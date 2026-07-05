@@ -10,7 +10,7 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 
 - **Orchestration-first** — n8n owns the pipeline: cloning, analysis, prompt building, Bedrock calls, packaging, retries, and branching.
 - **Managed services for durability & scale** — Amazon Bedrock, S3, Secrets Manager, and CloudWatch provide the heavy lifting.
-- **Event-driven** — GitHub events (and manual/scheduled triggers) start runs.
+- **Webhook-driven** — GitHub Webhooks (and manual triggers) start runs; deliveries are signature-verified before processing.
 - **Everything as code** — all infrastructure is Terraform; all workflows are versioned JSON.
 - **Cost-aware** — the only always-on cost driver (the EC2 n8n host) is started/stopped on a schedule by a small Go Lambda.
 - **Least privilege & encryption everywhere** — each component gets only the permissions it needs.
@@ -22,14 +22,15 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 ```mermaid
 flowchart TB
     subgraph GitHub
-        EVT[GitHub Events<br/>push · PR · release · dispatch]
+        EVT[GitHub Webhook<br/>push · release · pull_request · repository]
         REPO[(Target Repository)]
     end
 
     subgraph AWS
+        EIP[Public endpoint<br/>Elastic IP + TLS reverse proxy]
         SCHED[EventBridge Scheduler]
         LSTOP[Go Lambda<br/>ec2-scheduler]
-        subgraph EC2["Amazon EC2 (private subnet)"]
+        subgraph EC2["Amazon EC2"]
             N8N[n8n Orchestrator<br/>Docker Compose]
         end
         BR[Amazon Bedrock]
@@ -38,7 +39,8 @@ flowchart TB
         CW[Amazon CloudWatch]
     end
 
-    EVT -->|webhook / trigger| N8N
+    EVT -->|HTTPS + HMAC signature| EIP --> N8N
+    N8N -->|verify signature| SM
     SCHED -->|19:00 start / 21:00 stop| LSTOP --> EC2
     N8N -->|clone + analyze| REPO
     N8N -->|platform prompts| BR
@@ -53,42 +55,46 @@ flowchart TB
 
 | Component | Responsibility |
 | --- | --- |
-| GitHub events | Trigger runs (push, PR, release, repo creation, workflow dispatch) |
+| GitHub Webhook | Primary trigger — delivers repository events over HTTPS |
+| Public endpoint (Elastic IP + TLS) | Terminates TLS and forwards the webhook path to n8n |
 | EventBridge Scheduler | Fires the EC2 start/stop schedule |
 | `ec2-scheduler` (Go Lambda) | Starts/stops the EC2 host on schedule |
-| n8n (on EC2) | Clones, analyzes, builds prompts, invokes Bedrock, packages, stores, notifies |
+| `ec2-scheduler` (Go Lambda) | Starts/stops the EC2 host on schedule |
+| n8n (on EC2) | Validates webhooks, clones, analyzes, builds prompts, invokes Bedrock, packages, stores, notifies |
 | Amazon Bedrock | Generates each content type in the package |
 | Amazon S3 | Stores the versioned, dated content package |
-| Secrets Manager | Stores the GitHub token and credentials |
+| Secrets Manager | Stores the GitHub token and webhook secret |
 | CloudWatch | Central logs, metrics, dashboards, alarms |
 
 ---
 
 ## 3. AWS Architecture (Deployment Topology)
 
+Because GitHub Webhooks must reach the platform, the n8n host exposes an **inbound HTTPS endpoint**. It runs in a **public subnet** with an **Elastic IP**; a TLS reverse proxy terminates HTTPS and forwards only the webhook path to n8n. The **management UI is never publicly exposed** — admin access is via SSM.
+
 ```mermaid
 flowchart TB
+    GH[GitHub Webhook] -->|443 HTTPS| IGW
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
-            NAT[NAT Gateway]
+            EC2[(EC2: n8n + TLS proxy<br/>Elastic IP)]
         end
         subgraph Private["Private subnet 10.0.10.0/24"]
-            EC2[(EC2: n8n)]
+            RES[Reserved for internal/<br/>optional components]
         end
         VPCE["VPC Endpoints:<br/>S3 · Secrets Manager ·<br/>Bedrock · CloudWatch Logs · SSM"]
     end
 
-    IGW --- NAT
-    EC2 --> NAT --> IGW
+    EC2 --- IGW
     EC2 -. private .-> VPCE
     VPCE -. .-> BR[Amazon Bedrock]
     VPCE -. .-> S3[(Amazon S3)]
 ```
 
-- The **n8n EC2 host** runs in a **private subnet**; outbound internet (GitHub, image pulls) is via a **NAT gateway**. Administrative access is via **AWS Systems Manager Session Manager** — no public SSH.
-- Traffic to **S3, Secrets Manager, Bedrock, CloudWatch, and SSM** goes through **VPC endpoints** to keep it on the AWS network.
-- **Security groups** allow only required flows; see [Infrastructure](./infrastructure.md#7-security-groups).
+- **Inbound:** only **443** is open, and the **security group restricts it to GitHub's published webhook IP ranges** ([Infrastructure §7](./infrastructure.md#7-security-groups)). Administrative access is via **SSM Session Manager** — no public SSH, no public n8n UI.
+- **Outbound & internal:** traffic to **S3, Secrets Manager, Bedrock, CloudWatch, and SSM** goes through **VPC endpoints** to keep it on the AWS network; general egress (GitHub clone, image pulls) uses the Internet Gateway.
+- Private subnets remain part of the VPC for defense-in-depth and future internal components.
 
 ---
 
@@ -116,7 +122,7 @@ sequenceDiagram
     end
 ```
 
-**Prompt assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-platform templates and truncated deterministically to respect the model context window (see [AI Requirements](./requirements.md#5-ai-requirements)).
+**Prompt assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-platform templates and truncated deterministically to respect the model context window (see [AI Requirements](./requirements.md#4-ai-requirements)).
 
 ---
 
@@ -151,21 +157,21 @@ Any failure on a content type routes to the error/notification path without over
 
 ```mermaid
 flowchart LR
-    EVT[GitHub event / manual] --> N[n8n]
+    EVT[GitHub Webhook / manual] -->|verify HMAC| N[n8n]
     GH[(GitHub repo)] -->|clone| N
     N -->|analysis| N
     N -->|prompts| BR[Amazon Bedrock]
     BR -->|content| N
     N -->|package .md/.json| S3[(S3 generated-content)]
     N -->|notification| NOTIF[(SNS / Slack / webhook)]
-    SM[Secrets Manager] -. token .-> N
+    SM[Secrets Manager] -. token + webhook secret .-> N
 ```
 
 **Stages and payloads**
 
 | Stage | Input | Output |
 | --- | --- | --- |
-| Trigger | GitHub event / manual | run request `{ repoUrl, event }` |
+| Trigger | GitHub Webhook (verified) / manual | run request `{ repo, event, ref }` |
 | Clone | repo URL | local working copy on EC2 |
 | Analyze | working copy | structured repository understanding |
 | Generate | prompts + params | per-type content |
@@ -199,4 +205,4 @@ flowchart TB
 generated-content/<repository-name>/<YYYY-MM-DD>/<asset>
 ```
 
-All buckets enforce encryption at rest, block public access, and require TLS. See [Storage Requirements](./requirements.md#7-storage-requirements), [Infrastructure](./infrastructure.md) for the Terraform modules, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.
+All buckets enforce encryption at rest, block public access, and require TLS. See [Storage Requirements](./requirements.md#8-storage-requirements), [Infrastructure](./infrastructure.md) for the Terraform modules, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.

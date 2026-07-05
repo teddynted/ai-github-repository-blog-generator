@@ -10,15 +10,15 @@ Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.
 
 | Workflow | File | Trigger | Purpose |
 | --- | --- | --- | --- |
-| Repository Ingestion | `repository-ingestion.json` | GitHub event / manual | Entry point; validates input, clones repo |
+| Webhook Ingestion | `webhook-ingestion.json` | **GitHub Webhook** (HTTPS) | Receives events, validates the HMAC signature, extracts repo info |
 | Repository Analysis | `repository-analysis.json` | Called by ingestion | Structure, README, source, config, tech stack, architecture |
 | Content Generation | `content-generation.json` | Called by analysis | Invokes Amazon Bedrock per content type |
 | Packaging & Publishing | `packaging-publishing.json` | Called by generation | Assembles the package, writes it to S3 |
 | Notifications | `notifications.json` | Called on success/failure | Sends notifications |
 
-The workflows compose into a single pipeline; each can also be executed independently for testing ([WF-6](./requirements.md#6-workflow-requirements)).
+The workflows compose into a single pipeline; each can also be executed independently for testing ([WF-6](./requirements.md#7-workflow-requirements)).
 
-> **Scheduling note:** the daily EC2 start/stop (19:00–21:00) is **not** an n8n workflow — it is an **EventBridge Scheduler** rule invoking the `ec2-scheduler` Go Lambda ([Infrastructure §6](./infrastructure.md#6-amazon-eventbridge)). Content runs are triggered by **GitHub events** or **manual** invocation.
+> **Trigger note:** the **primary trigger is a GitHub Webhook** delivered to the n8n HTTPS endpoint ([GitHub Webhook Requirements](./requirements.md#3-github-webhook-requirements)); manual invocation is also supported. The daily EC2 start/stop (19:00–21:00) is **not** an n8n workflow — it is an **EventBridge Scheduler** rule invoking the `ec2-scheduler` Go Lambda ([Infrastructure §6](./infrastructure.md#6-amazon-eventbridge)).
 
 ---
 
@@ -26,7 +26,7 @@ The workflows compose into a single pipeline; each can also be executed independ
 
 ```mermaid
 flowchart LR
-    T[GitHub event / manual] --> I[Repository Ingestion]
+    T[GitHub Webhook / manual] --> I[Webhook Ingestion]
     I --> A[Repository Analysis]
     A --> G[Content Generation]
     G --> P[Packaging & Publishing]
@@ -39,23 +39,29 @@ flowchart LR
 
 ---
 
-## 3. Repository Ingestion
+## 3. Webhook Ingestion
 
-Entry point. Validates the target repo, resolves the GitHub token from Secrets Manager, clones the repository to the EC2 working directory, and hands off to analysis.
+Entry point. Receives the GitHub Webhook over HTTPS, **validates the HMAC SHA-256 signature** against the secret in Secrets Manager, extracts repository information, clones/updates the repository on the EC2 working directory, and hands off to analysis. Invalid deliveries are rejected and logged.
 
 ```mermaid
 flowchart TB
-    T[Trigger: repoUrl + event] --> V{Valid repo?}
-    V -- no --> E[Emit error → Notifications]
-    V -- yes --> S[Get GitHub token<br/>Secrets Manager]
-    S --> C[Clone repository]
-    C --> R{Clone OK?}
-    R -- no --> E
-    R -- yes --> H[Handoff: working copy → Analysis]
+    W[Webhook: payload + X-Hub-Signature-256] --> SEC[Get webhook secret<br/>Secrets Manager]
+    SEC --> HM{HMAC SHA-256 valid?<br/>constant-time compare}
+    HM -- no --> R401[Respond 401 + log rejection]
+    HM -- yes --> EX[Extract owner, repo, event, ref]
+    EX --> SUP{Supported event?}
+    SUP -- no --> SKIP[Skip + log]
+    SUP -- yes --> TOK[Get GitHub token<br/>Secrets Manager]
+    TOK --> C[Clone / update repository]
+    C --> OK{Clone OK?}
+    OK -- no --> E[Emit error → Notifications]
+    OK -- yes --> H[Respond 202 + handoff → Analysis]
 ```
 
-**Triggers:** push, pull request, release, repository creation, workflow dispatch, manual ([FR-5](./requirements.md#15-github-event-triggers)).
-**Input:** `{ repoUrl, event, branch? }` · **Output:** `{ workingCopyRef, repoMeta }`
+**Triggers:** GitHub Webhook events — `push`, `release`, `pull_request`, `workflow_dispatch`, `repository`; plus manual ([GitHub Webhook Requirements](./requirements.md#3-github-webhook-requirements)).
+**Input:** `{ headers, payload }` · **Output:** `{ workingCopyRef, repoMeta, event }`
+
+See [Security → Webhook Security](./security.md#10-webhook-security) for the validation contract.
 
 ---
 
@@ -77,7 +83,7 @@ flowchart TB
 
 **Input:** `{ workingCopyRef, repoMeta }` · **Output:** `{ prompts, contextManifest }`
 
-Implements [FR-1](./requirements.md#11-repository-analysis) (repository analysis) and feeds [AI Requirements](./requirements.md#5-ai-requirements).
+Implements [FR-1](./requirements.md#11-repository-analysis) (repository analysis) and feeds [AI Requirements](./requirements.md#4-ai-requirements).
 
 ---
 
@@ -101,7 +107,7 @@ flowchart TB
 **Content types:** `blog`, `medium`, `devto`, `hashnode`, `newsletter`, `linkedin`, `twitter-thread`, `reddit`, `faq`, `readme-suggestions`, `image-prompts`, `seo`, `metadata` ([FR-2](./requirements.md#12-content-generation)).
 **Input:** `{ prompts, model, temperature, maxTokens }` · **Output:** `{ contentSet, tokenUsage }`
 
-Model ID and parameters come from Terraform config ([AI-2](./requirements.md#5-ai-requirements)).
+Model ID and parameters come from Terraform config ([AI-2](./requirements.md#4-ai-requirements)).
 
 ---
 
@@ -116,7 +122,7 @@ flowchart TB
     ME --> OK[Success → Notifications]
 ```
 
-The package is written under `generated-content/<repository-name>/<YYYY-MM-DD>/` with S3 versioning enabled, containing all articles plus `seo.json`, `metadata.json`, and `image-prompts.md`. Metadata (`title`, `date`, `source_repo`, `tags`, `reading_time`, `model`) is captured in `metadata.json` ([FR-2](./requirements.md#12-content-generation), [Storage Requirements](./requirements.md#7-storage-requirements)). Failures never overwrite an existing package ([FR-6.3](./requirements.md#16-error-handling--retries)).
+The package is written under `generated-content/<repository-name>/<YYYY-MM-DD>/` with S3 versioning enabled, containing all articles plus `seo.json`, `metadata.json`, and `image-prompts.md`. Metadata (`title`, `date`, `source_repo`, `tags`, `reading_time`, `model`) is captured in `metadata.json` ([FR-2](./requirements.md#12-content-generation), [Storage Requirements](./requirements.md#8-storage-requirements)). Failures never overwrite an existing package ([FR-6.3](./requirements.md#16-error-handling--retries)).
 
 ---
 
@@ -138,7 +144,7 @@ flowchart LR
 
 ## 8. Importing Workflows
 
-1. Open n8n on the EC2 host via SSM port-forwarding (no public ingress — see [Deployment §7](./deployment.md#7-deployment-verification)); locally it's `http://localhost:5678`.
+1. Open n8n on the EC2 host via SSM port-forwarding (the management UI is not publicly exposed — only the webhook path is — see [Deployment §7](./deployment.md#7-deployment-verification)); locally it's `http://localhost:5678`.
 2. **Workflows → Import from File** and select each JSON in `workflows/n8n/`.
 3. Configure **Credentials** (AWS, GitHub, notification channel) in the n8n editor — these reference Secrets Manager values in AWS.
 4. Activate the workflows.
@@ -153,4 +159,4 @@ git add workflows/n8n/*.json
 git commit -m "chore(workflows): update content generation flow"
 ```
 
-Keep exported JSON free of embedded secrets — credentials are referenced by ID, not value ([WF-5](./requirements.md#6-workflow-requirements)).
+Keep exported JSON free of embedded secrets — credentials are referenced by ID, not value ([WF-5](./requirements.md#7-workflow-requirements)).

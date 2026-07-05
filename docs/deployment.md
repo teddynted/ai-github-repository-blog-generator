@@ -86,6 +86,7 @@ Never commit secrets. Store them in **AWS Secrets Manager**; Terraform provision
 | Secret | Purpose |
 | --- | --- |
 | `blog-generator/github-token` | GitHub PAT for cloning private repos / API metadata |
+| `blog-generator/github-webhook-secret` | Shared secret for HMAC SHA-256 webhook signature validation |
 | `blog-generator/n8n-credentials` | n8n encryption key and basic-auth credentials |
 | `blog-generator/notification-webhook` | Slack/webhook URL (if used) |
 
@@ -132,6 +133,28 @@ Then import the n8n workflows (see [Workflows](./workflows.md#8-importing-workfl
 
 ---
 
+## 6a. GitHub Webhook Configuration
+
+With the webhook endpoint deployed, connect GitHub to it.
+
+1. Generate and store the webhook secret (if not already done in Section 4):
+   ```bash
+   aws secretsmanager put-secret-value \
+     --secret-id blog-generator/github-webhook-secret \
+     --secret-string "$(openssl rand -hex 32)" --region us-east-1
+   ```
+2. Get the endpoint host from Terraform outputs (`terraform output webhook_url`).
+3. In the repository (or organization): **Settings → Webhooks → Add webhook**.
+4. **Payload URL:** `https://<webhook-host>/webhook/github`
+5. **Content type:** `application/json`
+6. **Secret:** the same value stored in Secrets Manager.
+7. **Events:** select *push*, *release*, *pull request*, *repository* (or "Send me everything").
+8. Save. Confirm a green **✓** under **Recent Deliveries**; use **Redeliver** to retest.
+
+> The endpoint is only reachable while the EC2 host is running (its 19:00–21:00 window). GitHub retries failed deliveries; you can widen the window via `ec2_start_cron` / `ec2_stop_cron`.
+
+---
+
 ## 7. Deployment Verification
 
 After `apply`, verify each layer:
@@ -140,11 +163,14 @@ After `apply`, verify each layer:
 # Outputs (bucket names, instance id, function arns)
 terraform output
 
-# n8n reachable via SSM port-forward (no public ingress)
+# n8n management UI via SSM port-forward (UI is not publicly exposed)
 aws ssm start-session --target <instance-id> \
   --document-name AWS-StartPortForwardingSession \
   --parameters '{"portNumber":["5678"],"localPortNumber":["5678"]}'
 # then open http://localhost:5678
+
+# Webhook endpoint responds over HTTPS (while EC2 is running)
+curl -sSf -o /dev/null -w '%{http_code}\n' "$(terraform output -raw webhook_url)/health" || true
 
 # Scheduler Lambda is deployed
 aws lambda get-function --function-name blog-generator-ec2-scheduler --query 'Configuration.State'
@@ -155,11 +181,12 @@ aws bedrock-runtime invoke-model --model-id "$BEDROCK_MODEL_ID" \
   --cli-binary-format raw-in-base64-out /dev/stdout
 ```
 
-**Smoke test:** trigger the ingestion workflow with a known public repo and confirm a content package appears in the generated-content bucket and a notification is received.
+**Smoke test:** from GitHub, **Redeliver** a webhook (or push a commit) and confirm a content package appears in the generated-content bucket and a notification is received.
 
 | Check | Expected |
 | --- | --- |
 | `terraform output` | All outputs populated |
+| GitHub Recent Deliveries | Green ✓ (2xx) response from the webhook |
 | Generated-content bucket | New `generated-content/<repo>/<YYYY-MM-DD>/` package after a run |
 | CloudWatch dashboard | Run/success metrics increment |
 | Notification | Success message received |

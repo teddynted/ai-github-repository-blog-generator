@@ -19,24 +19,27 @@ timeline
 
 The core end-to-end pipeline, deployable from scratch with Terraform.
 
+- ✅ GitHub Webhook trigger with HMAC SHA-256 signature validation
 - ✅ GitHub repository analysis (clone, metadata, file discovery, README + source analysis, technology detection)
-- ✅ Amazon Bedrock integration for blog generation
-- ✅ Markdown blog generation with front matter and versioned S3 storage
-- ✅ Terraform deployment (VPC, EC2/n8n, Lambdas, S3, EventBridge, CloudWatch, Secrets Manager, IAM)
+- ✅ Amazon Bedrock integration generating a full multi-platform content package
+- ✅ Versioned S3 storage of generated content
+- ✅ Terraform deployment (VPC, EC2/n8n, Lambda, S3, EventBridge Scheduler, CloudWatch, Secrets Manager, IAM)
 - ✅ n8n workflow orchestration with error handling and notifications
 
-**Exit criteria:** a single `terraform apply` + workflow import yields a working pipeline that produces a versioned Markdown post from a public repo.
+**Exit criteria:** a single `terraform apply` + workflow import + webhook configuration yields a working pipeline that produces a versioned content package from a repository event.
 
 ---
 
-## Version 1.1 — Quality
+## Version 1.1 — Quality & Hardening
 
-Improve output quality and discoverability.
+Improve output quality, discoverability, and webhook robustness.
 
 - Improved AI prompts (better structure, tighter context selection, few-shot examples)
 - Better architecture diagrams (auto-generated Mermaid from detected structure)
 - SEO optimization (meta description, slug, tags, reading time, canonical front matter)
 - Configurable prompt templates surfaced as variables
+- Managed webhook front door (ALB + ACM + WAF, or API Gateway) with an always-on ingestion buffer for 24/7 delivery capture
+- Expanded webhook event support (`issues`, `discussion`, `deployment`, `package`, `star`, `fork`, …)
 
 ---
 
@@ -46,7 +49,8 @@ Make output format and reach configurable.
 
 - Multiple blog templates (tutorial, deep-dive, changelog, "show HN" style)
 - Multi-language support (generate posts in multiple human languages)
-- Automatic publishing (push to static-site repos, Dev.to, Medium, or a CMS via API)
+- Automatic publishing to Medium, Dev.to, and Hashnode via their APIs
+- CMS integrations (WordPress, Ghost)
 - Draft/review state before publish
 
 ---

@@ -23,10 +23,11 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 | Secret | Consumer | Access |
 | --- | --- | --- |
 | `blog-generator/github-token` | n8n (EC2) | `secretsmanager:GetSecretValue` on that ARN |
+| `blog-generator/github-webhook-secret` | n8n (EC2) | `GetSecretValue` on that ARN |
 | `blog-generator/n8n-credentials` | n8n (EC2) | `GetSecretValue` on that ARN |
 | `blog-generator/notification-webhook` | n8n (EC2) | `GetSecretValue` on that ARN |
 
-**Rotation:** enable Secrets Manager rotation where supported; rotate the GitHub token on a schedule and immediately on suspected exposure. The n8n encryption key must remain stable (rotating it invalidates stored credentials) — treat its change as a planned migration.
+**Rotation:** enable Secrets Manager rotation where supported; rotate the GitHub token and the webhook secret on a schedule and immediately on suspected exposure. When rotating the webhook secret, update it in the GitHub webhook configuration in the same change window to avoid rejected deliveries. The n8n encryption key must remain stable (rotating it invalidates stored credentials) — treat its change as a planned migration.
 
 ---
 
@@ -99,9 +100,9 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 
 ## 5. HTTPS / Transport Security
 
-- All AWS API traffic and all GitHub interactions use **TLS 1.2+**.
+- All AWS API traffic, all GitHub interactions, and the **inbound webhook endpoint** use **TLS 1.2+** — the endpoint accepts **HTTPS only**.
 - S3 bucket policies **deny non-TLS requests**.
-- The n8n editor is **not exposed publicly**; it is reached via SSM port-forwarding over an encrypted channel ([Deployment §7](./deployment.md#7-deployment-verification)). If ever exposed, it must sit behind TLS termination (ALB/ACM) with authentication.
+- Only the **webhook path** is publicly reachable (443, restricted by security group to GitHub's IP ranges); the **n8n management UI is not exposed publicly** and is reached via SSM port-forwarding over an encrypted channel ([Deployment §7](./deployment.md#7-deployment-verification)). A managed TLS front door (ALB + ACM, or API Gateway) is a documented hardening option.
 
 ---
 
@@ -128,7 +129,7 @@ See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
 ## 8. Data Handling & Privacy
 
 - Only **repository content the operator has rights to** should be processed. For private repos, access is via a scoped GitHub token.
-- Cloned artifacts are transient and **expire quickly** (default 7 days) via S3 lifecycle.
+- Cloned repositories are transient — they live on the EC2 host's ephemeral disk during a run and are not persisted to S3.
 - Generated content contains summaries/excerpts of source repos; treat the generated-content bucket according to the sensitivity of the analyzed repositories.
 
 ---
@@ -136,3 +137,36 @@ See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
 ## 9. Reporting a Vulnerability
 
 Please report security issues privately (e.g. GitHub Security Advisories or a maintainer email) rather than opening a public issue. Include reproduction steps and impact. Do not include exploit details in public channels until a fix is released.
+
+---
+
+## 10. Webhook Security
+
+GitHub Webhooks are the primary entry point, so the delivery path is hardened end to end ([WH-7…WH-10](./requirements.md#32-signature-validation)).
+
+| Control | Implementation |
+| --- | --- |
+| **Secret validation** | Every delivery is validated against `blog-generator/github-webhook-secret` from Secrets Manager |
+| **HMAC SHA-256** | The `X-Hub-Signature-256` header is recomputed over the raw body and compared |
+| **Constant-time comparison** | Signature comparison uses a constant-time function to prevent timing attacks |
+| **Reject invalid signatures** | Missing/invalid signatures are rejected with `401` and **not processed** |
+| **HTTPS only** | The endpoint accepts TLS traffic only; plaintext is refused |
+| **Network restriction** | Inbound 443 is limited to GitHub's published webhook IP ranges |
+| **Least privilege** | n8n may only read the webhook secret; no other component can |
+| **Audit logging** | Every delivery — accepted **and** rejected — is logged to CloudWatch |
+
+**Validation contract (illustrative):**
+
+```text
+signature = "sha256=" + HMAC_SHA256(secret, raw_request_body)
+if not constant_time_equals(signature, header["X-Hub-Signature-256"]):
+    respond 401 and log rejection
+else:
+    process event
+```
+
+**Operational notes:**
+
+- Rotate the webhook secret in Secrets Manager and GitHub together to avoid rejected deliveries ([§2](#2-secrets-management)).
+- GitHub retries failed deliveries; inspect **Settings → Webhooks → Recent Deliveries** to replay or debug.
+- Never log the raw payload or the secret — log the delivery ID, event type, and outcome only.
