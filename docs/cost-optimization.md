@@ -2,7 +2,7 @@
 
 Cost controls for the **AI GitHub Repository Blog Generator**. The design keeps the always-on footprint tiny: managed, pay-per-use services do the durable work, and the only persistent host (the n8n EC2 instance) is started and stopped on a schedule.
 
-Related: [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md) · [Cost Requirements](./requirements.md#10-cost-optimization-requirements).
+Related: [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md) · [Cost Requirements](./requirements.md#11-cost-optimization-requirements).
 
 ---
 
@@ -24,7 +24,13 @@ flowchart LR
 - **Impact:** running ~2h/day instead of 24/7 reduces EC2 compute cost by roughly **90%**.
 - The window and instance are configurable via Terraform variables (`ec2_start_cron`, `ec2_stop_cron`, `ec2_instance_id`).
 - The root EBS volume persists while stopped (small cost); n8n state survives restarts.
-- This prevents the instance from running continuously and keeps infrastructure cost minimal ([COST-1](./requirements.md#10-cost-optimization-requirements)–[COST-4](./requirements.md#10-cost-optimization-requirements)).
+- This prevents the instance from running continuously and keeps infrastructure cost minimal ([COST-1](./requirements.md#11-cost-optimization-requirements)–[COST-4](./requirements.md#11-cost-optimization-requirements)).
+
+---
+
+## 1a. DynamoDB On-Demand
+
+The `repositories` metadata table uses **on-demand (pay-per-request)** capacity, so it costs effectively nothing when idle and scales automatically with registrations and runs — no provisioned throughput to pay for or tune ([COST-7](./requirements.md#11-cost-optimization-requirements)). Per-repository Secrets Manager entries add a small fixed cost per registered repo.
 
 ---
 
@@ -75,8 +81,9 @@ Versioning on `generated-content` is paired with lifecycle rules on **non-curren
 | Elastic IP | Attached to a (mostly stopped) instance | ~$1–4 |
 | Lambda (`ec2-scheduler`, arm64) | 2 invocations/day | ~$0 |
 | S3 (generated content) | Lifecycle-managed, small volume | ~$1–3 |
+| DynamoDB (`repositories`, on-demand) | Low read/write volume | ~$0–1 |
 | CloudWatch (logs + metrics) | 14-day retention | ~$1–3 |
-| Secrets Manager | ~3–4 secrets | ~$1.60 |
+| Secrets Manager | ~2 deployment + per-repo secrets | ~$1.20+ |
 | Amazon Bedrock | Per-token, model-dependent | **variable** (often dominant) |
 | **Baseline (excl. Bedrock)** | | **~$5–14** |
 

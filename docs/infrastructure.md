@@ -16,17 +16,17 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 | Amazon S3 | Generated content, Terraform state | `modules/s3` |
 | Amazon EventBridge / Scheduler | EC2 start/stop scheduling | `modules/eventbridge` |
 | Amazon CloudWatch | Logs, metrics, dashboards, alarms | `modules/monitoring` |
-| AWS Secrets Manager | GitHub tokens and credentials | `modules/secrets` |
+| AWS Secrets Manager | Per-repository PATs and webhook secrets | `modules/secrets` |
 | AWS IAM | Least-privilege roles and policies | `modules/iam` |
 | Amazon VPC | Network isolation (subnets, IGW, route tables, SGs) | `modules/networking` |
-| Amazon DynamoDB | Terraform state locking | bootstrap |
+| Amazon DynamoDB | Repository metadata store; Terraform state locking | `modules/dynamodb` + bootstrap |
 
 ---
 
 ## 2. Amazon Bedrock
 
 - Provides foundation-model inference for content generation via `bedrock-runtime:InvokeModel`.
-- The model ID/inference profile and parameters (`max_tokens`, `temperature`) are Terraform variables, so the model can be swapped without code changes ([AI-2](./requirements.md#4-ai-requirements)).
+- The model ID/inference profile and parameters (`max_tokens`, `temperature`) are Terraform variables, so the model can be swapped without code changes ([AI-2](./requirements.md#5-ai-requirements)).
 - Access is granted narrowly via IAM to the n8n instance role, scoped to the specific model ARN(s).
 - **Model access must be requested** in the Bedrock console per Region before first use ([Deployment §1](./deployment.md#1-aws-prerequisites)).
 
@@ -40,7 +40,7 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 - Inbound is limited to **443 from GitHub webhook IP ranges**; no inbound SSH — administrative access via **SSM Session Manager**.
 - Bootstrapped with user-data that installs Docker, pulls the n8n image, and starts the stack.
 - **Started and stopped on a schedule** (19:00 start / 21:00 stop) to control cost ([Cost Optimization](./cost-optimization.md#1-ec2-scheduling)).
-- Attached IAM instance profile grants Bedrock invoke, S3 read/write, Secrets Manager read (GitHub token + webhook secret), and CloudWatch.
+- Attached IAM instance profile grants Bedrock invoke, S3 read/write, DynamoDB read/write (repository metadata), Secrets Manager create/read (per-repository PATs + webhook secrets), and CloudWatch.
 
 ---
 
@@ -67,7 +67,20 @@ Key scheme: `generated-content/<repository-name>/<YYYY-MM-DD>/<asset>`. Reposito
 
 ---
 
-## 6. Amazon EventBridge
+## 6. Amazon DynamoDB
+
+Two tables serve distinct purposes:
+
+| Table | Purpose | Capacity |
+| --- | --- | --- |
+| `repositories` | Repository metadata store (one item per registered repo) | On-demand (pay-per-request) |
+| `tf-locks` | Terraform state locking | On-demand |
+
+The `repositories` table stores: repository URL, owner, name, default branch, registration timestamp, webhook status, webhook ID, last processed commit, last successful generation, and generation status. It also holds **references** (Secrets Manager ARNs) to the repository's PAT and webhook secret — **never the secret values themselves** ([ST-7](./requirements.md#9-storage-requirements), [ST-8](./requirements.md#9-storage-requirements)). Encryption at rest is enabled; point-in-time recovery (PITR) is recommended.
+
+---
+
+## 7. Amazon EventBridge
 
 - **EventBridge Scheduler** rules invoke the `ec2-scheduler` Lambda to **start EC2 at 19:00** and **stop EC2 at 21:00** ([Cost Optimization §1](./cost-optimization.md#1-ec2-scheduling)).
 - Schedule expressions are configurable via Terraform variables (`ec2_start_cron`, `ec2_stop_cron`).
@@ -75,7 +88,7 @@ Key scheme: `generated-content/<repository-name>/<YYYY-MM-DD>/<asset>`. Reposito
 
 ---
 
-## 7. Amazon CloudWatch
+## 8. Amazon CloudWatch
 
 - **Log groups** for n8n and the `ec2-scheduler` Lambda, with bounded retention (`log_retention_days`, default 14).
 - **Metrics** — custom namespace (`BlogGenerator`) for runs, successes, failures, latency, and token usage.
@@ -84,19 +97,19 @@ Key scheme: `generated-content/<repository-name>/<YYYY-MM-DD>/<asset>`. Reposito
 
 ---
 
-## 8. AWS Secrets Manager
+## 9. AWS Secrets Manager
 
-Stores the **GitHub token**, the **GitHub webhook secret** (used for HMAC signature validation), the n8n credentials/encryption key, and notification secrets. Terraform creates the secret resources; values are populated out of band ([Deployment §4](./deployment.md#4-secrets)). Rotation and access policy: [Security](./security.md#2-secrets-management).
+Stores **per-repository GitHub PATs** and **per-repository webhook signing secrets** (used for HMAC validation), plus deployment-level secrets (the n8n credentials/encryption key and notification secrets). Per-repository secrets are created dynamically at **registration** under a stable prefix (e.g. `blog-generator/repos/<owner>/<name>/pat` and `.../webhook-secret`); deployment-level secret resources are created by Terraform and populated out of band ([Deployment §4](./deployment.md#4-secrets)). PATs are **never** stored in DynamoDB or plaintext. Rotation and access policy: [Security](./security.md#2-secrets-management).
 
 ---
 
-## 9. AWS IAM
+## 10. AWS IAM
 
 Every compute identity gets a dedicated, least-privilege role. No wildcards on resources where an ARN can be specified. Details and example policies: [Security → Least Privilege](./security.md#3-least-privilege).
 
 ---
 
-## 10. Networking (VPC, Subnets, Endpoints)
+## 11. Networking (VPC, Subnets, Endpoints)
 
 ```mermaid
 flowchart TB
@@ -126,7 +139,7 @@ flowchart TB
 
 ---
 
-## 11. Terraform Modules
+## 12. Terraform Modules
 
 ```text
 terraform/
@@ -136,12 +149,13 @@ terraform/
 ├── variables.tf
 ├── outputs.tf
 └── modules/
-    ├── networking/   # VPC, subnets, NAT, IGW, route tables, endpoints, SGs
-    ├── ec2/          # n8n host, instance profile, user-data
+    ├── networking/   # VPC, subnets, IGW, route tables, endpoints, SGs
+    ├── ec2/          # n8n host, Elastic IP, instance profile, user-data
     ├── lambda/       # ec2-scheduler (Go), role, log group
     ├── s3/           # generated-content bucket, versioning, lifecycle, policies
+    ├── dynamodb/     # repositories metadata table
     ├── eventbridge/  # EventBridge Scheduler start/stop rules
-    ├── secrets/      # Secrets Manager resources
+    ├── secrets/      # Secrets Manager resources (deployment-level)
     ├── iam/          # roles and policies
     └── monitoring/   # dashboards, alarms, log retention
 ```
@@ -150,7 +164,7 @@ Each module exposes typed variables and outputs and is composed in `main.tf`. Mo
 
 ---
 
-## 12. Remote State
+## 13. Remote State
 
 - **Backend:** S3 (versioned, encrypted) + **DynamoDB** for state locking.
 - Created once by `scripts/bootstrap.sh` before the first `terraform init` ([Deployment §2](./deployment.md#2-bootstrap-remote-state)).
@@ -158,11 +172,12 @@ Each module exposes typed variables and outputs and is composed in `main.tf`. Mo
 
 ---
 
-## 13. Encryption
+## 14. Encryption
 
 | Layer | Mechanism |
 | --- | --- |
 | S3 (all buckets) | SSE (SSE-S3 or SSE-KMS); TLS-only bucket policy |
+| DynamoDB (`repositories`, `tf-locks`) | Encryption at rest enabled |
 | EC2 storage | Encrypted EBS |
 | Secrets Manager | KMS-encrypted at rest |
 | In transit | TLS 1.2+ for all AWS API and GitHub calls |

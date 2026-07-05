@@ -22,12 +22,14 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 
 | Secret | Consumer | Access |
 | --- | --- | --- |
-| `blog-generator/github-token` | n8n (EC2) | `secretsmanager:GetSecretValue` on that ARN |
-| `blog-generator/github-webhook-secret` | n8n (EC2) | `GetSecretValue` on that ARN |
+| `blog-generator/repos/<owner>/<name>/pat` | n8n (EC2) | `secretsmanager:GetSecretValue` on that ARN (per repo) |
+| `blog-generator/repos/<owner>/<name>/webhook-secret` | n8n (EC2) | `GetSecretValue` on that ARN (per repo) |
 | `blog-generator/n8n-credentials` | n8n (EC2) | `GetSecretValue` on that ARN |
 | `blog-generator/notification-webhook` | n8n (EC2) | `GetSecretValue` on that ARN |
 
-**Rotation:** enable Secrets Manager rotation where supported; rotate the GitHub token and the webhook secret on a schedule and immediately on suspected exposure. When rotating the webhook secret, update it in the GitHub webhook configuration in the same change window to avoid rejected deliveries. The n8n encryption key must remain stable (rotating it invalidates stored credentials) — treat its change as a planned migration.
+Per-repository PATs and webhook secrets are created **at registration** under the `blog-generator/repos/*` prefix; n8n is granted `secretsmanager:CreateSecret`/`PutSecretValue` scoped to that prefix and `GetSecretValue` to read them. **The PAT is stored only here — never in DynamoDB, code, or plaintext** ([SEC-4](./requirements.md#7-security-requirements)); DynamoDB holds only the secret ARN.
+
+**Rotation:** rotate PATs and webhook secrets on a schedule and immediately on suspected exposure. When rotating a webhook secret, update it in the GitHub webhook configuration in the same change window to avoid rejected deliveries. The n8n encryption key must remain stable (rotating it invalidates stored credentials) — treat its change as a planned migration.
 
 ---
 
@@ -88,11 +90,13 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 
 | Data | At rest | In transit |
 | --- | --- | --- |
-| S3 objects (artifacts, posts, state) | SSE (SSE-S3/SSE-KMS) | TLS enforced via bucket policy (`aws:SecureTransport`) |
-| Secrets | KMS-encrypted | TLS |
+| S3 objects (generated content, state) | SSE (SSE-S3/SSE-KMS) | TLS enforced via bucket policy (`aws:SecureTransport`) |
+| DynamoDB (`repositories`, `tf-locks`) | Encryption at rest | TLS |
+| Secrets (PATs, webhook secrets) | KMS-encrypted | TLS |
 | EC2 storage | Encrypted EBS | TLS to AWS APIs |
 | Bedrock calls | — | TLS |
-| GitHub calls | — | HTTPS only |
+| GitHub API & clone | — | HTTPS only |
+| Registration & webhook endpoints | — | HTTPS only |
 
 Where SSE-KMS is used, keys have rotation enabled and key policies restrict use to the intended roles.
 
@@ -142,11 +146,11 @@ Please report security issues privately (e.g. GitHub Security Advisories or a ma
 
 ## 10. Webhook Security
 
-GitHub Webhooks are the primary entry point, so the delivery path is hardened end to end ([WH-7…WH-10](./requirements.md#32-signature-validation)).
+GitHub Webhooks are the primary entry point, so the delivery path is hardened end to end ([WH-7…WH-10](./requirements.md#42-signature-validation)).
 
 | Control | Implementation |
 | --- | --- |
-| **Secret validation** | Every delivery is validated against `blog-generator/github-webhook-secret` from Secrets Manager |
+| **Secret validation** | Every delivery is validated against the repository's `.../webhook-secret` (resolved via its DynamoDB record) from Secrets Manager |
 | **HMAC SHA-256** | The `X-Hub-Signature-256` header is recomputed over the raw body and compared |
 | **Constant-time comparison** | Signature comparison uses a constant-time function to prevent timing attacks |
 | **Reject invalid signatures** | Missing/invalid signatures are rejected with `401` and **not processed** |
@@ -167,6 +171,11 @@ else:
 
 **Operational notes:**
 
+- Each repository has its **own** webhook signing secret, generated at registration; a leak is contained to one repository.
 - Rotate the webhook secret in Secrets Manager and GitHub together to avoid rejected deliveries ([§2](#2-secrets-management)).
 - GitHub retries failed deliveries; inspect **Settings → Webhooks → Recent Deliveries** to replay or debug.
-- Never log the raw payload or the secret — log the delivery ID, event type, and outcome only.
+- Never log the raw payload, the PAT, or the secret — log the delivery ID, event type, and outcome only.
+
+### Registration endpoint
+
+The registration endpoint receives a PAT, so it is held to the same bar: **HTTPS only**, access-controlled (admin token / basic auth), and it immediately writes the PAT to Secrets Manager without logging it. See [Repository Registration Requirements](./requirements.md#2-repository-registration-requirements).

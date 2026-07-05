@@ -60,6 +60,8 @@ Make output format and reach configurable.
 From single-run tool to team platform.
 
 - Multi-repository support (batch analysis; org-wide scans)
+- **GitHub App authentication** and **OAuth login** (replace per-repo PATs)
+- **Team workspaces** and **multi-user support**
 - AI content review (a second model pass for accuracy, tone, and fact-checking)
 - Team collaboration (roles, review/approval workflow, comments)
 - Analytics on generated content performance

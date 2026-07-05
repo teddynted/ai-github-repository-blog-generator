@@ -116,7 +116,10 @@ Local configuration lives in `docker/.env` (git-ignored). Start from `.env.examp
 | `N8N_USER` / `N8N_PASSWORD` | Local n8n basic auth | `admin` / `change-me` |
 | `N8N_ENCRYPTION_KEY` | n8n credential encryption key | random 32+ chars |
 | `GENERATED_CONTENT_BUCKET` | Dev content bucket | `blog-generator-dev-generated-content` |
-| `GITHUB_TOKEN` | Optional; for private/API access | `ghp_xxx` |
+| `REPOSITORIES_TABLE` | Dev DynamoDB metadata table | `blog-generator-dev-repositories` |
+| `SECRETS_PREFIX` | Prefix for per-repo secrets | `blog-generator/repos` |
+| `REGISTRATION_TOKEN` | Admin token for the registration endpoint | random 32+ chars |
+| `GITHUB_TOKEN` | Optional; PAT for local registration/clone tests | `github_pat_xxx` |
 
 > Secrets in `.env` are for **local dev only**. In AWS, all secrets come from Secrets Manager — see [Security](./security.md).
 
@@ -125,12 +128,13 @@ Local configuration lives in `docker/.env` (git-ignored). Start from `.env.examp
 ## 6. Running End-to-End Locally
 
 1. Start n8n (`docker compose up -d`).
-2. Import the workflow JSON from `workflows/n8n/` (see [Workflows → Importing](./workflows.md#8-importing-workflows)).
+2. Import the workflow JSON from `workflows/n8n/` (see [Workflows → Importing](./workflows.md#9-importing-workflows)).
 3. Configure n8n credentials (AWS, GitHub) in the editor.
-4. Manually execute the **Repository Ingestion** workflow with a test repo URL.
-5. Confirm the content package appears in your dev generated-content bucket.
+4. **Register a test repository** by POSTing `{ repository_url, pat }` to the registration endpoint (with the `REGISTRATION_TOKEN`). Confirm an item appears in your dev `REPOSITORIES_TABLE` and the PAT lands in Secrets Manager under `SECRETS_PREFIX`.
+5. **Redeliver** a webhook from GitHub (or execute the **Webhook Ingestion** workflow with a sample payload).
+6. Confirm the content package appears in your dev generated-content bucket.
 
-Iterate on the pipeline directly in the n8n editor; changes are exported back to `workflows/n8n/` and committed ([Workflows → Exporting](./workflows.md#8-importing-workflows)).
+Iterate on the pipeline directly in the n8n editor; changes are exported back to `workflows/n8n/` and committed ([Workflows → Exporting](./workflows.md#9-importing-workflows)).
 
 ---
 

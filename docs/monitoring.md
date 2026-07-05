@@ -2,7 +2,7 @@
 
 How the platform is observed in production: CloudWatch logs, metrics, dashboards, and alarms across infrastructure, workflows, Amazon Bedrock, and the application.
 
-Related: [Infrastructure](./infrastructure.md) · [Security](./security.md) · [Monitoring Requirements](./requirements.md#9-monitoring-requirements).
+Related: [Infrastructure](./infrastructure.md) · [Security](./security.md) · [Monitoring Requirements](./requirements.md#10-monitoring-requirements).
 
 ---
 
@@ -23,6 +23,8 @@ CloudWatch is the single pane of glass:
 
 | Metric | Unit | Meaning |
 | --- | --- | --- |
+| `RegistrationsCompleted` | Count | Repositories registered successfully |
+| `RegistrationsFailed` | Count | Registration attempts that failed |
 | `WebhookReceived` | Count | Webhook deliveries received |
 | `WebhookRejected` | Count | Deliveries rejected (invalid signature) |
 | `RunsStarted` | Count | Generation runs triggered (valid webhooks) |
@@ -68,6 +70,7 @@ Alarms publish to an SNS topic subscribed by the operator (`notification_email`)
 
 | Alarm | Condition | Severity |
 | --- | --- | --- |
+| Registration failures | `RegistrationsFailed` > 0 sustained | Medium |
 | Webhook rejections | `WebhookRejected` spike (possible misconfig or attack) | Medium |
 | Run failure rate | `RunsFailed` ≥ 1 in 5 min (or failure ratio > 20%) | High |
 | Scheduler Lambda errors | `ec2-scheduler` `Errors` > 0 | High |

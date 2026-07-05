@@ -81,21 +81,24 @@ Environment variables passed to n8n/Lambdas (non-secret) are set by Terraform; s
 
 ## 4. Secrets
 
-Never commit secrets. Store them in **AWS Secrets Manager**; Terraform provisions the secret *containers*, and you populate the *values* out of band.
+Never commit secrets. Store them in **AWS Secrets Manager**.
+
+**Deployment-level secrets** — Terraform provisions the containers; you populate the values out of band:
 
 | Secret | Purpose |
 | --- | --- |
-| `blog-generator/github-token` | GitHub PAT for cloning private repos / API metadata |
-| `blog-generator/github-webhook-secret` | Shared secret for HMAC SHA-256 webhook signature validation |
 | `blog-generator/n8n-credentials` | n8n encryption key and basic-auth credentials |
 | `blog-generator/notification-webhook` | Slack/webhook URL (if used) |
+| `blog-generator/registration-token` | Admin token protecting the registration endpoint |
 
-Populate a secret value after `apply`:
+**Per-repository secrets** — created **automatically at registration** under the `blog-generator/repos/<owner>/<name>/` prefix (`pat` and `webhook-secret`). You do **not** create these manually; the registration workflow does, and their ARNs are recorded in DynamoDB (never the values).
+
+Populate a deployment-level secret after `apply`:
 
 ```bash
 aws secretsmanager put-secret-value \
-  --secret-id blog-generator/github-token \
-  --secret-string '{"token":"ghp_xxx"}' \
+  --secret-id blog-generator/n8n-credentials \
+  --secret-string '{"encryptionKey":"...","user":"admin","password":"..."}' \
   --region us-east-1
 ```
 
@@ -111,7 +114,7 @@ At runtime, Terraform creates **least-privilege roles**:
 
 | Role | Key permissions |
 | --- | --- |
-| n8n EC2 instance role | `bedrock:InvokeModel`, `secretsmanager:GetSecretValue` (github-token), `s3:PutObject/GetObject` (generated-content), `sns:Publish`, CloudWatch |
+| n8n EC2 instance role | `bedrock:InvokeModel`; `secretsmanager:CreateSecret/PutSecretValue/GetSecretValue` on `blog-generator/repos/*`; `dynamodb:GetItem/PutItem/UpdateItem/Query` on the `repositories` table; `s3:PutObject/GetObject` (generated-content); `sns:Publish`; CloudWatch |
 | `ec2-scheduler` Lambda role | `ec2:StartInstances` / `ec2:StopInstances` (the n8n instance only), CloudWatch Logs |
 
 Full policy detail: [Security → Least Privilege](./security.md#3-least-privilege).
@@ -129,27 +132,32 @@ terraform plan -out tfplan
 terraform apply tfplan
 ```
 
-Then import the n8n workflows (see [Workflows](./workflows.md#8-importing-workflows)) and populate secrets (Section 4).
+Then import the n8n workflows (see [Workflows](./workflows.md#9-importing-workflows)) and populate secrets (Section 4).
 
 ---
 
-## 6a. GitHub Webhook Configuration
+## 6a. Register a Repository
 
-With the webhook endpoint deployed, connect GitHub to it.
+Registration is the primary way to onboard a repo — it stores metadata, secures the PAT, and **creates the webhook automatically**.
 
-1. Generate and store the webhook secret (if not already done in Section 4):
-   ```bash
-   aws secretsmanager put-secret-value \
-     --secret-id blog-generator/github-webhook-secret \
-     --secret-string "$(openssl rand -hex 32)" --region us-east-1
-   ```
-2. Get the endpoint host from Terraform outputs (`terraform output webhook_url`).
-3. In the repository (or organization): **Settings → Webhooks → Add webhook**.
-4. **Payload URL:** `https://<webhook-host>/webhook/github`
-5. **Content type:** `application/json`
-6. **Secret:** the same value stored in Secrets Manager.
-7. **Events:** select *push*, *release*, *pull request*, *repository* (or "Send me everything").
-8. Save. Confirm a green **✓** under **Recent Deliveries**; use **Redeliver** to retest.
+```bash
+curl -sS -X POST "$(terraform output -raw registration_url)" \
+  -H "Authorization: Bearer $REGISTRATION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
+```
+
+On success the platform validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, creates the webhook (if the PAT permits), and triggers an initial analysis. Confirm the item in DynamoDB and a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
+
+### Manual webhook setup (fallback)
+
+If the PAT lacks webhook permission, registration returns manual instructions — add a webhook yourself:
+
+1. **Payload URL:** `https://<webhook-host>/webhook/github` (from `terraform output webhook_url`)
+2. **Content type:** `application/json`
+3. **Secret:** the value the registration response reports (stored at `blog-generator/repos/<owner>/<name>/webhook-secret`).
+4. **Events:** *push*, *release*, *pull request*, *repository*.
+5. Save and confirm a green **✓** under **Recent Deliveries**.
 
 > The endpoint is only reachable while the EC2 host is running (its 19:00–21:00 window). GitHub retries failed deliveries; you can widen the window via `ec2_start_cron` / `ec2_stop_cron`.
 
@@ -175,17 +183,21 @@ curl -sSf -o /dev/null -w '%{http_code}\n' "$(terraform output -raw webhook_url)
 # Scheduler Lambda is deployed
 aws lambda get-function --function-name blog-generator-ec2-scheduler --query 'Configuration.State'
 
+# Repository metadata table exists and is active
+aws dynamodb describe-table --table-name blog-generator-repositories --query 'Table.TableStatus'
+
 # Bedrock access works
 aws bedrock-runtime invoke-model --model-id "$BEDROCK_MODEL_ID" \
   --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}' \
   --cli-binary-format raw-in-base64-out /dev/stdout
 ```
 
-**Smoke test:** from GitHub, **Redeliver** a webhook (or push a commit) and confirm a content package appears in the generated-content bucket and a notification is received.
+**Smoke test:** register a test repository (§6a), then **Redeliver** a webhook (or push a commit) and confirm a content package appears in the generated-content bucket and a notification is received.
 
 | Check | Expected |
 | --- | --- |
 | `terraform output` | All outputs populated |
+| DynamoDB `repositories` | Item present after registration; `webhook_status = active` |
 | GitHub Recent Deliveries | Green ✓ (2xx) response from the webhook |
 | Generated-content bucket | New `generated-content/<repo>/<YYYY-MM-DD>/` package after a run |
 | CloudWatch dashboard | Run/success metrics increment |

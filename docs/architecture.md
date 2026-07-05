@@ -55,15 +55,16 @@ flowchart TB
 
 | Component | Responsibility |
 | --- | --- |
+| Registration (URL + PAT) | Onboards a repo — validated, stored, webhook auto-created |
 | GitHub Webhook | Primary trigger — delivers repository events over HTTPS |
-| Public endpoint (Elastic IP + TLS) | Terminates TLS and forwards the webhook path to n8n |
+| Public endpoint (Elastic IP + TLS) | Terminates TLS and forwards the registration/webhook path to n8n |
 | EventBridge Scheduler | Fires the EC2 start/stop schedule |
 | `ec2-scheduler` (Go Lambda) | Starts/stops the EC2 host on schedule |
-| `ec2-scheduler` (Go Lambda) | Starts/stops the EC2 host on schedule |
-| n8n (on EC2) | Validates webhooks, clones, analyzes, builds prompts, invokes Bedrock, packages, stores, notifies |
+| n8n (on EC2) | Handles registration, validates webhooks, clones, analyzes, invokes Bedrock, packages, stores, notifies |
 | Amazon Bedrock | Generates each content type in the package |
 | Amazon S3 | Stores the versioned, dated content package |
-| Secrets Manager | Stores the GitHub token and webhook secret |
+| Amazon DynamoDB | Stores per-repository metadata (not the PAT) |
+| Secrets Manager | Stores per-repository PATs and webhook signing secrets |
 | CloudWatch | Central logs, metrics, dashboards, alarms |
 
 ---
@@ -122,7 +123,7 @@ sequenceDiagram
     end
 ```
 
-**Prompt assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-platform templates and truncated deterministically to respect the model context window (see [AI Requirements](./requirements.md#4-ai-requirements)).
+**Prompt assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-platform templates and truncated deterministically to respect the model context window (see [AI Requirements](./requirements.md#5-ai-requirements)).
 
 ---
 
@@ -182,7 +183,7 @@ flowchart LR
 
 ## 7. Storage Architecture
 
-One S3 bucket holds generated content; a separate bucket holds Terraform state. Repository clones are transient and live on the EC2 host's ephemeral disk, not in S3.
+Storage spans three layers: **S3** for generated content and Terraform state, **DynamoDB** for repository metadata, and **Secrets Manager** for secrets. Repository clones are transient and live on the EC2 host's ephemeral disk, not in S3.
 
 ```mermaid
 flowchart TB
@@ -190,14 +191,27 @@ flowchart TB
         GC[(generated-content bucket)]
         STATE[(tfstate bucket)]
     end
+    subgraph DynamoDB
+        REPOS[(repositories table)]
+        LOCK[(tf-locks table)]
+    end
+    subgraph SecretsManager
+        PAT[/per-repo PAT/]
+        WHS[/per-repo webhook secret/]
+    end
     GC -->|versioning + lifecycle: IA 30d, Glacier 90d| ARCH[Archived]
-    STATE -->|versioned + locked via DynamoDB| LOCK[(DynamoDB lock table)]
+    STATE -->|versioned| LOCK
+    REPOS -. references (ARN) .-> PAT
+    REPOS -. references (ARN) .-> WHS
 ```
 
-| Bucket | Contents | Versioning | Lifecycle |
-| --- | --- | --- | --- |
-| `generated-content` | Generated content packages | **On** | IA at 30d, Glacier at 90d |
-| `tfstate` | Terraform remote state | **On** | Retain; DynamoDB lock table |
+| Store | Contents | Notes |
+| --- | --- | --- |
+| S3 `generated-content` | Generated content packages | Versioning on; IA 30d, Glacier 90d |
+| S3 `tfstate` | Terraform remote state | Versioned; locked via DynamoDB |
+| DynamoDB `repositories` | Per-repository metadata + secret ARNs | Encrypted; **no PAT values** |
+| DynamoDB `tf-locks` | Terraform state locking | On-demand |
+| Secrets Manager | Per-repository PAT + webhook secret | KMS-encrypted |
 
 **Key scheme** for a package:
 
@@ -205,4 +219,4 @@ flowchart TB
 generated-content/<repository-name>/<YYYY-MM-DD>/<asset>
 ```
 
-All buckets enforce encryption at rest, block public access, and require TLS. See [Storage Requirements](./requirements.md#8-storage-requirements), [Infrastructure](./infrastructure.md) for the Terraform modules, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.
+All stores enforce encryption at rest; S3 buckets block public access and require TLS. See [Storage Requirements](./requirements.md#9-storage-requirements), [Infrastructure](./infrastructure.md) for the Terraform modules, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.
