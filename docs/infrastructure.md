@@ -10,24 +10,24 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 
 | Service | Purpose | Terraform module |
 | --- | --- | --- |
-| Amazon Bedrock | Foundation model inference | referenced by IAM + EC2/Lambda |
+| Amazon Bedrock | Foundation model inference for content generation | referenced by IAM + EC2 |
 | Amazon EC2 | n8n orchestration host | `modules/ec2` |
-| AWS Lambda | Go functions (clone/analyze/publish) | `modules/lambda` |
-| Amazon S3 | Artifacts, posts, Terraform state | `modules/s3` |
-| Amazon EventBridge | Scheduling + EC2 start/stop | `modules/eventbridge` |
+| AWS Lambda | Go function for scheduled EC2 start/stop | `modules/lambda` |
+| Amazon S3 | Generated content, Terraform state | `modules/s3` |
+| Amazon EventBridge / Scheduler | EC2 start/stop scheduling | `modules/eventbridge` |
 | Amazon CloudWatch | Logs, metrics, dashboards, alarms | `modules/monitoring` |
-| AWS Secrets Manager | Credentials and tokens | `modules/secrets` |
-| AWS IAM | Roles and policies | `modules/iam` |
-| Amazon VPC | Network isolation | `modules/networking` |
+| AWS Secrets Manager | GitHub tokens and credentials | `modules/secrets` |
+| AWS IAM | Least-privilege roles and policies | `modules/iam` |
+| Amazon VPC | Network isolation (subnets, IGW, route tables, SGs) | `modules/networking` |
 | Amazon DynamoDB | Terraform state locking | bootstrap |
 
 ---
 
 ## 2. Amazon Bedrock
 
-- Provides foundation-model inference for blog generation via `bedrock-runtime:InvokeModel`.
-- The model ID/inference profile and parameters (`max_tokens`, `temperature`) are Terraform variables, so the model can be swapped without code changes ([FR-9.2](./requirements.md#19-amazon-bedrock-integration)).
-- Access is granted narrowly via IAM to the n8n instance role (and/or the generation Lambda), scoped to the specific model ARN(s).
+- Provides foundation-model inference for content generation via `bedrock-runtime:InvokeModel`.
+- The model ID/inference profile and parameters (`max_tokens`, `temperature`) are Terraform variables, so the model can be swapped without code changes ([AI-2](./requirements.md#5-ai-requirements)).
+- Access is granted narrowly via IAM to the n8n instance role, scoped to the specific model ARN(s).
 - **Model access must be requested** in the Bedrock console per Region before first use ([Deployment §1](./deployment.md#1-aws-prerequisites)).
 
 ---
@@ -35,24 +35,23 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 ## 3. Amazon EC2
 
 - Single instance (default `t3.small`) running **n8n via Docker Compose** in a **private subnet**.
+- n8n performs the full content pipeline: clone, analysis, prompt building, Bedrock calls, packaging, and storage to S3.
 - No public IP and no inbound SSH; administrative access via **SSM Session Manager**.
 - Bootstrapped with user-data that installs Docker, pulls the n8n image, and starts the stack.
-- Managed by EventBridge start/stop schedule to control cost ([Cost Optimization](./cost-optimization.md#1-ec2-scheduling)).
-- Attached IAM instance profile grants Bedrock invoke, Lambda invoke, S3 access, Secrets Manager read, and CloudWatch.
+- **Started and stopped on a schedule** (19:00 start / 21:00 stop) to control cost ([Cost Optimization](./cost-optimization.md#1-ec2-scheduling)).
+- Attached IAM instance profile grants Bedrock invoke, S3 read/write, Secrets Manager read, and CloudWatch.
 
 ---
 
 ## 4. AWS Lambda
 
-Three Go functions, packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton) for cost/performance.
+A single Go function handles scheduled EC2 start/stop. It is packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton).
 
 | Function | Trigger | Responsibility |
 | --- | --- | --- |
-| `repo-cloner` | n8n | Clone repo → normalize → upload to artifacts bucket |
-| `repo-analyzer` | n8n | Discover/rank files, extract metadata, detect tech, build prompt |
-| `blog-publisher` | n8n | Render Markdown, version, write to posts bucket, emit metrics |
+| `ec2-scheduler` | EventBridge Scheduler (19:00, 21:00) | Calls `StartInstances` / `StopInstances` on the n8n host |
 
-Each has its own least-privilege role, dedicated CloudWatch log group, configurable memory/timeout, and (optionally) VPC access via endpoints.
+It has a least-privilege role limited to `ec2:StartInstances` / `ec2:StopInstances` on the specific instance, plus CloudWatch Logs. (Content generation runs inside n8n on EC2, not in Lambda.)
 
 ---
 
@@ -60,28 +59,27 @@ Each has its own least-privilege role, dedicated CloudWatch log group, configura
 
 | Bucket | Contents | Config |
 | --- | --- | --- |
-| `<prefix>-artifacts` | Cloned snapshots / intermediates | SSE, block public access, lifecycle expire (default 7d) |
-| `<prefix>-posts` | Generated Markdown | **Versioning on**, SSE, lifecycle IA/Glacier |
+| `<prefix>-generated-content` | Generated content packages | **Versioning on**, SSE, block public access, lifecycle IA/Glacier |
 | `<prefix>-tfstate` | Terraform state | Versioning on, SSE, TLS-only, DynamoDB lock |
 
-All buckets: **Block Public Access = ON**, default encryption enabled, and bucket policies requiring `aws:SecureTransport`. See [Storage Architecture](./architecture.md#7-storage-architecture).
+Key scheme: `generated-content/<repository-name>/<YYYY-MM-DD>/<asset>`. Repository clones are transient and live on the EC2 host's ephemeral disk — they are **not** stored in S3. All buckets: **Block Public Access = ON**, default encryption enabled, and bucket policies requiring `aws:SecureTransport`. See [Storage Architecture](./architecture.md#7-storage-architecture).
 
 ---
 
 ## 6. Amazon EventBridge
 
-- **Generation schedule** — a rule (cron/rate) triggers the ingestion workflow.
-- **EC2 start/stop** — scheduled rules invoke a small start/stop mechanism to keep the n8n host off outside operating hours.
-- Rules and schedules are declared in `modules/eventbridge` and configured via variables.
+- **EventBridge Scheduler** rules invoke the `ec2-scheduler` Lambda to **start EC2 at 19:00** and **stop EC2 at 21:00** ([Cost Optimization §1](./cost-optimization.md#1-ec2-scheduling)).
+- Schedule expressions are configurable via Terraform variables (`ec2_start_cron`, `ec2_stop_cron`).
+- Content runs are triggered by **GitHub events** delivered to the n8n webhook (or manual invocation), not by EventBridge.
 
 ---
 
 ## 7. Amazon CloudWatch
 
-- **Log groups** per Lambda and for n8n, with bounded retention (`log_retention_days`, default 14).
+- **Log groups** for n8n and the `ec2-scheduler` Lambda, with bounded retention (`log_retention_days`, default 14).
 - **Metrics** — custom namespace (`BlogGenerator`) for runs, successes, failures, latency, and token usage.
 - **Dashboard** — a single operational dashboard.
-- **Alarms** — failure-rate and error alarms wired to SNS. See [Monitoring](./monitoring.md).
+- **Alarms** — failure and error alarms wired to SNS. See [Monitoring](./monitoring.md).
 
 ---
 
@@ -102,8 +100,8 @@ Every compute identity gets a dedicated, least-privilege role. No wildcards on r
 ```mermaid
 flowchart TB
     subgraph VPC["VPC 10.0.0.0/16"]
-        PUB["Public subnet 10.0.0.0/24<br/>NAT Gateway"]
-        PRIV["Private subnet 10.0.10.0/24<br/>EC2 n8n + Lambda ENIs"]
+        PUB["Public subnet(s)<br/>NAT Gateway"]
+        PRIV["Private subnet(s)<br/>EC2 n8n"]
         VPCE["VPC Endpoints:<br/>S3 (gateway), Secrets Manager,<br/>Bedrock, CloudWatch Logs, SSM"]
     end
     IGW[Internet Gateway] --- PUB
@@ -111,8 +109,8 @@ flowchart TB
     PRIV --- VPCE
 ```
 
-- **Public subnet:** NAT gateway + internet gateway for controlled egress (GitHub, image pulls).
-- **Private subnet:** EC2 and Lambda ENIs; no inbound from the internet.
+- **Public subnets:** NAT gateway + internet gateway for controlled egress (GitHub, image pulls); **route tables** direct private egress through NAT.
+- **Private subnets:** the EC2 host; no inbound from the internet.
 - **VPC endpoints** keep S3/Secrets Manager/Bedrock/Logs/SSM traffic on the AWS network.
 
 ### 7. Security Groups
@@ -120,8 +118,7 @@ flowchart TB
 | Security group | Inbound | Outbound |
 | --- | --- | --- |
 | `n8n-sg` (EC2) | None from internet; SSM only | 443 to AWS endpoints; 443 to GitHub via NAT |
-| `lambda-sg` | None | 443 to endpoints/services |
-| `vpce-sg` | 443 from `n8n-sg`, `lambda-sg` | — |
+| `vpce-sg` | 443 from `n8n-sg` | — |
 
 ---
 
@@ -135,11 +132,11 @@ terraform/
 ├── variables.tf
 ├── outputs.tf
 └── modules/
-    ├── networking/   # VPC, subnets, NAT, IGW, endpoints, SGs
+    ├── networking/   # VPC, subnets, NAT, IGW, route tables, endpoints, SGs
     ├── ec2/          # n8n host, instance profile, user-data
-    ├── lambda/       # 3 Go functions, roles, log groups
-    ├── s3/           # buckets, versioning, lifecycle, policies
-    ├── eventbridge/  # schedules + EC2 start/stop rules
+    ├── lambda/       # ec2-scheduler (Go), role, log group
+    ├── s3/           # generated-content bucket, versioning, lifecycle, policies
+    ├── eventbridge/  # EventBridge Scheduler start/stop rules
     ├── secrets/      # Secrets Manager resources
     ├── iam/          # roles and policies
     └── monitoring/   # dashboards, alarms, log retention
@@ -162,7 +159,7 @@ Each module exposes typed variables and outputs and is composed in `main.tf`. Mo
 | Layer | Mechanism |
 | --- | --- |
 | S3 (all buckets) | SSE (SSE-S3 or SSE-KMS); TLS-only bucket policy |
-| EBS (EC2) | Encrypted volumes |
+| EC2 storage | Encrypted EBS |
 | Secrets Manager | KMS-encrypted at rest |
 | In transit | TLS 1.2+ for all AWS API and GitHub calls |
 | Terraform state | Encrypted S3 + versioning |

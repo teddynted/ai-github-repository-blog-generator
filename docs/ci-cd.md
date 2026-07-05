@@ -76,7 +76,7 @@ jobs:
 | Test | `go test ./... -race -cover` |
 | Build | `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda` |
 
-Each function under `lambdas/` is built and tested; the resulting `bootstrap` binary is packaged for deployment (uploaded to the deploy artifact or referenced by Terraform).
+The `ec2-scheduler` function under `lambdas/` is built and tested; the resulting `bootstrap` binary is packaged for deployment (uploaded to the deploy artifact or referenced by Terraform). The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
 
 ---
 

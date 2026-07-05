@@ -1,6 +1,6 @@
 # Workflows
 
-The platform's control flow is implemented as **n8n workflows**. Each workflow is a discrete, versioned unit exported as JSON under `workflows/n8n/`. Workflows call Go Lambda functions and Amazon Bedrock, and pass structured data between stages.
+The platform's control flow is implemented as **n8n workflows**. Each workflow is a discrete, versioned unit exported as JSON under `workflows/n8n/`. n8n (running on the EC2 host) performs cloning, analysis, prompt building, Amazon Bedrock invocation, packaging, and notifications, passing structured data between stages.
 
 Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md).
 
@@ -10,15 +10,15 @@ Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.
 
 | Workflow | File | Trigger | Purpose |
 | --- | --- | --- | --- |
-| Repository Ingestion | `repository-ingestion.json` | EventBridge / manual | Entry point; validates input, clones repo |
-| Repository Analysis | `repository-analysis.json` | Called by ingestion | File discovery, metadata, tech detection, prompt |
-| AI Blog Generation | `ai-blog-generation.json` | Called by analysis | Invokes Amazon Bedrock |
-| Markdown Generation | `markdown-generation.json` | Called by generation | Renders Markdown + front matter |
-| Publishing | `publishing.json` | Called by markdown gen | Versions + writes to S3 posts bucket |
+| Repository Ingestion | `repository-ingestion.json` | GitHub event / manual | Entry point; validates input, clones repo |
+| Repository Analysis | `repository-analysis.json` | Called by ingestion | Structure, README, source, config, tech stack, architecture |
+| Content Generation | `content-generation.json` | Called by analysis | Invokes Amazon Bedrock per content type |
+| Packaging & Publishing | `packaging-publishing.json` | Called by generation | Assembles the package, writes it to S3 |
 | Notifications | `notifications.json` | Called on success/failure | Sends notifications |
-| Scheduling | EventBridge rule (IaC) | cron | Fires ingestion on schedule |
 
-The workflows compose into a single pipeline; each can also be executed independently for testing.
+The workflows compose into a single pipeline; each can also be executed independently for testing ([WF-6](./requirements.md#6-workflow-requirements)).
+
+> **Scheduling note:** the daily EC2 start/stop (19:00–21:00) is **not** an n8n workflow — it is an **EventBridge Scheduler** rule invoking the `ec2-scheduler` Go Lambda ([Infrastructure §6](./infrastructure.md#6-amazon-eventbridge)). Content runs are triggered by **GitHub events** or **manual** invocation.
 
 ---
 
@@ -26,16 +26,14 @@ The workflows compose into a single pipeline; each can also be executed independ
 
 ```mermaid
 flowchart LR
-    S[Scheduling<br/>EventBridge] --> I[Repository Ingestion]
+    T[GitHub event / manual] --> I[Repository Ingestion]
     I --> A[Repository Analysis]
-    A --> G[AI Blog Generation]
-    G --> M[Markdown Generation]
-    M --> P[Publishing]
+    A --> G[Content Generation]
+    G --> P[Packaging & Publishing]
     P --> N[Notifications]
     I -. on error .-> N
     A -. on error .-> N
     G -. on error .-> N
-    M -. on error .-> N
     P -. on error .-> N
 ```
 
@@ -43,88 +41,88 @@ flowchart LR
 
 ## 3. Repository Ingestion
 
-Entry point. Validates the target repo URL, resolves the GitHub token from Secrets Manager, invokes `repo-cloner`, and hands off to analysis.
+Entry point. Validates the target repo, resolves the GitHub token from Secrets Manager, clones the repository to the EC2 working directory, and hands off to analysis.
 
 ```mermaid
 flowchart TB
-    T[Trigger: repoUrl] --> V{Valid URL?}
+    T[Trigger: repoUrl + event] --> V{Valid repo?}
     V -- no --> E[Emit error → Notifications]
     V -- yes --> S[Get GitHub token<br/>Secrets Manager]
-    S --> C[Invoke repo-cloner Lambda]
+    S --> C[Clone repository]
     C --> R{Clone OK?}
     R -- no --> E
-    R -- yes --> H[Handoff: artifact ref → Analysis]
+    R -- yes --> H[Handoff: working copy → Analysis]
 ```
 
-**Input:** `{ repoUrl, branch?, options? }` · **Output:** `{ artifactRef, repoMeta }`
+**Triggers:** push, pull request, release, repository creation, workflow dispatch, manual ([FR-5](./requirements.md#15-github-event-triggers)).
+**Input:** `{ repoUrl, event, branch? }` · **Output:** `{ workingCopyRef, repoMeta }`
 
 ---
 
 ## 4. Repository Analysis
 
-Reads the cloned snapshot, discovers and ranks files, extracts metadata and README content, detects technologies, and assembles the token-budgeted prompt.
+Builds a structured understanding of the repository.
 
 ```mermaid
 flowchart TB
-    A[artifactRef] --> AN[Invoke repo-analyzer Lambda]
-    AN --> F[File discovery + ranking]
-    F --> MD[Metadata + README extraction]
-    MD --> TD[Technology detection]
-    TD --> PB[Prompt assembly<br/>token budget]
-    PB --> O[Output: prompt + manifest]
+    A[working copy] --> ST[Structure analysis]
+    ST --> RD[README analysis]
+    RD --> SR[Source code analysis]
+    SR --> CF[Configuration file analysis]
+    CF --> TD[Technology stack detection]
+    TD --> AR[Architecture understanding]
+    AR --> PB[Prompt assembly<br/>per platform, token-budgeted]
+    PB --> O[Output: prompt set + context]
 ```
 
-**Input:** `{ artifactRef, repoMeta }` · **Output:** `{ prompt, contextManifest }`
+**Input:** `{ workingCopyRef, repoMeta }` · **Output:** `{ prompts, contextManifest }`
 
-Implements [FR-4](./requirements.md#14-file-discovery) through [FR-8](./requirements.md#18-ai-prompt-generation).
+Implements [FR-1](./requirements.md#11-repository-analysis) (repository analysis) and feeds [AI Requirements](./requirements.md#5-ai-requirements).
 
 ---
 
-## 5. AI Blog Generation
+## 5. Content Generation
 
-Invokes Amazon Bedrock with the assembled prompt and configured model parameters; retries on throttling with exponential backoff.
+Invokes Amazon Bedrock once per content type with platform-tuned prompts and configured model parameters; retries on throttling with exponential backoff.
 
 ```mermaid
 flowchart TB
-    P[prompt + params] --> B[Bedrock InvokeModel]
+    P[prompt set + params] --> LOOP{For each content type}
+    LOOP --> B[Bedrock InvokeModel]
     B --> C{Success?}
     C -- throttled/transient --> RB[Backoff + retry ≤ N]
     RB --> B
     C -- failed --> E[Error → Notifications]
-    C -- ok --> O[Raw blog content + token usage]
+    C -- ok --> ACC[Accumulate content + token usage]
+    ACC --> LOOP
+    LOOP --> O[Content set]
 ```
 
-**Input:** `{ prompt, model, temperature, maxTokens }` · **Output:** `{ content, tokenUsage }`
+**Content types:** `blog`, `medium`, `devto`, `hashnode`, `newsletter`, `linkedin`, `twitter-thread`, `reddit`, `faq`, `readme-suggestions`, `image-prompts`, `seo`, `metadata` ([FR-2](./requirements.md#12-content-generation)).
+**Input:** `{ prompts, model, temperature, maxTokens }` · **Output:** `{ contentSet, tokenUsage }`
 
-Model ID and parameters come from Terraform config ([FR-9](./requirements.md#19-amazon-bedrock-integration)).
+Model ID and parameters come from Terraform config ([AI-2](./requirements.md#5-ai-requirements)).
 
 ---
 
-## 6. Markdown Generation & Publishing
+## 6. Packaging & Publishing
 
 ```mermaid
 flowchart TB
-    subgraph MG[Markdown Generation]
-        C[Raw content] --> FM[Add YAML front matter]
-        FM --> MD[Normalize Markdown + code/diagrams]
-    end
-    subgraph PUB[Publishing]
-        MD --> KV[Compute versioned key]
-        KV --> W[Invoke blog-publisher Lambda → S3]
-        W --> ME[Emit CloudWatch metrics]
-    end
+    C[Content set] --> R[Render Markdown + JSON assets]
+    R --> KV[Compute dated key:<br/>generated-content/&lt;repo&gt;/&lt;YYYY-MM-DD&gt;/]
+    KV --> W[Write package → S3]
+    W --> ME[Emit CloudWatch metrics]
     ME --> OK[Success → Notifications]
 ```
 
-**Front matter** includes `title`, `date`, `source_repo`, `tags`, and `model`. **Key scheme:** `posts/<owner>/<repo>/<UTC-timestamp>.md`, with S3 versioning enabled ([FR-11](./requirements.md#111-markdown-generation)–[FR-13](./requirements.md#113-content-storage)).
+The package is written under `generated-content/<repository-name>/<YYYY-MM-DD>/` with S3 versioning enabled, containing all articles plus `seo.json`, `metadata.json`, and `image-prompts.md`. Metadata (`title`, `date`, `source_repo`, `tags`, `reading_time`, `model`) is captured in `metadata.json` ([FR-2](./requirements.md#12-content-generation), [Storage Requirements](./requirements.md#7-storage-requirements)). Failures never overwrite an existing package ([FR-6.3](./requirements.md#16-error-handling--retries)).
 
 ---
 
-## 7. Scheduling & Notifications
+## 7. Notifications
 
-**Scheduling** is an EventBridge rule (defined in Terraform, not in n8n) that periodically POSTs to the ingestion workflow's webhook or triggers it via the n8n API. Schedule expression is configurable (`n8n_operating_schedule` / a dedicated `generation_schedule` variable).
-
-**Notifications** is a shared sub-workflow invoked on both success and failure paths.
+A shared sub-workflow invoked on both success and failure paths.
 
 ```mermaid
 flowchart LR
@@ -134,13 +132,13 @@ flowchart LR
     R --> WH[Generic webhook]
 ```
 
-**Input:** `{ status, repo, postKey?, error? }` ([FR-17](./requirements.md#117-notifications)).
+**Input:** `{ status, repo, packagePrefix?, error? }` ([FR-6](./requirements.md#16-error-handling--retries)).
 
 ---
 
 ## 8. Importing Workflows
 
-1. Open n8n (local: `http://localhost:5678`; AWS: via SSM port-forward — see [Deployment](./deployment.md#7-deployment-verification)).
+1. Open n8n on the EC2 host via SSM port-forwarding (no public ingress — see [Deployment §7](./deployment.md#7-deployment-verification)); locally it's `http://localhost:5678`.
 2. **Workflows → Import from File** and select each JSON in `workflows/n8n/`.
 3. Configure **Credentials** (AWS, GitHub, notification channel) in the n8n editor — these reference Secrets Manager values in AWS.
 4. Activate the workflows.
@@ -151,9 +149,8 @@ Export edited workflows back to JSON and commit them so the repo stays the sourc
 
 ```bash
 # via the n8n editor: Workflow → Download
-# commit the updated JSON under workflows/n8n/
 git add workflows/n8n/*.json
-git commit -m "chore(workflows): update AI blog generation flow"
+git commit -m "chore(workflows): update content generation flow"
 ```
 
-Keep exported JSON free of embedded secrets — credentials are referenced by ID, not value.
+Keep exported JSON free of embedded secrets — credentials are referenced by ID, not value ([WF-5](./requirements.md#6-workflow-requirements)).

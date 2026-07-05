@@ -22,9 +22,9 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 
 | Secret | Consumer | Access |
 | --- | --- | --- |
-| `blog-generator/github-token` | `repo-cloner`, n8n | `secretsmanager:GetSecretValue` on that ARN |
-| `blog-generator/n8n-credentials` | EC2 (n8n) | `GetSecretValue` on that ARN |
-| `blog-generator/notification-webhook` | `blog-publisher`, n8n | `GetSecretValue` on that ARN |
+| `blog-generator/github-token` | n8n (EC2) | `secretsmanager:GetSecretValue` on that ARN |
+| `blog-generator/n8n-credentials` | n8n (EC2) | `GetSecretValue` on that ARN |
+| `blog-generator/notification-webhook` | n8n (EC2) | `GetSecretValue` on that ARN |
 
 **Rotation:** enable Secrets Manager rotation where supported; rotate the GitHub token on a schedule and immediately on suspected exposure. The n8n encryption key must remain stable (rotating it invalidates stored credentials) — treat its change as a planned migration.
 
@@ -34,31 +34,35 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 
 Policies specify concrete actions and resource ARNs; wildcards are avoided wherever an ARN can be named.
 
-**Example — `blog-publisher` policy (illustrative):**
+**Example — `ec2-scheduler` Lambda policy (illustrative):**
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "WritePosts",
+      "Sid": "StartStopN8nHost",
       "Effect": "Allow",
-      "Action": ["s3:PutObject"],
-      "Resource": "arn:aws:s3:::blog-generator-posts/posts/*"
-    },
-    {
-      "Sid": "Notify",
-      "Effect": "Allow",
-      "Action": ["sns:Publish"],
-      "Resource": "arn:aws:sns:us-east-1:<acct>:blog-generator-notifications"
+      "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+      "Resource": "arn:aws:ec2:us-east-1:<acct>:instance/<n8n-instance-id>"
     },
     {
       "Sid": "Logs",
       "Effect": "Allow",
       "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
-      "Resource": "arn:aws:logs:us-east-1:<acct>:log-group:/aws/lambda/blog-generator-blog-publisher:*"
+      "Resource": "arn:aws:logs:us-east-1:<acct>:log-group:/aws/lambda/blog-generator-ec2-scheduler:*"
     }
   ]
+}
+```
+
+**Example — n8n instance role: write the content package (illustrative):**
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject", "s3:GetObject"],
+  "Resource": "arn:aws:s3:::blog-generator-generated-content/generated-content/*"
 }
 ```
 
@@ -74,10 +78,8 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 
 | Principal | May do | May NOT do |
 | --- | --- | --- |
-| `repo-cloner` | Read github-token secret, write artifacts | Read posts, invoke Bedrock |
-| `repo-analyzer` | Read/write artifacts | Write posts, read secrets |
-| `blog-publisher` | Write posts, publish SNS | Read secrets, clone repos |
-| n8n (EC2) | Invoke Lambdas + Bedrock, read secrets | Delete buckets, modify IAM |
+| n8n (EC2) | Read secrets, invoke Bedrock, write generated-content, publish SNS | Delete buckets, modify IAM, start/stop EC2 |
+| `ec2-scheduler` (Lambda) | Start/stop the n8n instance, write its own logs | Read secrets, access content, invoke Bedrock |
 
 ---
 
@@ -116,7 +118,7 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 
 - **AWS CloudTrail** records control-plane API activity (recommended: org-level trail to a dedicated, locked log bucket).
 - **CloudWatch Logs** capture application/workflow logs with bounded retention.
-- **S3 access logging** and **versioning** on the posts bucket provide tamper-evidence and recovery.
+- **S3 access logging** and **versioning** on the generated-content bucket provide tamper-evidence and recovery.
 - Structured logs **must not** contain secrets or full source contents — log references (keys, IDs), not payloads.
 
 See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
@@ -127,7 +129,7 @@ See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
 
 - Only **repository content the operator has rights to** should be processed. For private repos, access is via a scoped GitHub token.
 - Cloned artifacts are transient and **expire quickly** (default 7 days) via S3 lifecycle.
-- Generated posts contain summaries/excerpts of source repos; treat the posts bucket according to the sensitivity of the analyzed repositories.
+- Generated content contains summaries/excerpts of source repos; treat the generated-content bucket according to the sensitivity of the analyzed repositories.
 
 ---
 

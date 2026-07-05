@@ -75,12 +75,12 @@ Use a low-privilege developer profile scoped to a **dev** environment. Never use
 
 ---
 
-## 4. Building & Testing the Go Lambdas
+## 4. Building & Testing the Go Lambda
 
-Each function under `lambdas/` is an independent Go module.
+The content pipeline itself runs inside **n8n workflows** (no application Lambda). The only Go function is `ec2-scheduler`, which starts/stops the EC2 host on a schedule ([Cost Optimization](./cost-optimization.md#1-ec2-scheduling)).
 
 ```bash
-cd lambdas/repo-analyzer
+cd lambdas/ec2-scheduler
 
 go mod download
 go build ./...
@@ -89,17 +89,17 @@ gofmt -l .            # should print nothing
 go test ./... -race -cover
 ```
 
-Build a deployable artifact (Linux, ARM64 example):
+Build a deployable artifact (Linux, ARM64):
 
 ```bash
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda
 zip function.zip bootstrap
 ```
 
-Run a function locally against a fixture event:
+Run it locally against a fixture event (e.g. a `start` or `stop` action):
 
 ```bash
-go run ./cmd/local --event ./testdata/event.json
+go run ./cmd/local --event ./testdata/start.json
 ```
 
 ---
@@ -115,8 +115,7 @@ Local configuration lives in `docker/.env` (git-ignored). Start from `.env.examp
 | `BEDROCK_MODEL_ID` | Foundation model / inference profile | `us.anthropic.claude-sonnet-4-...` |
 | `N8N_USER` / `N8N_PASSWORD` | Local n8n basic auth | `admin` / `change-me` |
 | `N8N_ENCRYPTION_KEY` | n8n credential encryption key | random 32+ chars |
-| `ARTIFACTS_BUCKET` | Dev artifacts bucket | `blog-generator-dev-artifacts` |
-| `POSTS_BUCKET` | Dev posts bucket | `blog-generator-dev-posts` |
+| `GENERATED_CONTENT_BUCKET` | Dev content bucket | `blog-generator-dev-generated-content` |
 | `GITHUB_TOKEN` | Optional; for private/API access | `ghp_xxx` |
 
 > Secrets in `.env` are for **local dev only**. In AWS, all secrets come from Secrets Manager — see [Security](./security.md).
@@ -129,9 +128,9 @@ Local configuration lives in `docker/.env` (git-ignored). Start from `.env.examp
 2. Import the workflow JSON from `workflows/n8n/` (see [Workflows → Importing](./workflows.md#8-importing-workflows)).
 3. Configure n8n credentials (AWS, GitHub) in the editor.
 4. Manually execute the **Repository Ingestion** workflow with a test repo URL.
-5. Confirm output in your dev posts bucket.
+5. Confirm the content package appears in your dev generated-content bucket.
 
-You can point workflows at locally-run Lambdas (via `go run ./cmd/local`) or at deployed dev Lambdas depending on what you're iterating on.
+Iterate on the pipeline directly in the n8n editor; changes are exported back to `workflows/n8n/` and committed ([Workflows → Exporting](./workflows.md#8-importing-workflows)).
 
 ---
 

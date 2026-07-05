@@ -110,10 +110,8 @@ At runtime, Terraform creates **least-privilege roles**:
 
 | Role | Key permissions |
 | --- | --- |
-| `repo-cloner` Lambda role | `s3:PutObject` (artifacts), `secretsmanager:GetSecretValue` (github-token), CloudWatch Logs |
-| `repo-analyzer` Lambda role | `s3:GetObject/PutObject` (artifacts), CloudWatch Logs |
-| `blog-publisher` Lambda role | `s3:PutObject` (posts), `sns:Publish`, CloudWatch metrics/logs |
-| n8n EC2 instance role | `bedrock:InvokeModel`, `lambda:InvokeFunction`, `secretsmanager:GetSecretValue`, S3 read/write, CloudWatch |
+| n8n EC2 instance role | `bedrock:InvokeModel`, `secretsmanager:GetSecretValue` (github-token), `s3:PutObject/GetObject` (generated-content), `sns:Publish`, CloudWatch |
+| `ec2-scheduler` Lambda role | `ec2:StartInstances` / `ec2:StopInstances` (the n8n instance only), CloudWatch Logs |
 
 Full policy detail: [Security → Least Privilege](./security.md#3-least-privilege).
 
@@ -148,8 +146,8 @@ aws ssm start-session --target <instance-id> \
   --parameters '{"portNumber":["5678"],"localPortNumber":["5678"]}'
 # then open http://localhost:5678
 
-# Lambdas are deployed
-aws lambda get-function --function-name blog-generator-repo-cloner --query 'Configuration.State'
+# Scheduler Lambda is deployed
+aws lambda get-function --function-name blog-generator-ec2-scheduler --query 'Configuration.State'
 
 # Bedrock access works
 aws bedrock-runtime invoke-model --model-id "$BEDROCK_MODEL_ID" \
@@ -157,12 +155,12 @@ aws bedrock-runtime invoke-model --model-id "$BEDROCK_MODEL_ID" \
   --cli-binary-format raw-in-base64-out /dev/stdout
 ```
 
-**Smoke test:** trigger the ingestion workflow with a known public repo and confirm a `.md` object appears in the posts bucket and a notification is received.
+**Smoke test:** trigger the ingestion workflow with a known public repo and confirm a content package appears in the generated-content bucket and a notification is received.
 
 | Check | Expected |
 | --- | --- |
 | `terraform output` | All outputs populated |
-| Posts bucket | New `posts/.../<timestamp>.md` after a run |
+| Generated-content bucket | New `generated-content/<repo>/<YYYY-MM-DD>/` package after a run |
 | CloudWatch dashboard | Run/success metrics increment |
 | Notification | Success message received |
 
@@ -184,13 +182,13 @@ terraform apply rollback.plan
 
 Because state is remote and versioned, you can also inspect prior state versions in the state bucket if needed.
 
-**Content rollback** — generated posts use S3 versioning; retrieve any prior version:
+**Content rollback** — generated packages use S3 versioning; retrieve any prior version:
 
 ```bash
-aws s3api list-object-versions --bucket <posts-bucket> --prefix posts/<owner>/<repo>/
-aws s3api get-object --bucket <posts-bucket> --key <key> --version-id <id> restored.md
+aws s3api list-object-versions --bucket <generated-content-bucket> --prefix generated-content/<repo>/
+aws s3api get-object --bucket <generated-content-bucket> --key <key> --version-id <id> restored.md
 ```
 
-**Lambda rollback** — deploy a previous artifact/alias, or `terraform apply` a prior code version. Use published versions/aliases for instant revert.
+**Lambda rollback** — for `ec2-scheduler`, deploy a previous artifact/alias, or `terraform apply` a prior code version. Use published versions/aliases for instant revert.
 
 > **Guardrail:** never run `terraform destroy` against a shared environment as a rollback mechanism. Prefer targeted re-apply from a known-good commit.

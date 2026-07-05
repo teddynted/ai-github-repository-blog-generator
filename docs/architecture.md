@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the architecture of the **AI GitHub Repository Blog Generator**: the high-level design, AWS deployment topology, the AI and blog-generation workflows, data flow, and storage.
+This document describes the architecture of the **AI GitHub Repository Blog Generator**: the high-level design, AWS deployment topology, the analysis and AI workflows, content-package generation, data flow, and storage.
 
 Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.md) · [Workflows](./workflows.md).
 
@@ -8,11 +8,12 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 
 ## 1. Design Principles
 
-- **Event-driven & serverless-first** — stateless Lambda functions do the heavy lifting; managed services provide durability and scale.
-- **Orchestration over glue code** — n8n owns the control flow, retries, and branching; Lambdas own discrete, testable units of work.
+- **Orchestration-first** — n8n owns the pipeline: cloning, analysis, prompt building, Bedrock calls, packaging, retries, and branching.
+- **Managed services for durability & scale** — Amazon Bedrock, S3, Secrets Manager, and CloudWatch provide the heavy lifting.
+- **Event-driven** — GitHub events (and manual/scheduled triggers) start runs.
 - **Everything as code** — all infrastructure is Terraform; all workflows are versioned JSON.
+- **Cost-aware** — the only always-on cost driver (the EC2 n8n host) is started/stopped on a schedule by a small Go Lambda.
 - **Least privilege & encryption everywhere** — each component gets only the permissions it needs.
-- **Cost-aware** — the only always-on cost driver (the EC2 n8n host) is schedule-managed.
 
 ---
 
@@ -20,54 +21,45 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 
 ```mermaid
 flowchart TB
-    subgraph External
-        GH[(GitHub)]
-        USER([Operator / Schedule])
+    subgraph GitHub
+        EVT[GitHub Events<br/>push · PR · release · dispatch]
+        REPO[(Target Repository)]
     end
 
     subgraph AWS
-        EB[Amazon EventBridge]
+        SCHED[EventBridge Scheduler]
+        LSTOP[Go Lambda<br/>ec2-scheduler]
         subgraph EC2["Amazon EC2 (private subnet)"]
             N8N[n8n Orchestrator<br/>Docker Compose]
         end
-        subgraph Lambdas["AWS Lambda (Go)"]
-            CLONE[repo-cloner]
-            ANALYZE[repo-analyzer]
-            PUBLISH[blog-publisher]
-        end
         BR[Amazon Bedrock]
-        subgraph S3["Amazon S3"]
-            ART[(artifacts bucket)]
-            POST[(posts bucket)]
-        end
+        S3[(Amazon S3<br/>generated-content)]
         SM[AWS Secrets Manager]
         CW[Amazon CloudWatch]
     end
 
-    USER --> EB --> N8N
-    N8N --> CLONE --> GH
-    CLONE --> ART
-    N8N --> ANALYZE
-    ANALYZE --> ART
-    ANALYZE --> N8N
-    N8N --> BR --> N8N
-    N8N --> PUBLISH --> POST
-    SM -. secrets .-> N8N
-    SM -. secrets .-> CLONE
-    N8N & CLONE & ANALYZE & PUBLISH -. logs/metrics .-> CW
+    EVT -->|webhook / trigger| N8N
+    SCHED -->|19:00 start / 21:00 stop| LSTOP --> EC2
+    N8N -->|clone + analyze| REPO
+    N8N -->|platform prompts| BR
+    BR -->|content package| N8N
+    N8N -->|store package| S3
+    SM -. GitHub token .-> N8N
+    N8N -. logs/metrics .-> CW
+    LSTOP -. logs .-> CW
 ```
 
 **Component responsibilities**
 
 | Component | Responsibility |
 | --- | --- |
-| EventBridge | Triggers runs (scheduled or manual) and manages EC2 start/stop |
-| n8n | Orchestrates stages, holds credentials, handles retries/branching |
-| `repo-cloner` | Clones the repo, normalizes it, uploads to the artifacts bucket |
-| `repo-analyzer` | Discovers files, extracts metadata, detects tech, builds the prompt |
-| Amazon Bedrock | Generates blog content from the prompt |
-| `blog-publisher` | Renders Markdown, versions it, writes to the posts bucket, notifies |
-| Secrets Manager | Stores GitHub token, n8n credentials, notification secrets |
+| GitHub events | Trigger runs (push, PR, release, repo creation, workflow dispatch) |
+| EventBridge Scheduler | Fires the EC2 start/stop schedule |
+| `ec2-scheduler` (Go Lambda) | Starts/stops the EC2 host on schedule |
+| n8n (on EC2) | Clones, analyzes, builds prompts, invokes Bedrock, packages, stores, notifies |
+| Amazon Bedrock | Generates each content type in the package |
+| Amazon S3 | Stores the versioned, dated content package |
+| Secrets Manager | Stores the GitHub token and credentials |
 | CloudWatch | Central logs, metrics, dashboards, alarms |
 
 ---
@@ -78,72 +70,80 @@ flowchart TB
 flowchart TB
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
-        NAT[NAT Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
-            NATN[NAT]
+            NAT[NAT Gateway]
         end
         subgraph Private["Private subnet 10.0.10.0/24"]
             EC2[(EC2: n8n)]
-            LAM[(Lambda ENIs)]
         end
+        VPCE["VPC Endpoints:<br/>S3 · Secrets Manager ·<br/>Bedrock · CloudWatch Logs · SSM"]
     end
 
-    IGW --- NATN
-    NAT --- NATN
+    IGW --- NAT
     EC2 --> NAT --> IGW
-    LAM --> NAT
-    EC2 -. VPC endpoints .-> BR[Amazon Bedrock]
-    LAM -. VPC endpoints .-> S3[(Amazon S3)]
-    LAM -. VPC endpoints .-> SM[Secrets Manager]
+    EC2 -. private .-> VPCE
+    VPCE -. .-> BR[Amazon Bedrock]
+    VPCE -. .-> S3[(Amazon S3)]
 ```
 
-- The **n8n EC2 host** runs in a **private subnet**; outbound internet (GitHub, package pulls) is via a **NAT gateway**. Administrative access is via **AWS Systems Manager Session Manager** (no public SSH).
-- **Lambda functions** run in the VPC (or with VPC access to endpoints) and reach AWS services through **VPC gateway/interface endpoints** to keep traffic off the public internet where possible.
+- The **n8n EC2 host** runs in a **private subnet**; outbound internet (GitHub, image pulls) is via a **NAT gateway**. Administrative access is via **AWS Systems Manager Session Manager** — no public SSH.
+- Traffic to **S3, Secrets Manager, Bedrock, CloudWatch, and SSM** goes through **VPC endpoints** to keep it on the AWS network.
 - **Security groups** allow only required flows; see [Infrastructure](./infrastructure.md#7-security-groups).
 
 ---
 
-## 4. AI Workflow
+## 4. Analysis & AI Workflow
 
-The AI workflow converts a repository snapshot into a generation-ready prompt and invokes Amazon Bedrock.
+n8n converts a repository into a set of generation-ready prompts and invokes Amazon Bedrock for each content type.
 
 ```mermaid
 sequenceDiagram
+    participant GH as GitHub
     participant N as n8n
-    participant A as repo-analyzer (Lambda)
-    participant S as S3 (artifacts)
     participant B as Amazon Bedrock
 
-    N->>A: analyze(repoRef)
-    A->>S: read repo snapshot
-    A->>A: file discovery + ranking
-    A->>A: metadata + README extraction
-    A->>A: technology detection
-    A->>A: assemble structured prompt (token-budgeted)
-    A-->>N: prompt + context manifest
-    N->>B: InvokeModel(prompt, model, params)
-    B-->>N: generated blog content
-    N->>N: validate + branch on result
+    N->>GH: clone repository
+    N->>N: repository structure analysis
+    N->>N: README analysis
+    N->>N: source code analysis
+    N->>N: configuration file analysis
+    N->>N: technology stack detection
+    N->>N: architecture understanding
+    N->>N: build platform-specific prompts (token-budgeted)
+    loop each content type
+        N->>B: InvokeModel(prompt, model, params)
+        B-->>N: generated content
+    end
 ```
 
-**Prompt assembly** combines: repository metadata, README summary, ranked source excerpts, and detected technologies, formatted against a configurable template and truncated deterministically to respect the model context window (see [FR-8.2](./requirements.md#18-ai-prompt-generation)).
+**Prompt assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-platform templates and truncated deterministically to respect the model context window (see [AI Requirements](./requirements.md#5-ai-requirements)).
 
 ---
 
-## 5. Blog Generation Workflow
+## 5. Content-Package Generation
+
+Rather than a single article, each run produces a **content package** — many platform-specific assets.
 
 ```mermaid
-flowchart LR
-    A[Bedrock output] --> B{Valid?}
-    B -- no --> R[Retry / fail + notify]
-    B -- yes --> C[blog-publisher]
-    C --> D[Render Markdown + front matter]
-    D --> E[Version + write to posts bucket]
-    E --> F[Emit metrics]
-    F --> G[Notify success]
+flowchart TB
+    A[Repository understanding] --> P{Fan-out per content type}
+    P --> A1[blog.md]
+    P --> A2[medium.md]
+    P --> A3[devto.md]
+    P --> A4[hashnode.md]
+    P --> A5[newsletter.md]
+    P --> A6[linkedin.md]
+    P --> A7[twitter-thread.md]
+    P --> A8[reddit.md]
+    P --> A9[faq.md]
+    P --> A10[readme-suggestions.md]
+    P --> A11[image-prompts.md]
+    P --> A12[seo.json]
+    P --> A13[metadata.json]
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 & A11 & A12 & A13 --> PKG[Package + store to S3]
 ```
 
-The `blog-publisher` Lambda renders the model output into Markdown with YAML front matter, writes it to the posts bucket under a deterministic, versioned key, emits CloudWatch metrics, and triggers a success notification. Any failure routes to the error/notification path without overwriting existing content ([FR-16.3](./requirements.md#116-error-handling)).
+Any failure on a content type routes to the error/notification path without overwriting an existing package ([FR-6.3](./requirements.md#16-error-handling--retries)). See [Content Generation](./requirements.md#12-content-generation) for the full asset list.
 
 ---
 
@@ -151,51 +151,52 @@ The `blog-publisher` Lambda renders the model output into Markdown with YAML fro
 
 ```mermaid
 flowchart LR
-    GH[(GitHub repo)] -->|clone| C[repo-cloner]
-    C -->|snapshot| ART[(S3 artifacts)]
-    ART -->|read| AN[repo-analyzer]
-    AN -->|prompt + manifest| N[n8n]
-    N -->|InvokeModel| BR[Amazon Bedrock]
+    EVT[GitHub event / manual] --> N[n8n]
+    GH[(GitHub repo)] -->|clone| N
+    N -->|analysis| N
+    N -->|prompts| BR[Amazon Bedrock]
     BR -->|content| N
-    N -->|content| PUB[blog-publisher]
-    PUB -->|versioned .md| POST[(S3 posts)]
-    PUB -->|notification| NOTIF[(SNS / Slack / webhook)]
+    N -->|package .md/.json| S3[(S3 generated-content)]
+    N -->|notification| NOTIF[(SNS / Slack / webhook)]
+    SM[Secrets Manager] -. token .-> N
 ```
 
 **Stages and payloads**
 
 | Stage | Input | Output |
 | --- | --- | --- |
-| Clone | repo URL | normalized snapshot in artifacts bucket |
-| Analyze | snapshot reference | structured prompt + context manifest |
-| Generate | prompt + params | raw blog content |
-| Publish | blog content + metadata | versioned Markdown in posts bucket |
+| Trigger | GitHub event / manual | run request `{ repoUrl, event }` |
+| Clone | repo URL | local working copy on EC2 |
+| Analyze | working copy | structured repository understanding |
+| Generate | prompts + params | per-type content |
+| Package & store | content set | versioned package in S3 |
 | Notify | run result | notification message |
 
 ---
 
 ## 7. Storage Architecture
 
-Two S3 buckets separate transient inputs from durable outputs, plus a state bucket for Terraform.
+One S3 bucket holds generated content; a separate bucket holds Terraform state. Repository clones are transient and live on the EC2 host's ephemeral disk, not in S3.
 
 ```mermaid
 flowchart TB
     subgraph S3
-        ART[(artifacts bucket)]
-        POST[(posts bucket)]
+        GC[(generated-content bucket)]
         STATE[(tfstate bucket)]
     end
-    ART -->|lifecycle: expire 7d| X1[Deleted]
-    POST -->|versioning + lifecycle: IA 30d, Glacier 90d| X2[Archived]
+    GC -->|versioning + lifecycle: IA 30d, Glacier 90d| ARCH[Archived]
     STATE -->|versioned + locked via DynamoDB| LOCK[(DynamoDB lock table)]
 ```
 
 | Bucket | Contents | Versioning | Lifecycle |
 | --- | --- | --- | --- |
-| `artifacts` | Cloned repo snapshots, intermediate analysis | Off | Expire after 7 days |
-| `posts` | Generated Markdown blog posts | **On** | IA at 30d, Glacier at 90d |
+| `generated-content` | Generated content packages | **On** | IA at 30d, Glacier at 90d |
 | `tfstate` | Terraform remote state | **On** | Retain; DynamoDB lock table |
 
-Key scheme for posts: `posts/<repo-owner>/<repo-name>/<UTC-timestamp>.md` (see [FR-13.2](./requirements.md#113-content-storage)). All buckets enforce encryption at rest, block public access, and require TLS.
+**Key scheme** for a package:
 
-See [Infrastructure](./infrastructure.md) for the concrete Terraform modules and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.
+```text
+generated-content/<repository-name>/<YYYY-MM-DD>/<asset>
+```
+
+All buckets enforce encryption at rest, block public access, and require TLS. See [Storage Requirements](./requirements.md#7-storage-requirements), [Infrastructure](./infrastructure.md) for the Terraform modules, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.

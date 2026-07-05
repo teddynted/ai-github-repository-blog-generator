@@ -1,6 +1,6 @@
 # Requirements
 
-This document defines the functional and non-functional requirements for the **AI GitHub Repository Blog Generator**.
+This document defines the requirements for the **AI GitHub Repository Blog Generator** — an AI-powered developer content engine that analyzes GitHub repositories and generates complete, publication-ready content packages using Amazon Bedrock.
 
 Requirements use the following convention:
 
@@ -8,216 +8,263 @@ Requirements use the following convention:
 - **SHOULD** — strongly recommended; may be deferred with justification.
 - **MAY** — optional or future work.
 
-Each requirement has a stable ID (`FR-*` for functional, `NFR-*` for non-functional) so it can be referenced from issues, pull requests, and tests.
+Each requirement has a stable ID so it can be referenced from issues, pull requests, and tests:
 
-Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) · [Roadmap](./roadmap.md).
+| Prefix | Category |
+| --- | --- |
+| `FR-*` | Functional |
+| `NFR-*` | Non-functional |
+| `INF-*` | Infrastructure |
+| `SEC-*` | Security |
+| `AI-*` | AI |
+| `WF-*` | Workflow |
+| `ST-*` | Storage |
+| `MON-*` | Monitoring |
+| `COST-*` | Cost optimization |
+
+Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) · [Infrastructure](./infrastructure.md) · [Roadmap](./roadmap.md).
 
 ---
 
 ## 1. Functional Requirements
 
-### 1.1 GitHub Repository Analysis
+### 1.1 Repository Analysis
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-1.1 | The system MUST accept a public GitHub repository URL as input to a generation run. | MUST |
-| FR-1.2 | The system MUST support authenticated access to private repositories via a GitHub token stored in Secrets Manager. | SHOULD |
-| FR-1.3 | The system MUST validate the repository URL and reject malformed or unreachable inputs with a clear error. | MUST |
+| FR-1.1 | The system MUST accept a GitHub repository as input to a generation run. | MUST |
+| FR-1.2 | The system MUST automatically clone the target repository for analysis. | MUST |
+| FR-1.3 | The system SHOULD perform a shallow clone to minimize time and storage. | SHOULD |
+| FR-1.4 | The system MUST analyze the repository structure (file tree, modules, layout). | MUST |
+| FR-1.5 | The system MUST locate and analyze the README to extract purpose and usage. | MUST |
+| FR-1.6 | The system MUST analyze representative source code files within a token budget. | MUST |
+| FR-1.7 | The system MUST analyze configuration files (`package.json`, `go.mod`, `Dockerfile`, `*.tf`, CI configs, …). | MUST |
+| FR-1.8 | The system MUST detect the technology stack (languages, frameworks, build tools, infrastructure). | MUST |
+| FR-1.9 | The system MUST synthesize an understanding of the project architecture from the above. | MUST |
+| FR-1.10 | The system MUST respect ignore rules (`.gitignore`, binaries, vendored dirs, size caps). | MUST |
 
-### 1.2 Repository Cloning
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-2.1 | The system MUST clone the target repository into ephemeral storage (`repo-cloner` Lambda). | MUST |
-| FR-2.2 | The system SHOULD perform a shallow clone (`--depth 1`) to minimize time and storage. | SHOULD |
-| FR-2.3 | The system MUST upload a normalized snapshot of the cloned repository to the artifacts S3 bucket. | MUST |
-| FR-2.4 | The system MUST clean up ephemeral clone data after upload. | MUST |
-
-### 1.3 Repository Metadata Extraction
+### 1.2 Content Generation
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-3.1 | The system MUST extract repository metadata: name, description, default branch, topics, license, stars, and last-updated timestamp. | MUST |
-| FR-3.2 | The system SHOULD retrieve metadata from the GitHub REST API where available and fall back to on-disk inspection. | SHOULD |
+| FR-2.1 | The system MUST generate a **complete content package**, not a single article. | MUST |
+| FR-2.2 | The system MUST generate a generic technical blog article (`blog.md`). | MUST |
+| FR-2.3 | The system MUST generate a Medium article (`medium.md`). | MUST |
+| FR-2.4 | The system MUST generate a Dev.to article (`devto.md`). | MUST |
+| FR-2.5 | The system MUST generate a Hashnode article (`hashnode.md`). | MUST |
+| FR-2.6 | The system MUST generate a newsletter article (`newsletter.md`). | MUST |
+| FR-2.7 | The system MUST generate a LinkedIn post (`linkedin.md`). | MUST |
+| FR-2.8 | The system MUST generate an X (Twitter) thread (`twitter-thread.md`). | MUST |
+| FR-2.9 | The system MUST generate a Reddit post (`reddit.md`). | MUST |
+| FR-2.10 | The system MUST generate an FAQ (`faq.md`). | MUST |
+| FR-2.11 | The system SHOULD generate README improvement suggestions (`readme-suggestions.md`). | SHOULD |
+| FR-2.12 | The system MUST generate a cover-image prompt for AI image generation (`image-prompts.md`). | MUST |
+| FR-2.13 | The system MUST generate SEO metadata: title, description, keywords (`seo.json`). | MUST |
+| FR-2.14 | The system MUST generate package metadata: tags, reading time, social captions, call-to-action suggestions (`metadata.json`). | MUST |
 
-### 1.4 File Discovery
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-4.1 | The system MUST enumerate the repository file tree. | MUST |
-| FR-4.2 | The system MUST rank files by relevance (README, manifests, entrypoints, configuration, docs) for inclusion in analysis. | MUST |
-| FR-4.3 | The system MUST respect ignore rules (`.gitignore`, binary files, vendored/`node_modules` directories, size caps). | MUST |
-
-### 1.5 README Analysis
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-5.1 | The system MUST locate and parse the repository README (any common casing/extension). | MUST |
-| FR-5.2 | The system MUST extract the project summary, usage, and stated purpose from the README. | MUST |
-
-### 1.6 Source Code Analysis
+### 1.3 Article Quality
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-6.1 | The system MUST sample representative source files (entrypoints, core modules) within a configurable token budget. | MUST |
-| FR-6.2 | The system SHOULD summarize directory structure and module responsibilities. | SHOULD |
+| FR-3.1 | Each long-form article MUST include an engaging title (and subtitle where the platform supports one). | MUST |
+| FR-3.2 | Each long-form article MUST include an introduction, well-organized sections, and a conclusion. | MUST |
+| FR-3.3 | Each long-form article SHOULD include a table of contents. | SHOULD |
+| FR-3.4 | Each long-form article SHOULD include code examples where appropriate. | SHOULD |
+| FR-3.5 | Each long-form article SHOULD cover architecture explanations, best practices, and challenges/trade-offs. | SHOULD |
+| FR-3.6 | Each long-form article MUST include a call to action. | MUST |
+| FR-3.7 | Each long-form article MUST include platform-specific tags and estimated reading time. | MUST |
+| FR-3.8 | Generated content MUST be valid Markdown (articles) or valid JSON (`seo.json`, `metadata.json`). | MUST |
 
-### 1.7 Technology Detection
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-7.1 | The system MUST detect programming languages from file extensions and content. | MUST |
-| FR-7.2 | The system MUST detect frameworks, build tools, and package managers from manifest files (e.g. `package.json`, `go.mod`, `requirements.txt`, `Dockerfile`, `*.tf`). | MUST |
-| FR-7.3 | The system SHOULD detect infrastructure and deployment tooling (Terraform, Docker, CI configs). | SHOULD |
-
-### 1.8 AI Prompt Generation
+### 1.4 Platform Targeting
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-8.1 | The system MUST assemble a structured prompt from metadata, README analysis, code samples, and detected technologies. | MUST |
-| FR-8.2 | The system MUST enforce a maximum prompt token budget and truncate deterministically when exceeded. | MUST |
-| FR-8.3 | The system SHOULD support configurable prompt templates. | SHOULD |
+| FR-4.1 | The system MUST produce platform-specific content optimized for Medium, Dev.to, and Hashnode. | MUST |
+| FR-4.2 | The system MUST produce content suitable for personal blogs, company engineering blogs, and any Markdown-compatible platform. | MUST |
 
-### 1.9 Amazon Bedrock Integration
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-9.1 | The system MUST invoke a configurable Amazon Bedrock foundation model to generate blog content. | MUST |
-| FR-9.2 | The system MUST make the model ID, temperature, and max tokens configurable via Terraform variables. | MUST |
-| FR-9.3 | The system MUST implement retry with exponential backoff on throttling and transient errors. | MUST |
-| FR-9.4 | The system SHOULD record token usage per invocation for cost tracking. | SHOULD |
-
-### 1.10 Blog Generation
+### 1.5 GitHub Event Triggers
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-10.1 | The system MUST generate a coherent technical blog post covering purpose, architecture, technologies, and implementation. | MUST |
-| FR-10.2 | The system SHOULD include a title, summary/abstract, and section headings. | SHOULD |
+| FR-5.1 | The system MUST support triggering on a **push** event. | MUST |
+| FR-5.2 | The system MUST support triggering on a **pull request** event. | MUST |
+| FR-5.3 | The system MUST support triggering on a **release** event. | MUST |
+| FR-5.4 | The system SHOULD support triggering on **repository creation**. | SHOULD |
+| FR-5.5 | The system MUST support **workflow dispatch** (from GitHub Actions). | MUST |
+| FR-5.6 | The system MUST support **manual** on-demand triggering. | MUST |
 
-### 1.11 Markdown Generation
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-11.1 | The system MUST output the blog post as valid Markdown. | MUST |
-| FR-11.2 | The system MUST include YAML front matter (title, date, source repo, tags, model). | MUST |
-| FR-11.3 | The system SHOULD produce fenced code blocks and, where useful, Mermaid diagrams. | SHOULD |
-
-### 1.12 Blog Versioning
+### 1.6 Error Handling & Retries
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-12.1 | The system MUST version every generated post (S3 object versioning and/or timestamped keys). | MUST |
-| FR-12.2 | The system MUST retain prior versions and allow retrieval of any historical version. | MUST |
-
-### 1.13 Content Storage
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-13.1 | The system MUST store generated posts in a dedicated, encrypted S3 bucket. | MUST |
-| FR-13.2 | The system MUST use a deterministic key scheme: `posts/<repo-owner>/<repo-name>/<timestamp>.md`. | MUST |
-
-### 1.14 Scheduling
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-14.1 | The system MUST support scheduled generation runs via Amazon EventBridge. | MUST |
-| FR-14.2 | The system MUST support on-demand (manual) triggering. | MUST |
-
-### 1.15 Workflow Automation
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-15.1 | The system MUST orchestrate all stages through n8n workflows. | MUST |
-| FR-15.2 | The system MUST pass structured data between workflow stages. | MUST |
-| FR-15.3 | The system SHOULD make workflows importable/exportable as versioned JSON. | SHOULD |
-
-### 1.16 Error Handling
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-16.1 | Every workflow stage MUST handle failures explicitly and surface actionable errors. | MUST |
-| FR-16.2 | The system MUST retry transient failures and stop after a configurable maximum. | MUST |
-| FR-16.3 | Failed runs MUST NOT overwrite or corrupt previously generated content. | MUST |
-
-### 1.17 Notifications
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-17.1 | The system MUST send a notification on run success and on run failure. | MUST |
-| FR-17.2 | The system SHOULD support pluggable channels (email/SNS, Slack, webhook). | SHOULD |
+| FR-6.1 | Every stage MUST handle failures explicitly and surface actionable errors. | MUST |
+| FR-6.2 | The system MUST retry transient failures (GitHub, Bedrock, S3) with exponential backoff. | MUST |
+| FR-6.3 | A failed run MUST NOT overwrite or corrupt a previously generated package. | MUST |
 
 ---
 
 ## 2. Non-Functional Requirements
 
-### 2.1 Scalability
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| NFR-1 | **Scalability** — compute-heavy work MUST be able to scale horizontally or process repositories independently. | MUST |
+| NFR-2 | **Availability** — storage and AI stages MUST rely on managed, highly-available AWS services. | MUST |
+| NFR-3 | **Reliability** — runs MUST be idempotent; re-running a failed job MUST NOT corrupt output. | MUST |
+| NFR-4 | **Performance** — a single content package SHOULD complete within a bounded time for a typical repository, enforced by token/file budgets. | SHOULD |
+| NFR-5 | **Maintainability** — all infrastructure MUST be defined as code; Go code MUST pass `gofmt`, `go vet`, and tests in CI. | MUST |
+| NFR-6 | **Extensibility** — new content types and workflow stages SHOULD be addable without rewriting existing ones. | SHOULD |
+| NFR-7 | **Observability** — all components MUST emit structured logs and key metrics. | MUST |
+| NFR-8 | **Portability** — the workflows MUST be importable/exportable as versioned JSON. | MUST |
+| NFR-9 | **Beginner-friendliness** — a new contributor MUST be able to run the system locally from documentation alone. | MUST |
+
+---
+
+## 3. Infrastructure Requirements
+
+All infrastructure MUST be provisioned with **Terraform** (see [Infrastructure](./infrastructure.md)).
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| NFR-1.1 | Compute-heavy stages MUST run in stateless Lambda functions that scale horizontally. | MUST |
-| NFR-1.2 | The system SHOULD process multiple repositories concurrently without shared-state contention. | SHOULD |
+| INF-1 | Provision an **Amazon VPC** with **public** and **private** subnets. | MUST |
+| INF-2 | Provision an **Internet Gateway** and **route tables** for controlled connectivity. | MUST |
+| INF-3 | Provision **security groups** restricting traffic to only what is required. | MUST |
+| INF-4 | Provision **IAM roles** and **IAM policies** following least privilege. | MUST |
+| INF-5 | Provision **Amazon EC2** to host the n8n orchestrator in a private subnet. | MUST |
+| INF-6 | Provide access to **Amazon Bedrock** for content generation. | MUST |
+| INF-7 | Provision **Amazon S3** for generated content (and Terraform remote state). | MUST |
+| INF-8 | Provision **AWS Secrets Manager** for GitHub tokens and credentials. | MUST |
+| INF-9 | Provision **Amazon CloudWatch** for logs, metrics, and alarms. | MUST |
+| INF-10 | Provision **Amazon EventBridge** and **EventBridge Scheduler** for scheduling. | MUST |
+| INF-11 | Provision **AWS Lambda** (Go) for scheduled EC2 start/stop. | MUST |
+| INF-12 | Terraform state MUST be stored remotely (S3) with locking (DynamoDB). | MUST |
+| INF-13 | No resource MAY be created manually outside Terraform (no console drift). | MUST |
 
-### 2.2 Availability
+---
 
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-2.1 | Storage and AI stages MUST rely on managed, highly-available AWS services (S3, Bedrock, Lambda). | MUST |
-| NFR-2.2 | The n8n host SHOULD be recoverable from Infrastructure as Code within minutes. | SHOULD |
-
-### 2.3 Reliability
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-3.1 | The system MUST be idempotent per run: re-running a failed job MUST NOT produce corrupt output. | MUST |
-| NFR-3.2 | The system MUST use retries with backoff on all external calls (GitHub, Bedrock, S3). | MUST |
-
-### 2.4 Performance
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-4.1 | A single blog generation run SHOULD complete within 5 minutes for a typical repository. | SHOULD |
-| NFR-4.2 | Analysis MUST enforce token and file-size budgets to bound latency and cost. | MUST |
-
-### 2.5 Security
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-5.1 | All IAM roles MUST follow least privilege. | MUST |
-| NFR-5.2 | All secrets MUST be stored in AWS Secrets Manager — never in code or plaintext. | MUST |
-| NFR-5.3 | Data MUST be encrypted at rest (S3, EBS) and in transit (TLS). | MUST |
+## 4. Security Requirements
 
 See [Security](./security.md) for full detail.
 
-### 2.6 Cost Optimization
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| SEC-1 | All IAM roles and policies MUST follow **least privilege**. | MUST |
+| SEC-2 | GitHub tokens MUST be stored in **AWS Secrets Manager**. | MUST |
+| SEC-3 | There MUST be **no hardcoded credentials** in code, images, or state. | MUST |
+| SEC-4 | **Amazon Bedrock** access MUST be scoped by IAM to specific model ARNs. | MUST |
+| SEC-5 | **Amazon S3** access MUST be least-privilege; buckets MUST block public access and enforce TLS. | MUST |
+| SEC-6 | Data MUST be encrypted at rest (S3, EBS, Secrets Manager) and in transit (TLS 1.2+). | MUST |
+| SEC-7 | All access and activity MUST be logged to **CloudWatch**; logs MUST NOT contain secrets. | MUST |
+| SEC-8 | Administrative access to EC2 SHOULD use SSM Session Manager (no public SSH). | SHOULD |
+
+---
+
+## 5. AI Requirements
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| NFR-6.1 | The EC2 n8n host SHOULD be stopped outside operating windows via scheduled EventBridge rules. | SHOULD |
-| NFR-6.2 | S3 lifecycle policies MUST transition/expire artifacts to control storage cost. | MUST |
-| NFR-6.3 | CloudWatch log retention MUST be bounded (default 14 days). | MUST |
+| AI-1 | The system MUST use **Amazon Bedrock** foundation models for content generation. | MUST |
+| AI-2 | The model ID/inference profile, `max_tokens`, and `temperature` MUST be configurable (Terraform variables). | MUST |
+| AI-3 | The system MUST assemble structured prompts from repository analysis (structure, README, code, config, tech stack, architecture). | MUST |
+| AI-4 | Prompts MUST enforce a maximum token budget and truncate deterministically when exceeded. | MUST |
+| AI-5 | The system MUST use distinct, platform-tuned prompts for each content type. | MUST |
+| AI-6 | The system MUST retry Bedrock throttling/transient errors with exponential backoff. | MUST |
+| AI-7 | The system SHOULD record token usage per invocation for cost tracking. | SHOULD |
+| AI-8 | Prompt templates SHOULD be configurable without code changes. | SHOULD |
+
+---
+
+## 6. Workflow Requirements
+
+Orchestration is implemented with **n8n** (see [Workflows](./workflows.md)).
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| WF-1 | All stages MUST be orchestrated through n8n workflows. | MUST |
+| WF-2 | Workflows MUST pass structured data between stages. | MUST |
+| WF-3 | Workflows MUST be triggerable by GitHub events and by manual/scheduled invocation. | MUST |
+| WF-4 | Each workflow MUST have explicit success and failure paths. | MUST |
+| WF-5 | Workflows MUST be exportable/importable as versioned JSON, free of embedded secret values. | MUST |
+| WF-6 | Each content type SHOULD be generatable independently for testing. | SHOULD |
+
+---
+
+## 7. Storage Requirements
+
+See [Architecture → Storage](./architecture.md#7-storage-architecture).
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| ST-1 | Generated content MUST be stored in **Amazon S3**. | MUST |
+| ST-2 | Content MUST be organized by repository and date: `generated-content/<repository-name>/<YYYY-MM-DD>/`. | MUST |
+| ST-3 | Each package MUST contain the full set of generated assets (articles, social posts, `seo.json`, `metadata.json`, image prompts). | MUST |
+| ST-4 | The content bucket MUST enforce encryption at rest and block public access. | MUST |
+| ST-5 | The content bucket SHOULD use versioning and lifecycle policies to bound cost. | SHOULD |
+| ST-6 | Terraform state MUST be stored in a separate, versioned, encrypted S3 bucket with DynamoDB locking. | MUST |
+
+---
+
+## 8. Monitoring Requirements
+
+See [Monitoring](./monitoring.md).
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| MON-1 | All components MUST emit **structured logs** to CloudWatch. | MUST |
+| MON-2 | Key metrics (runs started/succeeded/failed, latency, token usage) MUST be published to CloudWatch. | MUST |
+| MON-3 | A run ID MUST correlate logs across all stages of a single run. | MUST |
+| MON-4 | Failure alarms (workflow failures, Bedrock failures, infra health) MUST notify operators. | MUST |
+| MON-5 | An operational dashboard SHOULD summarize run health at a glance. | SHOULD |
+| MON-6 | Log retention MUST be bounded (default 14 days). | MUST |
+
+---
+
+## 9. Cost Optimization Requirements
 
 See [Cost Optimization](./cost-optimization.md).
 
-### 2.7 Maintainability
-
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| NFR-7.1 | All infrastructure MUST be defined as code (Terraform) with no manual console drift. | MUST |
-| NFR-7.2 | Go code MUST pass `gofmt`, `go vet`, and unit tests in CI. | MUST |
+| COST-1 | The EC2 host MUST be automatically **started and stopped** to avoid running continuously. | MUST |
+| COST-2 | Start/stop MUST be driven by **EventBridge Scheduler** invoking a **Go AWS Lambda**. | MUST |
+| COST-3 | The default schedule MUST **start EC2 at 19:00** and **stop EC2 at 21:00**. | MUST |
+| COST-4 | The start/stop schedule MUST be configurable via Terraform variables. | MUST |
+| COST-5 | S3 lifecycle policies MUST bound stored-content cost. | MUST |
+| COST-6 | CloudWatch log retention MUST be bounded. | MUST |
+| COST-7 | Bedrock cost SHOULD be controlled via token budgets and capped `max_tokens`. | SHOULD |
 
-### 2.8 Extensibility
+---
 
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-8.1 | Prompt templates, models, and output templates MUST be configurable without code changes where practical. | MUST |
-| NFR-8.2 | New workflow stages SHOULD be addable without rewriting existing ones. | SHOULD |
+## 10. Future Enhancements
 
-### 2.9 Observability
+Planned capabilities (see [Roadmap](./roadmap.md)). These are **future work** and not part of the current compliant release.
 
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-9.1 | All components MUST emit structured logs to CloudWatch. | MUST |
-| NFR-9.2 | Key metrics (runs, successes, failures, latency, token usage) MUST be published to CloudWatch. | MUST |
-| NFR-9.3 | Failure alarms MUST notify operators. | MUST |
+**Content breadth**
 
-See [Monitoring](./monitoring.md).
+- Multi-language article generation
+- AI-generated architecture diagrams
+- AI-generated sequence diagrams
+- AI-generated flowcharts
+- AI-generated release notes
+- Documentation generation
+- API documentation generation
+- YouTube video scripts
+- TikTok scripts
+- Shorts scripts
+- Podcast summaries
+
+**Intelligence & quality**
+
+- Multi-model AI support
+- Content quality scoring
+- Duplicate content detection
+
+**Automation**
+
+- Scheduled repository rescans
+- Automatic publishing to blogging platforms
+- CMS integrations
+- WordPress integration
+- Ghost CMS integration
+- Hashnode publishing API
+- Medium publishing API
+- Dev.to publishing API
