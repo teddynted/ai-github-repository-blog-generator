@@ -17,7 +17,7 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 ## 2. Secrets Management
 
 - All secrets live in **AWS Secrets Manager**; nothing sensitive is committed to git or baked into images/AMIs.
-- Terraform creates the secret *resources*; **values are populated out of band** ([Deployment §4](./deployment.md#4-secrets)).
+- CloudFormation creates the secret *resources*; **values are populated out of band** ([Deployment §4](./deployment.md#4-secrets)).
 - Access is granted per-consumer, scoped to specific secret ARNs.
 
 | Secret | Consumer | Access |
@@ -90,8 +90,8 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 
 | Data | At rest | In transit |
 | --- | --- | --- |
-| S3 objects (generated content, state) | SSE (SSE-S3/SSE-KMS) | TLS enforced via bucket policy (`aws:SecureTransport`) |
-| DynamoDB (`repositories`, `tf-locks`) | Encryption at rest | TLS |
+| S3 objects (generated content, deployment artifacts) | SSE (SSE-S3/SSE-KMS) | TLS enforced via bucket policy (`aws:SecureTransport`) |
+| DynamoDB (`repositories`) | Encryption at rest | TLS |
 | Secrets (PATs, webhook secrets) | KMS-encrypted | TLS |
 | EC2 storage | Encrypted EBS | TLS to AWS APIs |
 | Bedrock calls | — | TLS |
@@ -115,7 +115,7 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 - No long-lived AWS keys in code, CI, or images — CI uses **OIDC**; compute uses **instance/Lambda roles**.
 - Local development uses a **low-privilege dev profile**, never production credentials ([Local Development §3](./local-development.md#3-aws-cli-configuration)).
 - Exported n8n workflow JSON references credentials **by ID**, never by value.
-- `.env`, `*.tfvars`, and state files are git-ignored.
+- `.env`, `cloudformation/parameters.json`, and packaged template files are git-ignored.
 
 ---
 

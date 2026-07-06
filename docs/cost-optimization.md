@@ -22,7 +22,7 @@ flowchart LR
 ```
 
 - **Impact:** running ~2h/day instead of 24/7 reduces EC2 compute cost by roughly **90%**.
-- The window and instance are configurable via Terraform variables (`ec2_start_cron`, `ec2_stop_cron`, `ec2_instance_id`).
+- The window and instance are configurable via CloudFormation parameters (`Ec2StartCron`, `Ec2StopCron`, `Ec2InstanceId`).
 - The root EBS volume persists while stopped (small cost); n8n state survives restarts.
 - This prevents the instance from running continuously and keeps infrastructure cost minimal ([COST-1](./requirements.md#11-cost-optimization-requirements)–[COST-4](./requirements.md#11-cost-optimization-requirements)).
 
@@ -47,7 +47,7 @@ The `repositories` metadata table uses **on-demand (pay-per-request)** capacity,
 | Bucket | Rule | Rationale |
 | --- | --- | --- |
 | `generated-content` | **IA at 30d**, **Glacier at 90d** | Packages are durable but rarely re-read after publishing |
-| `tfstate` | Retain (versioned) | Small; needed for recovery |
+| `artifacts` | Expire old non-current versions | Small; only latest packaged artifacts are needed |
 
 Versioning on `generated-content` is paired with lifecycle rules on **non-current versions** so history is retained without unbounded growth. Repository clones are transient (EC2 ephemeral disk) and incur no S3 cost.
 
@@ -61,12 +61,12 @@ Versioning on `generated-content` is paired with lifecycle rules on **non-curren
 
 ---
 
-## 5. Terraform Cost Optimization
+## 5. IaC Cost Optimization
 
-- **Tag everything** (via provider `default_tags`) with `project`, `environment`, `owner` for cost allocation and budget filtering.
-- Use **`terraform plan`** in CI to catch unintended, cost-increasing changes before apply ([CI/CD](./ci-cd.md)).
+- **Tag everything** (via stack-level `Tags` on `aws cloudformation deploy`) with `project`, `environment`, `owner` for cost allocation and budget filtering.
+- Review a **change set** in CI to catch unintended, cost-increasing changes before deploy ([CI/CD](./ci-cd.md)).
 - Prefer **on-demand/managed** services over always-on infrastructure.
-- Keep **dev** environments smaller (or destroyed when idle): `terraform destroy` on ephemeral dev stacks.
+- Keep **dev** environments smaller (or deleted when idle): `aws cloudformation delete-stack` on ephemeral dev stacks.
 - Consider an **AWS Budget** with alerts on the project tag.
 
 ---
@@ -96,7 +96,7 @@ Versioning on `generated-content` is paired with lifecycle rules on **non-curren
 
 ## 7. Ways to Reduce Operational Cost
 
-- Tighten or shift the **EC2 window** (`ec2_start_cron` / `ec2_stop_cron`), or run fully on demand.
+- Tighten or shift the **EC2 window** (`Ec2StartCron` / `Ec2StopCron`), or run fully on demand.
 - Keep using **VPC endpoints** instead of a NAT gateway for AWS-bound traffic.
 - Reduce **Bedrock** spend: trim prompt context, lower `max_tokens`, generate a subset of content types, or use a smaller/cheaper model for drafts and reserve larger models for final passes.
 - Shorten **content retention** and **log retention**.

@@ -13,8 +13,8 @@ Related: [Deployment](./deployment.md) · [Workflows](./workflows.md) · [Contri
 | [Git](https://git-scm.com/) | 2.30 | Clone the repo; the app itself clones target repos |
 | [Docker](https://www.docker.com/) | 24 | Run n8n locally |
 | [Docker Compose](https://docs.docker.com/compose/) | v2 | Local n8n stack |
-| [Terraform](https://developer.hashicorp.com/terraform/downloads) | 1.6 | Infrastructure as Code |
-| [AWS CLI](https://docs.aws.amazon.com/cli/) | v2 | AWS access, Bedrock testing |
+| [AWS CLI](https://docs.aws.amazon.com/cli/) | v2 | AWS access, Bedrock testing, CloudFormation deploy |
+| [cfn-lint](https://github.com/aws-cloudformation/cfn-lint) | latest | Lint CloudFormation templates |
 | [Go](https://go.dev/dl/) | 1.22 | Build and test Lambda functions |
 | Make | any | Convenience targets (optional) |
 
@@ -22,7 +22,7 @@ Verify:
 
 ```bash
 git --version && docker --version && docker compose version
-terraform version && aws --version && go version
+aws --version && cfn-lint --version && go version
 ```
 
 ---
@@ -149,6 +149,6 @@ Iterate on the pipeline directly in the n8n editor; changes are exported back to
 | Go build fails for Lambda | Wrong target arch | Set `GOOS=linux GOARCH=arm64 CGO_ENABLED=0` |
 | `NoCredentialProviders` | AWS creds not loaded | `aws sts get-caller-identity`; set `AWS_PROFILE` |
 | n8n loses credentials on restart | `N8N_ENCRYPTION_KEY` changed | Keep the key stable; persist the `n8n_data` volume |
-| Terraform state lock error | Interrupted run | `terraform force-unlock <lock-id>` (only if you own the lock) |
+| Stack stuck `UPDATE_IN_PROGRESS` / rollback | Interrupted or failed deploy | Inspect `aws cloudformation describe-stack-events`; wait for auto-rollback, or `cancel-update-stack` if you own it |
 
 If you're stuck, open an issue with logs and reproduction steps — see [Contributing → Issue Reporting](./contributing.md#8-issue-reporting).

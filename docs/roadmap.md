@@ -7,7 +7,7 @@ Related: [Requirements](./requirements.md) · [Contributing](./contributing.md).
 ```mermaid
 timeline
     title Release Roadmap
-    v1.0 : Core generation pipeline : Bedrock integration : Terraform deploy
+    v1.0 : Core generation pipeline : Bedrock integration : CloudFormation deploy
     v1.1 : Better prompts : Diagrams : SEO
     v2.0 : Templates : Multi-language : Auto-publish
     v3.0 : Multi-repo : AI review : Collaboration
@@ -17,16 +17,16 @@ timeline
 
 ## Version 1.0 — Foundation
 
-The core end-to-end pipeline, deployable from scratch with Terraform.
+The core end-to-end pipeline, deployable from scratch with CloudFormation.
 
 - ✅ GitHub Webhook trigger with HMAC SHA-256 signature validation
 - ✅ GitHub repository analysis (clone, metadata, file discovery, README + source analysis, technology detection)
 - ✅ Amazon Bedrock integration generating a full multi-platform content package
 - ✅ Versioned S3 storage of generated content
-- ✅ Terraform deployment (VPC, EC2/n8n, Lambda, S3, EventBridge Scheduler, CloudWatch, Secrets Manager, IAM)
+- ✅ CloudFormation deployment (VPC, EC2/n8n, Lambda, S3, EventBridge Scheduler, CloudWatch, Secrets Manager, IAM)
 - ✅ n8n workflow orchestration with error handling and notifications
 
-**Exit criteria:** a single `terraform apply` + workflow import + webhook configuration yields a working pipeline that produces a versioned content package from a repository event.
+**Exit criteria:** a single `aws cloudformation deploy` + workflow import + webhook configuration yields a working pipeline that produces a versioned content package from a repository event.
 
 ---
 
@@ -37,7 +37,7 @@ Improve output quality, discoverability, and webhook robustness.
 - Improved AI prompts (better structure, tighter context selection, few-shot examples)
 - Better architecture diagrams (auto-generated Mermaid from detected structure)
 - SEO optimization (meta description, slug, tags, reading time, canonical front matter)
-- Configurable prompt templates surfaced as variables
+- Configurable prompt templates surfaced as stack parameters
 - Managed webhook front door (ALB + ACM + WAF, or API Gateway) with an always-on ingestion buffer for 24/7 delivery capture
 - Expanded webhook event support (`issues`, `discussion`, `deployment`, `package`, `star`, `fork`, …)
 

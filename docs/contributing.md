@@ -23,8 +23,8 @@ Local checks before pushing:
 # Go
 ( cd lambdas/<fn> && gofmt -l . && go vet ./... && go test ./... -race )
 
-# Terraform
-( cd terraform && terraform fmt -check -recursive && terraform validate )
+# CloudFormation
+cfn-lint cloudformation/**/*.yaml
 
 # Shell
 shellcheck scripts/*.sh
@@ -85,16 +85,16 @@ A good PR:
 - Is **focused** — one logical change.
 - **Links the issue** it addresses (`Closes #NN`).
 - Includes **tests** for new behavior and updates docs when behavior/interfaces change.
-- Passes all CI checks: lint, `go test`, `terraform plan/validate`, security scan ([CI/CD](./ci-cd.md)).
+- Passes all CI checks: lint, `go test`, `cfn-lint` + change set, security scan ([CI/CD](./ci-cd.md)).
 - Explains **what** and **why**, and notes any infrastructure/cost impact.
 
 PR checklist (include in the description):
 
 - [ ] Tests added/updated and passing
-- [ ] `gofmt` / `terraform fmt` clean
+- [ ] `gofmt` clean / `cfn-lint` passes
 - [ ] Docs updated (if applicable)
 - [ ] No secrets committed
-- [ ] Terraform plan reviewed (if infra changed)
+- [ ] CloudFormation change set reviewed (if infra changed)
 
 ---
 
@@ -107,7 +107,7 @@ PR checklist (include in the description):
 - Be specific and kind; suggest, don't demand.
 - Check correctness, security (least privilege, secrets), tests, and cost impact.
 - Approve when it's *better than before*, not only when perfect — file follow-ups for the rest.
-- At least one approval is required; infrastructure changes should get extra scrutiny on the Terraform plan.
+- At least one approval is required; infrastructure changes should get extra scrutiny on the CloudFormation change set.
 
 ---
 
@@ -120,12 +120,12 @@ PR checklist (include in the description):
 - Keep functions small and testable; table-driven tests.
 - No secrets or full source payloads in logs.
 
-**Terraform**
+**CloudFormation**
 
-- `terraform fmt`; one module per concern; typed variables with descriptions.
-- No hardcoded account IDs, secrets, or Regions — use variables.
+- Pass `cfn-lint`; one nested stack per concern; typed parameters with descriptions.
+- No hardcoded account IDs, secrets, or Regions — use parameters and pseudo-parameters (`AWS::Region`, `AWS::AccountId`).
 - Least-privilege IAM; explicit resource ARNs over wildcards.
-- Tag resources via provider `default_tags`.
+- Tag resources via stack-level `Tags`.
 
 **n8n workflows**
 
@@ -152,7 +152,7 @@ Open an issue for bugs, features, or questions. A good bug report includes:
 - **Summary** and expected vs. actual behavior.
 - **Reproduction steps** (repo URL used, config, environment).
 - **Logs** (redacted — no secrets), run ID if available.
-- **Environment**: Region, model ID, Terraform/Go versions.
+- **Environment**: Region, model ID, cfn-lint/Go versions.
 
 For features, describe the **use case** and **why** it matters; link to the [Roadmap](./roadmap.md) if relevant.
 

@@ -200,7 +200,7 @@ GitHub Webhooks are the **primary trigger mechanism** (see [Security → Webhook
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | AI-1 | The system MUST use **Amazon Bedrock** foundation models for content generation. | MUST |
-| AI-2 | The model ID/inference profile, `max_tokens`, and `temperature` MUST be configurable (Terraform variables). | MUST |
+| AI-2 | The model ID/inference profile, `max_tokens`, and `temperature` MUST be configurable (CloudFormation parameters). | MUST |
 | AI-3 | The system MUST assemble structured prompts from the repository analysis context. | MUST |
 | AI-4 | Prompts MUST enforce a maximum token budget and truncate deterministically when exceeded. | MUST |
 | AI-5 | The system MUST use distinct, platform-tuned prompts for each content type. | MUST |
@@ -212,7 +212,7 @@ GitHub Webhooks are the **primary trigger mechanism** (see [Security → Webhook
 
 ## 6. Infrastructure Requirements
 
-All infrastructure MUST be provisioned with **Terraform** (see [Infrastructure](./infrastructure.md)).
+All infrastructure MUST be provisioned with **AWS CloudFormation** (see [Infrastructure](./infrastructure.md)).
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -222,14 +222,14 @@ All infrastructure MUST be provisioned with **Terraform** (see [Infrastructure](
 | INF-4 | Provision **IAM roles** and **IAM policies** following least privilege. | MUST |
 | INF-5 | Provision **Amazon EC2** to host the n8n orchestrator and the registration/webhook endpoint. | MUST |
 | INF-6 | Provide access to **Amazon Bedrock** for content generation. | MUST |
-| INF-7 | Provision **Amazon S3** for generated content (and Terraform remote state). | MUST |
-| INF-8 | Provision **Amazon DynamoDB** for repository metadata and for Terraform state locking. | MUST |
+| INF-7 | Provision **Amazon S3** for generated content (and a deployment artifacts bucket for CloudFormation packaging). | MUST |
+| INF-8 | Provision **Amazon DynamoDB** for repository metadata. | MUST |
 | INF-9 | Provision **AWS Secrets Manager** for per-repository PATs and webhook secrets. | MUST |
 | INF-10 | Provision **Amazon CloudWatch** for logs, metrics, and alarms. | MUST |
 | INF-11 | Provision **Amazon EventBridge** and **EventBridge Scheduler** for scheduling. | MUST |
 | INF-12 | Provision **AWS Lambda** (Go) for scheduled EC2 start/stop. | MUST |
-| INF-13 | Terraform state MUST be stored remotely (S3) with locking (DynamoDB). | MUST |
-| INF-14 | No resource MAY be created manually outside Terraform (no console drift). | MUST |
+| INF-13 | CloudFormation packaging artifacts MUST be stored in a versioned, encrypted S3 bucket; stack state is managed by CloudFormation itself. | MUST |
+| INF-14 | No resource MAY be created manually outside CloudFormation (no console drift). | MUST |
 
 ---
 
@@ -279,7 +279,7 @@ See [Architecture → Storage](./architecture.md#7-storage-architecture).
 | ST-3 | Each package MUST contain the full set of generated assets (articles, social posts, `seo.json`, `metadata.json`, image prompts). | MUST |
 | ST-4 | The content bucket MUST enforce encryption at rest and block public access. | MUST |
 | ST-5 | The content bucket SHOULD use versioning and lifecycle policies to bound cost. | SHOULD |
-| ST-6 | Terraform state MUST be stored in a separate, versioned, encrypted S3 bucket with DynamoDB locking. | MUST |
+| ST-6 | CloudFormation packaging artifacts MUST be stored in a separate, versioned, encrypted S3 bucket. | MUST |
 | ST-7 | Repository metadata MUST be stored in **DynamoDB**: repository URL, owner, name, default branch, registration timestamp, webhook status, webhook ID, last processed commit, last successful generation, generation status. | MUST |
 | ST-8 | DynamoDB MUST NOT store GitHub Personal Access Tokens (store references/ARNs only). | MUST |
 | ST-9 | The DynamoDB table MUST have encryption at rest enabled. | MUST |
@@ -310,7 +310,7 @@ See [Cost Optimization](./cost-optimization.md).
 | COST-1 | The EC2 host MUST be automatically **started and stopped** to avoid running continuously. | MUST |
 | COST-2 | Start/stop MUST be driven by **EventBridge Scheduler** invoking a **Go AWS Lambda**. | MUST |
 | COST-3 | The default schedule MUST **start EC2 every day at 19:00** and **stop EC2 every day at 21:00**. | MUST |
-| COST-4 | The start/stop schedule MUST be configurable via Terraform variables. | MUST |
+| COST-4 | The start/stop schedule MUST be configurable via CloudFormation parameters. | MUST |
 | COST-5 | S3 lifecycle policies MUST bound stored-content cost. | MUST |
 | COST-6 | CloudWatch log retention MUST be bounded. | MUST |
 | COST-7 | DynamoDB SHOULD use on-demand (pay-per-request) capacity to avoid idle cost. | SHOULD |

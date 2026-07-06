@@ -1,6 +1,6 @@
 # CI/CD
 
-Continuous integration and delivery run on **GitHub Actions**. Pipelines validate infrastructure, build and test the Go Lambdas, lint, scan for security issues, and deploy via Terraform.
+Continuous integration and delivery run on **GitHub Actions**. Pipelines validate infrastructure, build and test the Go Lambdas, lint, scan for security issues, and deploy via CloudFormation.
 
 Related: [Deployment](./deployment.md) · [Contributing](./contributing.md) · [Security](./security.md).
 
@@ -12,11 +12,11 @@ Related: [Deployment](./deployment.md) · [Contributing](./contributing.md) · [
 flowchart LR
     PR[Pull Request] --> L[Lint + Format]
     PR --> T[Go Test]
-    PR --> TF[Terraform fmt/validate/plan]
+    PR --> TF[cfn-lint + validate + change set]
     PR --> SEC[Security Scan]
     L & T & TF & SEC --> REV[Review + Approve]
     REV --> MERGE[Merge to main]
-    MERGE --> APPLY[Terraform Apply<br/>+ Lambda deploy]
+    MERGE --> APPLY[CloudFormation Deploy<br/>+ Lambda artifact]
     APPLY --> VERIFY[Post-deploy smoke test]
 ```
 
@@ -24,29 +24,29 @@ Workflows live in `.github/workflows/`:
 
 | File | Trigger | Purpose |
 | --- | --- | --- |
-| `lint.yml` | PR, push | ShellCheck, gofmt, terraform fmt |
+| `lint.yml` | PR, push | ShellCheck, gofmt, cfn-lint |
 | `go.yml` | PR, push | Build + test Go Lambdas |
-| `terraform.yml` | PR (plan), main (apply) | Validate, plan, apply |
+| `cloudformation.yml` | PR (change set), main (deploy) | Validate, change set, deploy |
 | `security.yml` | PR, schedule | Static analysis + scanning |
 
 ---
 
-## 2. Terraform Jobs
+## 2. CloudFormation Jobs
 
 | Step | Command | Gate |
 | --- | --- | --- |
-| Format | `terraform fmt -check -recursive` | Fails on unformatted code |
-| Init | `terraform init -backend=false` (validate) / full init (plan) | — |
-| Validate | `terraform validate` | Fails on invalid config |
-| Plan | `terraform plan -out tfplan` | Posted as a PR comment for review |
-| Apply | `terraform apply tfplan` | **main only**, after approval |
+| Lint | `cfn-lint cloudformation/**/*.yaml` | Fails on lint errors |
+| Validate | `aws cloudformation validate-template` (per template) | Fails on invalid template |
+| Package | `aws cloudformation package …` | Uploads nested templates + Lambda ZIP |
+| Change set | `aws cloudformation create-change-set …` + `describe-change-set` | Posted as a PR comment for review |
+| Deploy | `aws cloudformation deploy …` (or `execute-change-set`) | **main only**, after approval |
 
-`plan` runs on every PR so reviewers see exactly what will change. `apply` runs only on `main` (optionally gated by a protected **environment** requiring manual approval).
+The **change set** is created on every PR so reviewers see exactly what will change. `deploy` runs only on `main` (optionally gated by a protected **environment** requiring manual approval).
 
 ```yaml
-# excerpt: terraform.yml
+# excerpt: cloudformation.yml
 jobs:
-  plan:
+  changeset:
     runs-on: ubuntu-latest
     permissions:
       id-token: write   # OIDC
@@ -54,15 +54,22 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
-      - run: terraform fmt -check -recursive
-      - run: terraform init
-      - run: terraform validate
-      - run: terraform plan -out tfplan
+      - run: pip install cfn-lint && cfn-lint cloudformation/**/*.yaml
+      - run: |
+          aws cloudformation package \
+            --template-file cloudformation/main.yaml \
+            --s3-bucket ${{ secrets.ARTIFACTS_BUCKET }} \
+            --output-template-file packaged.yaml
+      - run: |
+          aws cloudformation create-change-set \
+            --stack-name blog-generator \
+            --change-set-name pr-${{ github.event.number }} \
+            --template-body file://packaged.yaml \
+            --capabilities CAPABILITY_NAMED_IAM
 ```
 
 ---
@@ -76,7 +83,7 @@ jobs:
 | Test | `go test ./... -race -cover` |
 | Build | `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda` |
 
-The `ec2-scheduler` function under `lambdas/` is built and tested; the resulting `bootstrap` binary is packaged for deployment (uploaded to the deploy artifact or referenced by Terraform). The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
+The `ec2-scheduler` function under `lambdas/` is built and tested; the resulting `bootstrap` binary is zipped and uploaded to the artifacts bucket by `aws cloudformation package`, which the Lambda resource references. The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
 
 ---
 
@@ -84,8 +91,8 @@ The `ec2-scheduler` function under `lambdas/` is built and tested; the resulting
 
 - **ShellCheck** on all scripts under `scripts/` (`bootstrap.sh`, `deploy.sh`) and any shell in workflows.
 - **gofmt / go vet** for Go.
-- **terraform fmt** for HCL.
-- Optional: `tflint` for provider-specific best practices.
+- **cfn-lint** for CloudFormation templates.
+- Optional: `yamllint` for general YAML hygiene.
 
 ---
 
@@ -105,7 +112,7 @@ See [Security → Credential Management](./security.md#6-credential-management).
 
 | Scan | Tool (example) | Scope |
 | --- | --- | --- |
-| IaC misconfig | `tfsec` / `checkov` | Terraform |
+| IaC misconfig | `cfn_nag` / `checkov` | CloudFormation |
 | Dependency vulns | `govulncheck`, Dependabot | Go modules, Actions |
 | Secret detection | `gitleaks` | Whole repo, pre-merge |
 | SAST | `gosec` | Go source |
@@ -117,15 +124,15 @@ Findings block the PR at an appropriate severity threshold. Dependabot keeps Act
 ## 7. Deployment Strategy
 
 - **Trunk-based:** short-lived feature branches merge to `main` after green checks and review.
-- **Plan on PR, apply on merge:** infrastructure changes are reviewed as a plan before they can apply.
-- **Protected environment:** `apply` requires the `production` environment approval (manual gate).
+- **Change set on PR, deploy on merge:** infrastructure changes are reviewed as a change set before they can deploy.
+- **Protected environment:** `deploy` requires the `production` environment approval (manual gate).
 - **Immutable artifacts:** Lambda binaries are versioned; use aliases for instant rollback ([Deployment §8](./deployment.md#8-rollback)).
 - **Post-deploy smoke test:** an automated check triggers a generation run against a known repo and verifies a post lands in S3.
 
 ```mermaid
 flowchart LR
-    A[Merge to main] --> B[Assume apply role OIDC]
-    B --> C[terraform apply]
+    A[Merge to main] --> B[Assume deploy role OIDC]
+    B --> C[cloudformation deploy]
     C --> D[Deploy Lambda artifacts]
     D --> E[Smoke test run]
     E --> F{Post created?}
@@ -140,7 +147,7 @@ flowchart LR
 Recommended settings on `main`:
 
 - Require PR + at least one approval.
-- Require status checks: `lint`, `go-test`, `terraform-plan`, `security-scan`.
+- Require status checks: `lint`, `go-test`, `cloudformation-changeset`, `security-scan`.
 - Require branches up to date before merge.
 - Dismiss stale approvals on new commits.
 - Restrict who can push directly (no direct pushes).
