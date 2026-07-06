@@ -1,6 +1,6 @@
 # Infrastructure
 
-All infrastructure is provisioned with **Terraform**. This document describes each AWS service, how it's used, the Terraform module layout, remote state, networking, and encryption.
+All infrastructure is provisioned with **AWS CloudFormation**. This document describes each AWS service, how it's used, the CloudFormation stack layout, deployment artifacts, networking, and encryption.
 
 Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [Security](./security.md) · [Cost Optimization](./cost-optimization.md).
 
@@ -8,25 +8,25 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 
 ## 1. Service Overview
 
-| Service | Purpose | Terraform module |
+| Service | Purpose | CloudFormation stack |
 | --- | --- | --- |
 | Amazon Bedrock | Foundation model inference for content generation | referenced by IAM + EC2 |
-| Amazon EC2 | n8n orchestration host | `modules/ec2` |
-| AWS Lambda | Go function for scheduled EC2 start/stop | `modules/lambda` |
-| Amazon S3 | Generated content, Terraform state | `modules/s3` |
-| Amazon EventBridge / Scheduler | EC2 start/stop scheduling | `modules/eventbridge` |
-| Amazon CloudWatch | Logs, metrics, dashboards, alarms | `modules/monitoring` |
-| AWS Secrets Manager | Per-repository PATs and webhook secrets | `modules/secrets` |
-| AWS IAM | Least-privilege roles and policies | `modules/iam` |
-| Amazon VPC | Network isolation (subnets, IGW, route tables, SGs) | `modules/networking` |
-| Amazon DynamoDB | Repository metadata store; Terraform state locking | `modules/dynamodb` + bootstrap |
+| Amazon EC2 | n8n orchestration host | `ec2.yaml` |
+| AWS Lambda | Go function for scheduled EC2 start/stop | `lambda.yaml` |
+| Amazon S3 | Generated content | `s3.yaml` |
+| Amazon EventBridge / Scheduler | EC2 start/stop scheduling | `eventbridge.yaml` |
+| Amazon CloudWatch | Logs, metrics, dashboards, alarms | `monitoring.yaml` |
+| AWS Secrets Manager | Per-repository PATs and webhook secrets | `secrets.yaml` |
+| AWS IAM | Least-privilege roles and policies | `iam.yaml` |
+| Amazon VPC | Network isolation (subnets, IGW, route tables, SGs) | `networking.yaml` |
+| Amazon DynamoDB | Repository metadata store | `dynamodb.yaml` |
 
 ---
 
 ## 2. Amazon Bedrock
 
 - Provides foundation-model inference for content generation via `bedrock-runtime:InvokeModel`.
-- The model ID/inference profile and parameters (`max_tokens`, `temperature`) are Terraform variables, so the model can be swapped without code changes ([AI-2](./requirements.md#5-ai-requirements)).
+- The model ID/inference profile and parameters (`max_tokens`, `temperature`) are CloudFormation parameters, so the model can be swapped without code changes ([AI-2](./requirements.md#5-ai-requirements)).
 - Access is granted narrowly via IAM to the n8n instance role, scoped to the specific model ARN(s).
 - **Model access must be requested** in the Bedrock console per Region before first use ([Deployment §1](./deployment.md#1-aws-prerequisites)).
 
@@ -61,7 +61,7 @@ It has a least-privilege role limited to `ec2:StartInstances` / `ec2:StopInstanc
 | Bucket | Contents | Config |
 | --- | --- | --- |
 | `<prefix>-generated-content` | Generated content packages | **Versioning on**, SSE, block public access, lifecycle IA/Glacier |
-| `<prefix>-tfstate` | Terraform state | Versioning on, SSE, TLS-only, DynamoDB lock |
+| `<prefix>-artifacts` | CloudFormation packaged templates + Lambda ZIPs | Versioning on, SSE, TLS-only |
 
 Key scheme: `generated-content/<repository-name>/<YYYY-MM-DD>/<asset>`. Repository clones are transient and live on the EC2 host's ephemeral disk — they are **not** stored in S3. All buckets: **Block Public Access = ON**, default encryption enabled, and bucket policies requiring `aws:SecureTransport`. See [Storage Architecture](./architecture.md#7-storage-architecture).
 
@@ -69,12 +69,11 @@ Key scheme: `generated-content/<repository-name>/<YYYY-MM-DD>/<asset>`. Reposito
 
 ## 6. Amazon DynamoDB
 
-Two tables serve distinct purposes:
+A single table backs the platform (CloudFormation manages its own stack state, so no lock table is required):
 
 | Table | Purpose | Capacity |
 | --- | --- | --- |
 | `repositories` | Repository metadata store (one item per registered repo) | On-demand (pay-per-request) |
-| `tf-locks` | Terraform state locking | On-demand |
 
 The `repositories` table stores: repository URL, owner, name, default branch, registration timestamp, webhook status, webhook ID, last processed commit, last successful generation, and generation status. It also holds **references** (Secrets Manager ARNs) to the repository's PAT and webhook secret — **never the secret values themselves** ([ST-7](./requirements.md#9-storage-requirements), [ST-8](./requirements.md#9-storage-requirements)). Encryption at rest is enabled; point-in-time recovery (PITR) is recommended.
 
@@ -83,7 +82,7 @@ The `repositories` table stores: repository URL, owner, name, default branch, re
 ## 7. Amazon EventBridge
 
 - **EventBridge Scheduler** rules invoke the `ec2-scheduler` Lambda to **start EC2 at 19:00** and **stop EC2 at 21:00** ([Cost Optimization §1](./cost-optimization.md#1-ec2-scheduling)).
-- Schedule expressions are configurable via Terraform variables (`ec2_start_cron`, `ec2_stop_cron`).
+- Schedule expressions are configurable via CloudFormation parameters (`Ec2StartCron`, `Ec2StopCron`).
 - Content runs are triggered by **GitHub Webhooks** delivered to the n8n HTTPS endpoint (or manual invocation), not by EventBridge.
 
 ---
@@ -99,7 +98,7 @@ The `repositories` table stores: repository URL, owner, name, default branch, re
 
 ## 9. AWS Secrets Manager
 
-Stores **per-repository GitHub PATs** and **per-repository webhook signing secrets** (used for HMAC validation), plus deployment-level secrets (the n8n credentials/encryption key and notification secrets). Per-repository secrets are created dynamically at **registration** under a stable prefix (e.g. `blog-generator/repos/<owner>/<name>/pat` and `.../webhook-secret`); deployment-level secret resources are created by Terraform and populated out of band ([Deployment §4](./deployment.md#4-secrets)). PATs are **never** stored in DynamoDB or plaintext. Rotation and access policy: [Security](./security.md#2-secrets-management).
+Stores **per-repository GitHub PATs** and **per-repository webhook signing secrets** (used for HMAC validation), plus deployment-level secrets (the n8n credentials/encryption key and notification secrets). Per-repository secrets are created dynamically at **registration** under a stable prefix (e.g. `blog-generator/repos/<owner>/<name>/pat` and `.../webhook-secret`); deployment-level secret resources are created by CloudFormation and populated out of band ([Deployment §4](./deployment.md#4-secrets)). PATs are **never** stored in DynamoDB or plaintext. Rotation and access policy: [Security](./security.md#2-secrets-management).
 
 ---
 
@@ -139,36 +138,35 @@ flowchart TB
 
 ---
 
-## 12. Terraform Modules
+## 12. CloudFormation Stacks
+
+The stack is composed as a **root template + nested stacks**. `aws cloudformation package` uploads each nested template to the artifacts bucket and rewrites the `TemplateURL` references before deploy.
 
 ```text
-terraform/
-├── backend.tf        # S3 + DynamoDB remote state
-├── providers.tf      # AWS provider, default tags
-├── main.tf           # module composition
-├── variables.tf
-├── outputs.tf
-└── modules/
-    ├── networking/   # VPC, subnets, IGW, route tables, endpoints, SGs
-    ├── ec2/          # n8n host, Elastic IP, instance profile, user-data
-    ├── lambda/       # ec2-scheduler (Go), role, log group
-    ├── s3/           # generated-content bucket, versioning, lifecycle, policies
-    ├── dynamodb/     # repositories metadata table
-    ├── eventbridge/  # EventBridge Scheduler start/stop rules
-    ├── secrets/      # Secrets Manager resources (deployment-level)
-    ├── iam/          # roles and policies
-    └── monitoring/   # dashboards, alarms, log retention
+cloudformation/
+├── main.yaml               # root stack: parameters, nested-stack composition, outputs
+├── parameters.example.json # example parameter overrides (copy to parameters.json)
+└── templates/
+    ├── networking.yaml      # VPC, subnets, IGW, route tables, endpoints, SGs
+    ├── ec2.yaml             # n8n host, Elastic IP, instance profile, user-data
+    ├── lambda.yaml          # ec2-scheduler (Go), role, log group
+    ├── s3.yaml              # generated-content bucket, versioning, lifecycle, policies
+    ├── dynamodb.yaml        # repositories metadata table
+    ├── eventbridge.yaml     # EventBridge Scheduler start/stop rules
+    ├── secrets.yaml         # Secrets Manager resources (deployment-level)
+    ├── iam.yaml             # roles and policies
+    └── monitoring.yaml      # dashboards, alarms, log retention
 ```
 
-Each module exposes typed variables and outputs and is composed in `main.tf`. Modules are independently reviewable and reusable across environments (`dev`/`prod`) via workspaces or `-var-file`.
+Each nested stack declares typed parameters and outputs and is wired together in `main.yaml`. Stacks are independently reviewable, and a single template set serves multiple environments (`dev`/`prod`) via different parameter files.
 
 ---
 
-## 13. Remote State
+## 13. Stack State & Deployment Artifacts
 
-- **Backend:** S3 (versioned, encrypted) + **DynamoDB** for state locking.
-- Created once by `scripts/bootstrap.sh` before the first `terraform init` ([Deployment §2](./deployment.md#2-bootstrap-remote-state)).
-- State is never committed to git; the state key is `blog-generator/terraform.tfstate`.
+- CloudFormation **manages stack state itself** — there is no remote state file or lock table to provision.
+- The only bootstrap resource is an **artifacts S3 bucket** (versioned, encrypted) that `aws cloudformation package` uses to upload nested templates and the Lambda ZIP. Created once by `scripts/bootstrap.sh` ([Deployment §2](./deployment.md#2-bootstrap-the-artifacts-bucket)).
+- Concurrent updates are serialized by CloudFormation; a failed update rolls back automatically.
 
 ---
 
@@ -177,10 +175,10 @@ Each module exposes typed variables and outputs and is composed in `main.tf`. Mo
 | Layer | Mechanism |
 | --- | --- |
 | S3 (all buckets) | SSE (SSE-S3 or SSE-KMS); TLS-only bucket policy |
-| DynamoDB (`repositories`, `tf-locks`) | Encryption at rest enabled |
+| DynamoDB (`repositories`) | Encryption at rest enabled |
 | EC2 storage | Encrypted EBS |
 | Secrets Manager | KMS-encrypted at rest |
 | In transit | TLS 1.2+ for all AWS API and GitHub calls |
-| Terraform state | Encrypted S3 + versioning |
+| Deployment artifacts | Encrypted S3 + versioning |
 
 KMS key usage and rotation: [Security → Encryption](./security.md#4-encryption).

@@ -11,7 +11,7 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 - **Orchestration-first** — n8n owns the pipeline: cloning, analysis, prompt building, Bedrock calls, packaging, retries, and branching.
 - **Managed services for durability & scale** — Amazon Bedrock, S3, Secrets Manager, and CloudWatch provide the heavy lifting.
 - **Webhook-driven** — GitHub Webhooks (and manual triggers) start runs; deliveries are signature-verified before processing.
-- **Everything as code** — all infrastructure is Terraform; all workflows are versioned JSON.
+- **Everything as code** — all infrastructure is CloudFormation; all workflows are versioned JSON.
 - **Cost-aware** — the only always-on cost driver (the EC2 n8n host) is started/stopped on a schedule by a small Go Lambda.
 - **Least privilege & encryption everywhere** — each component gets only the permissions it needs.
 
@@ -183,24 +183,23 @@ flowchart LR
 
 ## 7. Storage Architecture
 
-Storage spans three layers: **S3** for generated content and Terraform state, **DynamoDB** for repository metadata, and **Secrets Manager** for secrets. Repository clones are transient and live on the EC2 host's ephemeral disk, not in S3.
+Storage spans three layers: **S3** for generated content (and CloudFormation/Lambda deployment artifacts), **DynamoDB** for repository metadata, and **Secrets Manager** for secrets. Repository clones are transient and live on the EC2 host's ephemeral disk, not in S3.
 
 ```mermaid
 flowchart TB
     subgraph S3
         GC[(generated-content bucket)]
-        STATE[(tfstate bucket)]
+        ART[(artifacts bucket)]
     end
     subgraph DynamoDB
         REPOS[(repositories table)]
-        LOCK[(tf-locks table)]
     end
     subgraph SecretsManager
         PAT[/per-repo PAT/]
         WHS[/per-repo webhook secret/]
     end
     GC -->|versioning + lifecycle: IA 30d, Glacier 90d| ARCH[Archived]
-    STATE -->|versioned| LOCK
+    ART -->|versioned| PKG[Packaged templates + Lambda ZIPs]
     REPOS -. references (ARN) .-> PAT
     REPOS -. references (ARN) .-> WHS
 ```
@@ -208,9 +207,8 @@ flowchart TB
 | Store | Contents | Notes |
 | --- | --- | --- |
 | S3 `generated-content` | Generated content packages | Versioning on; IA 30d, Glacier 90d |
-| S3 `tfstate` | Terraform remote state | Versioned; locked via DynamoDB |
+| S3 `artifacts` | Packaged CloudFormation templates + Lambda ZIPs | Versioned |
 | DynamoDB `repositories` | Per-repository metadata + secret ARNs | Encrypted; **no PAT values** |
-| DynamoDB `tf-locks` | Terraform state locking | On-demand |
 | Secrets Manager | Per-repository PAT + webhook secret | KMS-encrypted |
 
 **Key scheme** for a package:
@@ -219,4 +217,4 @@ flowchart TB
 generated-content/<repository-name>/<YYYY-MM-DD>/<asset>
 ```
 
-All stores enforce encryption at rest; S3 buckets block public access and require TLS. See [Storage Requirements](./requirements.md#9-storage-requirements), [Infrastructure](./infrastructure.md) for the Terraform modules, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.
+All stores enforce encryption at rest; S3 buckets block public access and require TLS. See [Storage Requirements](./requirements.md#9-storage-requirements), [Infrastructure](./infrastructure.md) for the CloudFormation stacks, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.

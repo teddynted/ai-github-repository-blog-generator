@@ -5,7 +5,7 @@
 **An AI-powered Developer Content Engine. Register a GitHub repository once; every time it changes, a webhook triggers automatic analysis and a complete, publication-ready content package — powered by Amazon Bedrock.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![AWS CloudFormation](https://img.shields.io/badge/IaC-AWS%20CloudFormation-E7157B?logo=amazonaws&logoColor=white)](https://aws.amazon.com/cloudformation/)
 [![AWS](https://img.shields.io/badge/Cloud-AWS-232F3E?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
 [![Amazon Bedrock](https://img.shields.io/badge/AI-Amazon%20Bedrock-01A88D?logo=amazonaws&logoColor=white)](https://aws.amazon.com/bedrock/)
 [![n8n](https://img.shields.io/badge/Orchestration-n8n-EA4B71?logo=n8n&logoColor=white)](https://n8n.io/)
@@ -24,9 +24,9 @@
 
 Instead of a single blog post, each run produces an entire bundle of platform-specific content: a technical blog article, Medium / Dev.to / Hashnode versions, a LinkedIn post, an X (Twitter) thread, a Reddit post, a newsletter, an FAQ, SEO metadata, cover-image prompts, and more.
 
-Orchestration runs on [n8n](https://n8n.io/); infrastructure is provisioned entirely with [Terraform](https://www.terraform.io/) on AWS; and cost is kept low by starting and stopping the compute host on a daily schedule.
+Orchestration runs on [n8n](https://n8n.io/); infrastructure is provisioned entirely with [AWS CloudFormation](https://aws.amazon.com/cloudformation/); and cost is kept low by starting and stopping the compute host on a daily schedule.
 
-> This is an open-source **portfolio project** — architected for production practices today and a future **SaaS** evolution — demonstrating AI Engineering, Amazon Bedrock, AWS, Terraform, n8n, webhook automation, Infrastructure as Code, and operable, observable software engineering.
+> This is an open-source **portfolio project** — architected for production practices today and a future **SaaS** evolution — demonstrating AI Engineering, Amazon Bedrock, AWS, AWS CloudFormation, n8n, webhook automation, Infrastructure as Code, and operable, observable software engineering.
 
 ---
 
@@ -261,7 +261,7 @@ Each long-form article is **platform-specific and publish-ready**, optimized for
 
 ## AWS Architecture
 
-Infrastructure is provisioned **entirely with Terraform**. Each service has a clear purpose:
+Infrastructure is provisioned **entirely with AWS CloudFormation**. Each service has a clear purpose:
 
 | Service | Purpose |
 | --- | --- |
@@ -274,8 +274,8 @@ Infrastructure is provisioned **entirely with Terraform**. Each service has a cl
 | **IAM roles / policies** | Least-privilege identities and permissions for compute |
 | **Amazon EC2** | Runs the n8n orchestrator (registration, webhook, analysis, generation) |
 | **Amazon Bedrock** | Foundation model inference for content generation |
-| **Amazon S3** | Stores generated content packages and Terraform state |
-| **Amazon DynamoDB** | Stores repository metadata; provides Terraform state locking |
+| **Amazon S3** | Stores generated content packages and CloudFormation/Lambda deployment artifacts |
+| **Amazon DynamoDB** | Stores repository metadata |
 | **AWS Secrets Manager** | Stores per-repository PATs and webhook signing secrets |
 | **Amazon CloudWatch** | Logs, metrics, dashboards, and alarms |
 | **Amazon EventBridge** | Event bus and rules |
@@ -337,26 +337,31 @@ The PAT and webhook signing secret are stored **only in AWS Secrets Manager**; D
 
 ---
 
-## Terraform Deployment
+## CloudFormation Deployment
 
 ```bash
-# 1. Bootstrap remote state (once per account/region)
-./scripts/bootstrap.sh --region us-east-1 --state-bucket <tfstate-bucket> --lock-table tf-locks
+# 1. Create the deployment artifacts bucket (once per account/region)
+./scripts/bootstrap.sh --region us-east-1 --artifacts-bucket <artifacts-bucket>
 
-# 2. Configure variables
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-#   edit: region, bedrock_model_id, ec2_instance_type,
-#         ec2_start_cron, ec2_stop_cron, webhook_dns_name, ...
+# 2. Configure parameters
+cp cloudformation/parameters.example.json cloudformation/parameters.json
+#   edit: BedrockModelId, Ec2InstanceType,
+#         Ec2StartCron, Ec2StopCron, WebhookDnsName, ...
 
-# 3. Provision
-cd terraform
-terraform init
-terraform fmt -check && terraform validate
-terraform plan -out tfplan
-terraform apply tfplan
+# 3. Package (upload nested templates + Lambda artifacts) and deploy
+cfn-lint cloudformation/**/*.yaml
+aws cloudformation package \
+  --template-file cloudformation/main.yaml \
+  --s3-bucket <artifacts-bucket> \
+  --output-template-file packaged.yaml
+aws cloudformation deploy \
+  --template-file packaged.yaml \
+  --stack-name blog-generator \
+  --parameter-overrides file://cloudformation/parameters.json \
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 
-After apply, populate deployment secrets and import the n8n workflows. Full guide with rollback: **[docs/deployment.md](./docs/deployment.md)**.
+After the stack completes, populate deployment secrets and import the n8n workflows. Full guide with rollback: **[docs/deployment.md](./docs/deployment.md)**.
 
 ---
 
@@ -376,7 +381,7 @@ Import the workflows from `workflows/n8n/`, register a test repository, and send
 ## Amazon Bedrock Configuration
 
 1. In the AWS Console, open **Bedrock → Model access** and request access to your chosen model in the deployment Region.
-2. Set `bedrock_model_id`, `bedrock_max_tokens`, and `bedrock_temperature` in `terraform.tfvars`.
+2. Set `BedrockModelId`, `BedrockMaxTokens`, and `BedrockTemperature` in `cloudformation/parameters.json`.
 3. Verify:
    ```bash
    aws bedrock list-foundation-models --region us-east-1 \
@@ -470,7 +475,7 @@ flowchart LR
     ON --> S2[EventBridge Scheduler<br/>21:00] --> L2[Go Lambda] --> OFF[(EC2 stopped)]
 ```
 
-This ensures the n8n EC2 instance only runs during the required processing window (~2h/day instead of 24/7), minimizing infrastructure cost. The schedule is configurable via Terraform variables. Estimates and levers: **[docs/cost-optimization.md](./docs/cost-optimization.md)**.
+This ensures the n8n EC2 instance only runs during the required processing window (~2h/day instead of 24/7), minimizing infrastructure cost. The schedule is configurable via CloudFormation parameters. Estimates and levers: **[docs/cost-optimization.md](./docs/cost-optimization.md)**.
 
 ---
 
@@ -484,7 +489,7 @@ Security is built in by default (full detail in **[docs/security.md](./docs/secu
 - **PATs in Secrets Manager** — Personal Access Tokens are stored only in AWS Secrets Manager, **never in DynamoDB or plaintext**.
 - **Encryption at rest** — S3, EBS, DynamoDB, and Secrets Manager are encrypted.
 - **Encryption in transit** — all traffic uses TLS.
-- **No hardcoded credentials** — no secrets in source, images, or Terraform state.
+- **No hardcoded credentials** — no secrets in source, images, or CloudFormation templates/parameters.
 - **IAM roles instead of static credentials** — compute uses instance/Lambda roles; CI uses OIDC.
 - **CloudWatch audit logging** — auditable, structured logs with no secret material.
 - **Secure Bedrock and S3 access** — scoped by IAM to specific model ARNs and buckets.
@@ -497,10 +502,10 @@ Security is built in by default (full detail in **[docs/security.md](./docs/secu
 | --- | --- |
 | [Requirements](./docs/requirements.md) | Functional, registration, GitHub API, webhook, AI, infra, security, workflow, storage, monitoring, cost, non-functional |
 | [Architecture](./docs/architecture.md) | System, AWS, registration, webhook, and data-flow architecture |
-| [Deployment](./docs/deployment.md) | AWS deployment with Terraform |
+| [Deployment](./docs/deployment.md) | AWS deployment with CloudFormation |
 | [Local Development](./docs/local-development.md) | Running and developing locally |
 | [Workflows](./docs/workflows.md) | Every n8n workflow, documented |
-| [Infrastructure](./docs/infrastructure.md) | Every AWS service and Terraform module |
+| [Infrastructure](./docs/infrastructure.md) | Every AWS service and CloudFormation stack |
 | [Security](./docs/security.md) | IAM, webhook & token security, encryption, auditing |
 | [Monitoring](./docs/monitoring.md) | CloudWatch metrics, logs, and alerts |
 | [Cost Optimization](./docs/cost-optimization.md) | Cost controls and estimates |

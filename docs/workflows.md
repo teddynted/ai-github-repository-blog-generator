@@ -134,7 +134,7 @@ flowchart TB
 **Content types:** `blog`, `medium`, `devto`, `hashnode`, `newsletter`, `linkedin`, `twitter-thread`, `reddit`, `faq`, `readme-suggestions`, `image-prompts`, `seo`, `metadata` ([FR-2](./requirements.md#12-content-generation)).
 **Input:** `{ prompts, model, temperature, maxTokens }` · **Output:** `{ contentSet, tokenUsage }`
 
-Model ID and parameters come from Terraform config ([AI-2](./requirements.md#5-ai-requirements)).
+Model ID and parameters come from CloudFormation stack parameters ([AI-2](./requirements.md#5-ai-requirements)).
 
 ---
 
