@@ -82,7 +82,7 @@ register repo → webhook (HMAC + commit-trigger gate) → EventBridge → SQS �
 | Infrastructure — modular CloudFormation (`cfn-lint`-clean) | ✅ Implemented |
 | CI/CD — Go tests, cfn-lint, security scanning, opt-in OIDC deploy | ✅ Implemented |
 | Deploy to AWS + end-to-end validation | ⏳ Needs your AWS account + GPU instance |
-| Future roadmap — remote publish destinations, real email/Slack channels, deeper analysis, approvals dashboard, GitHub Apps | ⏳ Planned |
+| Future roadmap — email notifications, extra trigger sources, GitHub Apps, a web approvals UI | ⏳ Planned |
 
 > **Implementation note.** The MVP runtime is a **Go worker** (`cmd/worker`) that drains SQS and drives the pipeline — chosen for testability. The **n8n** orchestration described throughout these docs remains a valid alternative for the same seams; the pipeline stages are composable ports either can drive. See the [Development Plan](./docs/development-plan.md) for the runtime decision.
 
@@ -571,7 +571,7 @@ ai-github-repository-blog-generator/
 - [ ] **GitHub App authentication** (recommended long-term approach, replacing per-repo PATs) + OAuth login
 - [ ] Automatic webhook management, fine-grained permissions, and secret rotation
 - [ ] Multiple repositories per user, repository groups/organisations, multi-user workspaces
-- [ ] Web-based repository management dashboard (run history, approvals, content review)
+- [x] Approvals dashboard — CLI over the pending queue (`approve -all` auto-approves); web UI still planned
 - [x] Configurable custom trigger patterns (`[blog]`, `regex:`, per-repo rules)
 - [ ] Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
 - [ ] Manual blog generation from the application, and scheduled repository summaries

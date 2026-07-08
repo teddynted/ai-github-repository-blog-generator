@@ -48,9 +48,10 @@ build:
 		fi; \
 	done
 
-## build-worker: compile the instance worker (Linux/amd64 for the g4dn host)
+## build-worker: compile the instance worker and approvals CLI (Linux/amd64)
 build-worker:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/worker ./cmd/worker
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/approve ./cmd/approve
 
 ## clean: remove build artifacts
 clean:

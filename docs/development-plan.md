@@ -386,8 +386,14 @@ publish to `s3://<bucket>/<prefix>/<owner>/<name>/<date>/<kind>.md` instead. The
 compute stack grants the instance `s3:PutObject` on that bucket only when
 `OutputS3Bucket` is set.
 
+**Approvals dashboard.** When `REQUIRE_HUMAN_APPROVAL` holds content under
+`PENDING_DIR`, the `approve` CLI (`cmd/approve`, built with the worker) is the
+review queue: `approve` lists pending packages, `approve -all` auto-approves
+(publishes) everything to the live destination and clears the queue, and
+`approve -reject-all` discards. `internal/approval.PendingStore` is unit-tested.
+
 **Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
 analysis; an email notification channel; extra trigger sources (releases, tags,
-PR labels); GitHub Apps auth; an approvals dashboard; and the n8n workflow as an
+PR labels); GitHub Apps auth; a **web** approvals UI; and the n8n workflow as an
 alternative orchestration. Real deployment + end-to-end validation require an
 AWS account and a GPU instance.
