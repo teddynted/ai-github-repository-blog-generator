@@ -266,9 +266,21 @@ population, quality review, optional human approval, and publishing are still
 future work — the ports keep them additive, and `GenerateAll` never lets one
 failing kind corrupt the rest of the package.
 
-**Runtime wiring (next).** These are libraries; the instance runtime consumes
-them. The documented design uses **n8n** (its SQS-trigger workflow) to
-orchestrate processing → generation → publish on the EC2 host. The n8n workflow
-export (`workflows/`) and the OpenClaw-backed processing implementation are the
-next step; alternatively a small Go worker on the instance could drive the same
-seams. That orchestration choice is deliberately left open here.
+| `internal/pipeline` | `Pipeline.Run` — composes process → generate → publish for a request. Resilient: publishes the assets that succeeded even on a partial generation failure. | ✅ Implemented |
+| `internal/publish` | `LogPublisher` — placeholder Publisher (logs assets; never dumps content). Real destinations (Git / object store / CMS) are future work. | ✅ Implemented (placeholder) |
+| `internal/awssqs` | Extended with `Receive`/`Delete` (message consumption) alongside depth. | ✅ Implemented |
+| `cmd/worker` | Instance worker: long-polls SQS → `Pipeline.Run` → deletes on success (leaves failures for SQS redelivery/DLQ). Message-handling logic is unit-tested. | ✅ Implemented |
+
+**Runtime decision.** The MVP runtime is a **Go worker** (`cmd/worker`) draining
+SQS and invoking `pipeline.Pipeline`. It was chosen over hand-authored n8n
+workflow JSON because it is fully unit-testable and keeps the whole slice in one
+verifiable codebase. The documented **n8n** SQS-trigger design remains a valid
+alternative orchestration for the same seams (it would call the same
+composition, e.g. via an exec node) and a future visual-orchestration option;
+this worker does not remove that path. Build it with `make build-worker`
+(Linux/amd64 for the g4dn host).
+
+**Still placeholder / future.** Processing uses `NewPlaceholderProcessor`
+(OpenClaw-backed clone/retrieval is future), and publishing uses `LogPublisher`
+(a real destination is future). Repository Memory, quality review, and optional
+human approval are not yet wired into the pipeline.

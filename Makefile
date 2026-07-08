@@ -8,7 +8,7 @@ GO       ?= go
 LAMBDAS  := registration webhook-handler instance-starter idle-shutdown
 DIST     := dist
 
-.PHONY: all fmt vet test tidy build clean check lint-cfn
+.PHONY: all fmt vet test tidy build build-worker clean check lint-cfn
 
 all: check
 
@@ -47,6 +47,10 @@ build:
 			echo "skip $$fn (not implemented yet)"; \
 		fi; \
 	done
+
+## build-worker: compile the instance worker (Linux/amd64 for the g4dn host)
+build-worker:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/worker ./cmd/worker
 
 ## clean: remove build artifacts
 clean:
