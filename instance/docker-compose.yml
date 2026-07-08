@@ -1,0 +1,49 @@
+# GitHub AI Blog Generator - instance runtime.
+#
+# Runs on the EC2 Spot host (and locally for development). n8n orchestrates the
+# pipeline, Ollama serves the local model, and OpenClaw performs repository
+# analysis. State and models live under /data, which on the instance is the
+# persistent gp3 EBS volume so they survive start/stop cycles.
+#
+# Neither n8n (5678) nor Ollama (11434) is exposed publicly - reach them via an
+# SSH tunnel. See docs/local-development.md.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - /data/ollama:/root/.ollama
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - AWS_REGION=${AWS_REGION}
+      - QUEUE_URL=${QUEUE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+    volumes:
+      - /data/n8n:/home/node/.n8n
+    depends_on:
+      - ollama
+
+  # OpenClaw performs repository analysis (clone + structure/README/source).
+  # PLACEHOLDER: the image/wiring is provided with Repository Intelligence
+  # (see docs/development-plan.md, Milestone 7). Uncomment and set the image
+  # once available.
+  #
+  # openclaw:
+  #   image: openclaw/openclaw:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     - OLLAMA_BASE_URL=http://ollama:11434
+  #   volumes:
+  #     - /data/work:/work
+  #   depends_on:
+  #     - ollama

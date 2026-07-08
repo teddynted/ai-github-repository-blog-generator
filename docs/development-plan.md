@@ -38,7 +38,7 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ✅ Implemented |
 | 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ✅ Implemented |
 | 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ✅ Implemented |
-| 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ⏳ Planned |
+| 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ✅ Implemented |
 
 Out of scope for the MVP (see [Roadmap](./roadmap.md)): GitHub Apps, multi-user,
 SaaS dashboard, billing, analytics, advanced AI agents, multi-platform
@@ -200,3 +200,34 @@ scheduled idle check and instance start/stop are idempotent, so EventBridge/
 Lambda retries are safe.
 
 All four Lambdas now build; `make check` (`-race`) is green.
+
+---
+
+## Milestone 7 — Repository Processing ✅
+
+The processing seam where Repository Intelligence will plug in — **placeholders
+only**, no analysis or generation.
+
+| Package / file | Responsibility |
+| --- | --- |
+| `internal/processing` | Ports (`Cloner`, `ReadmeRetriever`, `DocsRetriever`, `CommitRetriever`) + `Processor` that gathers a `Snapshot` (clone → README → docs → commits). |
+| `internal/processing` (placeholder.go) | Canned implementations returning representative data; `NewPlaceholderProcessor` wires them. |
+| `instance/docker-compose.yml` | Instance runtime: n8n + Ollama (state/models on `/data` = the EBS volume). OpenClaw is a documented placeholder service. |
+
+The `Snapshot` is the fixed input contract for Repository Intelligence: swapping
+the placeholders for real (e.g. OpenClaw-backed) retrievers requires **no change**
+to the `Processor` or its ports. Every path is unit-tested.
+
+**Out of scope (future roadmap):** Repository Intelligence (analysis), Repository
+Memory population, AI generation, quality review, publishing, and multi-platform
+output — all deliberately deferred, with the seams in place.
+
+---
+
+## MVP status
+
+Milestones 1–7 are complete: an opt-in, event-driven, cost-optimised vertical
+slice from repository registration through the commit-trigger gate, event
+routing, on-demand Spot compute, automatic shutdown, and the processing seam —
+all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
+Intelligence and content generation on top of the `processing.Snapshot`.
