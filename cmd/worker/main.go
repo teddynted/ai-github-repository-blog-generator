@@ -69,7 +69,7 @@ func main() {
 			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
 			Logger: a.Logger,
 		},
-		Publisher: &publish.LogPublisher{Logger: a.Logger},
+		Publisher: &publish.FilePublisher{Dir: a.Config.OutputDir, Logger: a.Logger},
 		Kinds:     defaultKinds,
 		Logger:    a.Logger,
 	}

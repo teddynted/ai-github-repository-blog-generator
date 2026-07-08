@@ -267,7 +267,7 @@ future work — the ports keep them additive, and `GenerateAll` never lets one
 failing kind corrupt the rest of the package.
 
 | `internal/pipeline` | `Pipeline.Run` — composes process → generate → publish for a request. Resilient: publishes the assets that succeeded even on a partial generation failure. | ✅ Implemented |
-| `internal/publish` | `LogPublisher` — placeholder Publisher (logs assets; never dumps content). Real destinations (Git / object store / CMS) are future work. | ✅ Implemented (placeholder) |
+| `internal/publish` | `FilePublisher` writes each asset to `<dir>/<owner>/<name>/<YYYY-MM-DD>/<kind>.md` (path-traversal guarded); `LogPublisher` remains for logging. The worker uses `FilePublisher` (`OUTPUT_DIR`, default `/data/generated-content` on the EBS volume). Remote destinations (Git / object store / CMS) can follow behind the same port. | ✅ Implemented |
 | `internal/awssqs` | Extended with `Receive`/`Delete` (message consumption) alongside depth. | ✅ Implemented |
 | `cmd/worker` | Instance worker: long-polls SQS → `Pipeline.Run` → deletes on success (leaves failures for SQS redelivery/DLQ). Message-handling logic is unit-tested. | ✅ Implemented |
 
@@ -281,6 +281,7 @@ this worker does not remove that path. Build it with `make build-worker`
 (Linux/amd64 for the g4dn host).
 
 **Still placeholder / future.** Processing uses `NewPlaceholderProcessor`
-(OpenClaw-backed clone/retrieval is future), and publishing uses `LogPublisher`
-(a real destination is future). Repository Memory, quality review, and optional
-human approval are not yet wired into the pipeline.
+(OpenClaw-backed clone + retrieval is the remaining placeholder). Repository
+Memory, quality review, and optional human approval are not yet wired into the
+pipeline. Publishing now writes real Markdown files (`FilePublisher`); a remote
+destination is future.

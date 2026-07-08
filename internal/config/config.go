@@ -19,6 +19,7 @@ const (
 	DefaultSecretsPrefix       = "blog-gen/repos"
 	DefaultOllamaModel         = "qwen2.5:7b"
 	DefaultOllamaBaseURL       = "http://localhost:11434"
+	DefaultOutputDir           = "/data/generated-content"
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
@@ -64,6 +65,8 @@ type Config struct {
 	OllamaModel string
 	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
 	OllamaBaseURL string
+	// OutputDir is where generated content is written (OUTPUT_DIR).
+	OutputDir string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -95,6 +98,7 @@ func Load(getenv Getenv) (Config, error) {
 		WebhookURL:           getenv("WEBHOOK_URL"),
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
+		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,
