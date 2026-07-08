@@ -1,6 +1,6 @@
 # Workflows
 
-The platform's control flow is implemented as **n8n workflows**. Each workflow is a discrete, versioned unit exported as JSON under `workflows/n8n/`. n8n (running on the EC2 host) performs cloning, analysis, prompt building, Amazon Bedrock invocation, packaging, and notifications, passing structured data between stages.
+The platform's control flow on the instance is implemented as **n8n workflows**. Each workflow is a discrete, versioned unit exported as JSON under `workflows/`. n8n **polls Amazon SQS** for events, then drives cloning, analysis (via **OpenClaw**), local inference (via **Ollama/Qwen**), publishing, and notifications, passing structured data between stages.
 
 Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md).
 
@@ -10,16 +10,15 @@ Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.
 
 | Workflow | File | Trigger | Purpose |
 | --- | --- | --- | --- |
-| Repository Registration | `repository-registration.json` | Registration request (HTTPS) | Validates access, stores metadata + PAT, auto-creates webhook |
-| Webhook Ingestion | `webhook-ingestion.json` | **GitHub Webhook** (HTTPS) | Receives events, validates the HMAC signature, extracts repo info |
-| Repository Analysis | `repository-analysis.json` | Called by ingestion | Structure, README, source, config, tech stack, architecture |
-| Content Generation | `content-generation.json` | Called by analysis | Invokes Amazon Bedrock per content type |
-| Packaging & Publishing | `packaging-publishing.json` | Called by generation | Assembles the package, writes it to S3 |
-| Notifications | `notifications.json` | Called on success/failure | Sends notifications |
+| Event Ingestion | `event-ingestion.json` | **SQS poll** | Pulls queued events, parses the payload, decides whether to process |
+| Repository Analysis | `repository-analysis.json` | Called by ingestion | Clone + structure, README, source, config, tech-stack analysis via OpenClaw |
+| Content Generation | `content-generation.json` | Called by analysis | Runs local inference via Ollama per content type |
+| Publishing | `publishing.json` | Called by generation | Renders Markdown and publishes to the configured destination |
+| Notifications | `notifications.json` | Called on success/failure | Notifies users |
 
-The workflows compose into a single pipeline; each can also be executed independently for testing ([WF-6](./requirements.md#8-workflow-requirements)).
+The workflows compose into a single pipeline; each can also be executed independently for testing ([WF-8](./requirements.md#4-workflow-requirements)).
 
-> **Trigger note:** the **primary trigger is a GitHub Webhook** delivered to the n8n HTTPS endpoint ([GitHub Webhook Requirements](./requirements.md#4-github-webhook-requirements)); manual invocation is also supported. The daily EC2 start/stop (19:00–21:00) is **not** an n8n workflow — it is an **EventBridge Scheduler** rule invoking the `ec2-scheduler` Go Lambda ([Infrastructure §7](./infrastructure.md#7-amazon-eventbridge)).
+> **Trigger note:** the primary trigger is a **GitHub Webhook**, but n8n never receives it directly. The webhook is validated and enqueued by the **Webhook Handler Lambda**; n8n **polls SQS**. Manual invocation is also supported. Instance start/stop is handled by Lambda ([webhook handler](./architecture.md#4-event-driven-trigger-path) + [idle-shutdown](./cost-optimization.md#2-automatic-shutdown)), **not** by an n8n workflow.
 
 ---
 
@@ -27,13 +26,11 @@ The workflows compose into a single pipeline; each can also be executed independ
 
 ```mermaid
 flowchart LR
-    REG[Repository Registration] -.creates webhook.-> T
-    T[GitHub Webhook / manual] --> I[Webhook Ingestion]
-    I --> A[Repository Analysis]
-    A --> G[Content Generation]
-    G --> P[Packaging & Publishing]
+    SQS[(Amazon SQS)] --> I[Event Ingestion]
+    I --> A[Repository Analysis<br/>OpenClaw]
+    A --> G[Content Generation<br/>Ollama / Qwen]
+    G --> P[Publishing]
     P --> N[Notifications]
-    REG -.initial run.-> A
     I -. on error .-> N
     A -. on error .-> N
     G -. on error .-> N
@@ -42,138 +39,111 @@ flowchart LR
 
 ---
 
-## 3. Repository Registration
+## 3. Event Ingestion
 
-Onboards a repository. Accepts a repository URL and a GitHub PAT over an access-controlled HTTPS endpoint, validates access via the GitHub API, stores the PAT in Secrets Manager and metadata in DynamoDB, auto-creates the webhook when permitted, and triggers an initial analysis.
+Drains the queue and starts a run per message. n8n polls SQS on the instance; each message is a validated GitHub event.
 
 ```mermaid
 flowchart TB
-    IN[Register: repoUrl + PAT] --> V[Validate access<br/>GitHub API]
-    V -- fail --> ERR[Reject + log]
-    V -- ok --> PS[Store PAT<br/>Secrets Manager]
-    PS --> DB[Store metadata<br/>DynamoDB: webhook_status=pending]
-    DB --> HK{PAT can create hooks?}
-    HK -- yes --> CH[Create webhook + signing secret]
-    HK -- no --> MAN[Return manual setup instructions]
-    CH --> UP[Update DynamoDB<br/>webhook_status=active, webhook_id]
-    UP --> INIT[Trigger initial analysis]
-    MAN --> INIT
+    POLL[Poll SQS] --> MSG{Message available?}
+    MSG -- no --> IDLE[Idle → instance may auto-stop]
+    MSG -- yes --> PARSE[Parse payload<br/>event, repo, ref]
+    PARSE --> SUP{Supported event?}
+    SUP -- no --> SKIP[Skip + delete message + log]
+    SUP -- yes --> HANDOFF[Handoff → Analysis]
+    HANDOFF --> DONE{Run succeeded?}
+    DONE -- yes --> DEL[Delete SQS message]
+    DONE -- no --> KEEP[Leave message<br/>visibility timeout → retry / DLQ]
 ```
 
-**Input:** `{ repoUrl, pat }` · **Output:** `{ repoId, webhookStatus }`
+- A message is **deleted only after a successful run** ([WF-6](./requirements.md#4-workflow-requirements)); a failure lets the **visibility timeout** expire so the message is retried, and repeated failures land in the **dead-letter queue**.
+- When the queue is empty and the system stays idle, the **idle-shutdown Lambda** stops the instance ([Cost Optimisation](./cost-optimization.md#2-automatic-shutdown)).
 
-Implements [Repository Registration Requirements](./requirements.md#2-repository-registration-requirements) and [GitHub API Requirements](./requirements.md#3-github-api-requirements). The PAT is stored only in Secrets Manager — never in DynamoDB ([SEC-4](./requirements.md#7-security-requirements)).
+**Input:** SQS message `{ event, repo, ref, delivery_id }` · **Output:** `{ runId, repoMeta, event }`
 
 ---
 
-## 4. Webhook Ingestion
+## 4. Repository Analysis
 
-Entry point for events. Receives the GitHub Webhook over HTTPS, resolves the repository's record from **DynamoDB**, **validates the HMAC SHA-256 signature** against that repository's webhook secret in Secrets Manager, fetches its PAT, clones/updates the repository on the EC2 working directory, and hands off to analysis. Invalid deliveries are rejected and logged.
-
-```mermaid
-flowchart TB
-    W[Webhook: payload + X-Hub-Signature-256] --> LK[Look up repo record<br/>DynamoDB]
-    LK --> SEC[Get webhook secret<br/>Secrets Manager]
-    SEC --> HM{HMAC SHA-256 valid?<br/>constant-time compare}
-    HM -- no --> R401[Respond 401 + log rejection]
-    HM -- yes --> SUP{Supported event?}
-    SUP -- no --> SKIP[Skip + log]
-    SUP -- yes --> TOK[Get repository PAT<br/>Secrets Manager]
-    TOK --> C[Clone / update repository]
-    C --> OK{Clone OK?}
-    OK -- no --> E[Emit error → Notifications]
-    OK -- yes --> H[Respond 202 + handoff → Analysis]
-```
-
-**Triggers:** GitHub Webhook events — `push`, `release`, `pull_request`, `workflow_dispatch`, `repository`; plus manual ([GitHub Webhook Requirements](./requirements.md#4-github-webhook-requirements)).
-**Input:** `{ headers, payload }` · **Output:** `{ workingCopyRef, repoMeta, event }`
-
-See [Security → Webhook Security](./security.md#10-webhook-security) for the validation contract.
-
----
-
-## 5. Repository Analysis
-
-Builds a structured understanding of the repository.
+Builds a structured understanding of the repository using **OpenClaw**.
 
 ```mermaid
 flowchart TB
-    A[working copy] --> ST[Structure analysis]
+    C[Clone / update repository] --> ST[Structure analysis]
     ST --> RD[README analysis]
     RD --> SR[Source code analysis]
-    SR --> CF[Configuration file analysis]
+    SR --> CF[Configuration + IaC + Docker + CI/CD]
     CF --> TD[Technology stack detection]
-    TD --> AR[Architecture understanding]
-    AR --> PB[Prompt assembly<br/>per platform, token-budgeted]
-    PB --> O[Output: prompt set + context]
+    TD --> CTX[Build context<br/>token-budgeted]
+    CTX --> O[Output: context manifest]
 ```
 
-**Input:** `{ workingCopyRef, repoMeta }` · **Output:** `{ prompts, contextManifest }`
+**Input:** `{ runId, repoMeta }` · **Output:** `{ context, contextManifest }`
 
-Implements [FR-1](./requirements.md#11-repository-analysis) (repository analysis) and feeds [AI Requirements](./requirements.md#5-ai-requirements).
+Implements [FR-2](./requirements.md#12-repository-cloning--analysis) and feeds [AI Requirements](./requirements.md#3-ai--local-inference-requirements). Repository clones are transient — they live on the instance disk during the run.
 
 ---
 
-## 6. Content Generation
+## 5. Content Generation
 
-Invokes Amazon Bedrock once per content type with platform-tuned prompts and configured model parameters; retries on throttling with exponential backoff.
+Runs **local inference via Ollama** once per content type with purpose-tuned prompts; retries transient failures with backoff.
 
 ```mermaid
 flowchart TB
-    P[prompt set + params] --> LOOP{For each content type}
-    LOOP --> B[Bedrock InvokeModel]
-    B --> C{Success?}
-    C -- throttled/transient --> RB[Backoff + retry ≤ N]
-    RB --> B
+    P[context + prompts] --> LOOP{For each content type}
+    LOOP --> OL[Ollama generate<br/>local Qwen model]
+    OL --> C{Success?}
+    C -- transient --> RB[Backoff + retry ≤ N]
+    RB --> OL
     C -- failed --> E[Error → Notifications]
-    C -- ok --> ACC[Accumulate content + token usage]
+    C -- ok --> ACC[Accumulate Markdown]
     ACC --> LOOP
     LOOP --> O[Content set]
 ```
 
-**Content types:** `blog`, `medium`, `devto`, `hashnode`, `newsletter`, `linkedin`, `twitter-thread`, `reddit`, `faq`, `readme-suggestions`, `image-prompts`, `seo`, `metadata` ([FR-2](./requirements.md#12-content-generation)).
-**Input:** `{ prompts, model, temperature, maxTokens }` · **Output:** `{ contentSet, tokenUsage }`
+**Content types:** technical blog post, README improvements, project documentation, architecture summary, API documentation, project overview, release notes, changelog, technical tutorial ([FR-3](./requirements.md#13-documentation--content-generation)).
 
-Model ID and parameters come from CloudFormation stack parameters ([AI-2](./requirements.md#5-ai-requirements)).
+**Input:** `{ context, model, prompts }` · **Output:** `{ contentSet }`
+
+The model (`OLLAMA_MODEL`, default Qwen) and generation parameters come from configuration ([AI-2](./requirements.md#3-ai--local-inference-requirements)); there is **no external inference API**.
 
 ---
 
-## 7. Packaging & Publishing
+## 6. Publishing
 
 ```mermaid
 flowchart TB
-    C[Content set] --> R[Render Markdown + JSON assets]
-    R --> KV[Compute dated key:<br/>generated-content/&lt;repo&gt;/&lt;YYYY-MM-DD&gt;/]
-    KV --> W[Write package → S3]
-    W --> ME[Emit CloudWatch metrics]
+    C[Content set] --> R[Render Markdown assets]
+    R --> PUB[Publish to configured destination]
+    PUB --> ME[Emit CloudWatch metrics]
     ME --> OK[Success → Notifications]
 ```
 
-The package is written under `generated-content/<repository-name>/<YYYY-MM-DD>/` with S3 versioning enabled, containing all articles plus `seo.json`, `metadata.json`, and `image-prompts.md`. Metadata (`title`, `date`, `source_repo`, `tags`, `reading_time`, `model`) is captured in `metadata.json` ([FR-2](./requirements.md#12-content-generation), [Storage Requirements](./requirements.md#9-storage-requirements)). Failures never overwrite an existing package ([FR-6.3](./requirements.md#16-error-handling--retries)).
+All output is **GitHub-flavoured Markdown**. The publishing destination is deployment-configurable (for example a Git repository, an object store, or a CMS). A failure never corrupts previously published output ([FR-5.5](./requirements.md#15-reliability-retry-logging--error-handling)).
 
 ---
 
-## 8. Notifications
+## 7. Notifications
 
 A shared sub-workflow invoked on both success and failure paths.
 
 ```mermaid
 flowchart LR
     IN[result: success/failure + context] --> R{Channel}
-    R --> SNS[SNS → email]
+    R --> EMAIL[Email]
     R --> SLACK[Slack webhook]
     R --> WH[Generic webhook]
 ```
 
-**Input:** `{ status, repo, packagePrefix?, error? }` ([FR-6](./requirements.md#16-error-handling--retries)).
+**Input:** `{ status, repo, publishedRefs?, error? }` ([FR-4](./requirements.md#14-output-publishing--notifications)).
 
 ---
 
-## 9. Importing Workflows
+## 8. Importing Workflows
 
-1. Open n8n on the EC2 host via SSM port-forwarding (the management UI is not publicly exposed — only the webhook path is — see [Deployment §7](./deployment.md#7-deployment-verification)); locally it's `http://localhost:5678`.
-2. **Workflows → Import from File** and select each JSON in `workflows/n8n/`.
-3. Configure **Credentials** (AWS, GitHub, notification channel) in the n8n editor — these reference Secrets Manager values in AWS.
+1. Start the instance and open n8n over an **SSH tunnel** (the UI is not publicly exposed — see [Deployment §5](./deployment.md#5-import-the-n8n-workflows)); locally it's `http://localhost:5678`.
+2. **Workflows → Import from File** and select each JSON in `workflows/`.
+3. Configure **Credentials** (AWS/SQS, GitHub, notification channel) in the editor.
 4. Activate the workflows.
 
 ### Exporting after changes
@@ -182,8 +152,8 @@ Export edited workflows back to JSON and commit them so the repo stays the sourc
 
 ```bash
 # via the n8n editor: Workflow → Download
-git add workflows/n8n/*.json
+git add workflows/*.json
 git commit -m "chore(workflows): update content generation flow"
 ```
 
-Keep exported JSON free of embedded secrets — credentials are referenced by ID, not value ([WF-5](./requirements.md#8-workflow-requirements)).
+Keep exported JSON free of embedded secrets — credentials are referenced by ID, not value ([WF-7](./requirements.md#4-workflow-requirements)).

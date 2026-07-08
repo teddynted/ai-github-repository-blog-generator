@@ -12,11 +12,11 @@ Related: [Deployment](./deployment.md) · [Contributing](./contributing.md) · [
 flowchart LR
     PR[Pull Request] --> L[Lint + Format]
     PR --> T[Go Test]
-    PR --> TF[cfn-lint + validate + change set]
+    PR --> CF[cfn-lint + validate + change set]
     PR --> SEC[Security Scan]
-    L & T & TF & SEC --> REV[Review + Approve]
+    L & T & CF & SEC --> REV[Review + Approve]
     REV --> MERGE[Merge to main]
-    MERGE --> APPLY[CloudFormation Deploy<br/>+ Lambda artifact]
+    MERGE --> APPLY[CloudFormation Deploy<br/>+ Lambda artifacts]
     APPLY --> VERIFY[Post-deploy smoke test]
 ```
 
@@ -25,7 +25,7 @@ Workflows live in `.github/workflows/`:
 | File | Trigger | Purpose |
 | --- | --- | --- |
 | `lint.yml` | PR, push | ShellCheck, gofmt, cfn-lint |
-| `go.yml` | PR, push | Build + test Go Lambdas |
+| `go.yml` | PR, push | Build + test the Lambda functions |
 | `cloudformation.yml` | PR (change set), main (deploy) | Validate, change set, deploy |
 | `security.yml` | PR, schedule | Static analysis + scanning |
 
@@ -33,13 +33,14 @@ Workflows live in `.github/workflows/`:
 
 ## 2. CloudFormation Jobs
 
+Templates are modular (`network`, `serverless`, `compute`, `observability`), so each is linted and validated independently.
+
 | Step | Command | Gate |
 | --- | --- | --- |
-| Lint | `cfn-lint cloudformation/**/*.yaml` | Fails on lint errors |
+| Lint | `cfn-lint infrastructure/*.yaml` | Fails on lint errors |
 | Validate | `aws cloudformation validate-template` (per template) | Fails on invalid template |
-| Package | `aws cloudformation package …` | Uploads nested templates + Lambda ZIP |
 | Change set | `aws cloudformation create-change-set …` + `describe-change-set` | Posted as a PR comment for review |
-| Deploy | `aws cloudformation deploy …` (or `execute-change-set`) | **main only**, after approval |
+| Deploy | `aws cloudformation deploy …` (per stack, in order) | **main only**, after approval |
 
 The **change set** is created on every PR so reviewers see exactly what will change. `deploy` runs only on `main` (optionally gated by a protected **environment** requiring manual approval).
 
@@ -58,23 +59,20 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
-      - run: pip install cfn-lint && cfn-lint cloudformation/**/*.yaml
-      - run: |
-          aws cloudformation package \
-            --template-file cloudformation/main.yaml \
-            --s3-bucket ${{ secrets.ARTIFACTS_BUCKET }} \
-            --output-template-file packaged.yaml
+      - run: pip install cfn-lint && cfn-lint infrastructure/*.yaml
       - run: |
           aws cloudformation create-change-set \
-            --stack-name blog-generator \
+            --stack-name blog-gen-serverless \
             --change-set-name pr-${{ github.event.number }} \
-            --template-body file://packaged.yaml \
+            --template-body file://infrastructure/serverless.yaml \
             --capabilities CAPABILITY_NAMED_IAM
 ```
 
 ---
 
 ## 3. Go Jobs
+
+Both Lambda functions (`webhook-handler`, `idle-shutdown`) are built and tested.
 
 | Step | Command |
 | --- | --- |
@@ -83,16 +81,16 @@ jobs:
 | Test | `go test ./... -race -cover` |
 | Build | `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda` |
 
-The `ec2-scheduler` function under `lambdas/` is built and tested; the resulting `bootstrap` binary is zipped and uploaded to the artifacts bucket by `aws cloudformation package`, which the Lambda resource references. The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
+The resulting `bootstrap` binaries are zipped and uploaded so the Lambda resources reference them at deploy time. The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
 
 ---
 
 ## 4. Linting & ShellCheck
 
-- **ShellCheck** on all scripts under `scripts/` (`bootstrap.sh`, `deploy.sh`) and any shell in workflows.
+- **ShellCheck** on all scripts under `scripts/` and the instance `user-data.sh`, plus any shell in workflows.
 - **gofmt / go vet** for Go.
 - **cfn-lint** for CloudFormation templates.
-- Optional: `yamllint` for general YAML hygiene.
+- Optional: `yamllint` for general YAML hygiene, and a JSON check on exported n8n workflows.
 
 ---
 
@@ -104,7 +102,7 @@ CI authenticates to AWS using **GitHub OIDC** — no long-lived access keys stor
 - `aws-actions/configure-aws-credentials@v4` assumes the role per job.
 - The apply role is **more privileged** than the plan role and is only assumable from the `main`/protected environment.
 
-See [Security → Credential Management](./security.md#6-credential-management).
+See [Security → Environment Variables & Secrets Management](./security.md#6-environment-variables--secrets-management).
 
 ---
 
@@ -127,15 +125,15 @@ Findings block the PR at an appropriate severity threshold. Dependabot keeps Act
 - **Change set on PR, deploy on merge:** infrastructure changes are reviewed as a change set before they can deploy.
 - **Protected environment:** `deploy` requires the `production` environment approval (manual gate).
 - **Immutable artifacts:** Lambda binaries are versioned; use aliases for instant rollback ([Deployment §8](./deployment.md#8-rollback)).
-- **Post-deploy smoke test:** an automated check triggers a generation run against a known repo and verifies a post lands in S3.
+- **Post-deploy smoke test:** an automated check redelivers a webhook to a test repo and verifies the instance starts, the queue drains, and content is published.
 
 ```mermaid
 flowchart LR
     A[Merge to main] --> B[Assume deploy role OIDC]
-    B --> C[cloudformation deploy]
+    B --> C[cloudformation deploy<br/>network → serverless → compute → observability]
     C --> D[Deploy Lambda artifacts]
-    D --> E[Smoke test run]
-    E --> F{Post created?}
+    D --> E[Smoke test: redeliver webhook]
+    E --> F{Content published?}
     F -- yes --> G[✅ Done]
     F -- no --> H[❌ Alert + rollback]
 ```

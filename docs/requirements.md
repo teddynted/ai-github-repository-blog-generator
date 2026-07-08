@@ -1,6 +1,6 @@
 # Requirements
 
-This document defines the requirements for the **AI GitHub Repository Blog Generator** — an AI-powered Developer Content Engine. Users **register repositories** (URL + Personal Access Token); the platform stores metadata, auto-configures **GitHub Webhooks**, analyzes repositories, and generates complete, publication-ready content packages using Amazon Bedrock.
+This document defines the requirements for the **GitHub AI Blog Generator** — an event-driven, fully self-hosted AI platform that automatically transforms GitHub repositories into high-quality technical content. Repository events trigger a **GitHub Webhook**; an **AWS Lambda** validates the signature and enqueues the payload in **Amazon SQS**; a cost-optimized **EC2 Spot Instance** is started on demand; and **n8n**, **OpenClaw**, and **Ollama** (running a local **Qwen** LLM) generate documentation and technical content — with **no paid inference APIs**.
 
 Requirements use the following convention:
 
@@ -13,365 +13,248 @@ Each requirement has a stable ID so it can be referenced from issues, pull reque
 | Prefix | Category |
 | --- | --- |
 | `FR-*` | Functional |
-| `REG-*` | Repository registration |
-| `GH-*` | GitHub API |
 | `WH-*` | GitHub webhook |
-| `AI-*` | AI |
+| `AI-*` | AI / local inference |
+| `WF-*` | Workflow orchestration |
+| `NFR-*` | Non-functional |
 | `INF-*` | Infrastructure |
 | `SEC-*` | Security |
-| `WF-*` | Workflow |
-| `ST-*` | Storage |
-| `MON-*` | Monitoring |
-| `COST-*` | Cost optimization |
-| `NFR-*` | Non-functional |
+| `COST-*` | Cost optimisation |
 
-Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) · [Infrastructure](./infrastructure.md) · [Security](./security.md) · [Roadmap](./roadmap.md).
+Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) · [Infrastructure](./infrastructure.md) · [Security](./security.md) · [Cost Optimisation](./cost-optimization.md) · [Roadmap](./roadmap.md).
 
 ---
 
 ## 1. Functional Requirements
 
-### 1.1 Repository Analysis
-
-The system MUST analyze the repository to build context for generation, covering:
-
-| Area | Includes |
-| --- | --- |
-| Documentation | README, docs, API definitions |
-| Code | Source code, folder structure, project architecture |
-| Dependencies | Dependencies, package managers |
-| Infrastructure as Code | Terraform, CloudFormation |
-| Containers & orchestration | Docker files, Kubernetes manifests |
-| CI/CD | Pipelines, GitHub Actions |
-| Configuration | Configuration files |
+### 1.1 Triggering & Manual Execution
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-1.1 | The system MUST clone (or update) the registered repository for analysis. | MUST |
-| FR-1.2 | The system MUST analyze the README, source code, folder structure, and project architecture. | MUST |
-| FR-1.3 | The system MUST analyze dependencies and package managers. | MUST |
-| FR-1.4 | The system MUST analyze Infrastructure as Code (Terraform, CloudFormation), Docker files, and Kubernetes manifests. | MUST |
-| FR-1.5 | The system MUST analyze CI/CD pipelines and GitHub Actions. | MUST |
-| FR-1.6 | The system MUST analyze documentation, API definitions, and configuration files. | MUST |
-| FR-1.7 | The system MUST detect the technology stack from the above. | MUST |
-| FR-1.8 | The system MUST respect ignore rules (`.gitignore`, binaries, vendored dirs, size caps). | MUST |
-| FR-1.9 | The analysis MUST be used to provide context to Amazon Bedrock. | MUST |
+| FR-1.1 | The system MUST be triggered automatically by **GitHub Webhooks** on supported events. | MUST |
+| FR-1.2 | The system MUST support **manual repository execution** for any repository on demand, without waiting for a webhook. | MUST |
+| FR-1.3 | The system MUST accept a repository URL (and any required access token) for a manual run. | MUST |
+| FR-1.4 | The system MUST enqueue every triggered event durably so it survives a stopped/starting instance. | MUST |
 
-### 1.2 Content Generation
+### 1.2 Repository Cloning & Analysis
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-2.1 | The system MUST generate a **complete content package**, not a single article. | MUST |
-| FR-2.2 | The system MUST generate a generic technical blog article (`blog.md`). | MUST |
-| FR-2.3 | The system MUST generate a Medium article (`medium.md`). | MUST |
-| FR-2.4 | The system MUST generate a Dev.to article (`devto.md`). | MUST |
-| FR-2.5 | The system MUST generate a Hashnode article (`hashnode.md`). | MUST |
-| FR-2.6 | The system MUST generate a newsletter article (`newsletter.md`). | MUST |
-| FR-2.7 | The system MUST generate a LinkedIn post (`linkedin.md`). | MUST |
-| FR-2.8 | The system MUST generate an X (Twitter) thread (`twitter-thread.md`). | MUST |
-| FR-2.9 | The system MUST generate a Reddit post (`reddit.md`). | MUST |
-| FR-2.10 | The system MUST generate an FAQ (`faq.md`). | MUST |
-| FR-2.11 | The system SHOULD generate README improvement suggestions (`readme-suggestions.md`). | SHOULD |
-| FR-2.12 | The system MUST generate a cover-image prompt for AI image generation (`image-prompts.md`). | MUST |
-| FR-2.13 | The system MUST generate SEO metadata: title, description, keywords (`seo.json`). | MUST |
-| FR-2.14 | The system MUST generate package metadata: tags, reading time, social captions, call-to-action suggestions (`metadata.json`). | MUST |
+| FR-2.1 | The system MUST clone (or update) the target repository before analysis. | MUST |
+| FR-2.2 | The system MUST analyse the README, source code, folder structure, and project architecture using **OpenClaw**. | MUST |
+| FR-2.3 | The system MUST analyse dependencies and package managers. | MUST |
+| FR-2.4 | The system MUST analyse Infrastructure as Code, Docker files, and CI/CD configuration where present. | MUST |
+| FR-2.5 | The system MUST detect the repository's technology stack from the analysis. | MUST |
+| FR-2.6 | The system MUST respect ignore rules (`.gitignore`, binaries, vendored directories, size caps). | MUST |
+| FR-2.7 | The analysis MUST be used to build the context supplied to the local LLM. | MUST |
 
-### 1.3 Article Quality
+### 1.3 Documentation & Content Generation
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-3.1 | Each long-form article MUST include a title and, where supported, a subtitle. | MUST |
-| FR-3.2 | Each long-form article MUST include an introduction, structured sections, and a conclusion. | MUST |
-| FR-3.3 | Each long-form article SHOULD include a table of contents. | SHOULD |
-| FR-3.4 | Each long-form article SHOULD include code examples and architecture explanations. | SHOULD |
-| FR-3.5 | Each long-form article SHOULD cover best practices, challenges, and trade-offs. | SHOULD |
-| FR-3.6 | Each long-form article MUST include a call to action. | MUST |
-| FR-3.7 | Each long-form article MUST include platform-specific tags and estimated reading time. | MUST |
-| FR-3.8 | Generated content MUST be valid Markdown (articles) or valid JSON (`seo.json`, `metadata.json`). | MUST |
+| FR-3.1 | The system MUST generate content using a **local LLM via Ollama** — no external inference API. | MUST |
+| FR-3.2 | The system MUST generate **technical blog posts**. | MUST |
+| FR-3.3 | The system MUST generate **README** improvements/suggestions. | MUST |
+| FR-3.4 | The system MUST generate **project documentation**. | MUST |
+| FR-3.5 | The system MUST generate **architecture summaries**. | MUST |
+| FR-3.6 | The system SHOULD generate **API documentation** where the repository exposes an API. | SHOULD |
+| FR-3.7 | The system MUST generate **project overviews**. | MUST |
+| FR-3.8 | The system SHOULD generate **release notes** and **changelogs** for release events. | SHOULD |
+| FR-3.9 | The system SHOULD generate **technical tutorials**. | SHOULD |
+| FR-3.10 | Generated content MUST be emitted as valid **GitHub-flavoured Markdown**. | MUST |
+| FR-3.11 | Each generation run MAY produce a bundle of multiple assets rather than a single document. | MAY |
 
-### 1.4 Platform Targeting
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| FR-4.1 | The system MUST produce platform-specific content optimized for Medium, Dev.to, and Hashnode. | MUST |
-| FR-4.2 | The system MUST produce content suitable for personal blogs, company engineering blogs, and any Markdown-compatible platform. | MUST |
-
-### 1.5 Event-to-Content Mapping
-
-The content produced SHOULD be tailored to the triggering event.
-
-| Event | Expected content |
-| --- | --- |
-| `push` | Updated technical article, updated documentation, LinkedIn update, X thread |
-| `release` | Release blog, newsletter, LinkedIn article, release summary |
-| `pull_request` | Feature article, architecture update, technical summary |
-| `repository` (created) | Initial project overview, technology stack article, repository introduction |
-| `workflow_dispatch` | On-demand full content package |
-
-### 1.6 Error Handling & Retries
+### 1.4 Output, Publishing & Notifications
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-6.1 | Every stage MUST handle failures explicitly and surface actionable errors. | MUST |
-| FR-6.2 | The system MUST retry transient failures (GitHub, Bedrock, S3, DynamoDB) with exponential backoff. | MUST |
-| FR-6.3 | A failed run MUST NOT overwrite or corrupt a previously generated package. | MUST |
+| FR-4.1 | The system MUST produce **Markdown output** for every generated asset. | MUST |
+| FR-4.2 | The system MUST **publish** generated content to a configured destination. | MUST |
+| FR-4.3 | The system MUST **notify users** when content is published. | MUST |
+| FR-4.4 | The system MUST **notify users/operators** when a run fails. | MUST |
+
+### 1.5 Reliability: Retry, Logging & Error Handling
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| FR-5.1 | The system MUST support **retry** of transient failures with exponential backoff. | MUST |
+| FR-5.2 | Messages that repeatedly fail MUST be routed to a **dead-letter queue**. | MUST |
+| FR-5.3 | Every stage MUST handle failures explicitly and surface actionable errors. | MUST |
+| FR-5.4 | The system MUST emit **structured logs** for every stage to CloudWatch. | MUST |
+| FR-5.5 | A failed run MUST NOT overwrite or corrupt a previously generated output. | MUST |
+| FR-5.6 | Processing MUST be **idempotent**: reprocessing the same event MUST NOT produce duplicate or corrupted output. | MUST |
 
 ---
 
-## 2. Repository Registration Requirements
+## 2. GitHub Webhook Requirements
 
-Registration is the onboarding entry point (see [Workflows](./workflows.md#3-repository-registration)).
+GitHub Webhooks are the **primary trigger mechanism**.
 
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| REG-1 | The system MUST accept a **repository URL** and a **GitHub Personal Access Token (PAT)** to register a repository. | MUST |
-| REG-2 | The system MUST validate repository access before completing registration. | MUST |
-| REG-3 | The system MUST store the PAT in **AWS Secrets Manager** and MUST NOT persist it in plaintext or in DynamoDB. | MUST |
-| REG-4 | The system MUST store repository metadata in **DynamoDB** ([ST-7](#9-storage-requirements)). | MUST |
-| REG-5 | The system MUST automatically create a GitHub Webhook **when the PAT grants permission**. | MUST |
-| REG-6 | If webhook creation is not permitted, the system MUST complete registration and return manual webhook setup instructions. | MUST |
-| REG-7 | The system MUST trigger an **initial repository analysis** after registration. | MUST |
-| REG-8 | The registration endpoint MUST be **HTTPS only** and access-controlled. | MUST |
-| REG-9 | The system SHOULD support re-registration/update of an existing repository (e.g. token rotation). | SHOULD |
-
----
-
-## 3. GitHub API Requirements
-
-The PAT is used to call the GitHub API and to clone repositories.
+### 2.1 Delivery & Processing
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| GH-1 | The system MUST use the PAT to access **private repositories** and clone repositories. | MUST |
-| GH-2 | The system MUST read repository **contents**. | MUST |
-| GH-3 | The system MUST read **releases**, **pull requests**, and **branches**. | MUST |
-| GH-4 | The system MUST be able to **create GitHub Webhooks** via the API when permitted. | MUST |
-| GH-5 | The system MUST handle GitHub API errors (rate limits, 401/403/404) gracefully and surface actionable messages. | MUST |
-| GH-6 | The system SHOULD respect GitHub API rate limits and back off on `403`/`429`. | SHOULD |
-| GH-7 | The system MUST request the **least-privilege** token scopes required (fine-grained tokens preferred). | MUST |
-
-**Recommended token permissions**
-
-| Fine-grained permission | Access | Classic scope |
-| --- | --- | --- |
-| Contents | Read | `repo` |
-| Metadata | Read | `repo` |
-| Pull requests | Read | `repo` |
-| Webhooks | Read & write | `admin:repo_hook` |
-
----
-
-## 4. GitHub Webhook Requirements
-
-GitHub Webhooks are the **primary trigger mechanism** (see [Security → Webhook Security](./security.md#10-webhook-security)).
-
-### 4.1 Delivery & Processing
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| WH-1 | The system MUST expose a single **HTTPS** webhook endpoint to receive GitHub events. | MUST |
-| WH-2 | The endpoint MUST accept the GitHub JSON payload (`application/json`). | MUST |
-| WH-3 | On a valid delivery, the system MUST resolve the repository record from DynamoDB and extract event/ref info. | MUST |
-| WH-4 | The system MUST start the analysis/generation pipeline from validated webhook data. | MUST |
-| WH-5 | The system MUST respond promptly to GitHub (e.g. `202 Accepted`) and process asynchronously. | SHOULD |
+| WH-1 | The system MUST expose a single **HTTPS** webhook endpoint via **Amazon API Gateway**. | MUST |
+| WH-2 | The webhook handler MUST **return HTTP 200 immediately** so GitHub does not time out. | MUST |
+| WH-3 | The webhook handler MUST **store the validated payload in Amazon SQS** before returning. | MUST |
+| WH-4 | The webhook handler MUST **start the EC2 Spot Instance** if it is currently stopped. | MUST |
+| WH-5 | The system MUST process queued events **asynchronously** on the EC2 instance via n8n. | MUST |
 | WH-6 | The system MUST log every delivery (accepted and rejected) to CloudWatch. | MUST |
+| WH-7 | No webhook event MUST be lost while the EC2 instance is stopped or starting (SQS durability). | MUST |
 
-### 4.2 Signature Validation
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| WH-7 | The system MUST validate the `X-Hub-Signature-256` header using **HMAC SHA-256** with the repository's webhook secret. | MUST |
-| WH-8 | The comparison MUST be constant-time to prevent timing attacks. | MUST |
-| WH-9 | The system MUST **reject** deliveries with a missing or invalid signature (`401`) and MUST NOT process them. | MUST |
-| WH-10 | The webhook secret MUST be stored in AWS Secrets Manager, never in code. | MUST |
-
-### 4.3 Supported Events
+### 2.2 Signature Validation
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| WH-11 | The system MUST support the **primary** events: `push`, `release`, `pull_request`, `workflow_dispatch`, `repository`. | MUST |
-| WH-12 | The system SHOULD ignore/skip events it does not handle without error. | SHOULD |
-| WH-13 | The system MAY support **future** events: `issues`, `issue_comment`, `discussion`, `discussion_comment`, `deployment`, `deployment_status`, `package`, `registry_package`, `milestone`, `fork`, `watch` (star). | MAY |
+| WH-8 | The system MUST validate the `X-Hub-Signature-256` header using **HMAC SHA-256** with the configured webhook secret. | MUST |
+| WH-9 | The comparison MUST be **constant-time** to prevent timing attacks. | MUST |
+| WH-10 | The system MUST **reject** deliveries with a missing or invalid signature and MUST NOT enqueue or process them. | MUST |
+| WH-11 | The webhook secret MUST be provided via environment/secret configuration, never hardcoded in source. | MUST |
+
+### 2.3 Supported Events
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| WH-12 | The system MUST support the primary events: `push`, `release`, `pull_request`. | MUST |
+| WH-13 | The system SHOULD ignore/skip events it does not handle without error. | SHOULD |
+| WH-14 | The system MAY support additional events (e.g. `workflow_dispatch`, `issues`, `discussion`). | MAY |
 
 ---
 
-## 5. AI Requirements
+## 3. AI / Local Inference Requirements
+
+All AI inference MUST occur locally. The system MUST NOT depend on Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| AI-1 | The system MUST use **Amazon Bedrock** foundation models for content generation. | MUST |
-| AI-2 | The model ID/inference profile, `max_tokens`, and `temperature` MUST be configurable (CloudFormation parameters). | MUST |
-| AI-3 | The system MUST assemble structured prompts from the repository analysis context. | MUST |
-| AI-4 | Prompts MUST enforce a maximum token budget and truncate deterministically when exceeded. | MUST |
-| AI-5 | The system MUST use distinct, platform-tuned prompts for each content type. | MUST |
-| AI-6 | The system MUST retry Bedrock throttling/transient errors with exponential backoff. | MUST |
-| AI-7 | The system SHOULD record token usage per invocation for cost tracking. | SHOULD |
-| AI-8 | Prompt templates SHOULD be configurable without code changes. | SHOULD |
+| AI-1 | The system MUST perform all inference **locally using Ollama**. | MUST |
+| AI-2 | The default model MUST be a **local Qwen** model, configurable via environment variable. | MUST |
+| AI-3 | The system MUST NOT require Amazon Bedrock, OpenAI, Anthropic, or any paid inference API. | MUST |
+| AI-4 | **OpenClaw** MUST perform repository analysis and assemble the context supplied to the model. | MUST |
+| AI-5 | The system MUST use distinct, purpose-tuned prompts for each content type. | MUST |
+| AI-6 | Prompts MUST enforce a token/context budget and truncate deterministically when exceeded. | MUST |
+| AI-7 | Model weights MUST persist on the EBS volume so they are not re-downloaded on each run. | MUST |
+| AI-8 | The model, prompt templates, and generation parameters SHOULD be configurable without code changes. | SHOULD |
+| AI-9 | The system SHOULD support swapping the local model (e.g. a larger Qwen variant) via configuration. | SHOULD |
 
 ---
 
-## 6. Infrastructure Requirements
+## 4. Workflow Requirements
 
-All infrastructure MUST be provisioned with **AWS CloudFormation** (see [Infrastructure](./infrastructure.md)).
+Orchestration is implemented with **n8n** running on the EC2 Spot Instance.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| INF-1 | Provision an **Amazon VPC** with **public** and **private** subnets. | MUST |
-| INF-2 | Provision an **Internet Gateway** and **route tables** for controlled connectivity. | MUST |
-| INF-3 | Provision **security groups** restricting inbound 443 to GitHub webhook IP ranges and allowing SSM. | MUST |
-| INF-4 | Provision **IAM roles** and **IAM policies** following least privilege. | MUST |
-| INF-5 | Provision **Amazon EC2** to host the n8n orchestrator and the registration/webhook endpoint. | MUST |
-| INF-6 | Provide access to **Amazon Bedrock** for content generation. | MUST |
-| INF-7 | Provision **Amazon S3** for generated content (and a deployment artifacts bucket for CloudFormation packaging). | MUST |
-| INF-8 | Provision **Amazon DynamoDB** for repository metadata. | MUST |
-| INF-9 | Provision **AWS Secrets Manager** for per-repository PATs and webhook secrets. | MUST |
-| INF-10 | Provision **Amazon CloudWatch** for logs, metrics, and alarms. | MUST |
-| INF-11 | Provision **Amazon EventBridge** and **EventBridge Scheduler** for scheduling. | MUST |
-| INF-12 | Provision **AWS Lambda** (Go) for scheduled EC2 start/stop. | MUST |
-| INF-13 | CloudFormation packaging artifacts MUST be stored in a versioned, encrypted S3 bucket; stack state is managed by CloudFormation itself. | MUST |
-| INF-14 | No resource MAY be created manually outside CloudFormation (no console drift). | MUST |
+| WF-1 | All stages (ingestion, analysis, generation, publishing, notifications) MUST be orchestrated through n8n workflows. | MUST |
+| WF-2 | n8n MUST **poll Amazon SQS** for queued events and drive the pipeline from them. | MUST |
+| WF-3 | Workflows MUST pass structured data between stages. | MUST |
+| WF-4 | Workflows MUST support both webhook-triggered and **manual** invocation. | MUST |
+| WF-5 | Each workflow MUST have explicit success and failure paths. | MUST |
+| WF-6 | A processed SQS message MUST be deleted only after successful handling; failures MUST allow redelivery. | MUST |
+| WF-7 | Workflows MUST be exportable/importable as versioned JSON, free of embedded secret values. | MUST |
+| WF-8 | Each content type SHOULD be generatable independently for testing. | SHOULD |
 
 ---
 
-## 7. Security Requirements
+## 5. Infrastructure Requirements
+
+All infrastructure MUST be provisioned with **AWS CloudFormation**. **Terraform MUST NOT be used.** Templates MUST be modular and reusable.
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| INF-1 | Provision an **Amazon VPC**. | MUST |
+| INF-2 | Provision a **public subnet**. | MUST |
+| INF-3 | Provision an **Internet Gateway** and **route tables** for controlled connectivity. | MUST |
+| INF-4 | Provision **security groups** that restrict inbound access to the minimum required. | MUST |
+| INF-5 | Provision **IAM roles** and policies following least privilege. | MUST |
+| INF-6 | Provision an **EC2 Spot Instance** running Ubuntu with Docker and Docker Compose. | MUST |
+| INF-7 | Provision a **persistent gp3 EBS volume** for models, n8n state, and workflows. | MUST |
+| INF-8 | Provision **Amazon API Gateway** as the HTTPS webhook ingress. | MUST |
+| INF-9 | Provision **AWS Lambda** functions for the webhook handler and the idle-shutdown routine. | MUST |
+| INF-10 | Provision **Amazon SQS** (with a dead-letter queue) as the durable event buffer. | MUST |
+| INF-11 | Provision **Amazon EventBridge** to drive the idle-shutdown timer. | MUST |
+| INF-12 | Provision **Amazon CloudWatch** for logs, metrics, and alarms. | MUST |
+| INF-13 | The EC2 host MUST run **n8n**, **OpenClaw**, and **Ollama** via **Docker Compose**. | MUST |
+| INF-14 | CloudFormation templates MUST be **modular and reusable** (separate network, serverless, compute, and observability stacks). | MUST |
+| INF-15 | No resource MAY be created manually outside CloudFormation (no console drift). | MUST |
+
+---
+
+## 6. Security Requirements
 
 See [Security](./security.md) for full detail.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| SEC-1 | All IAM roles and policies MUST follow **least privilege**. | MUST |
-| SEC-2 | The registration and webhook endpoints MUST be **HTTPS only**. | MUST |
-| SEC-3 | GitHub webhook deliveries MUST be verified with **HMAC SHA-256** before processing ([WH-7](#42-signature-validation)). | MUST |
-| SEC-4 | GitHub Personal Access Tokens MUST be stored in **AWS Secrets Manager** — never in DynamoDB, code, or plaintext. | MUST |
-| SEC-5 | Data MUST be encrypted **at rest** (S3, EBS, DynamoDB, Secrets Manager). | MUST |
-| SEC-6 | Data MUST be encrypted **in transit** (TLS 1.2+). | MUST |
-| SEC-7 | There MUST be **no hardcoded credentials** in code, images, or state. | MUST |
-| SEC-8 | Compute MUST use **IAM roles**, not static credentials; CI MUST use OIDC. | MUST |
-| SEC-9 | All access and activity MUST be logged to **CloudWatch** (audit logging); logs MUST NOT contain secrets. | MUST |
-| SEC-10 | **Amazon Bedrock** access MUST be scoped by IAM to specific model ARNs. | MUST |
-| SEC-11 | **Amazon S3** access MUST be least-privilege; buckets MUST block public access and enforce TLS. | MUST |
+| SEC-1 | All IAM roles and policies MUST follow **least privilege** (the handler Lambda may only enqueue and start the instance; the shutdown Lambda may only stop it). | MUST |
+| SEC-2 | GitHub webhook deliveries MUST be verified with **HMAC SHA-256** before processing ([WH-8](#22-signature-validation)). | MUST |
+| SEC-3 | The webhook endpoint MUST be **HTTPS only**. | MUST |
+| SEC-4 | **Security groups** MUST restrict inbound traffic; the n8n and Ollama ports MUST NOT be publicly exposed. | MUST |
+| SEC-5 | Sensitive configuration MUST be provided via **environment variables** / a secrets store, never committed to source. | MUST |
+| SEC-6 | Secrets (webhook secret, tokens) MUST be managed through a **secrets management** mechanism, not stored in plaintext. | MUST |
+| SEC-7 | The EC2 instance MUST use **SSH key authentication**; password authentication MUST be disabled. | MUST |
+| SEC-8 | There MUST be **no hardcoded credentials** in code, images, or CloudFormation templates/parameters. | MUST |
+| SEC-9 | Data MUST be encrypted **at rest** (EBS, SQS, and any content storage) and **in transit** (TLS 1.2+). | MUST |
+| SEC-10 | All access and activity MUST be logged to **CloudWatch**; logs MUST NOT contain secret material. | MUST |
 
 ---
 
-## 8. Workflow Requirements
+## 7. Cost Optimisation Requirements
 
-Orchestration is implemented with **n8n** (see [Workflows](./workflows.md)).
+See [Cost Optimisation](./cost-optimization.md).
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| WF-1 | All stages (registration, ingestion, analysis, generation, publishing, notifications) MUST be orchestrated through n8n workflows. | MUST |
-| WF-2 | Workflows MUST pass structured data between stages. | MUST |
-| WF-3 | Workflows MUST be triggered by GitHub webhooks and MUST also support manual invocation. | MUST |
-| WF-4 | Each workflow MUST have explicit success and failure paths. | MUST |
-| WF-5 | Workflows MUST be exportable/importable as versioned JSON, free of embedded secret values. | MUST |
-| WF-6 | Each content type SHOULD be generatable independently for testing. | SHOULD |
+| COST-1 | Compute MUST be **event-driven**: the EC2 instance MUST NOT run continuously. | MUST |
+| COST-2 | The compute host MUST be an **EC2 Spot Instance** to minimise cost. | MUST |
+| COST-3 | The instance MUST be **started automatically** by the webhook handler Lambda when a valid event arrives. | MUST |
+| COST-4 | The instance MUST be **stopped automatically** after a configurable **idle timeout** via EventBridge and the idle-shutdown Lambda. | MUST |
+| COST-5 | The idle timeout MUST be configurable via CloudFormation parameter / environment variable. | MUST |
+| COST-6 | Model weights and state MUST persist on **EBS** so the system pays only cheap storage while stopped and avoids re-downloading models. | MUST |
+| COST-7 | **Amazon SQS** MUST buffer webhooks during cold start so no event is lost while the instance boots ([WH-7](#21-delivery--processing)). | MUST |
+| COST-8 | Because inference is **local via Ollama**, the system MUST incur **no per-token inference charges**. | MUST |
+| COST-9 | CloudWatch log retention MUST be bounded to limit storage cost. | MUST |
+| COST-10 | The system SHOULD support falling back to On-Demand when Spot capacity is unavailable. | SHOULD |
 
 ---
 
-## 9. Storage Requirements
-
-See [Architecture → Storage](./architecture.md#7-storage-architecture).
+## 8. Non-Functional Requirements
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| ST-1 | Generated content MUST be stored in **Amazon S3**. | MUST |
-| ST-2 | Content MUST be organized by repository and date: `generated-content/<repository-name>/<YYYY-MM-DD>/`. | MUST |
-| ST-3 | Each package MUST contain the full set of generated assets (articles, social posts, `seo.json`, `metadata.json`, image prompts). | MUST |
-| ST-4 | The content bucket MUST enforce encryption at rest and block public access. | MUST |
-| ST-5 | The content bucket SHOULD use versioning and lifecycle policies to bound cost. | SHOULD |
-| ST-6 | CloudFormation packaging artifacts MUST be stored in a separate, versioned, encrypted S3 bucket. | MUST |
-| ST-7 | Repository metadata MUST be stored in **DynamoDB**: repository URL, owner, name, default branch, registration timestamp, webhook status, webhook ID, last processed commit, last successful generation, generation status. | MUST |
-| ST-8 | DynamoDB MUST NOT store GitHub Personal Access Tokens (store references/ARNs only). | MUST |
-| ST-9 | The DynamoDB table MUST have encryption at rest enabled. | MUST |
+| NFR-1 | **Scalability** — the platform MUST process many repository events, buffered and drained through SQS. | MUST |
+| NFR-2 | **Availability** — the webhook front door (API Gateway + Lambda + SQS) MUST remain available even when the EC2 instance is stopped. | MUST |
+| NFR-3 | **Reliability** — runs MUST be idempotent and resumable after a Spot interruption. | MUST |
+| NFR-4 | **Performance** — a typical repository SHOULD complete a generation run within a bounded time once the instance is warm. | SHOULD |
+| NFR-5 | **Cost efficiency** — an idle system MUST cost only persistent storage (EBS), with no always-on compute. | MUST |
+| NFR-6 | **Maintainability** — all infrastructure MUST be defined as code (CloudFormation); services MUST run reproducibly via Docker Compose. | MUST |
+| NFR-7 | **Extensibility** — new content types, events, and workflow stages SHOULD be addable without rewriting existing ones. | SHOULD |
+| NFR-8 | **Observability** — all components MUST emit structured logs and key metrics to CloudWatch. | MUST |
+| NFR-9 | **Portability** — n8n workflows MUST be importable/exportable as versioned JSON; the AI stack MUST be provider-independent (local). | MUST |
+| NFR-10 | **Usability** — a new contributor MUST be able to deploy the platform and process a repository from the documentation alone. | MUST |
 
 ---
 
-## 10. Monitoring Requirements
-
-See [Monitoring](./monitoring.md).
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| MON-1 | All components MUST emit **structured logs** to CloudWatch. | MUST |
-| MON-2 | Key metrics (registrations, webhook deliveries, runs started/succeeded/failed, latency, token usage) MUST be published to CloudWatch. | MUST |
-| MON-3 | A run ID MUST correlate logs across all stages of a single run. | MUST |
-| MON-4 | Failure alarms (webhook rejections, workflow failures, Bedrock failures, infra health) MUST notify operators. | MUST |
-| MON-5 | An operational dashboard SHOULD summarize registration and run health at a glance. | SHOULD |
-| MON-6 | Log retention MUST be bounded (default 14 days). | MUST |
-
----
-
-## 11. Cost Optimization Requirements
-
-See [Cost Optimization](./cost-optimization.md).
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| COST-1 | The EC2 host MUST be automatically **started and stopped** to avoid running continuously. | MUST |
-| COST-2 | Start/stop MUST be driven by **EventBridge Scheduler** invoking a **Go AWS Lambda**. | MUST |
-| COST-3 | The default schedule MUST **start EC2 every day at 19:00** and **stop EC2 every day at 21:00**. | MUST |
-| COST-4 | The start/stop schedule MUST be configurable via CloudFormation parameters. | MUST |
-| COST-5 | S3 lifecycle policies MUST bound stored-content cost. | MUST |
-| COST-6 | CloudWatch log retention MUST be bounded. | MUST |
-| COST-7 | DynamoDB SHOULD use on-demand (pay-per-request) capacity to avoid idle cost. | SHOULD |
-| COST-8 | Bedrock cost SHOULD be controlled via token budgets and capped `max_tokens`. | SHOULD |
-
----
-
-## 12. Non-Functional Requirements
-
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| NFR-1 | **Scalability** — the platform MUST support many registered repositories and process runs independently. | MUST |
-| NFR-2 | **Availability** — storage, metadata, and AI stages MUST rely on managed, highly-available AWS services. | MUST |
-| NFR-3 | **Reliability** — runs MUST be idempotent; re-running a failed job MUST NOT corrupt output. | MUST |
-| NFR-4 | **Performance** — a single content package SHOULD complete within a bounded time for a typical repository. | SHOULD |
-| NFR-5 | **Maintainability** — all infrastructure MUST be defined as code; Go code MUST pass `gofmt`, `go vet`, and tests in CI. | MUST |
-| NFR-6 | **Extensibility** — new content types, events, and workflow stages SHOULD be addable without rewriting existing ones. | SHOULD |
-| NFR-7 | **Observability** — all components MUST emit structured logs and key metrics. | MUST |
-| NFR-8 | **Portability** — the workflows MUST be importable/exportable as versioned JSON. | MUST |
-| NFR-9 | **Usability** — a new contributor MUST be able to run the system locally and register a repository from documentation alone. | MUST |
-
----
-
-## 13. Future Enhancements
+## 9. Future Enhancements
 
 Planned capabilities (see [Roadmap](./roadmap.md)). These are **future work** and not part of the current compliant release.
 
-**Authentication & multi-user**
+**Compute & resilience**
 
-- GitHub App authentication
-- OAuth login
-- Team workspaces
-- Multi-user support
+- On-Demand fallback when Spot capacity is unavailable
+- Multi-Availability-Zone Spot placement
+- GPU auto-detection and model right-sizing
 
-**Automatic publishing & CMS**
+**AI & content**
 
-- Automatic publishing to Medium
-- Automatic publishing to Dev.to
-- Automatic publishing to Hashnode
-- WordPress integration
-- Ghost CMS integration
-
-**Content breadth**
-
+- Multi-model support (different local models per content type)
+- Fine-tuned local models for documentation style
+- Expanded content types (video/short/podcast scripts, diagrams)
 - Multi-language content generation
-- AI-generated diagrams
-- AI-generated release notes
-- API documentation generation
-- YouTube scripts
-- TikTok scripts
-- Shorts scripts
-- Podcast summaries
 
-**Intelligence & quality**
+**Publishing & platform**
 
-- Multi-model AI support
-- Content quality scoring
-- Duplicate content detection
-
-**Automation & platform**
-
-- Scheduled rescans
-- Expanded webhook event support ([WH-13](#43-supported-events))
-- Always-on webhook ingestion buffer (24/7 event capture)
+- Direct publishing integrations (Dev.to, Medium, Hashnode)
+- Web dashboard for run history and content review
+- Multi-repository batch processing
+- Expanded webhook event support ([WH-14](#23-supported-events))

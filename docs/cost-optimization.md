@@ -1,104 +1,113 @@
-# Cost Optimization
+# Cost Optimisation
 
-Cost controls for the **AI GitHub Repository Blog Generator**. The design keeps the always-on footprint tiny: managed, pay-per-use services do the durable work, and the only persistent host (the n8n EC2 instance) is started and stopped on a schedule.
+Cost controls for the **GitHub AI Blog Generator**. The design keeps the idle footprint tiny: the compute host is an **EC2 Spot Instance** started only when there is work, stopped after an idle timeout, and all inference is **local** (no per-token API fees).
 
-Related: [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md) · [Cost Requirements](./requirements.md#11-cost-optimization-requirements).
+Related: [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md) · [Cost Requirements](./requirements.md#7-cost-optimisation-requirements).
 
 ---
 
-## 1. EC2 Scheduling
+## 1. Event-Driven Compute & Automatic Startup
 
-The n8n host is the main fixed cost, so it is **not** left running continuously. An **EventBridge Scheduler** rule invokes the **`ec2-scheduler` Go AWS Lambda** to start and stop the instance on a fixed daily window.
-
-| Action | Time | Mechanism |
-| --- | --- | --- |
-| **Start EC2** | **19:00** | EventBridge Scheduler → Go Lambda → `StartInstances` |
-| **Stop EC2** | **21:00** | EventBridge Scheduler → Go Lambda → `StopInstances` |
+Nothing runs until a repository changes. When a webhook arrives, the **Webhook Handler Lambda** validates it, enqueues it in SQS, and **starts the EC2 Spot Instance if it is stopped**.
 
 ```mermaid
 flowchart LR
-    S1[EventBridge Scheduler<br/>19:00] --> L[Go Lambda<br/>ec2-scheduler] --> ON[(EC2 running)]
-    ON --> S2[EventBridge Scheduler<br/>21:00] --> L2[Go Lambda<br/>ec2-scheduler] --> OFF[(EC2 stopped)]
+    WH[GitHub Webhook] --> LH[Webhook Handler Lambda]
+    LH -->|StartInstances if stopped| EC2[(EC2 Spot running)]
+    LH -->|enqueue| SQS[(SQS)]
+    EC2 -->|poll + process| SQS
 ```
 
-- **Impact:** running ~2h/day instead of 24/7 reduces EC2 compute cost by roughly **90%**.
-- The window and instance are configurable via CloudFormation parameters (`Ec2StartCron`, `Ec2StopCron`, `Ec2InstanceId`).
-- The root EBS volume persists while stopped (small cost); n8n state survives restarts.
-- This prevents the instance from running continuously and keeps infrastructure cost minimal ([COST-1](./requirements.md#11-cost-optimization-requirements)–[COST-4](./requirements.md#11-cost-optimization-requirements)).
+- There is **no always-on server** — the instance exists only while processing.
+- Compute charges accrue **only during active generation** ([COST-1](./requirements.md#7-cost-optimisation-requirements), [COST-3](./requirements.md#7-cost-optimisation-requirements)).
 
 ---
 
-## 1a. DynamoDB On-Demand
+## 2. Automatic Shutdown
 
-The `repositories` metadata table uses **on-demand (pay-per-request)** capacity, so it costs effectively nothing when idle and scales automatically with registrations and runs — no provisioned throughput to pay for or tune ([COST-7](./requirements.md#11-cost-optimization-requirements)). Per-repository Secrets Manager entries add a small fixed cost per registered repo.
+An **EventBridge** timer drives the **Idle Shutdown Lambda**, which stops the instance after `IDLE_TIMEOUT_MINUTES` of inactivity (empty queue, no in-flight run).
 
----
+```mermaid
+flowchart LR
+    EB[EventBridge idle timer] --> LS[Idle Shutdown Lambda]
+    LS -->|StopInstances after idle| EC2[(EC2 Spot stopped)]
+```
 
-## 2. Lambda Optimization
-
-- **arm64 (Graviton)** custom runtime for the `ec2-scheduler` function — better price/performance than x86.
-- The function is tiny and runs only twice a day, so its cost is effectively **$0**.
-- Short timeout; least-privilege role limited to start/stop the specific instance.
-
----
-
-## 3. Amazon S3 Lifecycle Policies
-
-| Bucket | Rule | Rationale |
-| --- | --- | --- |
-| `generated-content` | **IA at 30d**, **Glacier at 90d** | Packages are durable but rarely re-read after publishing |
-| `artifacts` | Expire old non-current versions | Small; only latest packaged artifacts are needed |
-
-Versioning on `generated-content` is paired with lifecycle rules on **non-current versions** so history is retained without unbounded growth. Repository clones are transient (EC2 ephemeral disk) and incur no S3 cost.
+- The idle timeout is configurable via `IdleTimeoutMinutes` ([COST-4](./requirements.md#7-cost-optimisation-requirements), [COST-5](./requirements.md#7-cost-optimisation-requirements)).
+- While stopped, only the **persistent EBS volume** incurs cost — a few cents per month for typical model sizes.
 
 ---
 
-## 4. CloudWatch Retention
+## 3. EC2 Spot Instances
 
-- Log retention defaults to **14 days** (`log_retention_days`) — indefinite retention is a common hidden cost.
-- Only necessary custom metrics are published; high-cardinality dimensions are avoided.
-- Dashboards and alarms are kept minimal and purposeful.
+Spot Instances are the right default for this **interruptible, batch-style** workload.
 
----
+| Aspect | Detail |
+| --- | --- |
+| **Saving** | Typically **70–90% cheaper** than On-Demand for the same capacity |
+| **Why suitable** | Runs are asynchronous and resumable; latency is not critical |
+| **Interruption risk** | AWS may reclaim the instance with a 2-minute warning |
+| **Mitigation** | Work lives in SQS; an interrupted run reappears after the visibility timeout and is retried; models/state persist on EBS |
 
-## 5. IaC Cost Optimization
-
-- **Tag everything** (via stack-level `Tags` on `aws cloudformation deploy`) with `project`, `environment`, `owner` for cost allocation and budget filtering.
-- Review a **change set** in CI to catch unintended, cost-increasing changes before deploy ([CI/CD](./ci-cd.md)).
-- Prefer **on-demand/managed** services over always-on infrastructure.
-- Keep **dev** environments smaller (or deleted when idle): `aws cloudformation delete-stack` on ephemeral dev stacks.
-- Consider an **AWS Budget** with alerts on the project tag.
+Trade-offs in full: [README → Spot Instance Trade-offs](../README.md#spot-instance-trade-offs). Optionally fall back to On-Demand when Spot capacity is unavailable ([COST-10](./requirements.md#7-cost-optimisation-requirements), [Roadmap](./roadmap.md)).
 
 ---
 
-## 6. Estimated Monthly AWS Cost
+## 4. Local Inference — No Per-Token Cost
 
-> Illustrative estimate for **light usage** (a handful of content packages per week) in `us-east-1`. Actual costs vary by Region, model, prompt size, and volume. **Amazon Bedrock is usage-based and typically the largest variable.**
+Because **Ollama** runs a **local Qwen** model on the instance, there are **no per-token inference charges** — no matter how much content you generate ([COST-8](./requirements.md#7-cost-optimisation-requirements)). The only inference cost is the (already-paid-for) EC2 compute time while a run is active. This is the single biggest structural difference from hosted-model designs, where token spend usually dominates.
+
+---
+
+## 5. Persistent EBS, Ephemeral Compute
+
+Model weights and n8n state live on a persistent **gp3 EBS volume** that survives start/stop cycles.
+
+- A restarted (or Spot-replaced) instance **re-attaches the volume** and is ready to infer **without re-downloading multi-gigabyte models** ([COST-6](./requirements.md#7-cost-optimisation-requirements)).
+- Only cheap **storage** cost persists while the instance is stopped; there is no idle compute cost.
+
+---
+
+## 6. SQS Prevents Webhook Loss During Cold Start
+
+Starting a Spot Instance is not instantaneous — booting Ubuntu, starting Docker Compose, and warming Ollama takes time. During this **cold start**, GitHub may deliver several webhooks. **Amazon SQS** ensures none are lost:
+
+1. The handler Lambda writes each validated payload to SQS and returns HTTP 200 immediately.
+2. SQS **durably retains** messages (retention configurable up to 14 days) regardless of instance state.
+3. When n8n comes online it **polls SQS** and processes the backlog in order.
+4. A **visibility timeout** protects in-flight messages; a **dead-letter queue** captures repeated failures.
+
+This decouples the always-available front door from the on-demand compute layer ([COST-7](./requirements.md#7-cost-optimisation-requirements)).
+
+---
+
+## 7. Other Cost Controls
+
+- **CloudWatch retention** defaults to **14 days** (`LogRetentionDays`) — indefinite retention is a common hidden cost ([COST-9](./requirements.md#7-cost-optimisation-requirements)).
+- **Right-size the instance and model** — pick the smallest GPU instance and Qwen variant that meet your quality bar.
+- **Tune the idle timeout** — shorter timeouts stop the instance sooner at the risk of more cold starts.
+- **Tag everything** (`project`, `environment`, `owner`) for cost allocation; consider an **AWS Budget** with alerts on the project tag.
+- **Cache analysis** so unchanged repositories skip re-analysis on repeated events.
+
+---
+
+## 8. Estimated Monthly AWS Cost
+
+> Illustrative estimate for **light usage** (a handful of runs per week) in `us-east-1`. Actual cost varies by Region, instance type, model size, and run volume. The dominant variable is **EC2 Spot compute time**, which is proportional to how often and how long the instance runs.
 
 | Service | Assumption | Est. monthly (USD) |
 | --- | --- | --- |
-| EC2 (`t3.small`, ~2h × 30 days) | Schedule-managed (19:00–21:00) | ~$1–2 |
-| Elastic IP | Attached to a (mostly stopped) instance | ~$1–4 |
-| Lambda (`ec2-scheduler`, arm64) | 2 invocations/day | ~$0 |
-| S3 (generated content) | Lifecycle-managed, small volume | ~$1–3 |
-| DynamoDB (`repositories`, on-demand) | Low read/write volume | ~$0–1 |
+| EC2 Spot (`g4dn.xlarge`, a few active hours/week) | On-demand start/stop | ~$3–10 |
+| EBS gp3 (100 GB, persistent) | Retained while stopped | ~$8 |
+| Lambda (handler + idle-shutdown, arm64) | A few invocations/day | ~$0 |
+| API Gateway | Low request volume | ~$0–1 |
+| Amazon SQS | Low message volume | ~$0 |
 | CloudWatch (logs + metrics) | 14-day retention | ~$1–3 |
-| Secrets Manager | ~2 deployment + per-repo secrets | ~$1.20+ |
-| Amazon Bedrock | Per-token, model-dependent | **variable** (often dominant) |
-| **Baseline (excl. Bedrock)** | | **~$5–14** |
+| **Inference (Ollama, local)** | No per-token fee | **$0** |
+| **Baseline** | | **~$12–22** |
 
 **Notes & levers:**
-- The webhook design places EC2 in a **public subnet with an Elastic IP** and uses **VPC endpoints** for AWS traffic, so **no NAT gateway** is required — this removes what is usually the biggest fixed line item.
-- An **Elastic IP** attached to a *stopped* instance incurs a small hourly charge; it is retained so the webhook URL is stable across the daily start/stop cycle.
-- **Bedrock** cost scales with input+output tokens — and this project generates *many* assets per run, so it is the primary variable cost. Keep prompts tight and cap `max_tokens`.
-
----
-
-## 7. Ways to Reduce Operational Cost
-
-- Tighten or shift the **EC2 window** (`Ec2StartCron` / `Ec2StopCron`), or run fully on demand.
-- Keep using **VPC endpoints** instead of a NAT gateway for AWS-bound traffic.
-- Reduce **Bedrock** spend: trim prompt context, lower `max_tokens`, generate a subset of content types, or use a smaller/cheaper model for drafts and reserve larger models for final passes.
-- Shorten **content retention** and **log retention**.
-- Cache repository analysis so unchanged repos skip re-analysis on repeated events.
-- Use **cost allocation tags** + **AWS Budgets** to catch drift early.
+- The **EBS volume** is the largest *fixed* line item because it persists while stopped — size it to your model, no larger.
+- There is **no NAT gateway** (the instance sits in a public subnet with restricted security groups), removing a common fixed cost.
+- **No inference API bill** — generating more content costs only more active EC2 minutes, not tokens.
+- To cut cost further: use a smaller instance/model, shorten the idle timeout, or reduce the EBS volume size.

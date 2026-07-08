@@ -1,57 +1,60 @@
 # Roadmap
 
-Planned direction for the **AI GitHub Repository Blog Generator**. Dates are indicative; scope may shift as the project evolves. Items marked ✅ are considered done for the milestone.
+Planned direction for the **GitHub AI Blog Generator**. Dates are indicative; scope may shift as the project evolves. Items marked ✅ are considered done for the milestone.
 
 Related: [Requirements](./requirements.md) · [Contributing](./contributing.md).
 
 ```mermaid
 timeline
     title Release Roadmap
-    v1.0 : Core generation pipeline : Bedrock integration : CloudFormation deploy
-    v1.1 : Better prompts : Diagrams : SEO
-    v2.0 : Templates : Multi-language : Auto-publish
-    v3.0 : Multi-repo : AI review : Collaboration
+    v1.0 : Event-driven pipeline : Local inference (Ollama/Qwen) : CloudFormation deploy
+    v1.1 : Better prompts : Resilience : On-Demand fallback
+    v2.0 : Multi-model : Direct publishing : Web dashboard
+    v3.0 : Multi-repo : Fine-tuned models : Collaboration
 ```
 
 ---
 
 ## Version 1.0 — Foundation
 
-The core end-to-end pipeline, deployable from scratch with CloudFormation.
+The core event-driven pipeline, deployable from scratch with CloudFormation.
 
-- ✅ GitHub Webhook trigger with HMAC SHA-256 signature validation
-- ✅ GitHub repository analysis (clone, metadata, file discovery, README + source analysis, technology detection)
-- ✅ Amazon Bedrock integration generating a full multi-platform content package
-- ✅ Versioned S3 storage of generated content
-- ✅ CloudFormation deployment (VPC, EC2/n8n, Lambda, S3, EventBridge Scheduler, CloudWatch, Secrets Manager, IAM)
-- ✅ n8n workflow orchestration with error handling and notifications
+- ✅ GitHub Webhook trigger with HMAC SHA-256 signature validation (API Gateway + Lambda)
+- ✅ Durable event buffering with Amazon SQS (+ dead-letter queue)
+- ✅ On-demand EC2 Spot Instance start (webhook handler) and idle-timeout stop (EventBridge + Lambda)
+- ✅ Local inference via Ollama + Qwen — no paid inference API
+- ✅ Repository analysis via OpenClaw and Markdown content generation
+- ✅ Persistent gp3 EBS volume for models and n8n state
+- ✅ CloudFormation deployment (VPC, public subnet, IGW, route tables, SGs, IAM, EC2 Spot, EBS, API Gateway, Lambda, SQS, EventBridge, CloudWatch)
+- ✅ n8n workflow orchestration with retries, error handling, and notifications
 
-**Exit criteria:** a single `aws cloudformation deploy` + workflow import + webhook configuration yields a working pipeline that produces a versioned content package from a repository event.
-
----
-
-## Version 1.1 — Quality & Hardening
-
-Improve output quality, discoverability, and webhook robustness.
-
-- Improved AI prompts (better structure, tighter context selection, few-shot examples)
-- Better architecture diagrams (auto-generated Mermaid from detected structure)
-- SEO optimization (meta description, slug, tags, reading time, canonical front matter)
-- Configurable prompt templates surfaced as stack parameters
-- Managed webhook front door (ALB + ACM + WAF, or API Gateway) with an always-on ingestion buffer for 24/7 delivery capture
-- Expanded webhook event support (`issues`, `discussion`, `deployment`, `package`, `star`, `fork`, …)
+**Exit criteria:** deploying the CloudFormation stacks + importing the workflows + configuring the webhook yields a working pipeline that starts on a repository event, generates content locally, publishes it, and stops on idle.
 
 ---
 
-## Version 2.0 — Flexibility
+## Version 1.1 — Quality & Resilience
 
-Make output format and reach configurable.
+Improve output quality and make the compute layer more robust.
 
-- Multiple blog templates (tutorial, deep-dive, changelog, "show HN" style)
-- Multi-language support (generate posts in multiple human languages)
-- Automatic publishing to Medium, Dev.to, and Hashnode via their APIs
-- CMS integrations (WordPress, Ghost)
+- Improved prompts (better structure, tighter context selection, few-shot examples)
+- **On-Demand fallback** when Spot capacity is unavailable
+- Multi-Availability-Zone Spot placement
+- GPU auto-detection and model right-sizing
+- Configurable prompt templates surfaced as parameters
+- Faster cold start (pre-warmed AMI, model preload tuning)
+
+---
+
+## Version 2.0 — Flexibility & Reach
+
+Make model choice, output format, and publishing configurable.
+
+- **Multi-model support** — different local models per content type
+- Additional content types (video/short/podcast scripts, auto-generated diagrams)
+- Multi-language content generation
+- **Direct publishing integrations** (Dev.to, Medium, Hashnode)
 - Draft/review state before publish
+- Web dashboard for run history and content review
 
 ---
 
@@ -59,19 +62,19 @@ Make output format and reach configurable.
 
 From single-run tool to team platform.
 
-- Multi-repository support (batch analysis; org-wide scans)
-- **GitHub App authentication** and **OAuth login** (replace per-repo PATs)
-- **Team workspaces** and **multi-user support**
-- AI content review (a second model pass for accuracy, tone, and fact-checking)
-- Team collaboration (roles, review/approval workflow, comments)
-- Analytics on generated content performance
+- **Multi-repository batch processing** (org-wide scans)
+- **Fine-tuned local models** for documentation style
+- GitHub App authentication (replace per-repo secrets)
+- Team workspaces and multi-user support
+- A second local-model review pass for accuracy and tone
+- Analytics on generated-content performance
 
 ---
 
 ## Continuously (all versions)
 
 - Hardening security and least-privilege posture
-- Cost tracking and optimization
+- Cost tracking and optimisation (idle behaviour, EBS sizing)
 - Expanded test coverage and CI checks
 - Documentation upkeep
 

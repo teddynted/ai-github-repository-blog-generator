@@ -1,6 +1,6 @@
 # Local Development
 
-This guide explains how to run and develop the **AI GitHub Repository Blog Generator** on your machine.
+This guide explains how to run and develop the **GitHub AI Blog Generator** on your machine. The whole AI stack — n8n, OpenClaw, and Ollama — runs locally in Docker Compose, so you can develop the pipeline without any cloud inference cost.
 
 Related: [Deployment](./deployment.md) · [Workflows](./workflows.md) · [Contributing](./contributing.md).
 
@@ -11,11 +11,12 @@ Related: [Deployment](./deployment.md) · [Workflows](./workflows.md) · [Contri
 | Tool | Minimum version | Purpose |
 | --- | --- | --- |
 | [Git](https://git-scm.com/) | 2.30 | Clone the repo; the app itself clones target repos |
-| [Docker](https://www.docker.com/) | 24 | Run n8n locally |
-| [Docker Compose](https://docs.docker.com/compose/) | v2 | Local n8n stack |
-| [AWS CLI](https://docs.aws.amazon.com/cli/) | v2 | AWS access, Bedrock testing, CloudFormation deploy |
+| [Docker](https://www.docker.com/) | 24 | Run n8n + OpenClaw + Ollama locally |
+| [Docker Compose](https://docs.docker.com/compose/) | v2 | Local stack |
+| [Ollama](https://ollama.com/) | latest | Local LLM server (can also run in Compose) |
+| [AWS CLI](https://docs.aws.amazon.com/cli/) | v2 | Build/deploy CloudFormation; test SQS locally |
 | [cfn-lint](https://github.com/aws-cloudformation/cfn-lint) | latest | Lint CloudFormation templates |
-| [Go](https://go.dev/dl/) | 1.22 | Build and test Lambda functions |
+| [Go](https://go.dev/dl/) | 1.22 | Build and test the Lambda functions |
 | Make | any | Convenience targets (optional) |
 
 Verify:
@@ -25,22 +26,26 @@ git --version && docker --version && docker compose version
 aws --version && cfn-lint --version && go version
 ```
 
+> A machine with a **GPU** is recommended for reasonable inference speed with larger Qwen models; smaller models run acceptably on CPU for development.
+
 ---
 
-## 2. Docker & Docker Compose (local n8n)
+## 2. Docker Compose (local AI stack)
 
-The `docker/` directory contains a self-contained n8n stack for local development.
+The `instance/` directory contains the same Docker Compose stack that runs on the EC2 host, so local and production topology match.
 
 ```bash
-cd docker
-cp .env.example .env      # fill in values (see Section 5)
-docker compose up -d
-docker compose logs -f n8n
+cp .env.example .env      # fill in values (see Section 4)
+docker compose -f instance/docker-compose.yml up -d
+docker compose -f instance/docker-compose.yml logs -f n8n
 ```
 
-n8n is then available at **http://localhost:5678**. Stop with `docker compose down` (add `-v` to remove volumes).
+- **n8n** → http://localhost:5678
+- **Ollama** → http://localhost:11434
 
-Example `docker/docker-compose.yml` shape:
+Stop with `docker compose -f instance/docker-compose.yml down` (add `-v` to remove volumes).
+
+Example `instance/docker-compose.yml` shape:
 
 ```yaml
 services:
@@ -49,92 +54,98 @@ services:
     ports:
       - "5678:5678"
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - QUEUE_URL=${QUEUE_URL}
       - AWS_REGION=${AWS_REGION}
     volumes:
       - n8n_data:/home/node/.n8n
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+  openclaw:
+    image: openclaw/openclaw:latest
+    depends_on: [ollama]
 volumes:
   n8n_data:
+  ollama_models:
 ```
 
 ---
 
-## 3. AWS CLI Configuration
+## 3. Pull the Local Model
 
-Local runs still call **Amazon Bedrock**, **S3**, and **Secrets Manager**, so configure credentials:
+Download the default Qwen model into Ollama once (it is then cached in the `ollama_models` volume — the local analogue of the persistent EBS volume in production):
 
 ```bash
-aws configure          # or: aws configure sso
-aws sts get-caller-identity
+docker compose -f instance/docker-compose.yml exec ollama ollama pull qwen2.5:7b
+docker compose -f instance/docker-compose.yml exec ollama ollama list
 ```
 
-Use a low-privilege developer profile scoped to a **dev** environment. Never use production credentials for local experimentation.
+Set `OLLAMA_MODEL` in `.env` to match. No external API key is needed — inference is entirely local.
 
 ---
 
-## 4. Building & Testing the Go Lambda
+## 4. Environment Configuration
 
-The content pipeline itself runs inside **n8n workflows** (no application Lambda). The only Go function is `ec2-scheduler`, which starts/stops the EC2 host on a schedule ([Cost Optimization](./cost-optimization.md#1-ec2-scheduling)).
-
-```bash
-cd lambdas/ec2-scheduler
-
-go mod download
-go build ./...
-go vet ./...
-gofmt -l .            # should print nothing
-go test ./... -race -cover
-```
-
-Build a deployable artifact (Linux, ARM64):
-
-```bash
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda
-zip function.zip bootstrap
-```
-
-Run it locally against a fixture event (e.g. a `start` or `stop` action):
-
-```bash
-go run ./cmd/local --event ./testdata/start.json
-```
-
----
-
-## 5. Environment Configuration
-
-Local configuration lives in `docker/.env` (git-ignored). Start from `.env.example`:
+Local configuration lives in `.env` (git-ignored). Start from `.env.example`:
 
 | Variable | Description | Example |
 | --- | --- | --- |
-| `AWS_REGION` | Region for Bedrock/S3 | `us-east-1` |
+| `AWS_REGION` | Region for SQS testing | `us-east-1` |
 | `AWS_PROFILE` | Local credentials profile | `blog-dev` |
-| `BEDROCK_MODEL_ID` | Foundation model / inference profile | `us.anthropic.claude-sonnet-4-...` |
-| `N8N_USER` / `N8N_PASSWORD` | Local n8n basic auth | `admin` / `change-me` |
+| `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `N8N_ENCRYPTION_KEY` | n8n credential encryption key | random 32+ chars |
-| `GENERATED_CONTENT_BUCKET` | Dev content bucket | `blog-generator-dev-generated-content` |
-| `REPOSITORIES_TABLE` | Dev DynamoDB metadata table | `blog-generator-dev-repositories` |
-| `SECRETS_PREFIX` | Prefix for per-repo secrets | `blog-generator/repos` |
-| `REGISTRATION_TOKEN` | Admin token for the registration endpoint | random 32+ chars |
-| `GITHUB_TOKEN` | Optional; PAT for local registration/clone tests | `github_pat_xxx` |
+| `QUEUE_URL` | Dev SQS queue URL (optional) | `https://sqs…/blog-gen-dev-events` |
+| `WEBHOOK_SECRET` | Secret for local HMAC tests | random 32+ chars |
+| `GITHUB_TOKEN` | Optional; for cloning private test repos | `github_pat_xxx` |
 
-> Secrets in `.env` are for **local dev only**. In AWS, all secrets come from Secrets Manager — see [Security](./security.md).
+> Secrets in `.env` are for **local dev only**. In AWS, secrets are provided via environment/secret configuration — see [Security](./security.md).
+
+---
+
+## 5. Building & Testing the Lambdas
+
+Two Go functions make up the serverless control plane.
+
+```bash
+for fn in webhook-handler idle-shutdown; do
+  ( cd lambdas/$fn && \
+    go mod download && \
+    go build ./... && go vet ./... && gofmt -l . && \
+    go test ./... -race -cover )
+done
+```
+
+Build deployable artifacts (Linux, arm64):
+
+```bash
+( cd lambdas/webhook-handler && \
+  GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
+  zip webhook-handler.zip bootstrap )
+```
+
+Run a handler locally against a fixture webhook event:
+
+```bash
+( cd lambdas/webhook-handler && go run ./cmd/local --event ./testdata/push.json )
+```
 
 ---
 
 ## 6. Running End-to-End Locally
 
-1. Start n8n (`docker compose up -d`).
-2. Import the workflow JSON from `workflows/n8n/` (see [Workflows → Importing](./workflows.md#9-importing-workflows)).
-3. Configure n8n credentials (AWS, GitHub) in the editor.
-4. **Register a test repository** by POSTing `{ repository_url, pat }` to the registration endpoint (with the `REGISTRATION_TOKEN`). Confirm an item appears in your dev `REPOSITORIES_TABLE` and the PAT lands in Secrets Manager under `SECRETS_PREFIX`.
-5. **Redeliver** a webhook from GitHub (or execute the **Webhook Ingestion** workflow with a sample payload).
-6. Confirm the content package appears in your dev generated-content bucket.
+1. Start the stack (`docker compose -f instance/docker-compose.yml up -d`) and pull the model (§3).
+2. Import the workflow JSON from `workflows/` (see [Workflows → Importing](./workflows.md#8-importing-workflows)).
+3. Configure n8n credentials (SQS/AWS, GitHub) in the editor.
+4. **Enqueue a test event** — either post a fixture message to your dev SQS queue, or run the **Event Ingestion** workflow with a sample payload directly.
+5. Watch the pipeline: clone → analysis (OpenClaw) → generation (Ollama) → publish → notify.
+6. Confirm Markdown output appears at your configured local destination.
 
-Iterate on the pipeline directly in the n8n editor; changes are exported back to `workflows/n8n/` and committed ([Workflows → Exporting](./workflows.md#9-importing-workflows)).
+Iterate directly in the n8n editor; export changes back to `workflows/` and commit them.
 
 ---
 
@@ -142,13 +153,13 @@ Iterate on the pipeline directly in the n8n editor; changes are exported back to
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| `AccessDeniedException` calling Bedrock | Model access not granted, or wrong Region | Request model access in the Bedrock console; confirm `AWS_REGION` |
-| `ValidationException: model id` | Wrong/incomplete `BEDROCK_MODEL_ID` | Use an exact model ID or inference profile from `aws bedrock list-foundation-models` |
-| n8n editor unreachable | Container not up / port clash | `docker compose ps`; check port `5678`; view `docker compose logs n8n` |
-| `ThrottlingException` from Bedrock | Rate limits | Rely on backoff/retry; lower concurrency; request a quota increase |
-| Go build fails for Lambda | Wrong target arch | Set `GOOS=linux GOARCH=arm64 CGO_ENABLED=0` |
-| `NoCredentialProviders` | AWS creds not loaded | `aws sts get-caller-identity`; set `AWS_PROFILE` |
+| n8n editor unreachable | Container not up / port clash | `docker compose ps`; check port `5678`; view logs |
+| Ollama returns model-not-found | Model not pulled | `ollama pull $OLLAMA_MODEL` (§3) |
+| Inference very slow | Running a large model on CPU | Use a smaller Qwen model, or a GPU host |
 | n8n loses credentials on restart | `N8N_ENCRYPTION_KEY` changed | Keep the key stable; persist the `n8n_data` volume |
-| Stack stuck `UPDATE_IN_PROGRESS` / rollback | Interrupted or failed deploy | Inspect `aws cloudformation describe-stack-events`; wait for auto-rollback, or `cancel-update-stack` if you own it |
+| Go build fails for Lambda | Wrong target arch | Set `GOOS=linux GOARCH=arm64 CGO_ENABLED=0` |
+| `NoCredentialProviders` (SQS test) | AWS creds not loaded | `aws sts get-caller-identity`; set `AWS_PROFILE` |
+| HMAC test rejected (401) | `WEBHOOK_SECRET` mismatch | Ensure the signer and handler use the same secret |
+| Stack stuck `UPDATE_IN_PROGRESS` / rollback | Interrupted or failed deploy | Inspect `aws cloudformation describe-stack-events`; wait for auto-rollback |
 
 If you're stuck, open an issue with logs and reproduction steps — see [Contributing → Issue Reporting](./contributing.md#8-issue-reporting).

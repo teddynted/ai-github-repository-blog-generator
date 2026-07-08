@@ -1,32 +1,78 @@
 <div align="center">
 
-# AI GitHub Repository Blog Generator
+# GitHub AI Blog Generator
 
-**An AI-powered Developer Content Engine. Register a GitHub repository once; every time it changes, a webhook triggers automatic analysis and a complete, publication-ready content package — powered by Amazon Bedrock.**
+**Event-driven, fully self-hosted AI platform that automatically transforms GitHub repositories into high-quality technical content — powered by OpenClaw, Ollama, and local LLMs, orchestrated with n8n, and running on cost-optimized AWS EC2 Spot Instances provisioned entirely with AWS CloudFormation.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![AWS CloudFormation](https://img.shields.io/badge/IaC-AWS%20CloudFormation-E7157B?logo=amazonaws&logoColor=white)](https://aws.amazon.com/cloudformation/)
-[![AWS](https://img.shields.io/badge/Cloud-AWS-232F3E?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
-[![Amazon Bedrock](https://img.shields.io/badge/AI-Amazon%20Bedrock-01A88D?logo=amazonaws&logoColor=white)](https://aws.amazon.com/bedrock/)
+[![EC2 Spot](https://img.shields.io/badge/Compute-EC2%20Spot-FF9900?logo=amazonec2&logoColor=white)](https://aws.amazon.com/ec2/spot/)
+[![Ollama](https://img.shields.io/badge/Inference-Ollama-000000?logo=ollama&logoColor=white)](https://ollama.com/)
+[![Qwen](https://img.shields.io/badge/LLM-Qwen-615CED)](https://github.com/QwenLM)
 [![n8n](https://img.shields.io/badge/Orchestration-n8n-EA4B71?logo=n8n&logoColor=white)](https://n8n.io/)
-[![Go](https://img.shields.io/badge/Lambda-Go-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Amazon SQS](https://img.shields.io/badge/Queue-Amazon%20SQS-FF4F8B?logo=amazonsqs&logoColor=white)](https://aws.amazon.com/sqs/)
 [![GitHub Webhooks](https://img.shields.io/badge/Trigger-GitHub%20Webhooks-181717?logo=github&logoColor=white)](https://docs.github.com/webhooks)
-[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](./.github/workflows)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./docs/contributing.md)
 
 </div>
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Why This Project](#why-this-project)
+- [Features](#features)
+- [Architecture](#architecture)
+- [AI Workflow](#ai-workflow)
+- [Technology Stack](#technology-stack)
+- [Cost Optimisation](#cost-optimisation)
+- [Spot Instance Trade-offs](#spot-instance-trade-offs)
+- [Security](#security)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [CloudFormation Deployment Guide](#cloudformation-deployment-guide)
+- [Project Structure](#project-structure)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Documentation](#documentation)
+- [License](#license)
+
+---
+
 ## Overview
 
-**AI GitHub Repository Blog Generator** is an AI-powered Developer Content Engine. You **register a GitHub repository** by providing its URL and a Personal Access Token (PAT). The platform validates access, securely stores the repository metadata (in DynamoDB) and the token (in AWS Secrets Manager), and — when permissions allow — **automatically configures a GitHub Webhook**. From then on, whenever a supported event occurs (push, release, pull request, …), the platform analyzes the repository and uses [Amazon Bedrock](https://aws.amazon.com/bedrock/) to generate a **complete, publication-ready content package**.
+**GitHub AI Blog Generator** is a fully self-hosted, event-driven AI platform that automatically turns any GitHub repository into publication-ready technical content. When a repository changes, a **GitHub Webhook** fires, an **AWS Lambda** function validates the signature and enqueues the event in **Amazon SQS**, and a cost-optimized **EC2 Spot Instance** is started on demand. On that instance, **n8n** orchestrates a pipeline where **OpenClaw** analyses the repository and **Ollama** runs a **local LLM (Qwen by default)** to generate documentation and technical articles — with **zero paid inference APIs**.
 
-Instead of a single blog post, each run produces an entire bundle of platform-specific content: a technical blog article, Medium / Dev.to / Hashnode versions, a LinkedIn post, an X (Twitter) thread, a Reddit post, a newsletter, an FAQ, SEO metadata, cover-image prompts, and more.
+Every run can produce a bundle of assets:
 
-Orchestration runs on [n8n](https://n8n.io/); infrastructure is provisioned entirely with [AWS CloudFormation](https://aws.amazon.com/cloudformation/); and cost is kept low by starting and stopping the compute host on a daily schedule.
+- Technical blog posts
+- README improvements
+- Project documentation
+- Architecture summaries
+- API documentation
+- Project overviews
+- Release notes
+- Changelogs
+- Technical tutorials
 
-> This is an open-source **portfolio project** — architected for production practices today and a future **SaaS** evolution — demonstrating AI Engineering, Amazon Bedrock, AWS, AWS CloudFormation, n8n, webhook automation, Infrastructure as Code, and operable, observable software engineering.
+All AI inference happens **locally** on the instance. When processing is complete and the system has been idle for a configurable timeout, a Lambda function automatically **stops the EC2 Spot Instance**, so you pay only when AI work is actually being done.
+
+> This project is architected for real-world production practices: self-hosting, cost optimisation, local LLM inference, AWS-native services, event-driven compute, and Infrastructure as Code with AWS CloudFormation.
+
+---
+
+## Why This Project
+
+Most "AI content" projects assume an unlimited budget for hosted inference APIs (OpenAI, Anthropic, Amazon Bedrock). This project takes the opposite stance:
+
+- **No paid inference.** All models run locally via Ollama. You are never billed per token.
+- **Pay only when you compute.** Event-driven EC2 Spot Instances start on a webhook and stop on idle. An idle system costs only cents per month (EBS storage).
+- **Own your data.** Repository content is analysed on infrastructure you control; nothing is sent to a third-party model provider.
+- **Reproducible infrastructure.** Everything is defined in modular AWS CloudFormation — no click-ops, no Terraform.
+- **Open-source best practices.** Clear documentation, least-privilege IAM, secrets management, structured logging, and a public roadmap.
 
 ---
 
@@ -34,465 +80,399 @@ Orchestration runs on [n8n](https://n8n.io/); infrastructure is provisioned enti
 
 | Capability | Description |
 | --- | --- |
-| 📝 **Repository registration** | Register a repo with its URL + PAT; metadata is stored and a webhook is auto-created |
-| 🔑 **Secure token handling** | PATs are stored in AWS Secrets Manager, never in DynamoDB or plaintext |
-| 🪝 **Automatic webhook setup** | The platform creates the GitHub Webhook for you when the PAT permits |
-| 🔐 **Webhook signature validation** | HMAC SHA-256 verification of every delivery before processing |
-| 🔍 **Deep repository analysis** | README, source, structure, IaC, Docker/K8s, CI/CD, docs, API definitions, and more |
-| 🧠 **Amazon Bedrock integration** | Generates content with configurable foundation models |
-| ✍️ **Full content package** | Many platform-specific assets per run (see below) |
-| 🔗 **n8n workflow orchestration** | Composable, observable pipeline with branching and retries |
-| 🗄️ **DynamoDB metadata store** | Tracks registration, webhook status, and generation history |
-| 🪣 **S3 content storage** | Versioned, dated storage for every generated package |
-| 🪵 **CloudWatch logging** | Structured logs and metrics across every stage |
-| 🛡️ **Error handling & retries** | Explicit failure handling with exponential backoff |
-| 💰 **Scheduled cost control** | Daily EC2 start/stop keeps infrastructure cheap |
+| 🪝 **GitHub Webhook triggers** | Push, release, and pull-request events start a generation run automatically |
+| 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before processing |
+| 📥 **Durable event queue** | Payloads are stored in Amazon SQS so nothing is lost while the instance boots |
+| ⚡ **On-demand compute** | Lambda starts an EC2 Spot Instance only when there is work to do |
+| 🧠 **Local LLM inference** | Ollama runs Qwen (or any local model) — no external API, no per-token cost |
+| 🔍 **Deep repository analysis** | OpenClaw inspects README, source, structure, IaC, Docker, CI/CD, and docs |
+| 🔗 **n8n orchestration** | Composable, observable pipeline with branching, retries, and notifications |
+| ✍️ **Multi-format output** | Blog posts, READMEs, docs, architecture summaries, changelogs, tutorials |
+| 📝 **Markdown-native** | All content is emitted as clean, portable GitHub-flavoured Markdown |
+| ▶️ **Manual execution** | Trigger a run for any repository on demand, without waiting for a webhook |
+| 🔁 **Retry & error handling** | Failed stages retry with backoff; poison messages route to a dead-letter queue |
+| 🪵 **Structured logging** | CloudWatch logs and metrics across every stage of the pipeline |
+| 🔔 **Notifications** | Users are notified when content is published or a run fails |
+| 💤 **Automatic shutdown** | An idle-timeout Lambda stops the instance so you pay only for active work |
+| 💾 **Persistent storage** | A gp3 EBS volume keeps models and n8n state across start/stop cycles |
 
 ---
 
-## Repository Registration
+## Architecture
 
-Registration is the onboarding entry point. You provide two things:
-
-| Input | Purpose |
-| --- | --- |
-| **GitHub Repository URL** | The repository to analyze |
-| **GitHub Personal Access Token (PAT)** | Authenticates GitHub API and clone access, and lets the platform create the webhook |
-
-### What the platform does on registration
+The platform is **event-driven**: nothing runs until a repository changes. A webhook triggers a lightweight serverless front door, which buffers work in a queue and wakes up a Spot Instance to do the heavy AI lifting.
 
 ```mermaid
-flowchart TB
-    U[User submits repo URL + PAT] --> V[Validate repo access<br/>GitHub API]
-    V -->|ok| SEC[Store PAT in Secrets Manager]
-    V -->|fail| ERR[Reject with error]
-    SEC --> META[Store metadata in DynamoDB<br/>webhook_status = pending]
-    META --> HOOK{PAT can create hooks?}
-    HOOK -->|yes| CREATE[Create GitHub Webhook<br/>+ generate signing secret]
-    HOOK -->|no| MANUAL[Return manual webhook setup instructions]
-    CREATE --> UPD[Update DynamoDB<br/>webhook_status = active, webhook_id]
-    UPD --> INIT[Trigger initial repository analysis]
-    MANUAL --> INIT
+flowchart TD
+    GH["GitHub Repository"] -->|"push / release / PR"| WH["GitHub Webhook"]
+    WH -->|HTTPS POST| APIGW["Amazon API Gateway"]
+    APIGW --> L1["Lambda: Webhook Handler"]
+
+    subgraph Handler["Webhook Handler responsibilities"]
+        V["Validate HMAC signature"]
+        Q["Store payload in Amazon SQS"]
+        S["Start EC2 Spot Instance if stopped"]
+        R["Return HTTP 200 immediately"]
+    end
+
+    L1 --> V --> Q --> S --> R
+
+    Q --> SQS[("Amazon SQS Queue")]
+    S --> EC2
+
+    subgraph EC2["EC2 Spot Instance (Ubuntu + Docker Compose)"]
+        N8N["n8n (orchestrator)"]
+        OC["OpenClaw (repo analysis)"]
+        OLL["Ollama + Qwen (local LLM)"]
+        N8N -->|poll| SQS
+        N8N --> OC --> OLL
+    end
+
+    OLL --> GEN["Generate documentation & technical content"]
+    GEN --> PUB["Publish content"]
+    PUB --> NOTIFY["Notify users"]
+
+    EBS[("Persistent gp3 EBS Volume")] --- EC2
+
+    EB["Amazon EventBridge (idle timer)"] --> L2["Lambda: Idle Shutdown"]
+    L2 -->|"stop after idle timeout"| EC2
+
+    CW["Amazon CloudWatch"] -.logs/metrics.- L1
+    CW -.logs/metrics.- EC2
+    CW -.logs/metrics.- L2
 ```
 
-1. **User registers a repository** (URL + PAT).
-2. The platform **validates repository access** via the GitHub API.
-3. It **securely stores** the token in Secrets Manager and the metadata in DynamoDB.
-4. It **creates a GitHub Webhook automatically** (if the PAT grants permission) with a generated HMAC signing secret; otherwise it returns manual setup instructions.
-5. It **triggers an initial analysis** so you get content immediately.
+### Request lifecycle
 
-> The PAT is used to: access private repositories, clone repositories, read repository contents, read releases, read pull requests, read branches, automatically create GitHub Webhooks (when permitted), and trigger the initial analysis.
+1. **GitHub** emits a webhook when a supported event occurs.
+2. **API Gateway** receives the HTTPS request and invokes the **Webhook Handler Lambda**.
+3. The **Lambda** validates the GitHub signature, stores the payload in **Amazon SQS**, starts the **EC2 Spot Instance** if it is stopped, and returns **HTTP 200** immediately (so GitHub never times out).
+4. The **EC2 Spot Instance** boots Ubuntu with Docker Compose running **n8n**, **OpenClaw**, and **Ollama**.
+5. **n8n polls SQS**, pulls the queued event, and drives the pipeline.
+6. **OpenClaw** clones and analyses the repository; **Ollama** performs **local inference** with Qwen.
+7. Content is **generated**, **published**, and **users are notified**.
+8. **EventBridge** tracks activity; when the system is idle beyond the configured timeout, an **Idle Shutdown Lambda** stops the instance.
 
-### GitHub Personal Access Token setup
-
-Create a token at **GitHub → Settings → Developer settings → Personal access tokens**. A **fine-grained token** scoped to the specific repository is recommended.
-
-### Required GitHub token permissions
-
-| Permission (fine-grained) | Access | Why |
-| --- | --- | --- |
-| **Contents** | Read | Clone the repo and read source, README, config |
-| **Metadata** | Read | Repository metadata, branches |
-| **Pull requests** | Read | Analyze pull request events |
-| **Webhooks** | Read & write | Automatically create/manage the webhook |
-
-> Classic-token equivalent: `repo` (private repo access) and `admin:repo_hook` (create webhooks). Prefer fine-grained, least-privilege tokens. If webhook permission is not granted, registration still succeeds and returns manual webhook instructions.
-
-### Automatic webhook registration
-
-When the token includes webhook write access, the platform calls the GitHub API to create a webhook pointing at the n8n HTTPS endpoint (`/webhook/github`), subscribed to the supported events, with a per-repository **HMAC SHA-256 signing secret** stored in Secrets Manager. The webhook's status and ID are tracked in DynamoDB.
+For a deeper treatment of components and data flow, see [`docs/architecture.md`](./docs/architecture.md).
 
 ---
 
-## End-to-End Workflow
-
-```mermaid
-flowchart LR
-    R[Register repo<br/>URL + PAT] --> S[Store metadata + token]
-    S --> H[Auto-create webhook]
-    H --> E[GitHub event occurs]
-    E --> N[n8n receives webhook]
-    N --> V{Valid HMAC?}
-    V -- no --> X[401 + log]
-    V -- yes --> C[Clone / update repo]
-    C --> A[Analyze repository]
-    A --> G[Generate content<br/>Amazon Bedrock]
-    G --> ST[Store in S3]
-    ST --> D[Update DynamoDB + log]
-```
-
-1. User **registers a repository**.
-2. Application **validates repository access**.
-3. Application **securely stores configuration** (metadata → DynamoDB, PAT → Secrets Manager).
-4. Application **creates the GitHub Webhook automatically** (if permitted).
-5. GitHub **sends webhook events**.
-6. **n8n receives** the webhook.
-7. The **webhook signature is validated** (HMAC SHA-256).
-8. The repository is **cloned or updated**.
-9. **Repository analysis** begins.
-10. **Amazon Bedrock generates** the content package.
-11. Generated content is **stored in Amazon S3**.
-12. **Logs are written to CloudWatch** and metadata is updated in DynamoDB.
-13. **Failures are retried** where appropriate.
-
----
-
-## GitHub Webhook Processing
+## AI Workflow
 
 ```mermaid
 sequenceDiagram
     participant GH as GitHub
-    participant N as n8n (HTTPS endpoint)
-    participant DB as DynamoDB
-    participant SM as Secrets Manager
-    participant R as Repository (local)
-    participant B as Amazon Bedrock
-    participant S3 as Amazon S3
-    participant CW as CloudWatch
+    participant API as API Gateway
+    participant LH as Lambda (Handler)
+    participant SQS as Amazon SQS
+    participant EC2 as EC2 Spot Instance
+    participant N8N as n8n
+    participant OC as OpenClaw
+    participant OL as Ollama (Qwen)
+    participant LS as Lambda (Idle Shutdown)
 
-    GH->>N: POST webhook (payload + X-Hub-Signature-256)
-    N->>DB: look up repository record
-    N->>SM: get webhook signing secret
-    N->>N: compute HMAC SHA-256 & compare (constant-time)
-    alt Invalid signature
-        N-->>GH: 401 Unauthorized
-        N->>CW: log rejected delivery
-    else Valid signature
-        N->>SM: get repository PAT
-        N->>R: clone / update repository
-        N->>N: analyze README, code, structure, IaC, CI/CD, docs, APIs
-        N->>B: send prompts (per content type)
-        B-->>N: generated content package
-        N->>S3: store generated-content/<repo>/<YYYY-MM-DD>/
-        N->>DB: update last commit, generation status
-        N->>CW: log execution + metrics
-        N-->>GH: 202 Accepted
-    end
+    GH->>API: Webhook (push/release/PR)
+    API->>LH: Invoke
+    LH->>LH: Validate HMAC signature
+    LH->>SQS: Enqueue payload
+    LH->>EC2: StartInstances (if stopped)
+    LH-->>GH: HTTP 200 (immediate)
+    Note over EC2: Cold start: boot Ubuntu + Docker Compose
+    N8N->>SQS: Poll for messages
+    SQS-->>N8N: Repository event
+    N8N->>OC: Analyse repository
+    OC->>OL: Prompt local LLM
+    OL-->>OC: Generated content
+    OC-->>N8N: Documentation / blog / summaries
+    N8N->>N8N: Publish + notify
+    N8N->>SQS: Delete processed message
+    Note over EC2: Idle timeout reached
+    LS->>EC2: StopInstances
 ```
 
-> **Operating window:** the webhook endpoint is available while the EC2 host is running (its daily window — see [Cost Optimization](#cost-optimization)). GitHub automatically **retries** failed deliveries, and the window is configurable. An always-on ingestion buffer for 24/7 capture is on the [roadmap](./docs/roadmap.md).
+The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs/workflows.md).
 
 ---
 
-## Supported GitHub Events
+## Technology Stack
 
-### Primary (supported)
-
-| Event | Fires when | Example generated content |
+| Layer | Technology | Purpose |
 | --- | --- | --- |
-| `push` | Commits are pushed | Updated technical article · updated documentation · LinkedIn update · X thread |
-| `release` | A release is published | Release blog · newsletter · LinkedIn article · release summary |
-| `pull_request` | A PR is opened/updated/merged | Feature article · architecture update · technical summary |
-| `workflow_dispatch` | Manually triggered from GitHub Actions | On-demand full content package |
-| `repository` | A repository is created | Initial project overview · technology stack article · repository introduction |
+| **Trigger** | GitHub Webhooks | Fire on repository events |
+| **Ingress** | Amazon API Gateway | Public HTTPS endpoint for webhooks |
+| **Serverless** | AWS Lambda | Signature validation, enqueue, start/stop instance |
+| **Queue** | Amazon SQS | Durable buffer so events are never lost during cold start |
+| **Scheduling** | Amazon EventBridge | Drives the idle-shutdown timer |
+| **Compute** | EC2 Spot Instance (Ubuntu) | Cost-optimized host for AI processing |
+| **Storage** | gp3 EBS Volume | Persistent models, n8n state, and workflows |
+| **Runtime** | Docker + Docker Compose | Reproducible service topology on the instance |
+| **Orchestration** | n8n | Workflow engine that drives the pipeline |
+| **Analysis** | OpenClaw | Repository cloning and structural/code analysis |
+| **Inference** | Ollama | Local model server |
+| **Model** | Qwen (default) | Local LLM for content generation |
+| **IaC** | AWS CloudFormation | Modular, reusable infrastructure templates |
+| **Observability** | Amazon CloudWatch | Logs, metrics, and alarms |
 
-### Future (planned)
-
-`issues` · `issue_comment` · `discussion` · `discussion_comment` · `deployment` · `deployment_status` · `package` · `registry_package` · `milestone` · `fork` · `watch` (star)
-
-These are **future work** — see [Roadmap](./docs/roadmap.md) and [Future Enhancements](./docs/requirements.md#13-future-enhancements).
-
----
-
-## Repository Analysis
-
-Before generation, the platform builds a rich understanding of the repository by analyzing:
-
-| Area | Includes |
-| --- | --- |
-| Documentation | README, docs, API definitions (OpenAPI/GraphQL) |
-| Code | Source files, folder structure, project architecture |
-| Dependencies | Package managers and manifests |
-| Infrastructure as Code | Terraform, CloudFormation |
-| Containers & orchestration | Dockerfiles, Kubernetes manifests |
-| CI/CD | Pipelines, GitHub Actions workflows |
-| Configuration | Config files across the repo |
-
-This analysis is used to provide **context to Amazon Bedrock** for high-quality, accurate content generation.
+> **No Amazon Bedrock. No OpenAI. No Anthropic. No paid inference API.** All AI inference runs locally through Ollama.
 
 ---
 
-## AI Generated Content
+## Cost Optimisation
 
-Each run produces an **entire content package**, not a single article.
+This project is engineered to keep AWS costs as close to zero as possible when idle.
 
-### Long-form articles
+### Design principles
 
-| Asset | File | Optimized for |
+- **Event-driven compute.** Nothing runs until a webhook arrives. There is no always-on server.
+- **Pay only when you process.** The EC2 Spot Instance is started on demand and stopped after an idle timeout, so compute charges accrue only during active generation.
+- **Spot pricing.** Spot Instances are typically **70–90% cheaper** than On-Demand for the same capacity — ideal for interruptible, batch-style AI workloads.
+- **Local inference.** Because Ollama runs the model locally, there are **no per-token API fees**, no matter how much content you generate.
+- **Persistent EBS, ephemeral compute.** Models and n8n state live on a persistent **gp3 EBS volume**. Only the (cheap) storage cost persists while the instance is stopped; you never re-download models on each run.
+
+### How SQS prevents webhook loss during cold start
+
+An EC2 Spot Instance is not instantaneous — booting Ubuntu, starting Docker Compose, and warming Ollama takes time (the **cold start**). During this window, GitHub may deliver multiple webhooks. To ensure **no event is lost**:
+
+1. The Webhook Handler Lambda writes every validated payload to **Amazon SQS** and returns HTTP 200 immediately.
+2. SQS **durably retains** messages (retention configurable up to 14 days) regardless of instance state.
+3. When n8n comes online, it **polls SQS** and processes the backlog in order.
+4. A **visibility timeout** hides a message while it is being processed, and a **dead-letter queue** captures messages that repeatedly fail.
+
+This decoupling means the webhook front door is always available even when the compute layer is asleep.
+
+### Cold start, startup, and shutdown
+
+| Phase | Trigger | Mechanism |
 | --- | --- | --- |
-| Technical blog | `blog.md` | Personal & company engineering blogs, any Markdown platform |
-| Medium article | `medium.md` | Medium |
-| Dev.to article | `devto.md` | Dev.to |
-| Hashnode article | `hashnode.md` | Hashnode |
-| Newsletter | `newsletter.md` | Email newsletters |
+| **Automatic startup** | Webhook received | Handler Lambda calls `StartInstances` if the instance is stopped |
+| **Cold start** | Instance booting | Ubuntu + Docker Compose + Ollama warm up; SQS buffers events |
+| **Automatic shutdown** | Idle timeout elapsed | EventBridge → Idle Shutdown Lambda calls `StopInstances` |
 
-### Social & community
-
-| Asset | File | Platform |
-| --- | --- | --- |
-| LinkedIn post | `linkedin.md` | LinkedIn |
-| X (Twitter) thread | `twitter-thread.md` | X / Twitter |
-| Reddit post | `reddit.md` | Reddit |
-
-### Supporting assets
-
-| Asset | File | Purpose |
-| --- | --- | --- |
-| FAQ | `faq.md` | Anticipated reader questions |
-| README improvement suggestions | `readme-suggestions.md` | Actionable README upgrades for the source repo |
-| Cover image prompts | `image-prompts.md` | Prompts for AI image generation |
-| SEO metadata | `seo.json` | SEO title, description, keywords |
-| Package metadata | `metadata.json` | Tags, reading time, social captions, call-to-action suggestions |
-
-`metadata.json` and `seo.json` additionally carry: SEO title, description, and keywords; platform-specific tags; estimated reading time; social media captions; and call-to-action suggestions.
-
-### Publication-ready articles
-
-Each long-form article is **platform-specific and publish-ready**, optimized for **Medium**, **Dev.to**, **Hashnode**, **personal blogs**, **company engineering blogs**, and **any Markdown-compatible publishing platform**. Every article aims to include:
-
-- **Title** and **subtitle**
-- **Introduction** · **table of contents** · structured **sections**
-- **Code examples** · **architecture explanations**
-- **Best practices** · **challenges** · **trade-offs**
-- **Conclusion** · **call to action**
-- **SEO metadata** · **platform tags** · **reading time**
+Full numbers and tuning guidance live in [`docs/cost-optimization.md`](./docs/cost-optimization.md).
 
 ---
 
-## AWS Architecture
+## Spot Instance Trade-offs
 
-Infrastructure is provisioned **entirely with AWS CloudFormation**. Each service has a clear purpose:
+Spot Instances are the right default for this workload, but the trade-offs are explicit.
 
-| Service | Purpose |
-| --- | --- |
-| **VPC** | Network isolation boundary for all resources |
-| **Public subnets** | Host the internet-facing webhook/registration endpoint (Elastic IP + TLS) |
-| **Private subnets** | Reserved for internal/optional components; defense in depth |
-| **Internet Gateway** | Ingress/egress to the internet |
-| **Route tables** | Direct traffic between subnets, IGW, and endpoints |
-| **Security groups** | Restrict inbound 443 to GitHub webhook IP ranges; allow SSM |
-| **IAM roles / policies** | Least-privilege identities and permissions for compute |
-| **Amazon EC2** | Runs the n8n orchestrator (registration, webhook, analysis, generation) |
-| **Amazon Bedrock** | Foundation model inference for content generation |
-| **Amazon S3** | Stores generated content packages and CloudFormation/Lambda deployment artifacts |
-| **Amazon DynamoDB** | Stores repository metadata |
-| **AWS Secrets Manager** | Stores per-repository PATs and webhook signing secrets |
-| **Amazon CloudWatch** | Logs, metrics, dashboards, and alarms |
-| **Amazon EventBridge** | Event bus and rules |
-| **EventBridge Scheduler** | Fires the daily EC2 start/stop schedule |
-| **AWS Lambda** | Go function that starts/stops the EC2 host on schedule |
+**Why Spot was selected**
 
-```mermaid
-flowchart TB
-    subgraph GitHub
-        REG[Registration: URL + PAT]
-        EVT[GitHub Webhook]
-        REPO[(Repository)]
-    end
+- The workload is **asynchronous and interruptible** — content generation is a batch job, not a latency-critical service.
+- Runs are **short and bursty**, matching Spot's start-on-demand model.
+- Cost is the primary constraint, and Spot delivers the largest saving available on EC2.
 
-    subgraph AWS
-        EIP[Public endpoint<br/>Elastic IP + TLS]
-        subgraph EC2["Amazon EC2"]
-            N8N[n8n Orchestrator]
-        end
-        SCHED[EventBridge Scheduler] --> LSTOP[Go Lambda<br/>ec2-scheduler] --> EC2
-        BR[Amazon Bedrock]
-        DB[(DynamoDB<br/>repositories)]
-        S3[(Amazon S3<br/>generated-content)]
-        SM[AWS Secrets Manager]
-        CW[Amazon CloudWatch]
-    end
+**Advantages**
 
-    REG -->|HTTPS| EIP --> N8N
-    EVT -->|HTTPS + HMAC| EIP
-    N8N -->|validate + create hook| REPO
-    N8N -->|clone + analyze| REPO
-    N8N -->|metadata| DB
-    N8N -->|PAT + webhook secret| SM
-    N8N -->|prompts| BR --> N8N
-    N8N -->|content package| S3
-    N8N -. logs/metrics .-> CW
-```
+- **70–90% cheaper** than On-Demand.
+- Same instance types and performance as On-Demand.
+- Ideal for GPU-backed AI batch jobs that can tolerate interruption.
 
-Full detail: **[docs/architecture.md](./docs/architecture.md)** and **[docs/infrastructure.md](./docs/infrastructure.md)**.
+**Disadvantages**
 
-### Repository metadata storage
+- **Interruptible.** AWS can reclaim the instance with a two-minute warning when capacity is needed.
+- **Availability varies** by instance type and Availability Zone.
+- Requires **idempotent, resumable** processing.
 
-**DynamoDB** stores per-repository metadata — but **never the PAT**:
+**How this project mitigates the disadvantages**
 
-| Attribute | Example |
-| --- | --- |
-| `repository_url` | `https://github.com/acme/widget` |
-| `owner` | `acme` |
-| `name` | `widget` |
-| `default_branch` | `main` |
-| `registered_at` | `2026-07-05T19:00:00Z` |
-| `webhook_status` | `active` \| `pending` \| `manual` |
-| `webhook_id` | `498……` |
-| `last_processed_commit` | `a1b2c3d` |
-| `last_successful_generation` | `2026-07-05T19:12:00Z` |
-| `generation_status` | `success` \| `running` \| `failed` |
-
-The PAT and webhook signing secret are stored **only in AWS Secrets Manager**; DynamoDB holds references (secret ARNs), not secret values.
-
----
-
-## CloudFormation Deployment
-
-```bash
-# 1. Create the deployment artifacts bucket (once per account/region)
-./scripts/bootstrap.sh --region us-east-1 --artifacts-bucket <artifacts-bucket>
-
-# 2. Configure parameters
-cp cloudformation/parameters.example.json cloudformation/parameters.json
-#   edit: BedrockModelId, Ec2InstanceType,
-#         Ec2StartCron, Ec2StopCron, WebhookDnsName, ...
-
-# 3. Package (upload nested templates + Lambda artifacts) and deploy
-cfn-lint cloudformation/**/*.yaml
-aws cloudformation package \
-  --template-file cloudformation/main.yaml \
-  --s3-bucket <artifacts-bucket> \
-  --output-template-file packaged.yaml
-aws cloudformation deploy \
-  --template-file packaged.yaml \
-  --stack-name blog-generator \
-  --parameter-overrides file://cloudformation/parameters.json \
-  --capabilities CAPABILITY_NAMED_IAM
-```
-
-After the stack completes, populate deployment secrets and import the n8n workflows. Full guide with rollback: **[docs/deployment.md](./docs/deployment.md)**.
-
----
-
-## Local Development
-
-```bash
-git clone https://github.com/<your-org>/ai-github-repository-blog-generator.git
-cd ai-github-repository-blog-generator/docker
-cp .env.example .env          # AWS region, Bedrock model, n8n creds, table name
-docker compose up -d          # n8n → http://localhost:5678
-```
-
-Import the workflows from `workflows/n8n/`, register a test repository, and send a **test webhook** (GitHub's *Recent Deliveries → Redeliver*). Full guide: **[docs/local-development.md](./docs/local-development.md)**.
-
----
-
-## Amazon Bedrock Configuration
-
-1. In the AWS Console, open **Bedrock → Model access** and request access to your chosen model in the deployment Region.
-2. Set `BedrockModelId`, `BedrockMaxTokens`, and `BedrockTemperature` in `cloudformation/parameters.json`.
-3. Verify:
-   ```bash
-   aws bedrock list-foundation-models --region us-east-1 \
-     --query "modelSummaries[].modelId" --output table
-   ```
-
-## n8n Configuration
-
-1. Reach the n8n editor via **SSM Session Manager** port-forwarding (the management UI is not publicly exposed).
-2. **Import** each workflow JSON from `workflows/n8n/` (registration, webhook ingestion, analysis, generation, publishing, notifications).
-3. Configure **credentials** (AWS, GitHub) — these reference Secrets Manager.
-4. **Activate** the workflows and note the registration and webhook paths.
-
----
-
-## Example Workflow
-
-```mermaid
-flowchart LR
-    REG[Register repo] --> HOOK[Webhook created]
-    HOOK --> W[GitHub Webhook fires]
-    W --> V{Valid signature?}
-    V -- no --> X[401 + log]
-    V -- yes --> C[Clone / update repo]
-    C --> A[Analyze repository]
-    A --> G[Generate content package<br/>Amazon Bedrock]
-    G --> S[Store in S3]
-    S --> U[Update DynamoDB + notify]
-```
-
----
-
-## Generated Content Examples
-
-Each run writes a dated content package to S3 under `generated-content/`:
-
-```text
-generated-content/
-└── repository-name/
-    └── YYYY-MM-DD/
-        ├── medium.md              # Medium article
-        ├── devto.md               # Dev.to article
-        ├── hashnode.md            # Hashnode article
-        ├── blog.md                # Generic technical blog article
-        ├── linkedin.md            # LinkedIn post
-        ├── twitter-thread.md      # X (Twitter) thread
-        ├── reddit.md              # Reddit post
-        ├── newsletter.md          # Newsletter edition
-        ├── faq.md                 # FAQ
-        ├── seo.json               # SEO title, description, keywords
-        ├── metadata.json          # Tags, reading time, captions, CTAs
-        └── image-prompts.md       # Cover-image prompts for AI image generation
-```
-
-Example `metadata.json`:
-
-```json
-{
-  "source_repository": "https://github.com/acme/widget",
-  "trigger_event": "release",
-  "generated_at": "2026-07-05T19:12:00Z",
-  "model": "us.anthropic.claude-sonnet-4-...",
-  "reading_time_minutes": 8,
-  "tags": ["go", "aws", "terraform", "ai"],
-  "platform_tags": {
-    "devto": ["go", "aws", "tutorial", "devops"],
-    "hashnode": ["golang", "cloud", "bedrock"]
-  },
-  "social_captions": {
-    "linkedin": "How we built …",
-    "twitter": "🧵 A deep dive into …"
-  },
-  "call_to_action": "Star the repo and try it on your own project."
-}
-```
-
----
-
-## Cost Optimization
-
-The compute host (EC2, which runs n8n) is the only always-on cost driver — so it **does not run continuously**. An **EventBridge Scheduler** rule invokes a small **Go AWS Lambda** to start and stop the instance on a fixed daily window:
-
-| Action | Time (daily) | Mechanism |
-| --- | --- | --- |
-| **Start EC2** | **19:00** | EventBridge Scheduler → Go Lambda → `StartInstances` |
-| **Stop EC2** | **21:00** | EventBridge Scheduler → Go Lambda → `StopInstances` |
-
-```mermaid
-flowchart LR
-    S1[EventBridge Scheduler<br/>19:00] --> L[Go Lambda] --> ON[(EC2 running)]
-    ON --> S2[EventBridge Scheduler<br/>21:00] --> L2[Go Lambda] --> OFF[(EC2 stopped)]
-```
-
-This ensures the n8n EC2 instance only runs during the required processing window (~2h/day instead of 24/7), minimizing infrastructure cost. The schedule is configurable via CloudFormation parameters. Estimates and levers: **[docs/cost-optimization.md](./docs/cost-optimization.md)**.
+- Work lives in **SQS**, not on the instance — an interrupted job returns to the queue after its visibility timeout and is retried.
+- Models and state persist on **EBS**, so a replacement instance resumes quickly.
+- Processing is **idempotent**; re-running a repository event produces the same content package.
+- Optionally, fall back to On-Demand when Spot capacity is unavailable (see [Roadmap](#roadmap)).
 
 ---
 
 ## Security
 
-Security is built in by default (full detail in **[docs/security.md](./docs/security.md)**):
+Security is built in by default (full detail in [`docs/security.md`](./docs/security.md)):
 
-- **Least-privilege IAM** — every role is scoped to only the actions and resources it needs.
-- **HTTPS only** — the registration and webhook endpoints accept TLS traffic only.
-- **GitHub webhook signature verification** — every delivery is validated with **HMAC SHA-256**.
-- **PATs in Secrets Manager** — Personal Access Tokens are stored only in AWS Secrets Manager, **never in DynamoDB or plaintext**.
-- **Encryption at rest** — S3, EBS, DynamoDB, and Secrets Manager are encrypted.
-- **Encryption in transit** — all traffic uses TLS.
-- **No hardcoded credentials** — no secrets in source, images, or CloudFormation templates/parameters.
-- **IAM roles instead of static credentials** — compute uses instance/Lambda roles; CI uses OIDC.
-- **CloudWatch audit logging** — auditable, structured logs with no secret material.
-- **Secure Bedrock and S3 access** — scoped by IAM to specific model ARNs and buckets.
+- **Least-privilege IAM roles** — every Lambda and the EC2 instance profile is scoped to only the actions and resources it needs.
+- **GitHub webhook signature validation** — every delivery is verified with **HMAC SHA-256** (constant-time comparison) before it is enqueued.
+- **Security groups** — inbound access is tightly restricted; SSH is limited to known IPs and the LLM/n8n ports are never publicly exposed.
+- **HTTPS only** — the API Gateway webhook endpoint accepts TLS traffic only.
+- **Environment variables & secrets** — the webhook secret and other sensitive values are injected via environment/secret stores, never committed to source.
+- **Secrets management** — secrets are stored outside the repository (e.g. environment variables or a secrets store) and referenced at runtime.
+- **SSH key authentication** — the EC2 instance uses key-pair authentication; password login is disabled.
+
+---
+
+## Prerequisites
+
+Before deploying, ensure you have:
+
+- An **AWS account** with permissions to create VPC, EC2, Lambda, API Gateway, SQS, EventBridge, IAM, and CloudFormation resources.
+- The **AWS CLI v2** installed and configured (`aws configure`).
+- A **key pair** for SSH access to the EC2 instance.
+- A **GitHub account** with admin access to the repositories you want to process (to create webhooks).
+- **Docker** and **Docker Compose** knowledge for local development (optional).
+- A shared **webhook secret** for HMAC signature validation.
+
+---
+
+## Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/<your-org>/github-ai-blog-generator.git
+cd github-ai-blog-generator
+
+# 2. Review and copy the environment template
+cp .env.example .env
+
+# 3. Configure your AWS CLI (if not already done)
+aws configure
+```
+
+---
+
+## Configuration
+
+Configuration is provided through environment variables and CloudFormation parameters. Key values:
+
+| Variable / Parameter | Description | Example |
+| --- | --- | --- |
+| `AWS_REGION` | Deployment region | `us-east-1` |
+| `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | `a-long-random-string` |
+| `INSTANCE_TYPE` | EC2 instance type for the Spot request | `g4dn.xlarge` |
+| `SPOT_MAX_PRICE` | Maximum Spot price you are willing to pay | `0.20` |
+| `IDLE_TIMEOUT_MINUTES` | Minutes of inactivity before auto-shutdown | `15` |
+| `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
+| `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
+| `KEY_PAIR_NAME` | EC2 key pair for SSH access | `blog-generator-key` |
+
+Secrets such as `WEBHOOK_SECRET` must **never** be committed. Store them in environment variables or a secrets manager. See [`docs/security.md`](./docs/security.md).
+
+---
+
+## Deployment
+
+Deployment is a two-part process: provision infrastructure with CloudFormation, then register the GitHub webhook.
+
+```mermaid
+flowchart LR
+    A["Package Lambda code"] --> B["Deploy CloudFormation stacks"]
+    B --> C["Retrieve API Gateway URL"]
+    C --> D["Create GitHub Webhook"]
+    D --> E["Push a commit to test"]
+    E --> F["Watch CloudWatch logs & n8n"]
+```
+
+1. Package the Lambda functions and upload them to an S3 bucket (or use inline deployment).
+2. Deploy the CloudFormation stacks (network → serverless → compute).
+3. Copy the **API Gateway invoke URL** from the stack outputs.
+4. Add a **webhook** to your GitHub repository pointing at that URL, using your `WEBHOOK_SECRET`.
+5. Trigger an event (e.g. push a commit) and watch the pipeline run.
+
+Full step-by-step instructions are in [`docs/deployment.md`](./docs/deployment.md).
+
+---
+
+## CloudFormation Deployment Guide
+
+All infrastructure is provisioned with **AWS CloudFormation** — no Terraform. Templates are **modular and reusable** so each layer can be deployed and updated independently.
+
+Provisioned resources include: **VPC, Public Subnet, Internet Gateway, Route Tables, Security Groups, IAM Roles, EC2 Spot Instance, persistent gp3 EBS Volume, API Gateway, Lambda functions, Amazon SQS, EventBridge, and CloudWatch.**
+
+Suggested stack layout:
+
+| Stack | Template | Responsibility |
+| --- | --- | --- |
+| **Network** | `network.yaml` | VPC, public subnet, IGW, route tables, security groups |
+| **Serverless** | `serverless.yaml` | API Gateway, Lambda functions, SQS, EventBridge, IAM |
+| **Compute** | `compute.yaml` | EC2 Spot request, gp3 EBS volume, instance IAM role, user data |
+| **Observability** | `observability.yaml` | CloudWatch log groups, metrics, alarms |
+
+Example deployment:
+
+```bash
+# 1. Network layer
+aws cloudformation deploy \
+  --template-file infrastructure/network.yaml \
+  --stack-name blog-gen-network \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# 2. Serverless layer (API Gateway, Lambda, SQS, EventBridge)
+aws cloudformation deploy \
+  --template-file infrastructure/serverless.yaml \
+  --stack-name blog-gen-serverless \
+  --parameter-overrides WebhookSecret=$WEBHOOK_SECRET \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# 3. Compute layer (EC2 Spot + persistent EBS)
+aws cloudformation deploy \
+  --template-file infrastructure/compute.yaml \
+  --stack-name blog-gen-compute \
+  --parameter-overrides \
+      InstanceType=$INSTANCE_TYPE \
+      SpotMaxPrice=$SPOT_MAX_PRICE \
+      KeyPairName=$KEY_PAIR_NAME \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# 4. Retrieve the API Gateway URL for your GitHub webhook
+aws cloudformation describe-stacks \
+  --stack-name blog-gen-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='WebhookUrl'].OutputValue" \
+  --output text
+```
+
+See [`docs/infrastructure.md`](./docs/infrastructure.md) for the full parameter reference and stack outputs.
+
+---
+
+## Project Structure
+
+```text
+github-ai-blog-generator/
+├── README.md
+├── LICENSE
+├── .env.example
+├── infrastructure/            # AWS CloudFormation templates (modular)
+│   ├── network.yaml
+│   ├── serverless.yaml
+│   ├── compute.yaml
+│   └── observability.yaml
+├── lambdas/                   # Lambda source code
+│   ├── webhook-handler/       # Validate signature, enqueue, start instance
+│   └── idle-shutdown/         # Stop the instance after idle timeout
+├── instance/                  # EC2 host configuration
+│   ├── docker-compose.yml     # n8n + OpenClaw + Ollama
+│   └── user-data.sh           # Bootstraps Docker, Compose, and services
+├── workflows/                 # Exported n8n workflow definitions
+└── docs/                      # Project documentation
+    ├── architecture.md
+    ├── requirements.md
+    ├── infrastructure.md
+    ├── deployment.md
+    ├── workflows.md
+    ├── cost-optimization.md
+    ├── security.md
+    ├── monitoring.md
+    ├── local-development.md
+    ├── ci-cd.md
+    ├── contributing.md
+    └── roadmap.md
+```
+
+---
+
+## Roadmap
+
+- [ ] On-Demand fallback when Spot capacity is unavailable
+- [ ] Multi-model support (switch models per content type)
+- [ ] GPU auto-detection and model right-sizing
+- [ ] Direct publishing integrations (Dev.to, Medium, Hashnode)
+- [ ] Web dashboard for run history and content review
+- [ ] Multi-repository batch processing
+- [ ] Fine-tuned local models for documentation style
+
+The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read [`docs/contributing.md`](./docs/contributing.md) for the development workflow, coding standards, and pull-request process. Good first issues are labelled in the issue tracker.
 
 ---
 
@@ -500,35 +480,21 @@ Security is built in by default (full detail in **[docs/security.md](./docs/secu
 
 | Document | Description |
 | --- | --- |
-| [Requirements](./docs/requirements.md) | Functional, registration, GitHub API, webhook, AI, infra, security, workflow, storage, monitoring, cost, non-functional |
-| [Architecture](./docs/architecture.md) | System, AWS, registration, webhook, and data-flow architecture |
-| [Deployment](./docs/deployment.md) | AWS deployment with CloudFormation |
-| [Local Development](./docs/local-development.md) | Running and developing locally |
-| [Workflows](./docs/workflows.md) | Every n8n workflow, documented |
-| [Infrastructure](./docs/infrastructure.md) | Every AWS service and CloudFormation stack |
-| [Security](./docs/security.md) | IAM, webhook & token security, encryption, auditing |
-| [Monitoring](./docs/monitoring.md) | CloudWatch metrics, logs, and alerts |
-| [Cost Optimization](./docs/cost-optimization.md) | Cost controls and estimates |
-| [CI/CD](./docs/ci-cd.md) | GitHub Actions pipelines |
-| [Roadmap](./docs/roadmap.md) | Planned features and releases |
+| [Architecture](./docs/architecture.md) | Components, data flow, and design decisions |
+| [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
+| [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
+| [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
+| [Workflows](./docs/workflows.md) | n8n pipeline, node by node |
+| [Cost Optimisation](./docs/cost-optimization.md) | Spot strategy, cold start, and shutdown tuning |
+| [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
+| [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
+| [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |
+| [CI/CD](./docs/ci-cd.md) | Continuous integration and delivery |
 | [Contributing](./docs/contributing.md) | How to contribute |
-
----
-
-## Contributing
-
-Contributions are welcome! Please read the **[Contributing Guide](./docs/contributing.md)** for the development workflow, branch naming, commit conventions, and the pull-request process.
-
----
-
-## Roadmap
-
-Current focus is a robust, webhook-driven, multi-repository content engine. Planned enhancements include **GitHub App authentication** and **OAuth login**, **automatic publishing** (Medium, Dev.to, Hashnode, WordPress, Ghost), multi-language generation, AI-generated diagrams and release notes, API documentation and video/short/podcast scripts, multi-model support, content quality scoring, duplicate-content detection, scheduled rescans, and **team workspaces / multi-user support**.
-
-See the full **[Roadmap](./docs/roadmap.md)** and [Future Enhancements](./docs/requirements.md#13-future-enhancements).
+| [Roadmap](./docs/roadmap.md) | Planned features |
 
 ---
 
 ## License
 
-Released under the [MIT License](./LICENSE).
+This project is licensed under the terms of the [MIT License](./LICENSE).
