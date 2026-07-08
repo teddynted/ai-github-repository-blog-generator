@@ -233,6 +233,15 @@ routing, on-demand Spot compute, automatic shutdown, and the processing seam —
 all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
 Intelligence and content generation on top of the `processing.Snapshot`.
 
+## Testing
+
+Every package is unit-tested (ports exercised with fakes; HTTP clients with
+`httptest`; git operations against real local repos via go-git). An **end-to-end
+integration test** (`internal/pipeline`) wires the real adapters — filesystem
+retrieval, analysis, quality review, file publish, and Repository Memory —
+through the pipeline with only the LLM stubbed, and verifies the memory-based
+skip on a repeat commit. Run with `make check` (`-race`).
+
 ## Continuous integration
 
 GitHub Actions under `.github/workflows/` run on every push/PR and are green
