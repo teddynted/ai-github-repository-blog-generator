@@ -231,3 +231,15 @@ slice from repository registration through the commit-trigger gate, event
 routing, on-demand Spot compute, automatic shutdown, and the processing seam —
 all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
 Intelligence and content generation on top of the `processing.Snapshot`.
+
+## Continuous integration
+
+GitHub Actions under `.github/workflows/` run on every push/PR and are green
+without repository secrets:
+
+- `go.yml` — gofmt, `go vet`, `go test -race -cover`, and cross-compiles all
+  four Lambdas for `linux/arm64`.
+- `cloudformation.yml` — `cfn-lint` on all templates.
+
+The CloudFormation deploy job (OIDC) and security scanners are planned (they
+need the AWS deploy role / scanner config) — see [CI/CD](./ci-cd.md).

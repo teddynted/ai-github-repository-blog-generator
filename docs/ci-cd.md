@@ -22,12 +22,16 @@ flowchart LR
 
 Workflows live in `.github/workflows/`:
 
-| File | Trigger | Purpose |
-| --- | --- | --- |
-| `lint.yml` | PR, push | ShellCheck, gofmt, cfn-lint |
-| `go.yml` | PR, push | Build + test the Lambda functions |
-| `cloudformation.yml` | PR (change set), main (deploy) | Validate, change set, deploy |
-| `security.yml` | PR, schedule | Static analysis + scanning |
+| File | Trigger | Purpose | Status |
+| --- | --- | --- | --- |
+| `go.yml` | PR, push | gofmt + vet + `go test -race` + cross-compile all Lambdas | ✅ Implemented |
+| `cloudformation.yml` | PR, push | `cfn-lint` all templates | ✅ Implemented (lint) |
+| `cloudformation.yml` (deploy) | main | Package + change set + deploy | ⏳ Planned (needs the AWS OIDC deploy role) |
+| `security.yml` | PR, schedule | `gosec` / `govulncheck` / `gitleaks` / IaC scan | ⏳ Planned |
+
+> The implemented workflows run green without any repository secrets. The deploy
+> job and security scanners are added once the AWS OIDC role and scanner config
+> exist; the sections below document the intended end state.
 
 ---
 
