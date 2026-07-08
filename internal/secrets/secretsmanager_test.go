@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
@@ -17,6 +18,14 @@ type fakeAPI struct {
 
 func newFake() *fakeAPI {
 	return &fakeAPI{created: map[string]string{}, putValues: map[string]string{}, existing: map[string]bool{}}
+}
+
+func (f *fakeAPI) GetSecretValue(_ context.Context, in *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+	name := *in.SecretId
+	if v, ok := f.created[name]; ok {
+		return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(v)}, nil
+	}
+	return nil, &smtypes.ResourceNotFoundException{}
 }
 
 func (f *fakeAPI) CreateSecret(_ context.Context, in *secretsmanager.CreateSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error) {
@@ -63,5 +72,20 @@ func TestPutRepoCredentialsFallsBackToPutValue(t *testing.T) {
 	}
 	if f.putValues["blog-gen/repos/acme/widget/pat"] != "newpat" {
 		t.Errorf("expected PutSecretValue for existing pat, got %v", f.putValues)
+	}
+}
+
+func TestWebhookSecret(t *testing.T) {
+	f := newFake()
+	s := New(f, "blog-gen/repos")
+	if _, err := s.PutRepoCredentials(context.Background(), "acme", "widget", "pat", "whsec"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := s.WebhookSecret(context.Background(), "blog-gen/repos/acme/widget")
+	if err != nil {
+		t.Fatalf("WebhookSecret: %v", err)
+	}
+	if got != "whsec" {
+		t.Errorf("WebhookSecret = %q, want whsec", got)
 	}
 }

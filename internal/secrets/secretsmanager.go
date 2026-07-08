@@ -18,6 +18,7 @@ import (
 type API interface {
 	CreateSecret(ctx context.Context, in *secretsmanager.CreateSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error)
 	PutSecretValue(ctx context.Context, in *secretsmanager.PutSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.PutSecretValueOutput, error)
+	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
 // Store persists per-repository credentials in Secrets Manager.
@@ -44,6 +45,19 @@ func (s *Store) PutRepoCredentials(ctx context.Context, owner, name, pat, webhoo
 		return "", fmt.Errorf("store webhook secret: %w", err)
 	}
 	return base, nil
+}
+
+// WebhookSecret retrieves a repository's webhook signing secret, given the
+// base reference returned by PutRepoCredentials.
+func (s *Store) WebhookSecret(ctx context.Context, ref string) (string, error) {
+	name := ref + "/webhook-secret"
+	out, err := s.api.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(name),
+	})
+	if err != nil {
+		return "", fmt.Errorf("get webhook secret: %w", err)
+	}
+	return aws.ToString(out.SecretString), nil
 }
 
 // upsert creates the secret, falling back to a new version if it already
