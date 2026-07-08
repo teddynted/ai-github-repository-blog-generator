@@ -22,12 +22,35 @@ flowchart LR
 
 Workflows live in `.github/workflows/`:
 
-| File | Trigger | Purpose |
+| File | Trigger | Purpose | Status |
+| --- | --- | --- | --- |
+| `go.yml` | PR, push | gofmt + vet + `go test -race` + cross-compile all Lambdas | ✅ Implemented |
+| `cloudformation.yml` | PR, push | `cfn-lint` all templates | ✅ Implemented (lint) |
+| `deploy.yml` | main, dispatch | Package Lambdas → upload → deploy the four stacks (OIDC) | ✅ Implemented (opt-in) |
+| `security.yml` | PR, push, weekly | `govulncheck` + `gosec` (SAST) + `gitleaks` (gate); `checkov` IaC (informational) | ✅ Implemented |
+
+> The lint/test/security workflows run green without any repository secrets.
+> `gosec` gates on high-severity/high-confidence findings; `gitleaks` uses
+> `.gitleaks.toml` (default rules + placeholder allowlist); `checkov` runs
+> informationally (`--soft-fail`) until posture findings are triaged.
+
+### Enabling `deploy.yml`
+
+The deploy workflow is **dormant** (the job is skipped, so CI stays green) until
+you arm it by setting these on the repository:
+
+| Kind | Name | Purpose |
 | --- | --- | --- |
-| `lint.yml` | PR, push | ShellCheck, gofmt, cfn-lint |
-| `go.yml` | PR, push | Build + test the Lambda functions |
-| `cloudformation.yml` | PR (change set), main (deploy) | Validate, change set, deploy |
-| `security.yml` | PR, schedule | Static analysis + scanning |
+| Secret | `AWS_DEPLOY_ROLE_ARN` | IAM role that trusts the GitHub OIDC provider |
+| Variable | `AWS_REGION` | Deployment region (e.g. `us-east-1`) |
+| Variable | `ARTIFACTS_BUCKET` | S3 bucket for the Lambda packages |
+| Variable | `KEY_PAIR_NAME` | EC2 key pair for the instance |
+| Variable | `OPERATOR_CIDR` | (optional) SSH source CIDR |
+| Variable | `DEPLOY_ENABLED` | set to `true` to arm the workflow |
+
+On merge to `main` it builds and uploads the four Lambda packages under an
+SHA-versioned key (so function code actually updates), then runs
+`aws cloudformation deploy` for **network → serverless → compute → observability**.
 
 ---
 

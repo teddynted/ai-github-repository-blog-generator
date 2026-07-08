@@ -1,0 +1,17 @@
+title = "blog-gen gitleaks config"
+
+# Use gitleaks' built-in rule set, then allowlist known placeholder / example
+# values that appear in docs and tests (these are not real secrets).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders and examples, not real secrets"
+regexes = [
+  '''github_pat_x+''',
+  '''It's a Secret to Everybody''',
+  '''whsec(ret)?''',
+]
+paths = [
+  '''(^|/)\.env\.example$''',
+]

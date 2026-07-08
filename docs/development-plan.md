@@ -231,3 +231,44 @@ slice from repository registration through the commit-trigger gate, event
 routing, on-demand Spot compute, automatic shutdown, and the processing seam —
 all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
 Intelligence and content generation on top of the `processing.Snapshot`.
+
+## Continuous integration
+
+GitHub Actions under `.github/workflows/` run on every push/PR and are green
+without repository secrets:
+
+- `go.yml` — gofmt, `go vet`, `go test -race -cover`, and cross-compiles all
+  four Lambdas for `linux/arm64`.
+- `cloudformation.yml` — `cfn-lint` on all templates.
+- `security.yml` — `govulncheck` + `gosec` (SAST, high-severity gate) +
+  `gitleaks` (secret scan with a placeholder allowlist); `checkov` runs
+  informationally on the CloudFormation.
+- `deploy.yml` — on merge to `main`, packages the Lambdas (SHA-versioned keys)
+  and deploys network → serverless → compute → observability via OIDC. **Opt-in**:
+  dormant until `DEPLOY_ENABLED=true` and the AWS role/vars are set
+  (see [CI/CD → Enabling deploy.yml](./ci-cd.md#enabling-deployyml)).
+
+CI/CD is now complete end to end; deploying just needs the AWS side configured.
+
+---
+
+## Phase 2 (post-MVP) — Content Generation
+
+Beyond the MVP slice, building on `processing.Snapshot`. In progress.
+
+| Package | Responsibility | Status |
+| --- | --- | --- |
+| `internal/ollama` | Local LLM client (`/api/generate`, non-streaming) — realises "local inference via Ollama" with real, testable code. No external/paid API. | ✅ Implemented |
+| `internal/generation` | `Generator.BlogPost` — builds a deterministic prompt from a `Snapshot` and produces a Markdown blog post via the `Model` port (Ollama satisfies it). | ✅ Implemented (first slice) |
+
+**Scope note.** This is the first generation output (a single technical blog
+post). Additional outputs (README improvements, docs, architecture summaries,
+release notes, …), Repository Memory population, quality review, optional human
+approval, and publishing are still future work — the ports keep them additive.
+
+**Runtime wiring (next).** These are libraries; the instance runtime consumes
+them. The documented design uses **n8n** (its SQS-trigger workflow) to
+orchestrate processing → generation → publish on the EC2 host. The n8n workflow
+export (`workflows/`) and the OpenClaw-backed processing implementation are the
+next step; alternatively a small Go worker on the instance could drive the same
+seams. That orchestration choice is deliberately left open here.

@@ -1,0 +1,63 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # weekly
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: dependency vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  gosec:
+    name: static analysis (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+      # Gate on high-severity, high-confidence findings.
+      - run: gosec -severity high -confidence high -exclude-generated ./...
+
+  gitleaks:
+    name: secret detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: install gitleaks
+        run: |
+          VER=8.21.2
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" | tar -xz gitleaks
+      - name: scan
+        run: ./gitleaks detect --source . --config .gitleaks.toml --redact --no-banner
+
+  iac-scan:
+    name: IaC posture (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install checkov
+      # Informational for now: report CloudFormation posture without blocking.
+      - run: checkov -d infrastructure --quiet --compact --soft-fail

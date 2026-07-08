@@ -94,7 +94,7 @@ aws cloudformation deploy \
 aws cloudformation deploy \
   --template-file infrastructure/serverless.yaml \
   --stack-name blog-gen-serverless \
-  --parameter-overrides WebhookSecret=$WEBHOOK_SECRET PublishTrigger=$PUBLISH_TRIGGER \
+  --parameter-overrides ArtifactsBucket=$ARTIFACTS_BUCKET PublishTrigger=$PUBLISH_TRIGGER \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 3. Compute layer (EC2 Spot + persistent EBS)
