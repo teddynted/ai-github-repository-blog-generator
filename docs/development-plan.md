@@ -267,7 +267,7 @@ future work — the ports keep them additive, and `GenerateAll` never lets one
 failing kind corrupt the rest of the package.
 
 | `internal/pipeline` | `Pipeline.Run` — composes process → generate → publish for a request. Resilient: publishes the assets that succeeded even on a partial generation failure. | ✅ Implemented |
-| `internal/publish` | `LogPublisher` — placeholder Publisher (logs assets; never dumps content). Real destinations (Git / object store / CMS) are future work. | ✅ Implemented (placeholder) |
+| `internal/publish` | `FilePublisher` writes each asset to `<dir>/<owner>/<name>/<YYYY-MM-DD>/<kind>.md` (path-traversal guarded); `LogPublisher` remains for logging. The worker uses `FilePublisher` (`OUTPUT_DIR`, default `/data/generated-content` on the EBS volume). Remote destinations (Git / object store / CMS) can follow behind the same port. | ✅ Implemented |
 | `internal/awssqs` | Extended with `Receive`/`Delete` (message consumption) alongside depth. | ✅ Implemented |
 | `cmd/worker` | Instance worker: long-polls SQS → `Pipeline.Run` → deletes on success (leaves failures for SQS redelivery/DLQ). Message-handling logic is unit-tested. | ✅ Implemented |
 
@@ -280,7 +280,35 @@ composition, e.g. via an exec node) and a future visual-orchestration option;
 this worker does not remove that path. Build it with `make build-worker`
 (Linux/amd64 for the g4dn host).
 
-**Still placeholder / future.** Processing uses `NewPlaceholderProcessor`
-(OpenClaw-backed clone/retrieval is future), and publishing uses `LogPublisher`
-(a real destination is future). Repository Memory, quality review, and optional
-human approval are not yet wired into the pipeline.
+### Real repository processing ✅
+
+`internal/reposource` replaces the placeholder processor with real
+implementations of the processing ports:
+
+| Type | Responsibility |
+| --- | --- |
+| `GitCloner` | Shallow, single-branch clone via **go-git** (no external git binary); token passed via `Auth`, never in the URL; per-repo work dir replaced each run. |
+| `FSReadme` / `FSDocs` | Read the README and `docs/*.md` from the working copy (size- and count-capped). |
+| `GitCommits` | Read recent commits (SHA, subject, author) from the clone. |
+| `MetaTokenSource` | Resolve the repo's PAT: metadata `Get` → `secret_ref` → Secrets Manager `PAT`. |
+
+The worker now wires this real processor (metadata + secrets clients,
+`WORK_DIR` default `/data/work`), so a run clones the real repository, reads its
+content, generates the package via Ollama, and writes Markdown files. Tested
+with go-git against a real local repo (clone, README/docs retrieval, commit log)
+and fakes for the token source.
+
+### Repository Memory ✅
+
+`internal/memory` is a filesystem-backed, per-repository record of published
+commits (persisted under `MEMORY_DIR`, default `/data/memory` on the EBS volume
+— not a managed DB, per the requirements; never stores secrets). The pipeline
+now consults it: a matched event whose commit was **already published is skipped**
+(`Result.Skipped`), and a completed run **records** the commit + kinds. Memory is
+an optional port and a read failure never blocks a run. Tested (record → dedup,
+per-repo isolation, idempotent per commit) plus pipeline behaviour (skip, record,
+proceed-on-error).
+
+**Still future (not blocking the slice).** OpenClaw-based deeper analysis,
+quality review, optional human approval, and a remote publish destination. The
+MVP slice is real end to end.

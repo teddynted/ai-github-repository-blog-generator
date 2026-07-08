@@ -112,6 +112,69 @@ func TestRunRequiresRepo(t *testing.T) {
 	}
 }
 
+type fakeMemory struct {
+	already   bool
+	lookupErr error
+	recordErr error
+	recorded  bool
+	recCommit string
+	recKinds  []string
+}
+
+func (f *fakeMemory) AlreadyPublished(_ context.Context, _, _ string) (bool, error) {
+	return f.already, f.lookupErr
+}
+func (f *fakeMemory) RecordPublished(_ context.Context, _, commitSHA string, kinds []string) error {
+	f.recorded, f.recCommit, f.recKinds = true, commitSHA, kinds
+	return f.recordErr
+}
+
+func TestRunSkipsAlreadyPublishedCommit(t *testing.T) {
+	gen := &fakeGenerator{}
+	pub := &fakePublisher{}
+	mem := &fakeMemory{already: true}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Memory: mem}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "a/b", CommitSHA: "sha1"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Skipped {
+		t.Error("expected Skipped=true")
+	}
+	if len(gen.gotKinds) != 0 || len(pub.published) != 0 {
+		t.Error("skipped run must not generate or publish")
+	}
+}
+
+func TestRunRecordsMemoryAfterPublish(t *testing.T) {
+	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog}, {Kind: generation.KindReadme}}}
+	mem := &fakeMemory{}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: &fakePublisher{}, Memory: mem}
+
+	if _, err := p.Run(context.Background(), Request{RepoFullName: "a/b", CommitSHA: "sha1"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !mem.recorded || mem.recCommit != "sha1" || len(mem.recKinds) != 2 {
+		t.Errorf("memory not recorded correctly: %+v", mem)
+	}
+}
+
+func TestRunProceedsWhenMemoryLookupFails(t *testing.T) {
+	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog}}}
+	pub := &fakePublisher{}
+	mem := &fakeMemory{lookupErr: errors.New("disk error")}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Memory: mem}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "a/b", CommitSHA: "sha1"})
+	if err != nil {
+		t.Fatalf("memory read failure must not fail the run: %v", err)
+	}
+	if res.Skipped || len(pub.published) != 1 {
+		t.Errorf("run should proceed and publish despite memory error: %+v", res)
+	}
+}
+
 // Guards: the concrete implementations satisfy the pipeline ports.
 var (
 	_ Snapshotter      = (*processing.Processor)(nil)

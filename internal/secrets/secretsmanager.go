@@ -50,12 +50,21 @@ func (s *Store) PutRepoCredentials(ctx context.Context, owner, name, pat, webhoo
 // WebhookSecret retrieves a repository's webhook signing secret, given the
 // base reference returned by PutRepoCredentials.
 func (s *Store) WebhookSecret(ctx context.Context, ref string) (string, error) {
-	name := ref + "/webhook-secret"
+	return s.get(ctx, ref+"/webhook-secret", "webhook secret")
+}
+
+// PAT retrieves a repository's GitHub Personal Access Token, given the base
+// reference. Callers must treat the result as secret and never log it.
+func (s *Store) PAT(ctx context.Context, ref string) (string, error) {
+	return s.get(ctx, ref+"/pat", "pat")
+}
+
+func (s *Store) get(ctx context.Context, name, what string) (string, error) {
 	out, err := s.api.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(name),
 	})
 	if err != nil {
-		return "", fmt.Errorf("get webhook secret: %w", err)
+		return "", fmt.Errorf("get %s: %w", what, err)
 	}
 	return aws.ToString(out.SecretString), nil
 }

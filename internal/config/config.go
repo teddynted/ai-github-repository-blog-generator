@@ -19,6 +19,9 @@ const (
 	DefaultSecretsPrefix       = "blog-gen/repos"
 	DefaultOllamaModel         = "qwen2.5:7b"
 	DefaultOllamaBaseURL       = "http://localhost:11434"
+	DefaultOutputDir           = "/data/generated-content"
+	DefaultWorkDir             = "/data/work"
+	DefaultMemoryDir           = "/data/memory"
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
@@ -64,6 +67,12 @@ type Config struct {
 	OllamaModel string
 	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
 	OllamaBaseURL string
+	// OutputDir is where generated content is written (OUTPUT_DIR).
+	OutputDir string
+	// WorkDir is the parent directory for repository clones (WORK_DIR).
+	WorkDir string
+	// MemoryDir is the base directory for Repository Memory (MEMORY_DIR).
+	MemoryDir string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -95,6 +104,9 @@ func Load(getenv Getenv) (Config, error) {
 		WebhookURL:           getenv("WEBHOOK_URL"),
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
+		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
+		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
+		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,
