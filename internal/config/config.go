@@ -21,6 +21,7 @@ const (
 	DefaultOllamaBaseURL       = "http://localhost:11434"
 	DefaultOutputDir           = "/data/generated-content"
 	DefaultWorkDir             = "/data/work"
+	DefaultMemoryDir           = "/data/memory"
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
@@ -70,6 +71,8 @@ type Config struct {
 	OutputDir string
 	// WorkDir is the parent directory for repository clones (WORK_DIR).
 	WorkDir string
+	// MemoryDir is the base directory for Repository Memory (MEMORY_DIR).
+	MemoryDir string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -103,6 +106,7 @@ func Load(getenv Getenv) (Config, error) {
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
+		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,

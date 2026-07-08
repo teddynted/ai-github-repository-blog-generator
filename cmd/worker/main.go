@@ -24,6 +24,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
@@ -92,6 +93,7 @@ func main() {
 			Logger: a.Logger,
 		},
 		Publisher: &publish.FilePublisher{Dir: a.Config.OutputDir, Logger: a.Logger},
+		Memory:    &memory.Store{Dir: a.Config.MemoryDir, Logger: a.Logger},
 		Kinds:     defaultKinds,
 		Logger:    a.Logger,
 	}
@@ -136,7 +138,11 @@ func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) 
 		_ = q.Delete(ctx, m.ReceiptHandle)
 		return
 	}
-	if _, err := p.Run(ctx, pipeline.Request{RepoFullName: env.Detail.RepoFullName, Ref: env.Detail.Ref}); err != nil {
+	if _, err := p.Run(ctx, pipeline.Request{
+		RepoFullName: env.Detail.RepoFullName,
+		Ref:          env.Detail.Ref,
+		CommitSHA:    env.Detail.CommitSHA,
+	}); err != nil {
 		// Leave the message for SQS to redeliver / dead-letter.
 		logger.Error("run failed; leaving message for retry", "repo", env.Detail.RepoFullName, "error", err.Error())
 		return

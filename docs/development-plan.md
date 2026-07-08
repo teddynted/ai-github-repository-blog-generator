@@ -298,6 +298,17 @@ content, generates the package via Ollama, and writes Markdown files. Tested
 with go-git against a real local repo (clone, README/docs retrieval, commit log)
 and fakes for the token source.
 
+### Repository Memory ✅
+
+`internal/memory` is a filesystem-backed, per-repository record of published
+commits (persisted under `MEMORY_DIR`, default `/data/memory` on the EBS volume
+— not a managed DB, per the requirements; never stores secrets). The pipeline
+now consults it: a matched event whose commit was **already published is skipped**
+(`Result.Skipped`), and a completed run **records** the commit + kinds. Memory is
+an optional port and a read failure never blocks a run. Tested (record → dedup,
+per-repo isolation, idempotent per commit) plus pipeline behaviour (skip, record,
+proceed-on-error).
+
 **Still future (not blocking the slice).** OpenClaw-based deeper analysis,
-Repository Memory population, quality review, optional human approval, and a
-remote publish destination. The MVP slice is otherwise real end to end.
+quality review, optional human approval, and a remote publish destination. The
+MVP slice is real end to end.

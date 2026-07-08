@@ -29,16 +29,25 @@ type Publisher interface {
 	Publish(ctx context.Context, repoFullName string, assets []generation.Content) error
 }
 
+// Memory is Repository Memory: it lets the pipeline skip a commit it has already
+// published and record new ones. *memory.Store satisfies it. Optional.
+type Memory interface {
+	AlreadyPublished(ctx context.Context, repoFullName, commitSHA string) (bool, error)
+	RecordPublished(ctx context.Context, repoFullName, commitSHA string, kinds []string) error
+}
+
 // Request is a single pipeline run (typically derived from a matched event).
 type Request struct {
 	RepoFullName string
 	Ref          string
+	CommitSHA    string
 }
 
 // Result summarises a run.
 type Result struct {
 	RepoFullName string
 	Published    int
+	Skipped      bool // already published for this commit (Repository Memory)
 }
 
 // Pipeline runs process → generate → publish.
@@ -46,6 +55,7 @@ type Pipeline struct {
 	Processor Snapshotter
 	Generator ContentGenerator
 	Publisher Publisher
+	Memory    Memory            // optional; de-duplicates already-published commits
 	Kinds     []generation.Kind // defaults to blog when empty
 	Logger    *slog.Logger
 }
@@ -56,6 +66,18 @@ type Pipeline struct {
 func (p *Pipeline) Run(ctx context.Context, req Request) (Result, error) {
 	if req.RepoFullName == "" {
 		return Result{}, fmt.Errorf("pipeline: request is missing a repository")
+	}
+
+	// Repository Memory: skip a commit already published, to avoid duplicates.
+	if p.Memory != nil && req.CommitSHA != "" {
+		done, err := p.Memory.AlreadyPublished(ctx, req.RepoFullName, req.CommitSHA)
+		if err != nil {
+			// Memory is an optimisation; a read failure must not block a run.
+			p.logMemoryIssue("memory lookup failed; proceeding", req.RepoFullName, err)
+		} else if done {
+			p.log("skipping already-published commit", req.RepoFullName, 0)
+			return Result{RepoFullName: req.RepoFullName, Skipped: true}, nil
+		}
 	}
 
 	snap, err := p.Processor.Process(ctx, req.RepoFullName, req.Ref)
@@ -77,6 +99,13 @@ func (p *Pipeline) Run(ctx context.Context, req Request) (Result, error) {
 		}
 	}
 
+	// Record what was published so a repeat event for the same commit is skipped.
+	if p.Memory != nil && req.CommitSHA != "" && len(assets) > 0 {
+		if err := p.Memory.RecordPublished(ctx, req.RepoFullName, req.CommitSHA, kindsOf(assets)); err != nil {
+			p.logMemoryIssue("failed to record memory", req.RepoFullName, err)
+		}
+	}
+
 	res := Result{RepoFullName: req.RepoFullName, Published: len(assets)}
 	if genErr != nil {
 		return res, fmt.Errorf("generation partial failure: %w", genErr)
@@ -85,8 +114,22 @@ func (p *Pipeline) Run(ctx context.Context, req Request) (Result, error) {
 	return res, nil
 }
 
+func kindsOf(assets []generation.Content) []string {
+	kinds := make([]string, 0, len(assets))
+	for _, a := range assets {
+		kinds = append(kinds, string(a.Kind))
+	}
+	return kinds
+}
+
 func (p *Pipeline) log(msg, repoName string, published int) {
 	if p.Logger != nil {
 		p.Logger.Info(msg, slog.String("repo", repoName), slog.Int("published", published))
+	}
+}
+
+func (p *Pipeline) logMemoryIssue(msg, repoName string, err error) {
+	if p.Logger != nil {
+		p.Logger.Warn(msg, slog.String("repo", repoName), slog.String("error", err.Error()))
 	}
 }
