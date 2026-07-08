@@ -47,6 +47,9 @@ type Config struct {
 	// N8NWebhookURL is the n8n workflow entry point invoked once the instance
 	// is healthy (N8N_WEBHOOK_URL).
 	N8NWebhookURL string
+	// WebhookURL is this platform's public webhook endpoint, used by the
+	// registration Lambda when creating the GitHub webhook (WEBHOOK_URL).
+	WebhookURL string
 	// IdleTimeoutMinutes is the inactivity window before auto-shutdown
 	// (IDLE_TIMEOUT_MINUTES).
 	IdleTimeoutMinutes int
@@ -78,6 +81,7 @@ func Load(getenv Getenv) (Config, error) {
 		QueueURL:             getenv("QUEUE_URL"),
 		InstanceID:           getenv("INSTANCE_ID"),
 		N8NWebhookURL:        getenv("N8N_WEBHOOK_URL"),
+		WebhookURL:           getenv("WEBHOOK_URL"),
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
@@ -145,6 +149,8 @@ func (c Config) field(name string) (string, bool) {
 		return c.InstanceID, true
 	case "N8NWebhookURL":
 		return c.N8NWebhookURL, true
+	case "WebhookURL":
+		return c.WebhookURL, true
 	case "OllamaModel":
 		return c.OllamaModel, true
 	case "LogLevel":
