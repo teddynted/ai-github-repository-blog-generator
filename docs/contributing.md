@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving the **AI GitHub Repository Blog Generator**! This guide covers the development workflow, conventions, and standards for contributions.
+Thanks for your interest in improving the **GitHub AI Blog Generator**! This guide covers the development workflow, conventions, and standards for contributions.
 
 Related: [Local Development](./local-development.md) · [CI/CD](./ci-cd.md) · [Roadmap](./roadmap.md).
 
@@ -20,14 +20,16 @@ Related: [Local Development](./local-development.md) · [CI/CD](./ci-cd.md) · [
 Local checks before pushing:
 
 ```bash
-# Go
-( cd lambdas/<fn> && gofmt -l . && go vet ./... && go test ./... -race )
+# Go (webhook-handler and idle-shutdown)
+for fn in webhook-handler idle-shutdown; do
+  ( cd lambdas/$fn && gofmt -l . && go vet ./... && go test ./... -race )
+done
 
 # CloudFormation
-cfn-lint cloudformation/**/*.yaml
+cfn-lint infrastructure/*.yaml
 
 # Shell
-shellcheck scripts/*.sh
+shellcheck scripts/*.sh instance/user-data.sh
 ```
 
 ---
@@ -67,8 +69,8 @@ Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `perf`, `build`
 Examples:
 
 ```text
-feat(analyzer): detect Terraform modules for tech tagging
-fix(cloner): handle repos without a default README
+feat(analyzer): detect Dockerfiles for tech tagging
+fix(handler): reject deliveries with a missing signature header
 docs(workflows): add Mermaid diagram for publishing flow
 ```
 
@@ -129,7 +131,7 @@ PR checklist (include in the description):
 
 **n8n workflows**
 
-- Export to `workflows/n8n/*.json`; reference credentials by ID, never by value.
+- Export to `workflows/*.json`; reference credentials by ID, never by value.
 - Keep each workflow single-purpose and composable ([Workflows](./workflows.md)).
 
 ---

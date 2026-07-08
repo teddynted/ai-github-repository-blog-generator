@@ -1,18 +1,19 @@
 # Architecture
 
-This document describes the architecture of the **AI GitHub Repository Blog Generator**: the high-level design, AWS deployment topology, the analysis and AI workflows, content-package generation, data flow, and storage.
+This document describes the architecture of the **GitHub AI Blog Generator**: the high-level design, AWS deployment topology, the event-driven trigger path, the analysis and local-inference workflow, content generation, data flow, and storage.
 
-Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.md) · [Workflows](./workflows.md).
+Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.md) · [Workflows](./workflows.md) · [Cost Optimisation](./cost-optimization.md).
 
 ---
 
 ## 1. Design Principles
 
-- **Orchestration-first** — n8n owns the pipeline: cloning, analysis, prompt building, Bedrock calls, packaging, retries, and branching.
-- **Managed services for durability & scale** — Amazon Bedrock, S3, Secrets Manager, and CloudWatch provide the heavy lifting.
-- **Webhook-driven** — GitHub Webhooks (and manual triggers) start runs; deliveries are signature-verified before processing.
-- **Everything as code** — all infrastructure is CloudFormation; all workflows are versioned JSON.
-- **Cost-aware** — the only always-on cost driver (the EC2 n8n host) is started/stopped on a schedule by a small Go Lambda.
+- **Event-driven** — nothing runs until a repository changes. A GitHub Webhook is the primary trigger; manual runs are also supported.
+- **Self-hosted inference** — all AI runs locally on the instance via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
+- **Pay only when you compute** — a cost-optimized **EC2 Spot Instance** is started on demand and stopped after an idle timeout, so compute charges accrue only during active generation.
+- **Durable buffering** — every validated event is stored in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
+- **Persistent state, ephemeral compute** — models and n8n state live on a persistent **gp3 EBS volume**; the compute layer is disposable.
+- **Everything as code** — all infrastructure is AWS CloudFormation; all workflows are versioned n8n JSON; all services run via Docker Compose.
 - **Least privilege & encryption everywhere** — each component gets only the permissions it needs.
 
 ---
@@ -22,150 +23,182 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 ```mermaid
 flowchart TB
     subgraph GitHub
-        EVT[GitHub Webhook<br/>push · release · pull_request · repository]
+        EVT[GitHub Webhook<br/>push · release · pull_request]
         REPO[(Target Repository)]
     end
 
     subgraph AWS
-        EIP[Public endpoint<br/>Elastic IP + TLS reverse proxy]
-        SCHED[EventBridge Scheduler]
-        LSTOP[Go Lambda<br/>ec2-scheduler]
-        subgraph EC2["Amazon EC2"]
-            N8N[n8n Orchestrator<br/>Docker Compose]
+        APIGW[Amazon API Gateway<br/>HTTPS endpoint]
+        LH[Lambda: Webhook Handler]
+        SQS[(Amazon SQS<br/>+ dead-letter queue)]
+        EB[EventBridge<br/>idle timer]
+        LS[Lambda: Idle Shutdown]
+        subgraph EC2["EC2 Spot Instance (Ubuntu + Docker Compose)"]
+            N8N[n8n Orchestrator]
+            OC[OpenClaw]
+            OLL[Ollama + Qwen]
         end
-        BR[Amazon Bedrock]
-        S3[(Amazon S3<br/>generated-content)]
-        SM[AWS Secrets Manager]
+        EBS[(Persistent gp3 EBS Volume)]
         CW[Amazon CloudWatch]
     end
 
-    EVT -->|HTTPS + HMAC signature| EIP --> N8N
-    N8N -->|verify signature| SM
-    SCHED -->|19:00 start / 21:00 stop| LSTOP --> EC2
-    N8N -->|clone + analyze| REPO
-    N8N -->|platform prompts| BR
-    BR -->|content package| N8N
-    N8N -->|store package| S3
-    SM -. GitHub token .-> N8N
-    N8N -. logs/metrics .-> CW
-    LSTOP -. logs .-> CW
+    EVT -->|HTTPS + HMAC| APIGW --> LH
+    LH -->|enqueue| SQS
+    LH -->|StartInstances if stopped| EC2
+    LH -->|HTTP 200 immediately| EVT
+    N8N -->|poll| SQS
+    N8N --> OC -->|clone + analyze| REPO
+    OC --> OLL
+    OLL -->|generated content| N8N
+    N8N -->|publish + notify| OUT[Published content / users]
+    EBS --- EC2
+    EB --> LS -->|StopInstances on idle| EC2
+    LH -. logs .-> CW
+    N8N -. logs .-> CW
+    LS -. logs .-> CW
 ```
 
 **Component responsibilities**
 
 | Component | Responsibility |
 | --- | --- |
-| Registration (URL + PAT) | Onboards a repo — validated, stored, webhook auto-created |
 | GitHub Webhook | Primary trigger — delivers repository events over HTTPS |
-| Public endpoint (Elastic IP + TLS) | Terminates TLS and forwards the registration/webhook path to n8n |
-| EventBridge Scheduler | Fires the EC2 start/stop schedule |
-| `ec2-scheduler` (Go Lambda) | Starts/stops the EC2 host on schedule |
-| n8n (on EC2) | Handles registration, validates webhooks, clones, analyzes, invokes Bedrock, packages, stores, notifies |
-| Amazon Bedrock | Generates each content type in the package |
-| Amazon S3 | Stores the versioned, dated content package |
-| Amazon DynamoDB | Stores per-repository metadata (not the PAT) |
-| Secrets Manager | Stores per-repository PATs and webhook signing secrets |
-| CloudWatch | Central logs, metrics, dashboards, alarms |
+| API Gateway | Public HTTPS ingress for webhook deliveries |
+| Webhook Handler (Lambda) | Validates the HMAC signature, enqueues the payload in SQS, starts the Spot Instance if stopped, returns HTTP 200 immediately |
+| Amazon SQS | Durable buffer so no event is lost during cold start; visibility timeout + dead-letter queue |
+| EC2 Spot Instance | Cost-optimized host running n8n, OpenClaw, and Ollama via Docker Compose |
+| n8n (on EC2) | Polls SQS, orchestrates clone → analysis → generation → publish → notify |
+| OpenClaw | Clones and analyses the repository, assembles model context |
+| Ollama + Qwen | Local LLM inference — no external API |
+| gp3 EBS volume | Persists model weights and n8n state across start/stop cycles |
+| EventBridge + Idle Shutdown (Lambda) | Stops the instance after a configurable idle timeout |
+| CloudWatch | Central logs, metrics, and alarms |
 
 ---
 
-## 3. AWS Architecture (Deployment Topology)
+## 3. AWS Deployment Topology
 
-Because GitHub Webhooks must reach the platform, the n8n host exposes an **inbound HTTPS endpoint**. It runs in a **public subnet** with an **Elastic IP**; a TLS reverse proxy terminates HTTPS and forwards only the webhook path to n8n. The **management UI is never publicly exposed** — admin access is via SSM.
+The webhook front door is fully serverless (API Gateway + Lambda + SQS) and is **always available even when the EC2 instance is stopped**. The compute host runs in a **public subnet** so it can clone repositories and pull container images; inbound access is tightly restricted by security groups.
 
 ```mermaid
 flowchart TB
-    GH[GitHub Webhook] -->|443 HTTPS| IGW
+    GH[GitHub Webhook] -->|443 HTTPS| APIGW[API Gateway]
+    APIGW --> LH[Webhook Handler Lambda]
+    LH --> SQS[(SQS)]
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
-            EC2[(EC2: n8n + TLS proxy<br/>Elastic IP)]
+            EC2[(EC2 Spot Instance<br/>n8n + OpenClaw + Ollama)]
+            EBS[(gp3 EBS volume)]
         end
-        subgraph Private["Private subnet 10.0.10.0/24"]
-            RES[Reserved for internal/<br/>optional components]
-        end
-        VPCE["VPC Endpoints:<br/>S3 · Secrets Manager ·<br/>Bedrock · CloudWatch Logs · SSM"]
     end
-
+    EC2 --- EBS
     EC2 --- IGW
-    EC2 -. private .-> VPCE
-    VPCE -. .-> BR[Amazon Bedrock]
-    VPCE -. .-> S3[(Amazon S3)]
+    EC2 -->|poll| SQS
+    ADMIN[Operator] -->|SSH key auth<br/>restricted CIDR| EC2
 ```
 
-- **Inbound:** only **443** is open, and the **security group restricts it to GitHub's published webhook IP ranges** ([Infrastructure §7](./infrastructure.md#7-security-groups)). Administrative access is via **SSM Session Manager** — no public SSH, no public n8n UI.
-- **Outbound & internal:** traffic to **S3, Secrets Manager, Bedrock, CloudWatch, and SSM** goes through **VPC endpoints** to keep it on the AWS network; general egress (GitHub clone, image pulls) uses the Internet Gateway.
-- Private subnets remain part of the VPC for defense-in-depth and future internal components.
+- **Ingress:** GitHub reaches the platform through **API Gateway** (managed TLS), not the instance directly. The instance's own inbound is limited to **SSH (22) from known operator IPs**; the **n8n and Ollama ports are never publicly exposed**.
+- **Egress:** the **Internet Gateway** provides outbound access for cloning repositories, pulling Docker images, and downloading model weights.
+- **SQS decoupling:** the Lambda writes to SQS and returns immediately; the instance polls SQS when it is up. The instance never receives inbound webhook traffic.
+
+See [Infrastructure](./infrastructure.md) for the CloudFormation stacks and [Security](./security.md) for the network controls.
 
 ---
 
-## 4. Analysis & AI Workflow
-
-n8n converts a repository into a set of generation-ready prompts and invokes Amazon Bedrock for each content type.
+## 4. Event-Driven Trigger Path
 
 ```mermaid
 sequenceDiagram
     participant GH as GitHub
-    participant N as n8n
-    participant B as Amazon Bedrock
+    participant API as API Gateway
+    participant LH as Lambda (Handler)
+    participant SQS as Amazon SQS
+    participant EC2 as EC2 Spot Instance
+    participant N8N as n8n
 
-    N->>GH: clone repository
-    N->>N: repository structure analysis
-    N->>N: README analysis
-    N->>N: source code analysis
-    N->>N: configuration file analysis
-    N->>N: technology stack detection
-    N->>N: architecture understanding
-    N->>N: build platform-specific prompts (token-budgeted)
-    loop each content type
-        N->>B: InvokeModel(prompt, model, params)
-        B-->>N: generated content
+    GH->>API: Webhook (push/release/PR) + X-Hub-Signature-256
+    API->>LH: Invoke
+    LH->>LH: Validate HMAC SHA-256 (constant-time)
+    alt Invalid signature
+        LH-->>GH: 401 (not enqueued)
+    else Valid signature
+        LH->>SQS: Enqueue payload
+        LH->>EC2: StartInstances (if stopped)
+        LH-->>GH: HTTP 200 (immediate)
     end
+    Note over EC2: Cold start: Ubuntu + Docker Compose + Ollama warm up
+    N8N->>SQS: Poll for messages
+    SQS-->>N8N: Repository event
 ```
 
-**Prompt assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-platform templates and truncated deterministically to respect the model context window (see [AI Requirements](./requirements.md#5-ai-requirements)).
+The handler does the minimum required to accept the event safely and quickly: **validate → enqueue → start → return 200**. All heavy work happens asynchronously on the instance. Because the payload is durably stored in SQS, GitHub receives its 200 even though generation has not started yet, and no event is lost while the instance boots (the **cold start**).
 
 ---
 
-## 5. Content-Package Generation
+## 5. Analysis & Local-Inference Workflow
 
-Rather than a single article, each run produces a **content package** — many platform-specific assets.
+Once the instance is up, n8n drains SQS and drives the pipeline. **OpenClaw** builds a structured understanding of the repository and **Ollama** runs the local model for each content type.
+
+```mermaid
+sequenceDiagram
+    participant N as n8n
+    participant OC as OpenClaw
+    participant OL as Ollama (Qwen)
+    participant GH as GitHub repo
+
+    N->>OC: Repository event from SQS
+    OC->>GH: Clone / update repository
+    OC->>OC: Structure, README, source, config analysis
+    OC->>OC: Technology stack detection
+    OC->>OC: Build context (token-budgeted)
+    loop each content type
+        OC->>OL: Prompt with repository context
+        OL-->>OC: Generated content
+    end
+    OC-->>N: Content set (Markdown)
+```
+
+**Context assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-output templates and truncated deterministically to respect the local model's context window (see [AI Requirements](./requirements.md#3-ai--local-inference-requirements)).
+
+---
+
+## 6. Content Generation
+
+Each run can produce a bundle of assets rather than a single document.
 
 ```mermaid
 flowchart TB
     A[Repository understanding] --> P{Fan-out per content type}
-    P --> A1[blog.md]
-    P --> A2[medium.md]
-    P --> A3[devto.md]
-    P --> A4[hashnode.md]
-    P --> A5[newsletter.md]
-    P --> A6[linkedin.md]
-    P --> A7[twitter-thread.md]
-    P --> A8[reddit.md]
-    P --> A9[faq.md]
-    P --> A10[readme-suggestions.md]
-    P --> A11[image-prompts.md]
-    P --> A12[seo.json]
-    P --> A13[metadata.json]
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 & A11 & A12 & A13 --> PKG[Package + store to S3]
+    P --> A1[Technical blog post]
+    P --> A2[README improvements]
+    P --> A3[Project documentation]
+    P --> A4[Architecture summary]
+    P --> A5[API documentation]
+    P --> A6[Project overview]
+    P --> A7[Release notes]
+    P --> A8[Changelog]
+    P --> A9[Technical tutorial]
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> PKG[Render Markdown → publish]
 ```
 
-Any failure on a content type routes to the error/notification path without overwriting an existing package ([FR-6.3](./requirements.md#16-error-handling--retries)). See [Content Generation](./requirements.md#12-content-generation) for the full asset list.
+All output is emitted as clean, portable **GitHub-flavoured Markdown**. Any failure on a content type routes to the error/notification path without corrupting previously generated output ([FR-5.5](./requirements.md#15-reliability-retry-logging--error-handling)).
 
 ---
 
-## 6. Data Flow
+## 7. Data Flow
 
 ```mermaid
 flowchart LR
-    EVT[GitHub Webhook / manual] -->|verify HMAC| N[n8n]
-    GH[(GitHub repo)] -->|clone| N
-    N -->|analysis| N
-    N -->|prompts| BR[Amazon Bedrock]
-    BR -->|content| N
-    N -->|package .md/.json| S3[(S3 generated-content)]
-    N -->|notification| NOTIF[(SNS / Slack / webhook)]
-    SM[Secrets Manager] -. token + webhook secret .-> N
+    EVT[GitHub Webhook / manual] -->|verify HMAC| LH[Webhook Handler]
+    LH -->|enqueue| SQS[(SQS)]
+    SQS -->|poll| N8N[n8n]
+    GH[(GitHub repo)] -->|clone| OC[OpenClaw]
+    N8N --> OC
+    OC -->|context| OL[Ollama / Qwen]
+    OL -->|content| N8N
+    N8N -->|Markdown| PUB[Publish destination]
+    N8N -->|notification| NOTIF[(Email / Slack / webhook)]
 ```
 
 **Stages and payloads**
@@ -173,48 +206,38 @@ flowchart LR
 | Stage | Input | Output |
 | --- | --- | --- |
 | Trigger | GitHub Webhook (verified) / manual | run request `{ repo, event, ref }` |
-| Clone | repo URL | local working copy on EC2 |
-| Analyze | working copy | structured repository understanding |
-| Generate | prompts + params | per-type content |
-| Package & store | content set | versioned package in S3 |
+| Enqueue | verified payload | SQS message |
+| Poll | SQS message | in-flight run on EC2 |
+| Clone & analyse | repo URL | structured repository understanding |
+| Generate | context + prompts | per-type Markdown content |
+| Publish | content set | content at the configured destination |
 | Notify | run result | notification message |
 
 ---
 
-## 7. Storage Architecture
+## 8. Storage Architecture
 
-Storage spans three layers: **S3** for generated content (and CloudFormation/Lambda deployment artifacts), **DynamoDB** for repository metadata, and **Secrets Manager** for secrets. Repository clones are transient and live on the EC2 host's ephemeral disk, not in S3.
+Storage is deliberately minimal. The only **persistent** store is the **gp3 EBS volume** attached to the instance; everything else is either transient or a managed queue.
 
 ```mermaid
 flowchart TB
-    subgraph S3
-        GC[(generated-content bucket)]
-        ART[(artifacts bucket)]
+    subgraph Persistent
+        EBS[(gp3 EBS volume<br/>Ollama models · n8n state · workflows)]
     end
-    subgraph DynamoDB
-        REPOS[(repositories table)]
+    subgraph Transient
+        CLONE[Repository clones<br/>instance disk during a run]
     end
-    subgraph SecretsManager
-        PAT[/per-repo PAT/]
-        WHS[/per-repo webhook secret/]
+    subgraph Managed
+        SQS[(Amazon SQS<br/>event buffer + DLQ)]
     end
-    GC -->|versioning + lifecycle: IA 30d, Glacier 90d| ARCH[Archived]
-    ART -->|versioned| PKG[Packaged templates + Lambda ZIPs]
-    REPOS -. references (ARN) .-> PAT
-    REPOS -. references (ARN) .-> WHS
 ```
 
 | Store | Contents | Notes |
 | --- | --- | --- |
-| S3 `generated-content` | Generated content packages | Versioning on; IA 30d, Glacier 90d |
-| S3 `artifacts` | Packaged CloudFormation templates + Lambda ZIPs | Versioned |
-| DynamoDB `repositories` | Per-repository metadata + secret ARNs | Encrypted; **no PAT values** |
-| Secrets Manager | Per-repository PAT + webhook secret | KMS-encrypted |
+| gp3 EBS volume | Ollama model weights, n8n state and credentials, exported workflows | Survives start/stop; encrypted at rest; avoids re-downloading models |
+| Repository clones | Working copy during a run | Transient — on instance disk, discarded after the run |
+| Amazon SQS | Buffered webhook events + dead-letter queue | Durable; retention configurable up to 14 days |
 
-**Key scheme** for a package:
+Persisting model weights on EBS is what makes the start/stop cost model viable: a restarted instance re-attaches the volume and is ready to infer without re-downloading multi-gigabyte models. See [Storage & Cost](./cost-optimization.md) and [Infrastructure](./infrastructure.md).
 
-```text
-generated-content/<repository-name>/<YYYY-MM-DD>/<asset>
-```
-
-All stores enforce encryption at rest; S3 buckets block public access and require TLS. See [Storage Requirements](./requirements.md#9-storage-requirements), [Infrastructure](./infrastructure.md) for the CloudFormation stacks, and [Cost Optimization](./cost-optimization.md) for lifecycle rationale.
+Published Markdown is written to whatever destination the deployment configures (for example a Git repository, an object store, or a CMS via the publishing workflow). The platform itself does not mandate a specific content store.
