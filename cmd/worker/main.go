@@ -17,15 +17,20 @@ import (
 	"syscall"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/publish"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/reposource"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
 )
 
@@ -49,7 +54,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "QueueURL"); err != nil {
+	if err := a.Config.Require("AWSRegion", "QueueURL", "RepositoriesTable", "SecretsPrefix"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -62,9 +67,26 @@ func main() {
 	}
 
 	queue := awssqs.New(sqs.NewFromConfig(awsCfg), a.Config.QueueURL)
+
+	// Real repository processing: resolve the PAT from the repo's metadata
+	// secret reference, then clone and read the working copy.
+	meta := metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable)
+	sec := secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix)
+	processor := &processing.Processor{
+		Cloner: &reposource.GitCloner{
+			Tokens:  &reposource.MetaTokenSource{Meta: meta, Secrets: sec},
+			WorkDir: a.Config.WorkDir,
+			Logger:  a.Logger,
+		},
+		Readme:      reposource.FSReadme{},
+		Docs:        reposource.FSDocs{},
+		Commits:     reposource.GitCommits{},
+		CommitLimit: 20,
+		Logger:      a.Logger,
+	}
+
 	pipe := &pipeline.Pipeline{
-		// Placeholder processing until the OpenClaw-backed implementation lands.
-		Processor: processing.NewPlaceholderProcessor(),
+		Processor: processor,
 		Generator: &generation.Generator{
 			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
 			Logger: a.Logger,

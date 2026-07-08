@@ -20,6 +20,7 @@ const (
 	DefaultOllamaModel         = "qwen2.5:7b"
 	DefaultOllamaBaseURL       = "http://localhost:11434"
 	DefaultOutputDir           = "/data/generated-content"
+	DefaultWorkDir             = "/data/work"
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
@@ -67,6 +68,8 @@ type Config struct {
 	OllamaBaseURL string
 	// OutputDir is where generated content is written (OUTPUT_DIR).
 	OutputDir string
+	// WorkDir is the parent directory for repository clones (WORK_DIR).
+	WorkDir string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -99,6 +102,7 @@ func Load(getenv Getenv) (Config, error) {
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
+		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,

@@ -280,8 +280,24 @@ composition, e.g. via an exec node) and a future visual-orchestration option;
 this worker does not remove that path. Build it with `make build-worker`
 (Linux/amd64 for the g4dn host).
 
-**Still placeholder / future.** Processing uses `NewPlaceholderProcessor`
-(OpenClaw-backed clone + retrieval is the remaining placeholder). Repository
-Memory, quality review, and optional human approval are not yet wired into the
-pipeline. Publishing now writes real Markdown files (`FilePublisher`); a remote
-destination is future.
+### Real repository processing ✅
+
+`internal/reposource` replaces the placeholder processor with real
+implementations of the processing ports:
+
+| Type | Responsibility |
+| --- | --- |
+| `GitCloner` | Shallow, single-branch clone via **go-git** (no external git binary); token passed via `Auth`, never in the URL; per-repo work dir replaced each run. |
+| `FSReadme` / `FSDocs` | Read the README and `docs/*.md` from the working copy (size- and count-capped). |
+| `GitCommits` | Read recent commits (SHA, subject, author) from the clone. |
+| `MetaTokenSource` | Resolve the repo's PAT: metadata `Get` → `secret_ref` → Secrets Manager `PAT`. |
+
+The worker now wires this real processor (metadata + secrets clients,
+`WORK_DIR` default `/data/work`), so a run clones the real repository, reads its
+content, generates the package via Ollama, and writes Markdown files. Tested
+with go-git against a real local repo (clone, README/docs retrieval, commit log)
+and fakes for the token source.
+
+**Still future (not blocking the slice).** OpenClaw-based deeper analysis,
+Repository Memory population, quality review, optional human approval, and a
+remote publish destination. The MVP slice is otherwise real end to end.
