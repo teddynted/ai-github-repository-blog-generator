@@ -72,7 +72,7 @@ jobs:
 
 ## 3. Go Jobs
 
-All three Lambda functions (`webhook-handler`, `instance-starter`, `idle-shutdown`) are built and tested. The handler's **commit-message trigger** logic should have dedicated unit tests (matched vs. ignored commits).
+All four Lambda functions (`registration`, `webhook-handler`, `instance-starter`, `idle-shutdown`) are built and tested. The handler's **commit-message trigger** logic and the registration function's **validation/webhook-creation** logic should have dedicated unit tests.
 
 | Step | Command |
 | --- | --- |
@@ -102,7 +102,7 @@ CI authenticates to AWS using **GitHub OIDC** — no long-lived access keys stor
 - `aws-actions/configure-aws-credentials@v4` assumes the role per job.
 - The apply role is **more privileged** than the plan role and is only assumable from the `main`/protected environment.
 
-See [Security → Environment Variables & Secrets Management](./security.md#6-environment-variables--secrets-management).
+See [Security → Environment Variables & Secrets Management](./security.md#7-environment-variables--secrets-management).
 
 ---
 

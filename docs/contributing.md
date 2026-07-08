@@ -20,8 +20,8 @@ Related: [Local Development](./local-development.md) · [CI/CD](./ci-cd.md) · [
 Local checks before pushing:
 
 ```bash
-# Go (webhook-handler, instance-starter, idle-shutdown)
-for fn in webhook-handler instance-starter idle-shutdown; do
+# Go (registration, webhook-handler, instance-starter, idle-shutdown)
+for fn in registration webhook-handler instance-starter idle-shutdown; do
   ( cd lambdas/$fn && gofmt -l . && go vet ./... && go test ./... -race )
 done
 
@@ -158,7 +158,7 @@ Open an issue for bugs, features, or questions. A good bug report includes:
 
 For features, describe the **use case** and **why** it matters; link to the [Roadmap](./roadmap.md) if relevant.
 
-> **Security issues:** do **not** file a public issue. Report privately per [Security → Reporting a Vulnerability](./security.md#10-reporting-a-vulnerability).
+> **Security issues:** do **not** file a public issue. Report privately per [Security → Reporting a Vulnerability](./security.md#11-reporting-a-vulnerability).
 
 ---
 

@@ -10,7 +10,7 @@ Related: [Infrastructure](./infrastructure.md) · [Security](./security.md) · [
 
 CloudWatch is the single pane of glass:
 
-- **Logs** — log groups for `webhook-handler`, `instance-starter`, `idle-shutdown`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
+- **Logs** — log groups for `registration`, `webhook-handler`, `instance-starter`, `idle-shutdown`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
 - **Metrics** — a custom `BlogGenerator` namespace, plus native AWS metrics.
 - **Dashboard** — one operational dashboard combining trigger activity, run health, latency, queue depth, and instance state.
 - **Alarms** — threshold and anomaly alarms.
@@ -23,6 +23,8 @@ CloudWatch is the single pane of glass:
 
 | Metric | Unit | Meaning |
 | --- | --- | --- |
+| `RegistrationsCompleted` | Count | Repositories registered successfully |
+| `RegistrationsFailed` | Count | Registration attempts that failed (access/permission validation) |
 | `WebhookReceived` | Count | Webhook deliveries received |
 | `WebhookRejected` | Count | Deliveries rejected (invalid signature) |
 | `TriggerMatched` | Count | Deliveries whose commit message matched the publish trigger |
@@ -43,7 +45,9 @@ CloudWatch is the single pane of glass:
 | Source | Key metrics |
 | --- | --- |
 | API Gateway | `Count`, `4XXError`, `5XXError`, `Latency` |
-| Lambda (`webhook-handler`, `instance-starter`, `idle-shutdown`) | `Invocations`, `Errors`, `Throttles`, `Duration` |
+| Lambda (`registration`, `webhook-handler`, `instance-starter`, `idle-shutdown`) | `Invocations`, `Errors`, `Throttles`, `Duration` |
+| DynamoDB (`repositories`) | `ThrottledRequests`, `System/UserErrors` |
+| Secrets Manager | `GetSecretValue` call volume (audit spikes) |
 | EventBridge | `Invocations`, `FailedInvocations`, `ThrottledRules` |
 | SQS (`events`) | `ApproximateNumberOfMessagesVisible`, `ApproximateAgeOfOldestMessage` |
 | SQS (`events-dlq`) | `ApproximateNumberOfMessagesVisible` (any message = attention) |
@@ -57,7 +61,7 @@ CloudWatch is the single pane of glass:
 - All components emit **structured JSON logs** (run ID, stage, status, duration).
 - A **run ID** flows through every stage so a single generation can be traced from the matched event to publish across all n8n workflows.
 - The handler logs each delivery's **outcome** (`published`, `ignored`, `rejected`) with the delivery ID — never the raw payload or secret.
-- Logs **exclude secrets and raw source contents** ([Security §8](./security.md#8-logging--audit-trails)).
+- Logs **exclude secrets and raw source contents** ([Security §8](./security.md#9-logging--audit-trails)).
 
 Example query (CloudWatch Logs Insights) — ignored vs published in the last day:
 
@@ -105,7 +109,7 @@ Alarms publish to an SNS topic subscribed by the operator (and optionally Slack)
 | `StatusCheckFailed` / instance terminated | Possible Spot interruption | SQS visibility timeout returns the message; a new instance resumes |
 | DLQ messages appearing | Repeated processing failure | Inspect payload and n8n logs; fix and redrive |
 
-Spot interruptions are expected and handled: in-flight work returns to the queue and is retried ([Cost Optimisation §4](./cost-optimization.md#4-ec2-spot-instances)).
+Spot interruptions are expected and handled: in-flight work returns to the queue and is retried ([Cost Optimisation §4](./cost-optimization.md#5-ec2-spot-instances)).
 
 ---
 

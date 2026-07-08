@@ -25,6 +25,7 @@
 - [Core Principle](#core-principle)
 - [Why This Project](#why-this-project)
 - [Features](#features)
+- [Repository Registration](#repository-registration)
 - [Publishing Trigger](#publishing-trigger)
 - [Architecture](#architecture)
 - [AI Workflow](#ai-workflow)
@@ -49,7 +50,7 @@
 
 **GitHub AI Blog Generator** is a fully self-hosted, event-driven AI platform that turns any GitHub repository into publication-ready technical content — **on demand, under your explicit control**.
 
-The platform monitors repositories with **GitHub Webhooks**, but **receiving a webhook does not automatically generate anything**. Every event is first checked against a **configurable commit-message trigger** (default `blog:`). Only when a commit message matches does the platform publish the event to **Amazon EventBridge**, start a cost-optimized **EC2 Spot Instance**, and run the generation pipeline. Every other event is acknowledged with `HTTP 200` and ignored.
+You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, creates the webhook, stores metadata, and stores the token securely in **AWS Secrets Manager**. From then on, the platform monitors the repository with **GitHub Webhooks** — but **receiving a webhook does not automatically generate anything**. Every event is first checked against a **configurable commit-message trigger** (default `blog:`). Only when a commit message matches does the platform publish the event to **Amazon EventBridge**, start a cost-optimized **EC2 Spot Instance**, and run the generation pipeline. Every other event is acknowledged with `HTTP 200` and ignored.
 
 When a run does fire, **n8n** orchestrates a pipeline on the instance where **OpenClaw** analyses the repository, **Repository Memory** provides continuity across runs, and **Ollama** runs a **local LLM (Qwen by default)** to generate content — with **zero paid inference APIs**. After a configurable idle timeout, a Lambda automatically **stops the instance**, so you pay only when content is actually being produced.
 
@@ -83,6 +84,9 @@ Most "AI content" projects assume two things this project rejects: that every re
 
 | Capability | Description |
 | --- | --- |
+| 🔌 **Repository registration** | Onboard a repo with its URL + a GitHub PAT; the platform validates access and creates the webhook |
+| 🔑 **Secure PAT storage** | The token is stored in AWS Secrets Manager; only a secret reference is kept in the metadata store |
+| 🗄️ **Repository metadata store** | Per-repo metadata (owner, webhook ID, trigger pattern, secret reference, last commit) in DynamoDB |
 | 🎯 **Commit-message trigger gate** | Generation runs **only** when a commit message matches the configurable trigger (default `blog:`) |
 | 🪝 **GitHub Webhook ingress** | Push events are received, verified, and evaluated — never blindly processed |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
@@ -103,6 +107,45 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🔔 **Notifications** | Users are notified when content is published or a run fails |
 | 💤 **Automatic shutdown** | An idle-timeout Lambda stops the instance so you pay only for active work |
 | 💾 **Persistent storage** | A gp3 EBS volume keeps models, n8n state, and Repository Memory across cycles |
+
+---
+
+## Repository Registration
+
+For the **MVP**, you connect a repository by providing two things:
+
+| Input | Purpose |
+| --- | --- |
+| **GitHub Repository URL** | The repository to monitor and analyse |
+| **GitHub Personal Access Token (PAT)** | Access repository contents, register the webhook, read metadata, and (future) synchronise the repo |
+
+### How onboarding works
+
+```mermaid
+flowchart TB
+    U[User: Add Repository] --> URL[Enter Repository URL]
+    URL --> PAT[Enter GitHub PAT]
+    PAT --> VA[Validate repository access]
+    VA --> VP[Validate token permissions]
+    VP --> WH[Create GitHub webhook<br/>+ webhook secret]
+    WH --> META[Store repository metadata<br/>DynamoDB]
+    META --> SEC[Store PAT securely<br/>AWS Secrets Manager]
+    SEC --> DONE[Repository successfully registered]
+```
+
+### Why a PAT for the MVP
+
+A PAT keeps onboarding simple while providing a clear migration path to **GitHub Apps** in future releases (see [Roadmap](#roadmap)). The token is required to access repository contents, create the webhook, and read repository metadata.
+
+### How credentials are stored
+
+- The PAT is stored as a secret in **AWS Secrets Manager** — **never in plain text**, and never in source, config, environment variables, or the metadata database.
+- The metadata store keeps only a **reference** to the secret (its ARN/name), plus non-sensitive metadata: repository ID, owner, name, URL, default branch, webhook ID, trigger pattern, enabled status, last processed commit SHA, and registration timestamp.
+- The PAT is retrieved **only when required** (to clone the repository or manage the webhook), under least-privilege IAM.
+
+This keeps the platform **secure** (secrets isolated, least privilege, never logged), **simple** (two inputs to onboard), and **cost-effective** (repository and token validation happen up front, before any compute or AI runs). See [Security](./docs/security.md) and [Requirements → Repository Registration](./docs/requirements.md#12-repository-registration-requirements-mvp).
+
+> **GitHub App authentication is a future enhancement, not part of the MVP.**
 
 ---
 
@@ -206,7 +249,7 @@ flowchart TD
 
 1. **GitHub** emits a webhook on every push.
 2. **API Gateway** invokes the **Webhook Handler Lambda**.
-3. The **handler** verifies the HMAC signature, extracts the commit message and repository, and **validates the publishing trigger**:
+3. The **handler** resolves the repository's metadata, verifies the HMAC signature using that repo's webhook secret (from Secrets Manager), extracts the commit message, and **validates it against the repository's trigger pattern**:
    - **No match** → return **HTTP 200** and stop. Nothing else runs.
    - **Match** → **publish the event to Amazon EventBridge** and return HTTP 200.
 4. **EventBridge** routes the matched event to two targets: the **SQS** durable buffer, and the **Instance Starter Lambda**, which starts the **EC2 Spot Instance** if it is stopped.
@@ -258,10 +301,13 @@ The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs
 
 | Layer | Technology | Purpose |
 | --- | --- | --- |
+| **Onboarding** | Registration API (API Gateway + Lambda) | Validate repo + PAT, create webhook, store metadata/secret |
+| **Credentials** | AWS Secrets Manager | Securely store GitHub PATs and webhook secrets |
+| **Metadata** | Amazon DynamoDB | Per-repository metadata (secret reference, trigger pattern, …) |
 | **Trigger** | GitHub Webhooks | Deliver push events |
 | **Gate** | Commit-message trigger (`blog:`) | Decide whether a run should happen at all |
-| **Ingress** | Amazon API Gateway | Public HTTPS endpoint for webhooks |
-| **Serverless** | AWS Lambda | Handler (validate + publish), instance starter, idle shutdown |
+| **Ingress** | Amazon API Gateway | Public HTTPS endpoint for webhooks and registration |
+| **Serverless** | AWS Lambda | Registration, handler (validate + publish), instance starter, idle shutdown |
 | **Event bus** | Amazon EventBridge | Route matched events; start compute; buffer via SQS |
 | **Queue** | Amazon SQS | Durable buffer so events are never lost during cold start |
 | **Compute** | EC2 Spot Instance (Ubuntu) | Cost-optimized host for AI processing |
@@ -469,7 +515,8 @@ github-ai-blog-generator/
 │   ├── compute.yaml
 │   └── observability.yaml
 ├── lambdas/                   # Lambda source code
-│   ├── webhook-handler/       # Verify signature, validate trigger, publish to EventBridge
+│   ├── registration/          # Validate repo + PAT, create webhook, store metadata + secret
+│   ├── webhook-handler/       # Resolve metadata, verify signature, validate trigger, publish
 │   ├── instance-starter/      # Start the Spot Instance on a matched event
 │   └── idle-shutdown/         # Stop the instance after idle timeout
 ├── instance/                  # EC2 host configuration
@@ -495,13 +542,14 @@ github-ai-blog-generator/
 
 ## Roadmap
 
+- [ ] **GitHub App authentication** (recommended long-term approach, replacing per-repo PATs) + OAuth login
+- [ ] Automatic webhook management, fine-grained permissions, and secret rotation
+- [ ] Multiple repositories per user, repository groups/organisations, multi-user workspaces
+- [ ] Web-based repository management dashboard (run history, approvals, content review)
 - [ ] Configurable custom trigger patterns (`[blog]`, regex, per-repo rules)
 - [ ] Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
-- [ ] Manual blog generation from the application
-- [ ] Scheduled repository summaries
-- [ ] On-Demand fallback when Spot capacity is unavailable
-- [ ] Multi-model support (switch models per content type)
-- [ ] Web dashboard for run history, approvals, and content review
+- [ ] Manual blog generation from the application, and scheduled repository summaries
+- [ ] On-Demand fallback when Spot capacity is unavailable; multi-model support
 
 The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).
 

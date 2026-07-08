@@ -19,6 +19,7 @@ timeline
 
 The core opt-in, event-driven pipeline, deployable from scratch with CloudFormation.
 
+- ✅ **Repository registration (MVP)** — onboard with URL + GitHub PAT; validate access, create the webhook, store metadata (DynamoDB) and the PAT (Secrets Manager)
 - ✅ **Commit-message trigger gate** — generation runs only on a `blog:` commit; all other events are acknowledged and ignored
 - ✅ GitHub Webhook + HMAC SHA-256 signature validation (API Gateway + lightweight Lambda handler)
 - ✅ EventBridge event bus routing matched events to SQS + the instance starter
@@ -62,15 +63,17 @@ Extend the trigger system and make model choice and publishing configurable — 
 
 ---
 
-## Version 3.0 — Scale & Collaboration
+## Version 3.0 — Auth, Scale & Collaboration
 
-From single-run tool to team platform.
+From single-run tool to team platform, and from PATs to GitHub Apps.
 
+- **GitHub App authentication** (recommended long-term approach, replacing per-repo PATs) + **OAuth login**
+- **Automatic webhook management**, fine-grained repository permissions, and **secret rotation**
+- **Multiple repositories per user**, repository groups/organisations, and **multi-user workspaces**
+- **Web-based repository management dashboard** (run history, approvals, content review)
 - **Multi-repository batch processing** (org-wide scans)
 - **Fine-tuned local models** for documentation style
-- Team workspaces and multi-user support
 - A second local-model review pass for accuracy and tone
-- Analytics on generated-content performance
 
 ---
 
