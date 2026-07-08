@@ -175,6 +175,82 @@ func TestRunProceedsWhenMemoryLookupFails(t *testing.T) {
 	}
 }
 
+type fakeReviewer struct {
+	passed   []generation.Content
+	findings []string
+	got      []generation.Content
+}
+
+func (f *fakeReviewer) Review(_ context.Context, assets []generation.Content) ([]generation.Content, []string) {
+	f.got = assets
+	return f.passed, f.findings
+}
+
+type fakeApprover struct {
+	approved bool
+	err      error
+	called   bool
+}
+
+func (f *fakeApprover) Approve(_ context.Context, _ string, _ []generation.Content) (bool, error) {
+	f.called = true
+	return f.approved, f.err
+}
+
+func TestRunPublishesOnlyReviewedAssets(t *testing.T) {
+	blog := generation.Content{Kind: generation.KindBlog, Markdown: "# good"}
+	readme := generation.Content{Kind: generation.KindReadme, Markdown: "bad"}
+	gen := &fakeGenerator{assets: []generation.Content{blog, readme}}
+	rev := &fakeReviewer{passed: []generation.Content{blog}, findings: []string{"readme-improvements: too short"}}
+	pub := &fakePublisher{}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Reviewer: rev}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "a/b"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Published != 1 || len(pub.published) != 1 || pub.published[0].Kind != generation.KindBlog {
+		t.Errorf("only reviewed assets should publish: %+v", pub.published)
+	}
+}
+
+func TestRunHoldsWhenNotApproved(t *testing.T) {
+	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog, Markdown: "# x"}}}
+	ap := &fakeApprover{approved: false}
+	pub := &fakePublisher{}
+	mem := &fakeMemory{}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Approver: ap, Memory: mem}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "a/b", CommitSHA: "sha1"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Held || res.Published != 0 {
+		t.Errorf("expected held, not published: %+v", res)
+	}
+	if len(pub.published) != 0 {
+		t.Error("held content must not be published")
+	}
+	if mem.recorded {
+		t.Error("held content must not be recorded in memory")
+	}
+}
+
+func TestRunPublishesWhenApproved(t *testing.T) {
+	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog, Markdown: "# x"}}}
+	ap := &fakeApprover{approved: true}
+	pub := &fakePublisher{}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Approver: ap}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "a/b"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !ap.called || res.Published != 1 || len(pub.published) != 1 {
+		t.Errorf("approved content should publish: called=%v res=%+v", ap.called, res)
+	}
+}
+
 // Guards: the concrete implementations satisfy the pipeline ports.
 var (
 	_ Snapshotter      = (*processing.Processor)(nil)

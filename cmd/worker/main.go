@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
@@ -31,6 +32,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/publish"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/reposource"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/review"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
 )
@@ -86,6 +88,16 @@ func main() {
 		Logger:      a.Logger,
 	}
 
+	// Optional human-approval gate: when required, hold content for review
+	// (stashed under PendingDir) instead of publishing.
+	var approver pipeline.Approver
+	if a.Config.RequireHumanApproval {
+		approver = &approval.HoldForReview{
+			Stash:  &publish.FilePublisher{Dir: a.Config.PendingDir, Logger: a.Logger},
+			Logger: a.Logger,
+		}
+	}
+
 	pipe := &pipeline.Pipeline{
 		Processor: processor,
 		Generator: &generation.Generator{
@@ -94,6 +106,8 @@ func main() {
 		},
 		Publisher: &publish.FilePublisher{Dir: a.Config.OutputDir, Logger: a.Logger},
 		Memory:    &memory.Store{Dir: a.Config.MemoryDir, Logger: a.Logger},
+		Reviewer:  review.Reviewer{},
+		Approver:  approver,
 		Kinds:     defaultKinds,
 		Logger:    a.Logger,
 	}
