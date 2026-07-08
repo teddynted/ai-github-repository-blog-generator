@@ -320,6 +320,19 @@ Two more pipeline stages, both optional ports:
 
 Pipeline order is now **process → generate → review → approve → publish → record memory**. The worker always runs review and enables the approval gate from config. Tested: review pass/fail split, held-not-published-nor-recorded, approved-publishes.
 
-**Still future (not blocking the slice).** OpenClaw-based deeper analysis and a
-remote publish destination (currently local files). The MVP slice — and every
-documented pipeline stage — is now implemented end to end.
+### Notifications ✅
+
+`internal/notify` delivers run outcomes. `LogNotifier` (the MVP channel) emits
+`published` / `held` / `failed` events; email / Slack / webhook channels can
+follow behind the same `Notifier` port. The worker notifies after each run:
+failure (message retained for SQS retry), held (approval pending), or published.
+Tested at the notifier and worker-handler level.
+
+**Functional MVP complete.** Every documented functional requirement and
+pipeline stage now has real, tested code.
+
+**Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
+analysis; a remote publish destination (currently local files); real
+email/Slack/webhook notification channels; an approvals dashboard; and the n8n
+workflow as an alternative orchestration. Real deployment + end-to-end
+validation require an AWS account and a GPU instance.
