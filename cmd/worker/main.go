@@ -18,6 +18,7 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
@@ -101,13 +102,20 @@ func main() {
 		}
 	}
 
+	// Publish to S3 when a bucket is configured, otherwise to the local
+	// filesystem (on the instance /data is the persistent EBS volume).
+	var publisher pipeline.Publisher = &publish.FilePublisher{Dir: a.Config.OutputDir, Logger: a.Logger}
+	if a.Config.OutputS3Bucket != "" {
+		publisher = publish.NewS3(s3.NewFromConfig(awsCfg), a.Config.OutputS3Bucket, a.Config.OutputS3Prefix, a.Logger)
+	}
+
 	pipe := &pipeline.Pipeline{
 		Processor: processor,
 		Generator: &generation.Generator{
 			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
 			Logger: a.Logger,
 		},
-		Publisher: &publish.FilePublisher{Dir: a.Config.OutputDir, Logger: a.Logger},
+		Publisher: publisher,
 		Memory:    &memory.Store{Dir: a.Config.MemoryDir, Logger: a.Logger},
 		Reviewer:  review.Reviewer{},
 		Approver:  approver,

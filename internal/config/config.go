@@ -68,8 +68,13 @@ type Config struct {
 	OllamaModel string
 	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
 	OllamaBaseURL string
-	// OutputDir is where generated content is written (OUTPUT_DIR).
+	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
+	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
+	// local filesystem (OUTPUT_S3_BUCKET).
+	OutputS3Bucket string
+	// OutputS3Prefix is the S3 key prefix (OUTPUT_S3_PREFIX).
+	OutputS3Prefix string
 	// WorkDir is the parent directory for repository clones (WORK_DIR).
 	WorkDir string
 	// MemoryDir is the base directory for Repository Memory (MEMORY_DIR).
@@ -111,6 +116,8 @@ func Load(getenv Getenv) (Config, error) {
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
+		OutputS3Bucket:       getenv("OUTPUT_S3_BUCKET"),
+		OutputS3Prefix:       firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
 		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
 		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
 		PendingDir:           firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),

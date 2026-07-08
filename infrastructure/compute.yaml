@@ -35,6 +35,16 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
     Description: Resolves to the latest Ubuntu 22.04 (amd64) AMI.
+  OutputS3Bucket:
+    Type: String
+    Default: ""
+    Description: >
+      Optional S3 bucket for published content. When set, the instance role is
+      granted s3:PutObject on it (the worker publishes to S3 instead of local
+      files when OUTPUT_S3_BUCKET is configured).
+
+Conditions:
+  HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
 
 Resources:
   InstanceRole:
@@ -80,6 +90,13 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+              # Publish generated content to S3 (only when an output bucket is set).
+              - !If
+                - HasOutputBucket
+                - Effect: Allow
+                  Action: s3:PutObject
+                  Resource: !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
+                - !Ref AWS::NoValue
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile

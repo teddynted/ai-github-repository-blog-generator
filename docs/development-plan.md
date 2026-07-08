@@ -371,8 +371,14 @@ structured fields) HTTP POST, retried on transient failure, enabled by setting
 **Functional MVP complete.** Every documented functional requirement and
 pipeline stage now has real, tested code.
 
+Publishing destinations behind the `Publisher` port: `FilePublisher` (default,
+to `/data` on the EBS volume) and `S3Publisher` — set `OUTPUT_S3_BUCKET` to
+publish to `s3://<bucket>/<prefix>/<owner>/<name>/<date>/<kind>.md` instead. The
+compute stack grants the instance `s3:PutObject` on that bucket only when
+`OutputS3Bucket` is set.
+
 **Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
-analysis; a remote publish destination (currently local files); an email
-notification channel; an approvals dashboard; and the n8n workflow as an
+analysis; an email notification channel; extra trigger sources (releases, tags,
+PR labels); GitHub Apps auth; an approvals dashboard; and the n8n workflow as an
 alternative orchestration. Real deployment + end-to-end validation require an
 AWS account and a GPU instance.
