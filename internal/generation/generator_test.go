@@ -12,14 +12,21 @@ import (
 )
 
 type fakeModel struct {
-	gotPrompt string
-	out       string
-	err       error
+	gotPrompts []string
+	out        string
+	// failOn returns an error when the prompt contains this substring.
+	failOn string
 }
 
 func (f *fakeModel) Generate(_ context.Context, prompt string) (string, error) {
-	f.gotPrompt = prompt
-	return f.out, f.err
+	f.gotPrompts = append(f.gotPrompts, prompt)
+	if f.failOn != "" && strings.Contains(prompt, f.failOn) {
+		return "", errors.New("model error")
+	}
+	if f.out == "" {
+		return "# Generated\n\ncontent", nil
+	}
+	return f.out, nil
 }
 
 func sampleSnapshot() processing.Snapshot {
@@ -38,41 +45,89 @@ func TestBlogPostBuildsPromptAndReturnsContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BlogPost: %v", err)
 	}
-	if c.Kind != "blog" || !strings.HasPrefix(c.Markdown, "# Widget deep dive") {
+	if c.Kind != KindBlog || !strings.HasPrefix(c.Markdown, "# Widget deep dive") {
 		t.Errorf("content = %+v", c)
 	}
 
-	// The prompt should include the repo, README, docs, and commit subject
-	// (but only the first line of the commit message).
-	p := m.gotPrompt
-	for _, want := range []string{"acme/widget", "# Widget", "docs/arch.md", "abcdef1", "blog: add feature"} {
+	p := m.gotPrompts[0]
+	for _, want := range []string{"acme/widget", "# Widget", "docs/arch.md", "abcdef1", "blog: add feature", "blog post"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt missing %q", want)
 		}
 	}
-	if strings.Contains(p, "body") {
+	if strings.Contains(p, "\nbody") {
 		t.Error("prompt should include only the commit subject, not the body")
 	}
 }
 
-func TestBlogPostRequiresRepo(t *testing.T) {
-	_, err := (&Generator{Model: &fakeModel{out: "x"}}).BlogPost(context.Background(), processing.Snapshot{})
+func TestGenerateEachKindHasDistinctPrompt(t *testing.T) {
+	markers := map[Kind]string{
+		KindBlog:         "blog post",
+		KindReadme:       "README",
+		KindDocs:         "documentation",
+		KindArchitecture: "architecture",
+		KindReleaseNotes: "release notes",
+	}
+	for kind, marker := range markers {
+		m := &fakeModel{}
+		c, err := (&Generator{Model: m}).Generate(context.Background(), kind, sampleSnapshot())
+		if err != nil {
+			t.Fatalf("Generate(%s): %v", kind, err)
+		}
+		if c.Kind != kind {
+			t.Errorf("kind = %s, want %s", c.Kind, kind)
+		}
+		if !strings.Contains(strings.ToLower(m.gotPrompts[0]), strings.ToLower(marker)) {
+			t.Errorf("prompt for %s should mention %q", kind, marker)
+		}
+	}
+}
+
+func TestGenerateRejectsUnknownKind(t *testing.T) {
+	_, err := (&Generator{Model: &fakeModel{}}).Generate(context.Background(), Kind("nope"), sampleSnapshot())
 	if apperror.CodeOf(err) != apperror.CodeInvalidInput {
 		t.Errorf("code = %s, want invalid_input", apperror.CodeOf(err))
 	}
 }
 
-func TestBlogPostRejectsEmptyOutput(t *testing.T) {
-	_, err := (&Generator{Model: &fakeModel{out: "   "}}).BlogPost(context.Background(), sampleSnapshot())
+func TestGenerateRequiresRepo(t *testing.T) {
+	_, err := (&Generator{Model: &fakeModel{}}).Generate(context.Background(), KindBlog, processing.Snapshot{})
+	if apperror.CodeOf(err) != apperror.CodeInvalidInput {
+		t.Errorf("code = %s, want invalid_input", apperror.CodeOf(err))
+	}
+}
+
+func TestGenerateRejectsEmptyOutput(t *testing.T) {
+	_, err := (&Generator{Model: &fakeModel{out: "   "}}).Generate(context.Background(), KindBlog, sampleSnapshot())
 	if apperror.CodeOf(err) != apperror.CodeUpstream {
 		t.Errorf("code = %s, want upstream", apperror.CodeOf(err))
 	}
 }
 
-func TestBlogPostPropagatesModelError(t *testing.T) {
-	_, err := (&Generator{Model: &fakeModel{err: errors.New("ollama down")}}).BlogPost(context.Background(), sampleSnapshot())
+func TestGenerateAllProducesEveryKind(t *testing.T) {
+	kinds := []Kind{KindBlog, KindReadme, KindDocs, KindArchitecture, KindReleaseNotes}
+	out, err := (&Generator{Model: &fakeModel{}}).GenerateAll(context.Background(), sampleSnapshot(), kinds...)
+	if err != nil {
+		t.Fatalf("GenerateAll: %v", err)
+	}
+	if len(out) != len(kinds) {
+		t.Fatalf("got %d assets, want %d", len(out), len(kinds))
+	}
+}
+
+func TestGenerateAllContinuesPastFailures(t *testing.T) {
+	// Fail only the release-notes prompt; the rest should still be produced.
+	m := &fakeModel{failOn: "release notes"}
+	out, err := (&Generator{Model: m}).GenerateAll(context.Background(), sampleSnapshot(),
+		KindBlog, KindReadme, KindReleaseNotes)
 	if err == nil {
-		t.Error("expected model error to propagate")
+		t.Fatal("expected an aggregated error for the failed kind")
+	}
+	if len(out) != 2 {
+		t.Errorf("expected 2 successful assets, got %d", len(out))
+	}
+	if !strings.Contains(err.Error(), string(KindReleaseNotes)) {
+		t.Errorf("error should name the failed kind: %v", err)
 	}
 }
 
