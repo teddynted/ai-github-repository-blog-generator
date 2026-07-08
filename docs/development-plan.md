@@ -240,6 +240,9 @@ without repository secrets:
 - `go.yml` — gofmt, `go vet`, `go test -race -cover`, and cross-compiles all
   four Lambdas for `linux/arm64`.
 - `cloudformation.yml` — `cfn-lint` on all templates.
+- `security.yml` — `govulncheck` + `gosec` (SAST, high-severity gate) +
+  `gitleaks` (secret scan with a placeholder allowlist); `checkov` runs
+  informationally on the CloudFormation.
 
-The CloudFormation deploy job (OIDC) and security scanners are planned (they
-need the AWS deploy role / scanner config) — see [CI/CD](./ci-cd.md).
+The CloudFormation deploy job (OIDC) is planned (it needs the AWS deploy role) —
+see [CI/CD](./ci-cd.md).
