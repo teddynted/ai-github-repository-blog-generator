@@ -15,7 +15,7 @@ Related: [Local Development](./local-development.md) · [Infrastructure](./infra
 | AWS CLI v2 | Configured with credentials (`aws configure` or SSO) |
 | EC2 key pair | For SSH access to the instance |
 | `cfn-lint` | Template linting ([Install](https://github.com/aws-cloudformation/cfn-lint)) |
-| Go ≥ 1.22 | To build the Lambda binaries |
+| Go ≥ 1.24 | To build the Lambda binaries |
 | Docker | For local build/testing (optional) |
 
 > **No Amazon Bedrock, OpenAI, or Anthropic access is required.** All inference runs locally via Ollama on the instance.

@@ -34,10 +34,10 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | --- | --- | --- |
 | 1 | **Project foundation** — module, config, logging, errors, bootstrap, build tooling | ✅ Implemented |
 | 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ✅ Implemented |
-| 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ⏳ Planned |
-| 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ⏳ Planned |
-| 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ⏳ Planned |
-| 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ⏳ Planned |
+| 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ✅ Implemented |
+| 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ✅ Implemented |
+| 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ✅ Implemented |
+| 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ✅ Implemented |
 | 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ⏳ Planned |
 
 Out of scope for the MVP (see [Roadmap](./roadmap.md)): GitHub Apps, multi-user,
@@ -100,3 +100,103 @@ Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
   S3 bucket (`ArtifactsBucket` + `*CodeKey` parameters). The function code is
   implemented in Milestones 3–6; until then the stacks validate but the Lambdas
   are not yet deployable with real behaviour.
+
+---
+
+## Milestone 3 — Repository Registration ✅
+
+The `registration` Lambda, built with Clean Architecture: a pure use case with
+small ports, plus thin AWS/GitHub adapters. Introduces `aws-lambda-go` and the
+AWS SDK v2 (which raise the module's minimum Go to 1.24).
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/repo` | Repository domain model + `ParseRepositoryURL` (HTTPS + SSH forms). |
+| `internal/github` | Minimal GitHub REST client (`GetRepository`, `CreateWebhook`) over `net/http`, status→typed-error mapping. |
+| `internal/registration` | The onboarding use case + ports (`GitHub`, `SecretStore`, `MetadataStore`) and the JSON handler. |
+| `internal/secrets` | Secrets Manager adapter — stores PAT + webhook secret, returns only a reference. |
+| `internal/metadata` | DynamoDB adapter — persists repository metadata (never the PAT). |
+| `lambdas/registration` | API Gateway entry point wiring the collaborators. |
+
+Onboarding order guarantees no half-registered repo is visible: validate access
+→ create webhook → store credentials → write metadata. The PAT is never logged
+and never written to DynamoDB (guarded by a test). All logic is unit-tested with
+fakes/`httptest`; the Lambda cross-compiles to `linux/arm64`.
+
+**Decision:** the registration endpoint is protected by an **API Gateway API
+key** (`x-api-key`); the key ID is a stack output and its value is retrieved
+from API Gateway after deploy.
+
+---
+
+## Milestone 4 — Webhook Receiver ✅
+
+The `webhook-handler` Lambda — deliberately lightweight, no cloning/analysis/AI,
+and it never reads the PAT.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/trigger` | Commit-message trigger matching (prefix, default `blog:`). 100% covered. |
+| `internal/githubsig` | HMAC-SHA256 signature verify/sign, constant-time; GitHub known-answer test. |
+| `internal/webhook` | The handler: parse payload → resolve metadata → verify signature → evaluate trigger → publish (via port). |
+| `internal/eventbus` | `LogPublisher` — a placeholder Publisher for M4 (real EventBridge adapter in M5). |
+| `lambdas/webhook-handler` | API Gateway entry point (handles base64 bodies). |
+| `internal/metadata`, `internal/secrets` | Extended with `Get` and `WebhookSecret` read paths. |
+
+Request flow and outcomes: invalid signature → `401`; unregistered repo → `404`;
+non-`push`/disabled/no-match → `200 ignored`; matched `blog:` commit → publish
++ `200 accepted`. The per-repository **Trigger Pattern** from metadata is used
+(falling back to the platform default). Every branch is unit-tested with fakes.
+
+**Placeholder:** on a match the handler calls the `Publisher` port, which is
+wired to `LogPublisher` for now. Milestone 5 swaps in the EventBridge adapter
+that publishes `blog.publish.requested` and starts the Spot instance.
+
+---
+
+## Milestone 5 — Event Processing ✅
+
+The matched event now flows all the way to compute:
+**webhook-handler → EventBridge → (SQS buffer + instance-starter → EC2 Spot start)**.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/eventbus` | `EventBridgePublisher` — `PutEvents` of `blog.publish.requested`; swapped into the webhook handler in place of `LogPublisher`. |
+| `internal/lifecycle` | `Starter.EnsureRunning` — start the instance unless already running (idempotent), located by Project tag. |
+| `internal/awsec2` | EC2 adapter (`DescribeInstances` by tag, `StartInstances`). |
+| `lambdas/instance-starter` | EventBridge-invoked Lambda that ensures the Spot host is running. |
+
+Config gains `PROJECT_NAME` and `EVENT_SOURCE`; the serverless template passes
+`EVENT_SOURCE=<project>.webhook` to the handler (matching the rule pattern).
+
+**Stub:** the instance-starter ensures the host is running but does **not** yet
+invoke the n8n workflow — that (and readiness detection + idle shutdown) is
+Milestone 6. The event payload is available to the starter for that step.
+
+---
+
+## Milestone 6 — Infrastructure Lifecycle ✅
+
+Completes the cost-optimised compute loop with automatic shutdown.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/lifecycle` | `Shutdowner.StopIfIdle` — stop the instance once it has been up beyond the idle timeout **and** the queue is drained (visible + in-flight == 0). Idempotent. `EC2` port extended with `StopInstance` and an `Instance` value (id/state/launch time). |
+| `internal/awssqs` | SQS adapter reporting queue depth (visible + not-visible). |
+| `internal/awsec2` | Extended with `StopInstances` and launch-time. |
+| `lambdas/idle-shutdown` | Scheduled Lambda (EventBridge idle timer) that runs `StopIfIdle`. |
+
+**Readiness & n8n invocation (design decision).** In the hybrid model, n8n
+**pulls** work from SQS (its SQS-trigger workflow) rather than being pushed an
+HTTP call. So there is no Lambda-side n8n invoke or readiness probe: EventBridge
+buffers the matched event in SQS, the instance-starter brings the host up, and
+n8n drains SQS via long-polling once its container is healthy. This keeps n8n
+unexposed (no inbound) and needs no Lambda-in-VPC networking. The n8n
+SQS-trigger workflow + Docker Compose bring-up live on the instance and are part
+of the instance configuration (`instance/`, Milestone 7).
+
+**Retries.** Run retries come free from SQS visibility timeout + DLQ; the
+scheduled idle check and instance start/stop are idempotent, so EventBridge/
+Lambda retries are safe.
+
+All four Lambdas now build; `make check` (`-race`) is green.

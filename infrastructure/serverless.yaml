@@ -277,6 +277,7 @@ Resources:
           REPOSITORIES_TABLE: !Ref RepositoriesTable
           SECRETS_PREFIX: !Sub "${ProjectName}/repos"
           EVENT_BUS_NAME: !Ref EventBus
+          EVENT_SOURCE: !Sub "${ProjectName}.webhook"
           PUBLISH_TRIGGER: !Ref PublishTrigger
       Tags:
         - Key: Project
