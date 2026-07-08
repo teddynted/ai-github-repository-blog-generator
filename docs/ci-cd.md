@@ -76,12 +76,12 @@ All four Lambda functions (`registration`, `webhook-handler`, `instance-starter`
 
 | Step | Command |
 | --- | --- |
-| Format check | `gofmt -l .` (must be empty) |
+| Format check | `gofmt -l .` (must be empty) — or `make check` |
 | Vet | `go vet ./...` |
 | Test | `go test ./... -race -cover` |
-| Build | `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda` |
+| Build | `make build` (`GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/<fn>/bootstrap ./lambdas/<fn>`) |
 
-The resulting `bootstrap` binaries are zipped and uploaded so the Lambda resources reference them at deploy time. The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
+The code is a **single Go module**; `make build` compiles each implemented function to `dist/<fn>/bootstrap`. The resulting binaries are zipped and uploaded so the Lambda resources reference them at deploy time. The content pipeline itself lives in n8n workflows, which are validated separately as exported JSON.
 
 ---
 

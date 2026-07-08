@@ -110,31 +110,18 @@ Local configuration lives in `.env` (git-ignored). Start from `.env.example`:
 
 ## 5. Building & Testing the Lambdas
 
-Four Go functions make up the serverless control plane: `registration` (validate + create webhook + store metadata/secret), `webhook-handler` (verify + trigger gate + publish), `instance-starter` (start the Spot host), and `idle-shutdown` (stop it).
+The code is a **single Go module** (monorepo): shared logic lives under `internal/`, and each of the four functions — `registration` (validate + create webhook + store metadata/secret), `webhook-handler` (verify + trigger gate + publish), `instance-starter` (start the Spot host), and `idle-shutdown` (stop it) — is an entry point under `lambdas/<fn>/`. See [Development Plan](./development-plan.md).
 
 ```bash
-for fn in registration webhook-handler instance-starter idle-shutdown; do
-  ( cd lambdas/$fn && \
-    go mod download && \
-    go build ./... && go vet ./... && gofmt -l . && \
-    go test ./... -race -cover )
-done
+make check          # gofmt check + go vet + go test -race -cover
 ```
 
 > The handler's trigger logic is the highest-value unit to test: assert that `blog:` commits publish an event and that routine commits return `200` without publishing.
 
-Build deployable artifacts (Linux, arm64):
+Build deployable artifacts (Linux, arm64) for every implemented function:
 
 ```bash
-( cd lambdas/webhook-handler && \
-  GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
-  zip webhook-handler.zip bootstrap )
-```
-
-Run a handler locally against a fixture webhook event:
-
-```bash
-( cd lambdas/webhook-handler && go run ./cmd/local --event ./testdata/push.json )
+make build          # → dist/<fn>/bootstrap
 ```
 
 ---

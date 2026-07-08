@@ -20,10 +20,8 @@ Related: [Local Development](./local-development.md) · [CI/CD](./ci-cd.md) · [
 Local checks before pushing:
 
 ```bash
-# Go (registration, webhook-handler, instance-starter, idle-shutdown)
-for fn in registration webhook-handler instance-starter idle-shutdown; do
-  ( cd lambdas/$fn && gofmt -l . && go vet ./... && go test ./... -race )
-done
+# Go (single module; format check + vet + race tests)
+make check
 
 # CloudFormation
 cfn-lint infrastructure/*.yaml

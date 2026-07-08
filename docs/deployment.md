@@ -60,11 +60,12 @@ cp .env.example .env
 ## 3. Build the Lambda Functions
 
 ```bash
-# Build all four functions
+# Single Go module — build every implemented function to dist/<fn>/bootstrap
+make build
+
+# Package each for Lambda (provided.al2023, arm64)
 for fn in registration webhook-handler instance-starter idle-shutdown; do
-  ( cd lambdas/$fn && \
-    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
-    zip $fn.zip bootstrap )
+  [ -f "dist/$fn/bootstrap" ] && ( cd dist/$fn && zip $fn.zip bootstrap )
 done
 ```
 
