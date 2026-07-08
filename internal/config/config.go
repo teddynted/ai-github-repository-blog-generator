@@ -22,6 +22,7 @@ const (
 	DefaultOutputDir           = "/data/generated-content"
 	DefaultWorkDir             = "/data/work"
 	DefaultMemoryDir           = "/data/memory"
+	DefaultPendingDir          = "/data/pending"
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
@@ -73,6 +74,8 @@ type Config struct {
 	WorkDir string
 	// MemoryDir is the base directory for Repository Memory (MEMORY_DIR).
 	MemoryDir string
+	// PendingDir is where content awaiting human approval is stashed (PENDING_DIR).
+	PendingDir string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -107,6 +110,7 @@ func Load(getenv Getenv) (Config, error) {
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
 		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
+		PendingDir:           firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,

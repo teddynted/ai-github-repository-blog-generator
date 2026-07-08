@@ -36,6 +36,19 @@ type Memory interface {
 	RecordPublished(ctx context.Context, repoFullName, commitSHA string, kinds []string) error
 }
 
+// Reviewer performs a quality review, returning the assets that passed and
+// human-readable findings for those that did not. *review.Reviewer satisfies it.
+type Reviewer interface {
+	Review(ctx context.Context, assets []generation.Content) (passed []generation.Content, findings []string)
+}
+
+// Approver is the optional human-approval gate. When present and it does not
+// approve, the pipeline holds the content instead of publishing it.
+// *approval.HoldForReview satisfies it.
+type Approver interface {
+	Approve(ctx context.Context, repoFullName string, assets []generation.Content) (approved bool, err error)
+}
+
 // Request is a single pipeline run (typically derived from a matched event).
 type Request struct {
 	RepoFullName string
@@ -48,14 +61,17 @@ type Result struct {
 	RepoFullName string
 	Published    int
 	Skipped      bool // already published for this commit (Repository Memory)
+	Held         bool // generated but held for human approval
 }
 
-// Pipeline runs process → generate → publish.
+// Pipeline runs process → generate → review → approve → publish.
 type Pipeline struct {
 	Processor Snapshotter
 	Generator ContentGenerator
 	Publisher Publisher
 	Memory    Memory            // optional; de-duplicates already-published commits
+	Reviewer  Reviewer          // optional; quality review before publishing
+	Approver  Approver          // optional; human-approval gate before publishing
 	Kinds     []generation.Kind // defaults to blog when empty
 	Logger    *slog.Logger
 }
@@ -91,6 +107,28 @@ func (p *Pipeline) Run(ctx context.Context, req Request) (Result, error) {
 	}
 
 	assets, genErr := p.Generator.GenerateAll(ctx, snap, kinds...)
+
+	// Quality review: publish only the assets that pass.
+	if p.Reviewer != nil && len(assets) > 0 {
+		passed, findings := p.Reviewer.Review(ctx, assets)
+		if len(findings) > 0 {
+			p.logReview(req.RepoFullName, findings)
+		}
+		assets = passed
+	}
+
+	// Optional human-approval gate: hold instead of publishing when not approved.
+	if p.Approver != nil && len(assets) > 0 {
+		approved, err := p.Approver.Approve(ctx, req.RepoFullName, assets)
+		if err != nil {
+			return Result{RepoFullName: req.RepoFullName}, fmt.Errorf("approval: %w", err)
+		}
+		if !approved {
+			p.log("content held for human approval", req.RepoFullName, len(assets))
+			// Do not publish or record memory, so a later approved run proceeds.
+			return Result{RepoFullName: req.RepoFullName, Held: true}, nil
+		}
+	}
 
 	// Publish whatever succeeded, even on a partial generation failure.
 	if len(assets) > 0 {
@@ -131,5 +169,12 @@ func (p *Pipeline) log(msg, repoName string, published int) {
 func (p *Pipeline) logMemoryIssue(msg, repoName string, err error) {
 	if p.Logger != nil {
 		p.Logger.Warn(msg, slog.String("repo", repoName), slog.String("error", err.Error()))
+	}
+}
+
+func (p *Pipeline) logReview(repoName string, findings []string) {
+	if p.Logger != nil {
+		p.Logger.Warn("quality review flagged content",
+			slog.String("repo", repoName), slog.Any("findings", findings))
 	}
 }

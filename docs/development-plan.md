@@ -309,6 +309,17 @@ an optional port and a read failure never blocks a run. Tested (record → dedup
 per-repo isolation, idempotent per commit) plus pipeline behaviour (skip, record,
 proceed-on-error).
 
-**Still future (not blocking the slice).** OpenClaw-based deeper analysis,
-quality review, optional human approval, and a remote publish destination. The
-MVP slice is real end to end.
+### Quality review & optional human approval ✅
+
+Two more pipeline stages, both optional ports:
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/review` | Rule-based `Reviewer`: each asset must be non-empty, meet a minimum length, and contain a Markdown heading. Only passing assets are published; failures are reported. A second local-model pass is a future enhancement behind the same shape. |
+| `internal/approval` | `HoldForReview`: when `REQUIRE_HUMAN_APPROVAL=true`, generated content is stashed under `PENDING_DIR` (default `/data/pending`) and the gate returns not-approved, so the pipeline **holds** (`Result.Held`) without publishing or recording memory — a later approved run proceeds. |
+
+Pipeline order is now **process → generate → review → approve → publish → record memory**. The worker always runs review and enables the approval gate from config. Tested: review pass/fail split, held-not-published-nor-recorded, approved-publishes.
+
+**Still future (not blocking the slice).** OpenClaw-based deeper analysis and a
+remote publish destination (currently local files). The MVP slice — and every
+documented pipeline stage — is now implemented end to end.
