@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub AI Blog Generator - Network stack. VPC with a single public subnet,
+  Internet Gateway, route table, and the EC2 instance security group. The
+  compute host runs in the public subnet; inbound is restricted to SSH from
+  the operator CIDR (the webhook front door is serverless and never reaches
+  the instance directly).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix and cost-allocation tag value.
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    Description: CIDR block for the VPC.
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.0.0.0/24
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    Description: CIDR block for the public subnet.
+  OperatorCidr:
+    Type: String
+    Default: 203.0.113.10/32
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    Description: >
+      CIDR permitted to SSH (22) to the instance. Restrict to known operator
+      addresses; do not use 0.0.0.0/0.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-vpc"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-igw"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-subnet"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-rt"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: >
+        EC2 Spot host - inbound SSH from the operator CIDR only; n8n (5678) and
+        Ollama (11434) are never exposed. Egress open for cloning, image pulls,
+        and AWS API access.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref OperatorCidr
+          Description: SSH from operator
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: All outbound (GitHub, registries, AWS APIs)
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-instance-sg"
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  VpcId:
+    Description: VPC ID.
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "${ProjectName}-VpcId"
+  PublicSubnetId:
+    Description: Public subnet ID for the EC2 Spot host.
+    Value: !Ref PublicSubnet
+    Export:
+      Name: !Sub "${ProjectName}-PublicSubnetId"
+  InstanceSecurityGroupId:
+    Description: Security group for the EC2 Spot host.
+    Value: !Ref InstanceSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-InstanceSecurityGroupId"
