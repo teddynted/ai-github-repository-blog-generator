@@ -36,7 +36,7 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ✅ Implemented |
 | 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ✅ Implemented |
 | 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ✅ Implemented |
-| 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ⏳ Planned |
+| 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ✅ Implemented |
 | 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ⏳ Planned |
 | 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ⏳ Planned |
 
@@ -151,3 +151,24 @@ non-`push`/disabled/no-match → `200 ignored`; matched `blog:` commit → publi
 **Placeholder:** on a match the handler calls the `Publisher` port, which is
 wired to `LogPublisher` for now. Milestone 5 swaps in the EventBridge adapter
 that publishes `blog.publish.requested` and starts the Spot instance.
+
+---
+
+## Milestone 5 — Event Processing ✅
+
+The matched event now flows all the way to compute:
+**webhook-handler → EventBridge → (SQS buffer + instance-starter → EC2 Spot start)**.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/eventbus` | `EventBridgePublisher` — `PutEvents` of `blog.publish.requested`; swapped into the webhook handler in place of `LogPublisher`. |
+| `internal/lifecycle` | `Starter.EnsureRunning` — start the instance unless already running (idempotent), located by Project tag. |
+| `internal/awsec2` | EC2 adapter (`DescribeInstances` by tag, `StartInstances`). |
+| `lambdas/instance-starter` | EventBridge-invoked Lambda that ensures the Spot host is running. |
+
+Config gains `PROJECT_NAME` and `EVENT_SOURCE`; the serverless template passes
+`EVENT_SOURCE=<project>.webhook` to the handler (matching the rule pattern).
+
+**Stub:** the instance-starter ensures the host is running but does **not** yet
+invoke the n8n workflow — that (and readiness detection + idle shutdown) is
+Milestone 6. The event payload is available to the starter for that step.
