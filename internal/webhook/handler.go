@@ -1,0 +1,183 @@
+// Package webhook implements the lightweight GitHub webhook receiver: resolve
+// the repository's metadata, verify the HMAC signature with that repo's secret,
+// and evaluate the commit-message trigger. On a match it publishes an event via
+// the Publisher port; it performs no cloning, analysis, or AI work, and never
+// reads the repository PAT.
+package webhook
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"strings"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/githubsig"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/repo"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/trigger"
+)
+
+// RepoLookup resolves repository metadata by "owner/name".
+type RepoLookup interface {
+	Get(ctx context.Context, fullName string) (repo.Repository, bool, error)
+}
+
+// SecretGetter retrieves a repository's webhook signing secret by reference.
+type SecretGetter interface {
+	WebhookSecret(ctx context.Context, ref string) (string, error)
+}
+
+// Publisher publishes a matched event downstream (EventBridge in production).
+type Publisher interface {
+	Publish(ctx context.Context, ev Event) error
+}
+
+// Event is the payload published when a commit matches the trigger.
+type Event struct {
+	RepoFullName   string `json:"repo_full_name"`
+	Owner          string `json:"owner"`
+	Name           string `json:"name"`
+	Ref            string `json:"ref"`
+	CommitSHA      string `json:"commit_sha"`
+	CommitMessage  string `json:"commit_message"`
+	TriggerPattern string `json:"trigger_pattern"`
+}
+
+// Handler processes webhook deliveries.
+type Handler struct {
+	Repos          RepoLookup
+	Secrets        SecretGetter
+	Publisher      Publisher
+	DefaultTrigger string
+	Logger         *slog.Logger
+}
+
+// pushPayload is the minimal subset of the GitHub push event we parse.
+type pushPayload struct {
+	Ref        string `json:"ref"`
+	After      string `json:"after"`
+	Repository struct {
+		FullName string `json:"full_name"`
+	} `json:"repository"`
+	HeadCommit *struct {
+		ID      string `json:"id"`
+		Message string `json:"message"`
+	} `json:"head_commit"`
+}
+
+type result struct {
+	Status string `json:"status"`
+	Repo   string `json:"repo,omitempty"`
+}
+
+// Handle processes one delivery and returns an HTTP status and JSON body. It
+// never returns a Go error: outcomes (accepted, ignored, rejected) are encoded
+// in the response so the Lambda wrapper can reply uniformly.
+func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []byte) (int, []byte) {
+	hdr := normalizeHeaders(headers)
+	eventType := hdr["x-github-event"]
+	deliveryID := hdr["x-github-delivery"]
+
+	// Parse just enough to identify the repository and select its secret.
+	var p pushPayload
+	if err := json.Unmarshal(body, &p); err != nil || p.Repository.FullName == "" {
+		return jsonResp(apperror.New(apperror.CodeInvalidInput, "unrecognised webhook payload"))
+	}
+	full := p.Repository.FullName
+
+	r, ok, err := h.Repos.Get(ctx, full)
+	if err != nil {
+		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "metadata lookup failed"))
+	}
+	if !ok {
+		return jsonResp(apperror.New(apperror.CodeNotFound, "repository is not registered"))
+	}
+
+	secret, err := h.Secrets.WebhookSecret(ctx, r.SecretRef)
+	if err != nil {
+		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "secret lookup failed"))
+	}
+
+	// Verify the signature over the raw body before trusting the payload.
+	if !githubsig.Verify(secret, body, hdr["x-hub-signature-256"]) {
+		h.log("rejected", deliveryID, full, "invalid signature")
+		return jsonResp(apperror.New(apperror.CodeUnauthorized, "invalid signature"))
+	}
+
+	// Signature valid. Anything we choose not to process is a 200 "ignored".
+	if eventType != "push" {
+		h.log("ignored", deliveryID, full, "unsupported event: "+eventType)
+		return okResp("ignored", full)
+	}
+	if !r.Enabled {
+		h.log("ignored", deliveryID, full, "repository disabled")
+		return okResp("ignored", full)
+	}
+	if p.HeadCommit == nil {
+		h.log("ignored", deliveryID, full, "no head commit")
+		return okResp("ignored", full)
+	}
+
+	pattern := r.TriggerPattern
+	if strings.TrimSpace(pattern) == "" {
+		pattern = h.DefaultTrigger
+	}
+	if !trigger.Matches(p.HeadCommit.Message, pattern) {
+		h.log("ignored", deliveryID, full, "commit does not match trigger")
+		return okResp("ignored", full)
+	}
+
+	ev := Event{
+		RepoFullName:   full,
+		Owner:          r.Owner,
+		Name:           r.Name,
+		Ref:            p.Ref,
+		CommitSHA:      p.HeadCommit.ID,
+		CommitMessage:  p.HeadCommit.Message,
+		TriggerPattern: pattern,
+	}
+	if err := h.Publisher.Publish(ctx, ev); err != nil {
+		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "publish failed"))
+	}
+	h.log("published", deliveryID, full, "trigger matched")
+	return okResp("accepted", full)
+}
+
+func (h *Handler) log(outcome, deliveryID, repoName, detail string) {
+	if h.Logger == nil {
+		return
+	}
+	h.Logger.Info("webhook processed",
+		slog.String("outcome", outcome),
+		slog.String("delivery_id", deliveryID),
+		slog.String("repo", repoName),
+		slog.String("detail", detail))
+}
+
+func normalizeHeaders(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[strings.ToLower(k)] = v
+	}
+	return out
+}
+
+func okResp(status, repoName string) (int, []byte) {
+	b, _ := json.Marshal(result{Status: status, Repo: repoName})
+	return 200, b
+}
+
+func jsonResp(err error) (int, []byte) {
+	code := apperror.CodeOf(err)
+	// Do not leak internal detail to clients.
+	msg := "internal error"
+	if code != apperror.CodeInternal {
+		var e *apperror.Error
+		if errors.As(err, &e) {
+			msg = e.Message
+		}
+	}
+	b, _ := json.Marshal(map[string]string{"error": string(code), "message": msg})
+	return apperror.HTTPStatusOf(err), b
+}
