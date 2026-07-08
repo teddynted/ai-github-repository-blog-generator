@@ -532,38 +532,37 @@ See [`docs/infrastructure.md`](./docs/infrastructure.md) for the full parameter 
 
 ## Project Structure
 
+Single Go module (monorepo): shared code in `internal/`, entry points under `lambdas/` and `cmd/`.
+
 ```text
-github-ai-blog-generator/
-├── README.md
-├── LICENSE
-├── .env.example
-├── infrastructure/            # AWS CloudFormation templates (modular)
+ai-github-repository-blog-generator/
+├── README.md · LICENSE · Makefile · go.mod · .env.example
+├── .github/workflows/         # CI: go, cloudformation, security, deploy (OIDC, opt-in)
+├── infrastructure/            # AWS CloudFormation (modular; cfn-lint clean)
+│   ├── bootstrap.yaml         # artifacts bucket + OIDC provider + deploy role (once)
 │   ├── network.yaml
-│   ├── serverless.yaml        # API Gateway, Lambdas, EventBridge, SQS
-│   ├── compute.yaml
-│   └── observability.yaml
-├── lambdas/                   # Lambda source code
-│   ├── registration/          # Validate repo + PAT, create webhook, store metadata + secret
-│   ├── webhook-handler/       # Resolve metadata, verify signature, validate trigger, publish
-│   ├── instance-starter/      # Start the Spot Instance on a matched event
-│   └── idle-shutdown/         # Stop the instance after idle timeout
-├── instance/                  # EC2 host configuration
-│   ├── docker-compose.yml     # n8n + OpenClaw + Ollama
-│   └── user-data.sh           # Bootstraps Docker, Compose, and services
-├── workflows/                 # Exported n8n workflow definitions
-└── docs/                      # Project documentation
-    ├── architecture.md
-    ├── requirements.md
-    ├── infrastructure.md
-    ├── deployment.md
-    ├── workflows.md
-    ├── cost-optimization.md
-    ├── security.md
-    ├── monitoring.md
-    ├── local-development.md
-    ├── ci-cd.md
-    ├── contributing.md
-    └── roadmap.md
+│   ├── serverless.yaml        # API Gateway, Lambdas, EventBridge, SQS, Secrets Manager, DynamoDB
+│   ├── compute.yaml           # EC2 Spot + persistent gp3 EBS
+│   └── observability.yaml     # log groups, alarms, dashboard
+├── lambdas/                   # Lambda entry points (Go)
+│   ├── registration/          # validate repo + PAT → create webhook → store metadata + secret
+│   ├── webhook-handler/       # resolve metadata, verify HMAC, trigger gate, publish
+│   ├── instance-starter/      # start the Spot Instance on a matched event
+│   └── idle-shutdown/         # stop the instance when idle
+├── cmd/
+│   └── worker/                # instance worker: drain SQS → run the content pipeline
+├── internal/                  # shared library code (Clean Architecture, ports + adapters)
+│   ├── config · logging · apperror · app          # foundation
+│   ├── github · repo · registration · secrets · metadata   # onboarding
+│   ├── trigger · githubsig · webhook · eventbus            # trigger + events
+│   ├── awsec2 · awssqs · lifecycle                         # instance lifecycle
+│   ├── reposource · processing                            # clone (go-git) + retrieval
+│   └── ollama · generation · review · approval · memory · publish · notify · pipeline
+├── instance/
+│   └── docker-compose.yml     # n8n + Ollama (OpenClaw placeholder)
+├── scripts/
+│   └── bootstrap.sh           # one-time deploy bootstrap
+└── docs/                      # architecture, requirements, development-plan, deployment, …
 ```
 
 ---

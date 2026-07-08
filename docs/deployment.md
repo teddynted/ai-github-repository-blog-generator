@@ -19,6 +19,8 @@ Related: [Local Development](./local-development.md) · [Infrastructure](./infra
 | Docker | For local build/testing (optional) |
 
 > **No Amazon Bedrock, OpenAI, or Anthropic access is required.** All inference runs locally via Ollama on the instance.
+>
+> The instance runs Ollama, so choose a **GPU instance type** (e.g. `g4dn.xlarge`) and a Region/AZ with Spot capacity for it.
 
 Verify access:
 
@@ -26,6 +28,33 @@ Verify access:
 aws sts get-caller-identity
 aws ec2 describe-key-pairs --key-names "$KEY_PAIR_NAME"
 ```
+
+---
+
+## First-Time Bootstrap (automated deploy)
+
+Two ways to deploy: **manually** (Sections 3–4 below) or via the **`deploy.yml` GitHub Actions workflow** (recommended for repeatable deploys). Both need a one-time bootstrap that creates the **Lambda artifacts bucket**, and the workflow additionally needs a **GitHub OIDC deploy role**.
+
+Run once, with admin credentials:
+
+```bash
+scripts/bootstrap.sh --region us-east-1 --owner <you> --repo <repo>
+# If the account already has a GitHub OIDC provider:
+#   scripts/bootstrap.sh --no-oidc-provider --existing-oidc-arn <arn>
+```
+
+This deploys [`infrastructure/bootstrap.yaml`](../infrastructure/bootstrap.yaml) (artifacts bucket, OIDC provider, deploy role) and prints the values to set on the repository (**Settings → Secrets and variables → Actions**):
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Secret | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
+| Variable | `ARTIFACTS_BUCKET` | `ArtifactsBucketName` output |
+| Variable | `AWS_REGION` | your Region |
+| Variable | `KEY_PAIR_NAME` | your EC2 key pair |
+| Variable | `OPERATOR_CIDR` | your SSH CIDR (optional) |
+| Variable | `DEPLOY_ENABLED` | `true` |
+
+With those set, merging to `main` runs [`deploy.yml`](./ci-cd.md#enabling-deployyml), which packages the Lambdas and deploys **network → serverless → compute → observability**. For a manual deploy instead, set `ARTIFACTS_BUCKET` locally and follow Sections 3–4.
 
 ---
 
@@ -74,7 +103,13 @@ done
 - `instance-starter` — start the Spot Instance on a matched event.
 - `idle-shutdown` — stop the Spot Instance after the idle timeout.
 
-Upload the ZIPs to a deployment bucket (or reference them inline), depending on your pipeline.
+Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless template's default code keys are `<fn>.zip` at the bucket root:
+
+```bash
+for fn in registration webhook-handler instance-starter idle-shutdown; do
+  aws s3 cp "dist/$fn/$fn.zip" "s3://$ARTIFACTS_BUCKET/$fn.zip"
+done
+```
 
 ---
 

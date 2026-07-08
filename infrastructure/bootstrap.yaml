@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub AI Blog Generator - Bootstrap stack (deployed once, by an admin, before
+  the deploy workflow can run). Creates the Lambda artifacts S3 bucket, the
+  GitHub Actions OIDC provider (optional), and the least-privilege-ish IAM role
+  that the deploy.yml workflow assumes via OIDC to deploy the application stacks.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix.
+  GitHubOwner:
+    Type: String
+    Default: teddynted
+    Description: GitHub org/user that owns the repository.
+  GitHubRepo:
+    Type: String
+    Default: ai-github-repository-blog-generator
+    Description: Repository name allowed to assume the deploy role.
+  CreateOIDCProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Create the GitHub Actions OIDC provider. Set to "false" if the account
+      already has one (an account may only have a single provider per URL).
+  ExistingOIDCProviderArn:
+    Type: String
+    Default: ""
+    Description: ARN of the existing OIDC provider (used when CreateOIDCProvider=false).
+
+Conditions:
+  ShouldCreateProvider: !Equals [!Ref CreateOIDCProvider, "true"]
+
+Resources:
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-artifacts-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ArtifactsBucket.Arn
+              - !Sub "${ArtifactsBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-deploy"
+      Description: Assumed by GitHub Actions (OIDC) to deploy the application stacks.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - ShouldCreateProvider
+                - !Ref GitHubOIDCProvider
+                - !Ref ExistingOIDCProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepo}:*"
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # NOTE: a CloudFormation deploy role that provisions arbitrary
+              # infrastructure is necessarily broad. It is scoped to the services
+              # the four stacks use; tighten further for your org if required.
+              - Sid: CloudFormation
+                Effect: Allow
+                Action: cloudformation:*
+                Resource: "*"
+              - Sid: Artifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !Sub "${ArtifactsBucket.Arn}/*"
+              - Sid: CoreServices
+                Effect: Allow
+                Action:
+                  - ec2:*
+                  - lambda:*
+                  - apigateway:*
+                  - events:*
+                  - sqs:*
+                  - dynamodb:*
+                  - logs:*
+                  - cloudwatch:*
+                  - sns:*
+                Resource: "*"
+              - Sid: IAMForStacks
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:TagRole
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:PassRole
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*"
+
+Outputs:
+  ArtifactsBucketName:
+    Description: Set this as the ARTIFACTS_BUCKET repository variable.
+    Value: !Ref ArtifactsBucket
+  DeployRoleArn:
+    Description: Set this as the AWS_DEPLOY_ROLE_ARN repository secret.
+    Value: !GetAtt DeployRole.Arn
+  OIDCProviderArn:
+    Description: The GitHub Actions OIDC provider ARN.
+    Value: !If [ShouldCreateProvider, !Ref GitHubOIDCProvider, !Ref ExistingOIDCProviderArn]

@@ -250,6 +250,20 @@ without repository secrets:
 
 CI/CD is now complete end to end; deploying just needs the AWS side configured.
 
+### Deployment enablement
+
+`infrastructure/bootstrap.yaml` + `scripts/bootstrap.sh` provision, once with
+admin credentials, the pieces the deploy path needs: the **Lambda artifacts S3
+bucket**, the **GitHub Actions OIDC provider** (optional), and the **deploy
+role** the workflow assumes. The script prints the exact repository
+secrets/variables to set (`AWS_DEPLOY_ROLE_ARN`, `ARTIFACTS_BUCKET`, …,
+`DEPLOY_ENABLED=true`); after that, a merge to `main` deploys the app stacks.
+Runbook: [Deployment → First-Time Bootstrap](./deployment.md#first-time-bootstrap-automated-deploy).
+
+**Remaining to actually run in AWS (your side):** an account, a GPU Spot
+instance type, and an EC2 key pair — then bootstrap → set the vars → deploy →
+register a repo → push a `blog:` commit.
+
 ---
 
 ## Phase 2 (post-MVP) — Content Generation
