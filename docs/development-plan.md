@@ -259,12 +259,12 @@ Beyond the MVP slice, building on `processing.Snapshot`. In progress.
 | Package | Responsibility | Status |
 | --- | --- | --- |
 | `internal/ollama` | Local LLM client (`/api/generate`, non-streaming) — realises "local inference via Ollama" with real, testable code. No external/paid API. | ✅ Implemented |
-| `internal/generation` | `Generator.BlogPost` — builds a deterministic prompt from a `Snapshot` and produces a Markdown blog post via the `Model` port (Ollama satisfies it). | ✅ Implemented (first slice) |
+| `internal/generation` | `Generator.Generate`/`GenerateAll` — build deterministic prompts from a `Snapshot` and produce Markdown per kind via the `Model` port (Ollama satisfies it). Kinds: blog, README improvements, documentation, architecture summary, release notes. `GenerateAll` continues past a per-kind failure and aggregates errors. | ✅ Implemented |
 
-**Scope note.** This is the first generation output (a single technical blog
-post). Additional outputs (README improvements, docs, architecture summaries,
-release notes, …), Repository Memory population, quality review, optional human
-approval, and publishing are still future work — the ports keep them additive.
+**Scope note.** Five content outputs are implemented. Repository Memory
+population, quality review, optional human approval, and publishing are still
+future work — the ports keep them additive, and `GenerateAll` never lets one
+failing kind corrupt the rest of the package.
 
 **Runtime wiring (next).** These are libraries; the instance runtime consumes
 them. The documented design uses **n8n** (its SQS-trigger workflow) to
