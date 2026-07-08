@@ -268,11 +268,19 @@ failing kind corrupt the rest of the package.
 
 | `internal/pipeline` | `Pipeline.Run` — composes process → generate → publish for a request. Resilient: publishes the assets that succeeded even on a partial generation failure. | ✅ Implemented |
 | `internal/publish` | `LogPublisher` — placeholder Publisher (logs assets; never dumps content). Real destinations (Git / object store / CMS) are future work. | ✅ Implemented (placeholder) |
+| `internal/awssqs` | Extended with `Receive`/`Delete` (message consumption) alongside depth. | ✅ Implemented |
+| `cmd/worker` | Instance worker: long-polls SQS → `Pipeline.Run` → deletes on success (leaves failures for SQS redelivery/DLQ). Message-handling logic is unit-tested. | ✅ Implemented |
 
-**Runtime wiring (still open).** The `pipeline.Pipeline` is the orchestration
-logic, independent of how it is invoked. What remains is the **invocation**
-mechanism on the instance: a small Go worker draining SQS and calling
-`Pipeline.Run`, or the documented **n8n** SQS-trigger workflow calling the same
-composition (e.g. via an exec node). That choice — plus the OpenClaw-backed
-processing and a real publish destination — is the next decision, deliberately
-left open here rather than overriding the earlier "n8n runs" decision.
+**Runtime decision.** The MVP runtime is a **Go worker** (`cmd/worker`) draining
+SQS and invoking `pipeline.Pipeline`. It was chosen over hand-authored n8n
+workflow JSON because it is fully unit-testable and keeps the whole slice in one
+verifiable codebase. The documented **n8n** SQS-trigger design remains a valid
+alternative orchestration for the same seams (it would call the same
+composition, e.g. via an exec node) and a future visual-orchestration option;
+this worker does not remove that path. Build it with `make build-worker`
+(Linux/amd64 for the g4dn host).
+
+**Still placeholder / future.** Processing uses `NewPlaceholderProcessor`
+(OpenClaw-backed clone/retrieval is future), and publishing uses `LogPublisher`
+(a real destination is future). Repository Memory, quality review, and optional
+human approval are not yet wired into the pipeline.
