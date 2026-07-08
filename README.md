@@ -5,6 +5,8 @@
 **Event-driven, fully self-hosted AI platform that turns GitHub repositories into high-quality technical content — but only when you opt in with a `blog:` commit. Powered by OpenClaw, Ollama, and local LLMs, orchestrated with n8n, triggered through Amazon EventBridge, and running on cost-optimized AWS EC2 Spot Instances provisioned entirely with AWS CloudFormation.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![MVP: implemented](https://img.shields.io/badge/MVP-implemented-brightgreen.svg)](./docs/development-plan.md)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![AWS CloudFormation](https://img.shields.io/badge/IaC-AWS%20CloudFormation-E7157B?logo=amazonaws&logoColor=white)](https://aws.amazon.com/cloudformation/)
 [![EC2 Spot](https://img.shields.io/badge/Compute-EC2%20Spot-FF9900?logo=amazonec2&logoColor=white)](https://aws.amazon.com/ec2/spot/)
 [![Ollama](https://img.shields.io/badge/Inference-Ollama-000000?logo=ollama&logoColor=white)](https://ollama.com/)
@@ -22,6 +24,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Status](#status)
 - [Core Principle](#core-principle)
 - [Why This Project](#why-this-project)
 - [Features](#features)
@@ -57,6 +60,31 @@ When a run does fire, **n8n** orchestrates a pipeline on the instance where **Op
 Supported outputs include technical blog posts, README improvements, documentation, architecture summaries, API documentation, project overviews, release notes, changelogs, and technical tutorials — all emitted as clean, portable Markdown.
 
 > This project is architected for real-world production practices: **developer-controlled generation**, self-hosting, cost optimisation, local LLM inference, AWS-native event-driven design, and Infrastructure as Code with AWS CloudFormation.
+
+---
+
+## Status
+
+**The MVP is implemented and unit-tested** (a single Go module + four AWS Lambdas + an instance worker, all backed by modular CloudFormation). It has **not yet been deployed** to a live AWS account — deployment needs your AWS credentials and a GPU instance. Milestone-by-milestone detail lives in the [Development Plan](./docs/development-plan.md).
+
+**What works end to end today:**
+
+register repo → webhook (HMAC + commit-trigger gate) → EventBridge → SQS → EC2 Spot start → **worker**: skip-if-already-published → clone repo (go-git) → read README/docs/commits → generate 5 content types via local Ollama → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → idle shutdown.
+
+| Area | Status |
+| --- | --- |
+| Repository registration (URL + PAT → Secrets Manager + DynamoDB, auto webhook) | ✅ Implemented |
+| Webhook handler — HMAC verify + commit-message trigger gate (no AI, never reads the PAT) | ✅ Implemented |
+| Event processing — EventBridge → SQS buffer + EC2 Spot start | ✅ Implemented |
+| Instance lifecycle — on-demand start, idle shutdown | ✅ Implemented |
+| Content pipeline — clone, analyse, generate (5 types), review, approval, publish, memory, notify | ✅ Implemented |
+| Local inference — Ollama + Qwen (no paid API) | ✅ Implemented |
+| Infrastructure — modular CloudFormation (`cfn-lint`-clean) | ✅ Implemented |
+| CI/CD — Go tests, cfn-lint, security scanning, opt-in OIDC deploy | ✅ Implemented |
+| Deploy to AWS + end-to-end validation | ⏳ Needs your AWS account + GPU instance |
+| Future roadmap — remote publish destinations, real email/Slack channels, deeper analysis, approvals dashboard, GitHub Apps | ⏳ Planned |
+
+> **Implementation note.** The MVP runtime is a **Go worker** (`cmd/worker`) that drains SQS and drives the pipeline — chosen for testability. The **n8n** orchestration described throughout these docs remains a valid alternative for the same seams; the pipeline stages are composable ports either can drive. See the [Development Plan](./docs/development-plan.md) for the runtime decision.
 
 ---
 
