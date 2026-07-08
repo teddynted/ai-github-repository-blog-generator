@@ -72,7 +72,7 @@ jobs:
 
 ## 3. Go Jobs
 
-Both Lambda functions (`webhook-handler`, `idle-shutdown`) are built and tested.
+All three Lambda functions (`webhook-handler`, `instance-starter`, `idle-shutdown`) are built and tested. The handler's **commit-message trigger** logic should have dedicated unit tests (matched vs. ignored commits).
 
 | Step | Command |
 | --- | --- |
@@ -125,7 +125,7 @@ Findings block the PR at an appropriate severity threshold. Dependabot keeps Act
 - **Change set on PR, deploy on merge:** infrastructure changes are reviewed as a change set before they can deploy.
 - **Protected environment:** `deploy` requires the `production` environment approval (manual gate).
 - **Immutable artifacts:** Lambda binaries are versioned; use aliases for instant rollback ([Deployment §8](./deployment.md#8-rollback)).
-- **Post-deploy smoke test:** an automated check redelivers a webhook to a test repo and verifies the instance starts, the queue drains, and content is published.
+- **Post-deploy smoke test:** an automated check redelivers a `blog:` webhook to a test repo and verifies the event is published, the instance starts, the queue drains, and content is published — and separately that a routine commit is acknowledged and ignored.
 
 ```mermaid
 flowchart LR

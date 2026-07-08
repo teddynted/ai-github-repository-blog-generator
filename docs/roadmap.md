@@ -7,9 +7,9 @@ Related: [Requirements](./requirements.md) · [Contributing](./contributing.md).
 ```mermaid
 timeline
     title Release Roadmap
-    v1.0 : Event-driven pipeline : Local inference (Ollama/Qwen) : CloudFormation deploy
-    v1.1 : Better prompts : Resilience : On-Demand fallback
-    v2.0 : Multi-model : Direct publishing : Web dashboard
+    v1.0 : Commit-message trigger gate : Local inference (Ollama/Qwen) : EventBridge + Spot + CloudFormation
+    v1.1 : Custom trigger patterns : Better prompts : On-Demand fallback
+    v2.0 : More trigger sources : Multi-model : Web dashboard + approvals
     v3.0 : Multi-repo : Fine-tuned models : Collaboration
 ```
 
@@ -17,44 +17,48 @@ timeline
 
 ## Version 1.0 — Foundation
 
-The core event-driven pipeline, deployable from scratch with CloudFormation.
+The core opt-in, event-driven pipeline, deployable from scratch with CloudFormation.
 
-- ✅ GitHub Webhook trigger with HMAC SHA-256 signature validation (API Gateway + Lambda)
+- ✅ **Commit-message trigger gate** — generation runs only on a `blog:` commit; all other events are acknowledged and ignored
+- ✅ GitHub Webhook + HMAC SHA-256 signature validation (API Gateway + lightweight Lambda handler)
+- ✅ EventBridge event bus routing matched events to SQS + the instance starter
 - ✅ Durable event buffering with Amazon SQS (+ dead-letter queue)
-- ✅ On-demand EC2 Spot Instance start (webhook handler) and idle-timeout stop (EventBridge + Lambda)
+- ✅ On-demand EC2 Spot Instance start (instance-starter) and idle-timeout stop (idle-shutdown)
 - ✅ Local inference via Ollama + Qwen — no paid inference API
-- ✅ Repository analysis via OpenClaw and Markdown content generation
-- ✅ Persistent gp3 EBS volume for models and n8n state
-- ✅ CloudFormation deployment (VPC, public subnet, IGW, route tables, SGs, IAM, EC2 Spot, EBS, API Gateway, Lambda, SQS, EventBridge, CloudWatch)
+- ✅ Repository analysis via OpenClaw and **Repository Memory** for continuity
+- ✅ Quality review and **optional human approval** before publishing
+- ✅ Persistent gp3 EBS volume for models, n8n state, and Repository Memory
+- ✅ CloudFormation deployment (VPC, public subnet, IGW, route tables, SGs, IAM, EC2 Spot, EBS, API Gateway, Lambdas, EventBridge, SQS, CloudWatch)
 - ✅ n8n workflow orchestration with retries, error handling, and notifications
 
-**Exit criteria:** deploying the CloudFormation stacks + importing the workflows + configuring the webhook yields a working pipeline that starts on a repository event, generates content locally, publishes it, and stops on idle.
+**Exit criteria:** deploying the stacks + importing the workflows + configuring the webhook yields a pipeline where a `blog:` commit generates and publishes content, a routine commit is ignored, and the instance stops on idle.
 
 ---
 
-## Version 1.1 — Quality & Resilience
+## Version 1.1 — Trigger Flexibility & Resilience
 
-Improve output quality and make the compute layer more robust.
+Make the trigger configurable and the compute layer more robust.
 
+- **Configurable custom trigger patterns** — `[blog]`, regular expressions, per-repository rules
 - Improved prompts (better structure, tighter context selection, few-shot examples)
 - **On-Demand fallback** when Spot capacity is unavailable
 - Multi-Availability-Zone Spot placement
 - GPU auto-detection and model right-sizing
-- Configurable prompt templates surfaced as parameters
 - Faster cold start (pre-warmed AMI, model preload tuning)
 
 ---
 
-## Version 2.0 — Flexibility & Reach
+## Version 2.0 — More Trigger Sources & Reach
 
-Make model choice, output format, and publishing configurable.
+Extend the trigger system and make model choice and publishing configurable — **without changing the core architecture** (all sources publish to the same EventBridge bus).
 
+- **Additional trigger sources:** GitHub Releases, Git Tags, Pull Request labels
+- **Manual blog generation** from the application
+- **Scheduled repository summaries**
 - **Multi-model support** — different local models per content type
 - Additional content types (video/short/podcast scripts, auto-generated diagrams)
 - Multi-language content generation
-- **Direct publishing integrations** (Dev.to, Medium, Hashnode)
-- Draft/review state before publish
-- Web dashboard for run history and content review
+- **Web dashboard** for run history, approvals, and content review
 
 ---
 
@@ -64,7 +68,6 @@ From single-run tool to team platform.
 
 - **Multi-repository batch processing** (org-wide scans)
 - **Fine-tuned local models** for documentation style
-- GitHub App authentication (replace per-repo secrets)
 - Team workspaces and multi-user support
 - A second local-model review pass for accuracy and tone
 - Analytics on generated-content performance
@@ -74,7 +77,7 @@ From single-run tool to team platform.
 ## Continuously (all versions)
 
 - Hardening security and least-privilege posture
-- Cost tracking and optimisation (idle behaviour, EBS sizing)
+- Cost tracking and optimisation (trigger ratios, idle behaviour, EBS sizing)
 - Expanded test coverage and CI checks
 - Documentation upkeep
 

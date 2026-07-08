@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the architecture of the **GitHub AI Blog Generator**: the high-level design, AWS deployment topology, the event-driven trigger path, the analysis and local-inference workflow, content generation, data flow, and storage.
+This document describes the architecture of the **GitHub AI Blog Generator**: the design principles, the **commit-message trigger gate**, the event-driven trigger path, the AWS deployment topology, the analysis and local-inference pipeline, content generation, data flow, and storage.
 
 Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.md) · [Workflows](./workflows.md) · [Cost Optimisation](./cost-optimization.md).
 
@@ -8,34 +8,61 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 
 ## 1. Design Principles
 
-- **Event-driven** — nothing runs until a repository changes. A GitHub Webhook is the primary trigger; manual runs are also supported.
-- **Self-hosted inference** — all AI runs locally on the instance via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
-- **Pay only when you compute** — a cost-optimized **EC2 Spot Instance** is started on demand and stopped after an idle timeout, so compute charges accrue only during active generation.
-- **Durable buffering** — every validated event is stored in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
-- **Persistent state, ephemeral compute** — models and n8n state live on a persistent **gp3 EBS volume**; the compute layer is disposable.
-- **Everything as code** — all infrastructure is AWS CloudFormation; all workflows are versioned n8n JSON; all services run via Docker Compose.
+- **Opt-in generation** — a webhook is received on every push, but a run happens **only** when the commit message matches a configurable publishing trigger (default `blog:`). All other events are acknowledged and ignored.
+- **Event-driven** — matched events are published to **Amazon EventBridge**, which starts compute and buffers work. Nothing runs speculatively.
+- **Self-hosted inference** — all AI runs locally via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
+- **Pay only when you compute** — a cost-optimized **EC2 Spot Instance** starts on a matched event and stops after an idle timeout.
+- **Durable buffering** — every matched event is stored in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
+- **Persistent state, ephemeral compute** — models, n8n state, and **Repository Memory** live on a persistent **gp3 EBS volume**; the compute layer is disposable.
+- **Everything as code** — infrastructure is AWS CloudFormation; workflows are versioned n8n JSON; services run via Docker Compose.
 - **Least privilege & encryption everywhere** — each component gets only the permissions it needs.
 
 ---
 
-## 2. High-Level Architecture
+## 2. Commit-Message Trigger Gate
+
+The trigger gate is the platform's defining architectural decision. It lives in the **Webhook Handler Lambda** and runs before any compute or AI is invoked.
+
+```mermaid
+flowchart TB
+    W[Webhook delivery] --> SIG{Valid HMAC signature?}
+    SIG -- no --> R401[Return 401 + log rejection]
+    SIG -- yes --> EX[Extract commit message + repo]
+    EX --> T{Commit message matches<br/>publish trigger? default 'blog:'}
+    T -- no --> ACK[Return HTTP 200<br/>acknowledge & ignore — no further processing]
+    T -- yes --> PUT[PutEvents → Amazon EventBridge]
+    PUT --> OK[Return HTTP 200]
+```
+
+- The trigger pattern is configurable via `PublishTrigger` (default `blog:`). Custom patterns (`[blog]`, regex, per-repo rules) are [planned](./roadmap.md).
+- A non-matching event is a **terminal success**: the handler returns `200` and does nothing else. This is what prevents unwanted processing and cost.
+- Only a **matching** event is published to EventBridge, which begins the rest of the flow.
+
+See [Cost Optimisation → Trigger Pre-Filtering](./cost-optimization.md#1-trigger-pre-filtering) for why this is a primary cost lever, and [Requirements → Publishing Trigger](./requirements.md#2-publishing-trigger-requirements).
+
+---
+
+## 3. High-Level Architecture
 
 ```mermaid
 flowchart TB
     subgraph GitHub
-        EVT[GitHub Webhook<br/>push · release · pull_request]
+        EVT[GitHub Webhook<br/>push]
         REPO[(Target Repository)]
     end
 
     subgraph AWS
-        APIGW[Amazon API Gateway<br/>HTTPS endpoint]
-        LH[Lambda: Webhook Handler]
+        APIGW[Amazon API Gateway]
+        LH[Lambda: Webhook Handler<br/>verify + validate trigger]
+        EB[Amazon EventBridge<br/>event bus + rule]
         SQS[(Amazon SQS<br/>+ dead-letter queue)]
-        EB[EventBridge<br/>idle timer]
+        ST[Lambda: Instance Starter]
+        IDLE[EventBridge idle timer]
         LS[Lambda: Idle Shutdown]
         subgraph EC2["EC2 Spot Instance (Ubuntu + Docker Compose)"]
             N8N[n8n Orchestrator]
             OC[OpenClaw]
+            MEM[(Repository Memory)]
             OLL[Ollama + Qwen]
         end
         EBS[(Persistent gp3 EBS Volume)]
@@ -43,48 +70,68 @@ flowchart TB
     end
 
     EVT -->|HTTPS + HMAC| APIGW --> LH
-    LH -->|enqueue| SQS
-    LH -->|StartInstances if stopped| EC2
-    LH -->|HTTP 200 immediately| EVT
+    LH -->|trigger match → PutEvents| EB
+    LH -->|no match → 200| EVT
+    EB --> SQS
+    EB --> ST -->|StartInstances if stopped| EC2
     N8N -->|poll| SQS
-    N8N --> OC -->|clone + analyze| REPO
+    N8N --> OC --> MEM
     OC --> OLL
-    OLL -->|generated content| N8N
+    OLL -->|content| N8N
     N8N -->|publish + notify| OUT[Published content / users]
     EBS --- EC2
-    EB --> LS -->|StopInstances on idle| EC2
+    IDLE --> LS -->|StopInstances on idle| EC2
     LH -. logs .-> CW
     N8N -. logs .-> CW
-    LS -. logs .-> CW
 ```
 
 **Component responsibilities**
 
 | Component | Responsibility |
 | --- | --- |
-| GitHub Webhook | Primary trigger — delivers repository events over HTTPS |
-| API Gateway | Public HTTPS ingress for webhook deliveries |
-| Webhook Handler (Lambda) | Validates the HMAC signature, enqueues the payload in SQS, starts the Spot Instance if stopped, returns HTTP 200 immediately |
-| Amazon SQS | Durable buffer so no event is lost during cold start; visibility timeout + dead-letter queue |
-| EC2 Spot Instance | Cost-optimized host running n8n, OpenClaw, and Ollama via Docker Compose |
-| n8n (on EC2) | Polls SQS, orchestrates clone → analysis → generation → publish → notify |
-| OpenClaw | Clones and analyses the repository, assembles model context |
+| GitHub Webhook | Delivers push events over HTTPS (every push, matched or not) |
+| API Gateway | Public HTTPS ingress |
+| Webhook Handler (Lambda) | Verify signature, extract commit message, **validate trigger**, publish matched events to EventBridge, return 200 quickly. Does **no** analysis or inference |
+| Amazon EventBridge | Central event bus for matched events; routes to SQS and the instance starter; extension point for future trigger sources |
+| Amazon SQS | Durable buffer so no matched event is lost during cold start; visibility timeout + DLQ |
+| Instance Starter (Lambda) | Starts the EC2 Spot Instance if stopped |
+| EC2 Spot Instance | Cost-optimized host running n8n, OpenClaw, Ollama via Docker Compose |
+| n8n (on EC2) | Polls SQS, orchestrates the full pipeline |
+| OpenClaw | Clones and analyses the repository, assembles context |
+| Repository Memory | Persistent per-repo record of prior analyses and published topics |
 | Ollama + Qwen | Local LLM inference — no external API |
-| gp3 EBS volume | Persists model weights and n8n state across start/stop cycles |
-| EventBridge + Idle Shutdown (Lambda) | Stops the instance after a configurable idle timeout |
+| Idle Shutdown (Lambda) | Stops the instance after a configurable idle timeout |
 | CloudWatch | Central logs, metrics, and alarms |
 
 ---
 
-## 3. AWS Deployment Topology
+## 4. Webhook Handler Responsibilities
 
-The webhook front door is fully serverless (API Gateway + Lambda + SQS) and is **always available even when the EC2 instance is stopped**. The compute host runs in a **public subnet** so it can clone repositories and pull container images; inbound access is tightly restricted by security groups.
+The handler is intentionally **lightweight** so it returns to GitHub in milliseconds. It is limited to:
+
+1. Verify the GitHub webhook signature (HMAC SHA-256, constant-time).
+2. Parse the webhook payload.
+3. Extract commit information (message, ref, author).
+4. Determine the affected repository.
+5. **Validate the configured commit-message trigger.**
+6. **Publish an event to EventBridge only when the trigger matches.**
+7. Return a successful HTTP response to GitHub as quickly as possible.
+
+The handler **must not** clone repositories, perform analysis, invoke Repository Memory, or run AI models — all of that happens downstream on the EC2 instance ([Requirements → Webhook Handler](./requirements.md#3-webhook-handler-requirements)).
+
+---
+
+## 5. AWS Deployment Topology
+
+The webhook front door (API Gateway + Lambda + EventBridge + SQS) is fully serverless and **always available even when the EC2 instance is stopped**. The compute host runs in a **public subnet**; inbound access is tightly restricted by security groups.
 
 ```mermaid
 flowchart TB
     GH[GitHub Webhook] -->|443 HTTPS| APIGW[API Gateway]
     APIGW --> LH[Webhook Handler Lambda]
-    LH --> SQS[(SQS)]
+    LH --> EB[EventBridge]
+    EB --> SQS[(SQS)]
+    EB --> ST[Instance Starter Lambda]
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
@@ -92,84 +139,62 @@ flowchart TB
             EBS[(gp3 EBS volume)]
         end
     end
+    ST -->|StartInstances| EC2
     EC2 --- EBS
     EC2 --- IGW
     EC2 -->|poll| SQS
     ADMIN[Operator] -->|SSH key auth<br/>restricted CIDR| EC2
 ```
 
-- **Ingress:** GitHub reaches the platform through **API Gateway** (managed TLS), not the instance directly. The instance's own inbound is limited to **SSH (22) from known operator IPs**; the **n8n and Ollama ports are never publicly exposed**.
-- **Egress:** the **Internet Gateway** provides outbound access for cloning repositories, pulling Docker images, and downloading model weights.
-- **SQS decoupling:** the Lambda writes to SQS and returns immediately; the instance polls SQS when it is up. The instance never receives inbound webhook traffic.
+- **Ingress:** GitHub reaches the platform through **API Gateway** (managed TLS), not the instance. The instance's inbound is limited to **SSH (22) from operator IPs**; the **n8n and Ollama ports are never publicly exposed**.
+- **Egress:** the **Internet Gateway** provides outbound access for cloning, image pulls, and model downloads.
+- **Decoupling:** the instance never receives inbound webhook traffic — it **polls SQS** when up.
 
-See [Infrastructure](./infrastructure.md) for the CloudFormation stacks and [Security](./security.md) for the network controls.
-
----
-
-## 4. Event-Driven Trigger Path
-
-```mermaid
-sequenceDiagram
-    participant GH as GitHub
-    participant API as API Gateway
-    participant LH as Lambda (Handler)
-    participant SQS as Amazon SQS
-    participant EC2 as EC2 Spot Instance
-    participant N8N as n8n
-
-    GH->>API: Webhook (push/release/PR) + X-Hub-Signature-256
-    API->>LH: Invoke
-    LH->>LH: Validate HMAC SHA-256 (constant-time)
-    alt Invalid signature
-        LH-->>GH: 401 (not enqueued)
-    else Valid signature
-        LH->>SQS: Enqueue payload
-        LH->>EC2: StartInstances (if stopped)
-        LH-->>GH: HTTP 200 (immediate)
-    end
-    Note over EC2: Cold start: Ubuntu + Docker Compose + Ollama warm up
-    N8N->>SQS: Poll for messages
-    SQS-->>N8N: Repository event
-```
-
-The handler does the minimum required to accept the event safely and quickly: **validate → enqueue → start → return 200**. All heavy work happens asynchronously on the instance. Because the payload is durably stored in SQS, GitHub receives its 200 even though generation has not started yet, and no event is lost while the instance boots (the **cold start**).
+See [Infrastructure](./infrastructure.md) and [Security](./security.md).
 
 ---
 
-## 5. Analysis & Local-Inference Workflow
+## 6. Analysis & Generation Pipeline
 
-Once the instance is up, n8n drains SQS and drives the pipeline. **OpenClaw** builds a structured understanding of the repository and **Ollama** runs the local model for each content type.
+Once the instance is up, n8n drains SQS and runs the pipeline. **OpenClaw** analyses the repository, **Repository Memory** provides continuity, and **Ollama** runs the local model.
 
 ```mermaid
 sequenceDiagram
     participant N as n8n
     participant OC as OpenClaw
+    participant M as Repository Memory
     participant OL as Ollama (Qwen)
-    participant GH as GitHub repo
 
-    N->>OC: Repository event from SQS
-    OC->>GH: Clone / update repository
+    N->>OC: Matched event from SQS
+    OC->>OC: Checkout / sync repository
     OC->>OC: Structure, README, source, config analysis
-    OC->>OC: Technology stack detection
-    OC->>OC: Build context (token-budgeted)
+    OC->>M: Look up prior analyses + published topics
+    M-->>OC: Memory context (avoid duplicates)
+    OC->>OC: Topic identification + outline
     loop each content type
-        OC->>OL: Prompt with repository context
+        OC->>OL: Prompt with repo context + memory
         OL-->>OC: Generated content
     end
-    OC-->>N: Content set (Markdown)
+    OC->>N: Draft content set
+    N->>N: Quality review
+    N->>N: Optional human approval
+    N->>N: Publish + notify
+    N->>M: Record published topics
 ```
 
-**Context assembly** combines repository structure, README, source excerpts, configuration, and detected technologies, formatted against per-output templates and truncated deterministically to respect the local model's context window (see [AI Requirements](./requirements.md#3-ai--local-inference-requirements)).
+**Repository Memory** is a persistent, per-repository record (stored on the EBS volume) of previous analyses, identified topics, and published posts. It gives runs continuity — so the platform avoids regenerating duplicate content and can build on what it has already written ([Requirements → Repository Memory](./requirements.md#5-repository-memory-requirements)).
+
+**Optional human approval** is a configurable gate (`REQUIRE_HUMAN_APPROVAL`) that pauses the pipeline for a human to approve or reject content before it is published.
 
 ---
 
-## 6. Content Generation
+## 7. Content Generation
 
 Each run can produce a bundle of assets rather than a single document.
 
 ```mermaid
 flowchart TB
-    A[Repository understanding] --> P{Fan-out per content type}
+    A[Repository understanding + memory] --> P{Fan-out per content type}
     P --> A1[Technical blog post]
     P --> A2[README improvements]
     P --> A3[Project documentation]
@@ -179,25 +204,31 @@ flowchart TB
     P --> A7[Release notes]
     P --> A8[Changelog]
     P --> A9[Technical tutorial]
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> PKG[Render Markdown → publish]
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> REV[Quality review]
+    REV --> APP{Optional human approval}
+    APP --> PKG[Render Markdown → publish]
 ```
 
-All output is emitted as clean, portable **GitHub-flavoured Markdown**. Any failure on a content type routes to the error/notification path without corrupting previously generated output ([FR-5.5](./requirements.md#15-reliability-retry-logging--error-handling)).
+All output is clean, portable **GitHub-flavoured Markdown**. A failure on a content type routes to the error/notification path without corrupting previously generated output ([FR-5.5](./requirements.md#16-reliability-retry-logging--error-handling)).
 
 ---
 
-## 7. Data Flow
+## 8. Data Flow
 
 ```mermaid
 flowchart LR
-    EVT[GitHub Webhook / manual] -->|verify HMAC| LH[Webhook Handler]
-    LH -->|enqueue| SQS[(SQS)]
+    EVT[GitHub push] -->|verify + validate trigger| LH[Webhook Handler]
+    LH -->|match → PutEvents| EB[(EventBridge)]
+    LH -->|no match → 200| STOP[Ignored]
+    EB --> SQS[(SQS)]
+    EB --> ST[Instance Starter]
     SQS -->|poll| N8N[n8n]
     GH[(GitHub repo)] -->|clone| OC[OpenClaw]
     N8N --> OC
+    OC <--> MEM[(Repository Memory)]
     OC -->|context| OL[Ollama / Qwen]
     OL -->|content| N8N
-    N8N -->|Markdown| PUB[Publish destination]
+    N8N -->|review + approve| PUB[Publish]
     N8N -->|notification| NOTIF[(Email / Slack / webhook)]
 ```
 
@@ -205,39 +236,41 @@ flowchart LR
 
 | Stage | Input | Output |
 | --- | --- | --- |
-| Trigger | GitHub Webhook (verified) / manual | run request `{ repo, event, ref }` |
-| Enqueue | verified payload | SQS message |
+| Trigger gate | webhook payload | matched event → EventBridge, or 200 + stop |
+| Route & buffer | matched event | SQS message + instance start |
 | Poll | SQS message | in-flight run on EC2 |
-| Clone & analyse | repo URL | structured repository understanding |
+| Analyse | working copy + memory | structured repository understanding |
 | Generate | context + prompts | per-type Markdown content |
-| Publish | content set | content at the configured destination |
-| Notify | run result | notification message |
+| Review & approve | draft content | approved content (or rejection) |
+| Publish & notify | approved content | published content + notification + memory update |
 
 ---
 
-## 8. Storage Architecture
+## 9. Storage Architecture
 
-Storage is deliberately minimal. The only **persistent** store is the **gp3 EBS volume** attached to the instance; everything else is either transient or a managed queue.
+The only **persistent** store is the **gp3 EBS volume** attached to the instance.
 
 ```mermaid
 flowchart TB
-    subgraph Persistent
-        EBS[(gp3 EBS volume<br/>Ollama models · n8n state · workflows)]
+    subgraph Persistent["gp3 EBS volume"]
+        MODELS[Ollama models]
+        STATE[n8n state + credentials]
+        MEM[Repository Memory]
+        WF[Exported workflows]
     end
     subgraph Transient
         CLONE[Repository clones<br/>instance disk during a run]
     end
     subgraph Managed
-        SQS[(Amazon SQS<br/>event buffer + DLQ)]
+        EB[(EventBridge)]
+        SQS[(SQS buffer + DLQ)]
     end
 ```
 
 | Store | Contents | Notes |
 | --- | --- | --- |
-| gp3 EBS volume | Ollama model weights, n8n state and credentials, exported workflows | Survives start/stop; encrypted at rest; avoids re-downloading models |
-| Repository clones | Working copy during a run | Transient — on instance disk, discarded after the run |
-| Amazon SQS | Buffered webhook events + dead-letter queue | Durable; retention configurable up to 14 days |
+| gp3 EBS volume | Ollama models, n8n state, **Repository Memory**, workflows | Survives start/stop; encrypted; avoids re-downloading models |
+| Repository clones | Working copy during a run | Transient — discarded after the run |
+| Amazon SQS | Buffered matched events + DLQ | Durable; retention up to 14 days |
 
-Persisting model weights on EBS is what makes the start/stop cost model viable: a restarted instance re-attaches the volume and is ready to infer without re-downloading multi-gigabyte models. See [Storage & Cost](./cost-optimization.md) and [Infrastructure](./infrastructure.md).
-
-Published Markdown is written to whatever destination the deployment configures (for example a Git repository, an object store, or a CMS via the publishing workflow). The platform itself does not mandate a specific content store.
+Persisting models and Repository Memory on EBS is what makes the start/stop cost model viable and gives runs continuity. Published Markdown is written to whatever destination the deployment configures (a Git repository, an object store, or a CMS). The platform does not mandate a specific content store.

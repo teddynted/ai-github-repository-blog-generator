@@ -101,6 +101,7 @@ Local configuration lives in `.env` (git-ignored). Start from `.env.example`:
 | `N8N_ENCRYPTION_KEY` | n8n credential encryption key | random 32+ chars |
 | `QUEUE_URL` | Dev SQS queue URL (optional) | `https://sqs…/blog-gen-dev-events` |
 | `WEBHOOK_SECRET` | Secret for local HMAC tests | random 32+ chars |
+| `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
 | `GITHUB_TOKEN` | Optional; for cloning private test repos | `github_pat_xxx` |
 
 > Secrets in `.env` are for **local dev only**. In AWS, secrets are provided via environment/secret configuration — see [Security](./security.md).
@@ -109,16 +110,18 @@ Local configuration lives in `.env` (git-ignored). Start from `.env.example`:
 
 ## 5. Building & Testing the Lambdas
 
-Two Go functions make up the serverless control plane.
+Three Go functions make up the serverless control plane: `webhook-handler` (verify + trigger gate + publish), `instance-starter` (start the Spot host), and `idle-shutdown` (stop it).
 
 ```bash
-for fn in webhook-handler idle-shutdown; do
+for fn in webhook-handler instance-starter idle-shutdown; do
   ( cd lambdas/$fn && \
     go mod download && \
     go build ./... && go vet ./... && gofmt -l . && \
     go test ./... -race -cover )
 done
 ```
+
+> The handler's trigger logic is the highest-value unit to test: assert that `blog:` commits publish an event and that routine commits return `200` without publishing.
 
 Build deployable artifacts (Linux, arm64):
 
@@ -139,11 +142,12 @@ Run a handler locally against a fixture webhook event:
 ## 6. Running End-to-End Locally
 
 1. Start the stack (`docker compose -f instance/docker-compose.yml up -d`) and pull the model (§3).
-2. Import the workflow JSON from `workflows/` (see [Workflows → Importing](./workflows.md#8-importing-workflows)).
+2. Import the workflow JSON from `workflows/` (see [Workflows → Importing](./workflows.md#11-importing-workflows)).
 3. Configure n8n credentials (SQS/AWS, GitHub) in the editor.
-4. **Enqueue a test event** — either post a fixture message to your dev SQS queue, or run the **Event Ingestion** workflow with a sample payload directly.
-5. Watch the pipeline: clone → analysis (OpenClaw) → generation (Ollama) → publish → notify.
+4. **Enqueue a test event** — post a fixture message representing a matched (`blog:`) event to your dev SQS queue, or run the **Event Ingestion** workflow with a sample payload directly.
+5. Watch the pipeline: clone → analysis (OpenClaw) → Repository Memory → generation (Ollama) → quality review → (optional approval) → publish → notify.
 6. Confirm Markdown output appears at your configured local destination.
+7. Separately, exercise the handler's trigger gate against a `blog:` fixture and a routine-commit fixture (§5) to confirm only the former publishes.
 
 Iterate directly in the n8n editor; export changes back to `workflows/` and commit them.
 
