@@ -107,7 +107,8 @@ Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
 
 The `registration` Lambda, built with Clean Architecture: a pure use case with
 small ports, plus thin AWS/GitHub adapters. Introduces `aws-lambda-go` and the
-AWS SDK v2 (which raise the module's minimum Go to 1.24).
+AWS SDK v2 (which raise the module's minimum Go to 1.25; the build toolchain is
+pinned in `go.mod` to a patched release).
 
 | Package | Responsibility |
 | --- | --- |
