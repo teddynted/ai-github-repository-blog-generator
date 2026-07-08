@@ -37,7 +37,7 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ✅ Implemented |
 | 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ✅ Implemented |
 | 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ✅ Implemented |
-| 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ⏳ Planned |
+| 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ✅ Implemented |
 | 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ⏳ Planned |
 
 Out of scope for the MVP (see [Roadmap](./roadmap.md)): GitHub Apps, multi-user,
@@ -172,3 +172,31 @@ Config gains `PROJECT_NAME` and `EVENT_SOURCE`; the serverless template passes
 **Stub:** the instance-starter ensures the host is running but does **not** yet
 invoke the n8n workflow — that (and readiness detection + idle shutdown) is
 Milestone 6. The event payload is available to the starter for that step.
+
+---
+
+## Milestone 6 — Infrastructure Lifecycle ✅
+
+Completes the cost-optimised compute loop with automatic shutdown.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/lifecycle` | `Shutdowner.StopIfIdle` — stop the instance once it has been up beyond the idle timeout **and** the queue is drained (visible + in-flight == 0). Idempotent. `EC2` port extended with `StopInstance` and an `Instance` value (id/state/launch time). |
+| `internal/awssqs` | SQS adapter reporting queue depth (visible + not-visible). |
+| `internal/awsec2` | Extended with `StopInstances` and launch-time. |
+| `lambdas/idle-shutdown` | Scheduled Lambda (EventBridge idle timer) that runs `StopIfIdle`. |
+
+**Readiness & n8n invocation (design decision).** In the hybrid model, n8n
+**pulls** work from SQS (its SQS-trigger workflow) rather than being pushed an
+HTTP call. So there is no Lambda-side n8n invoke or readiness probe: EventBridge
+buffers the matched event in SQS, the instance-starter brings the host up, and
+n8n drains SQS via long-polling once its container is healthy. This keeps n8n
+unexposed (no inbound) and needs no Lambda-in-VPC networking. The n8n
+SQS-trigger workflow + Docker Compose bring-up live on the instance and are part
+of the instance configuration (`instance/`, Milestone 7).
+
+**Retries.** Run retries come free from SQS visibility timeout + DLQ; the
+scheduled idle check and instance start/stop are idempotent, so EventBridge/
+Lambda retries are safe.
+
+All four Lambdas now build; `make check` (`-race`) is green.
