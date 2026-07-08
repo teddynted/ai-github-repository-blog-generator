@@ -2,7 +2,7 @@ module github.com/teddynted/ai-github-repository-blog-generator
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	github.com/aws/aws-lambda-go v1.54.0
