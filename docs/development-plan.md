@@ -266,9 +266,13 @@ population, quality review, optional human approval, and publishing are still
 future work — the ports keep them additive, and `GenerateAll` never lets one
 failing kind corrupt the rest of the package.
 
-**Runtime wiring (next).** These are libraries; the instance runtime consumes
-them. The documented design uses **n8n** (its SQS-trigger workflow) to
-orchestrate processing → generation → publish on the EC2 host. The n8n workflow
-export (`workflows/`) and the OpenClaw-backed processing implementation are the
-next step; alternatively a small Go worker on the instance could drive the same
-seams. That orchestration choice is deliberately left open here.
+| `internal/pipeline` | `Pipeline.Run` — composes process → generate → publish for a request. Resilient: publishes the assets that succeeded even on a partial generation failure. | ✅ Implemented |
+| `internal/publish` | `LogPublisher` — placeholder Publisher (logs assets; never dumps content). Real destinations (Git / object store / CMS) are future work. | ✅ Implemented (placeholder) |
+
+**Runtime wiring (still open).** The `pipeline.Pipeline` is the orchestration
+logic, independent of how it is invoked. What remains is the **invocation**
+mechanism on the instance: a small Go worker draining SQS and calling
+`Pipeline.Run`, or the documented **n8n** SQS-trigger workflow calling the same
+composition (e.g. via an exec node). That choice — plus the OpenClaw-backed
+processing and a real publish destination — is the next decision, deliberately
+left open here rather than overriding the earlier "n8n runs" decision.
