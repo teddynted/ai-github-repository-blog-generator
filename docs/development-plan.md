@@ -34,7 +34,7 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | --- | --- | --- |
 | 1 | **Project foundation** — module, config, logging, errors, bootstrap, build tooling | ✅ Implemented |
 | 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ✅ Implemented |
-| 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ⏳ Planned |
+| 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ✅ Implemented |
 | 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ⏳ Planned |
 | 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ⏳ Planned |
 | 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ⏳ Planned |
@@ -100,3 +100,29 @@ Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
   S3 bucket (`ArtifactsBucket` + `*CodeKey` parameters). The function code is
   implemented in Milestones 3–6; until then the stacks validate but the Lambdas
   are not yet deployable with real behaviour.
+
+---
+
+## Milestone 3 — Repository Registration ✅
+
+The `registration` Lambda, built with Clean Architecture: a pure use case with
+small ports, plus thin AWS/GitHub adapters. Introduces `aws-lambda-go` and the
+AWS SDK v2 (which raise the module's minimum Go to 1.24).
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/repo` | Repository domain model + `ParseRepositoryURL` (HTTPS + SSH forms). |
+| `internal/github` | Minimal GitHub REST client (`GetRepository`, `CreateWebhook`) over `net/http`, status→typed-error mapping. |
+| `internal/registration` | The onboarding use case + ports (`GitHub`, `SecretStore`, `MetadataStore`) and the JSON handler. |
+| `internal/secrets` | Secrets Manager adapter — stores PAT + webhook secret, returns only a reference. |
+| `internal/metadata` | DynamoDB adapter — persists repository metadata (never the PAT). |
+| `lambdas/registration` | API Gateway entry point wiring the collaborators. |
+
+Onboarding order guarantees no half-registered repo is visible: validate access
+→ create webhook → store credentials → write metadata. The PAT is never logged
+and never written to DynamoDB (guarded by a test). All logic is unit-tested with
+fakes/`httptest`; the Lambda cross-compiles to `linux/arm64`.
+
+**Decision:** the registration endpoint is protected by an **API Gateway API
+key** (`x-api-key`); the key ID is a stack output and its value is retrieved
+from API Gateway after deploy.

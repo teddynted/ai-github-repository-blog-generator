@@ -16,7 +16,7 @@ Related: [Deployment](./deployment.md) · [Workflows](./workflows.md) · [Contri
 | [Ollama](https://ollama.com/) | latest | Local LLM server (can also run in Compose) |
 | [AWS CLI](https://docs.aws.amazon.com/cli/) | v2 | Build/deploy CloudFormation; test SQS locally |
 | [cfn-lint](https://github.com/aws-cloudformation/cfn-lint) | latest | Lint CloudFormation templates |
-| [Go](https://go.dev/dl/) | 1.22 | Build and test the Lambda functions |
+| [Go](https://go.dev/dl/) | 1.24 | Build and test the Lambda functions |
 | Make | any | Convenience targets (optional) |
 
 Verify:
