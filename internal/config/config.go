@@ -84,6 +84,10 @@ type Config struct {
 	// NotifyWebhookURL is an optional Slack/webhook URL for notifications
 	// (NOTIFY_WEBHOOK_URL). When blank, notifications are logged only.
 	NotifyWebhookURL string
+	// NotifyEmailFrom / NotifyEmailTo enable SES email notifications when both
+	// are set (NOTIFY_EMAIL_FROM, NOTIFY_EMAIL_TO — comma-separated recipients).
+	NotifyEmailFrom string
+	NotifyEmailTo   string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -122,6 +126,8 @@ func Load(getenv Getenv) (Config, error) {
 		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
 		PendingDir:           firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
 		NotifyWebhookURL:     getenv("NOTIFY_WEBHOOK_URL"),
+		NotifyEmailFrom:      getenv("NOTIFY_EMAIL_FROM"),
+		NotifyEmailTo:        getenv("NOTIFY_EMAIL_TO"),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,

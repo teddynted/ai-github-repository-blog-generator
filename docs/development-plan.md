@@ -392,8 +392,13 @@ review queue: `approve` lists pending packages, `approve -all` auto-approves
 (publishes) everything to the live destination and clears the queue, and
 `approve -reject-all` discards. `internal/approval.PendingStore` is unit-tested.
 
+Notification channels: `LogNotifier` (always on), `WebhookNotifier`
+(Slack/webhook, `NOTIFY_WEBHOOK_URL`), and `EmailNotifier` (SES, enabled by
+`NOTIFY_EMAIL_FROM` + `NOTIFY_EMAIL_TO`); `Multi` fans out to all configured
+channels. The compute stack grants `ses:SendEmail` only when `EnableEmailNotify`
+is set.
+
 **Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
-analysis; an email notification channel; extra trigger sources (releases, tags,
-PR labels); GitHub Apps auth; a **web** approvals UI; and the n8n workflow as an
-alternative orchestration. Real deployment + end-to-end validation require an
-AWS account and a GPU instance.
+analysis; extra trigger sources (releases, tags, PR labels); GitHub Apps auth; a
+**web** approvals UI; and the n8n workflow as an alternative orchestration. Real
+deployment + end-to-end validation require an AWS account and a GPU instance.

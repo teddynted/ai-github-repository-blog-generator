@@ -14,12 +14,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
@@ -123,13 +125,16 @@ func main() {
 		Logger:    a.Logger,
 	}
 
-	var notifier notify.Notifier = &notify.LogNotifier{Logger: a.Logger}
+	notifiers := notify.Multi{&notify.LogNotifier{Logger: a.Logger}}
 	if a.Config.NotifyWebhookURL != "" {
-		notifier = notify.Multi{
-			&notify.LogNotifier{Logger: a.Logger},
-			notify.NewWebhook(a.Config.NotifyWebhookURL, a.Logger),
-		}
+		notifiers = append(notifiers, notify.NewWebhook(a.Config.NotifyWebhookURL, a.Logger))
 	}
+	if a.Config.NotifyEmailFrom != "" && a.Config.NotifyEmailTo != "" {
+		notifiers = append(notifiers, notify.NewEmail(
+			sesv2.NewFromConfig(awsCfg), a.Config.NotifyEmailFrom,
+			splitCSV(a.Config.NotifyEmailTo), a.Logger))
+	}
+	var notifier notify.Notifier = notifiers
 	meter := metrics.New(metrics.Namespace, os.Stdout)
 
 	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "model", a.Config.OllamaModel)
@@ -213,4 +218,15 @@ func errString(err error) string {
 		return "empty detail"
 	}
 	return err.Error()
+}
+
+// splitCSV splits a comma-separated list, trimming spaces and dropping blanks.
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
