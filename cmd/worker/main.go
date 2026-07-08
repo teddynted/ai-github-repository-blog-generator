@@ -115,7 +115,13 @@ func main() {
 		Logger:    a.Logger,
 	}
 
-	notifier := &notify.LogNotifier{Logger: a.Logger}
+	var notifier notify.Notifier = &notify.LogNotifier{Logger: a.Logger}
+	if a.Config.NotifyWebhookURL != "" {
+		notifier = notify.Multi{
+			&notify.LogNotifier{Logger: a.Logger},
+			notify.NewWebhook(a.Config.NotifyWebhookURL, a.Logger),
+		}
+	}
 	meter := metrics.New(metrics.Namespace, os.Stdout)
 
 	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "model", a.Config.OllamaModel)

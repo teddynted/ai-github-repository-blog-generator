@@ -361,17 +361,18 @@ Pipeline order is now **process → generate → review → approve → publish 
 
 ### Notifications ✅
 
-`internal/notify` delivers run outcomes. `LogNotifier` (the MVP channel) emits
-`published` / `held` / `failed` events; email / Slack / webhook channels can
-follow behind the same `Notifier` port. The worker notifies after each run:
-failure (message retained for SQS retry), held (approval pending), or published.
-Tested at the notifier and worker-handler level.
+`internal/notify` delivers run outcomes (`published` / `held` / `failed`). The
+worker notifies after each run: failure (message retained for SQS retry), held
+(approval pending), or published. Channels behind the `Notifier` port:
+`LogNotifier` (always on) and `WebhookNotifier` — a Slack-compatible (`text` +
+structured fields) HTTP POST, retried on transient failure, enabled by setting
+`NOTIFY_WEBHOOK_URL`. `Multi` fans out to both. Email is future.
 
 **Functional MVP complete.** Every documented functional requirement and
 pipeline stage now has real, tested code.
 
 **Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
-analysis; a remote publish destination (currently local files); real
-email/Slack/webhook notification channels; an approvals dashboard; and the n8n
-workflow as an alternative orchestration. Real deployment + end-to-end
-validation require an AWS account and a GPU instance.
+analysis; a remote publish destination (currently local files); an email
+notification channel; an approvals dashboard; and the n8n workflow as an
+alternative orchestration. Real deployment + end-to-end validation require an
+AWS account and a GPU instance.

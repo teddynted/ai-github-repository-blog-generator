@@ -76,6 +76,9 @@ type Config struct {
 	MemoryDir string
 	// PendingDir is where content awaiting human approval is stashed (PENDING_DIR).
 	PendingDir string
+	// NotifyWebhookURL is an optional Slack/webhook URL for notifications
+	// (NOTIFY_WEBHOOK_URL). When blank, notifications are logged only.
+	NotifyWebhookURL string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -111,6 +114,7 @@ func Load(getenv Getenv) (Config, error) {
 		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
 		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
 		PendingDir:           firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
+		NotifyWebhookURL:     getenv("NOTIFY_WEBHOOK_URL"),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,
