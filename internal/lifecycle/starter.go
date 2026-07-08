@@ -7,17 +7,27 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
-// EC2 is the port for the instance operations the Starter needs. The instance
-// is located by its Project tag rather than a hard-coded ID (see the compute
-// stack), which is what breaks the serverless/compute dependency cycle.
+// Instance is the subset of EC2 instance state the lifecycle use cases need.
+// A zero-value ID means no matching instance was found.
+type Instance struct {
+	ID         string
+	State      string // pending|running|stopping|stopped
+	LaunchTime time.Time
+}
+
+// EC2 is the port for the instance operations the lifecycle use cases need. The
+// instance is located by its Project tag rather than a hard-coded ID (see the
+// compute stack), which is what breaks the serverless/compute dependency cycle.
 type EC2 interface {
-	// FindInstance returns the id and state name of the project's instance, or
-	// an empty id when none exists.
-	FindInstance(ctx context.Context, project string) (id, state string, err error)
+	// FindInstance returns the project's instance (empty ID when none exists).
+	FindInstance(ctx context.Context, project string) (Instance, error)
 	// StartInstance starts the given instance.
 	StartInstance(ctx context.Context, id string) error
+	// StopInstance stops the given instance.
+	StopInstance(ctx context.Context, id string) error
 }
 
 // Starter ensures the project's instance is running.
@@ -31,23 +41,23 @@ type Starter struct {
 // reports whether a start was issued. It is idempotent: concurrent matched
 // events simply observe a running instance.
 func (s *Starter) EnsureRunning(ctx context.Context) (started bool, err error) {
-	id, state, err := s.EC2.FindInstance(ctx, s.Project)
+	inst, err := s.EC2.FindInstance(ctx, s.Project)
 	if err != nil {
 		return false, fmt.Errorf("find instance: %w", err)
 	}
-	if id == "" {
+	if inst.ID == "" {
 		return false, fmt.Errorf("no instance tagged Project=%s", s.Project)
 	}
 
-	switch state {
+	switch inst.State {
 	case "running", "pending":
-		s.log("instance already running", id, state)
+		s.log("instance already running", inst.ID, inst.State)
 		return false, nil
 	default: // stopped, stopping, shutting-down
-		if err := s.EC2.StartInstance(ctx, id); err != nil {
-			return false, fmt.Errorf("start instance %s: %w", id, err)
+		if err := s.EC2.StartInstance(ctx, inst.ID); err != nil {
+			return false, fmt.Errorf("start instance %s: %w", inst.ID, err)
 		}
-		s.log("instance start issued", id, state)
+		s.log("instance start issued", inst.ID, inst.State)
 		return true, nil
 	}
 }
