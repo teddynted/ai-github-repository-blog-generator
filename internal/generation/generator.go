@@ -179,6 +179,10 @@ func repoContext(snap processing.Snapshot) string {
 	if snap.Ref != "" {
 		fmt.Fprintf(&b, "Ref: %s\n", snap.Ref)
 	}
+	if tp := techProfile(snap.Analysis); tp != "" {
+		b.WriteString("\n## Technical profile\n")
+		b.WriteString(tp)
+	}
 	if strings.TrimSpace(snap.Readme) != "" {
 		b.WriteString("\n## README\n")
 		b.WriteString(snap.Readme)
@@ -196,6 +200,23 @@ func repoContext(snap processing.Snapshot) string {
 			fmt.Fprintf(&b, "- %s %s\n", shortSHA(c.SHA), firstLine(c.Message))
 		}
 	}
+	return b.String()
+}
+
+// techProfile renders the detected analysis as Markdown bullet lines (empty
+// when nothing was detected).
+func techProfile(a processing.Analysis) string {
+	var b strings.Builder
+	line := func(label string, vals []string) {
+		if len(vals) > 0 {
+			fmt.Fprintf(&b, "- %s: %s\n", label, strings.Join(vals, ", "))
+		}
+	}
+	line("Languages", a.Languages)
+	line("Package managers", a.PackageManagers)
+	line("Infrastructure as Code", a.IaC)
+	line("Containers", a.Containers)
+	line("CI/CD", a.CICD)
 	return b.String()
 }
 

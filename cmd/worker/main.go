@@ -85,6 +85,7 @@ func main() {
 		Readme:      reposource.FSReadme{},
 		Docs:        reposource.FSDocs{},
 		Commits:     reposource.GitCommits{},
+		Analyzer:    reposource.FSAnalyzer{},
 		CommitLimit: 20,
 		Logger:      a.Logger,
 	}

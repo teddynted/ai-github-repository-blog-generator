@@ -277,6 +277,12 @@ register a repo → push a `blog:` commit.
   (default 24 KB) deterministically truncates the repository context so a large
   repo cannot overflow the model window; instructions and the closing directive
   are preserved, and a truncation marker is appended.
+- **Deeper analysis (FR-2.3–2.5).** `reposource.FSAnalyzer` detects the
+  technical profile from the working copy — languages, dependency managers, IaC
+  (Terraform, CloudFormation), containers (Docker/Compose), and CI/CD (GitHub
+  Actions, GitLab CI, …). It is added to the `processing.Snapshot` and rendered
+  into every generation prompt as a "Technical profile" section, so content is
+  grounded in the real stack rather than just the README.
 
 ## Phase 2 (post-MVP) — Content Generation
 

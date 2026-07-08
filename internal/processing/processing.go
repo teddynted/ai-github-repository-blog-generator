@@ -25,8 +25,16 @@ type Commit struct {
 	Author  string `json:"author"`
 }
 
-// Snapshot is the raw material a future Repository Intelligence stage will
-// analyse. It carries no analysis or generated content itself.
+// Analysis is the detected technical profile of a repository.
+type Analysis struct {
+	Languages       []string `json:"languages"`        // e.g. Go, TypeScript
+	PackageManagers []string `json:"package_managers"` // e.g. Go modules, npm
+	IaC             []string `json:"iac"`              // e.g. Terraform, CloudFormation
+	Containers      []string `json:"containers"`       // e.g. Docker, Docker Compose
+	CICD            []string `json:"cicd"`             // e.g. GitHub Actions
+}
+
+// Snapshot is the material the generation stage works from.
 type Snapshot struct {
 	RepoFullName string     `json:"repo_full_name"`
 	Ref          string     `json:"ref"`
@@ -34,6 +42,7 @@ type Snapshot struct {
 	Readme       string     `json:"readme"`
 	Docs         []Document `json:"docs"`
 	Commits      []Commit   `json:"commits"`
+	Analysis     Analysis   `json:"analysis"`
 }
 
 // Cloner clones or syncs a repository and returns its local working path.
@@ -56,6 +65,12 @@ type CommitRetriever interface {
 	Commits(ctx context.Context, localPath string, limit int) ([]Commit, error)
 }
 
+// Analyzer detects the repository's technical profile (tech stack, dependency
+// managers, IaC, containers, CI/CD).
+type Analyzer interface {
+	Analyze(ctx context.Context, localPath string) (Analysis, error)
+}
+
 // Processor orchestrates the retrieval stages into a Snapshot. It performs no
 // analysis or generation; Repository Intelligence consumes the Snapshot later.
 type Processor struct {
@@ -63,6 +78,7 @@ type Processor struct {
 	Readme      ReadmeRetriever
 	Docs        DocsRetriever
 	Commits     CommitRetriever
+	Analyzer    Analyzer // optional; detects the technical profile
 	CommitLimit int
 	Logger      *slog.Logger
 }
@@ -93,6 +109,14 @@ func (p *Processor) Process(ctx context.Context, repoFullName, ref string) (Snap
 		return Snapshot{}, fmt.Errorf("read commits: %w", err)
 	}
 
+	var analysis Analysis
+	if p.Analyzer != nil {
+		analysis, err = p.Analyzer.Analyze(ctx, path)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("analyze: %w", err)
+		}
+	}
+
 	p.log("snapshot ready", repoFullName, path)
 	return Snapshot{
 		RepoFullName: repoFullName,
@@ -101,6 +125,7 @@ func (p *Processor) Process(ctx context.Context, repoFullName, ref string) (Snap
 		Readme:       readme,
 		Docs:         docs,
 		Commits:      commits,
+		Analysis:     analysis,
 	}, nil
 }
 

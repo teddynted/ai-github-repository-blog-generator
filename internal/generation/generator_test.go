@@ -152,6 +152,26 @@ func TestPromptBudgetTruncatesLargeContext(t *testing.T) {
 	}
 }
 
+func TestPromptIncludesTechProfile(t *testing.T) {
+	snap := sampleSnapshot()
+	snap.Analysis = processing.Analysis{
+		Languages:       []string{"Go", "TypeScript"},
+		PackageManagers: []string{"Go modules"},
+		IaC:             []string{"CloudFormation"},
+		CICD:            []string{"GitHub Actions"},
+	}
+	m := &fakeModel{}
+	if _, err := (&Generator{Model: m}).Generate(context.Background(), KindBlog, snap); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	p := m.gotPrompts[0]
+	for _, want := range []string{"Technical profile", "Go, TypeScript", "CloudFormation", "GitHub Actions"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}
+
 func TestPromptNotTruncatedWhenSmall(t *testing.T) {
 	snap := sampleSnapshot()
 	m := &fakeModel{}
