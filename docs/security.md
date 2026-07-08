@@ -1,6 +1,6 @@
 # Security
 
-Security model and controls for the **GitHub AI Blog Generator**. The platform is designed to be secure by default: least-privilege IAM, HMAC-validated webhooks, restricted security groups, HTTPS-only ingress, secrets kept out of source, SSH key authentication, and encryption in transit and at rest.
+Security model and controls for the **GitHub AI Blog Generator**. The platform is designed to be secure by default: least-privilege IAM, HMAC-validated webhooks, a lightweight handler that gates on the commit trigger, restricted security groups, HTTPS-only ingress, secrets kept out of source, SSH key authentication, and encryption in transit and at rest.
 
 Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) · [Monitoring](./monitoring.md).
 
@@ -10,36 +10,39 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 
 - Every compute identity — each Lambda and the EC2 instance — has its **own least-privilege role**; no shared, over-broad roles.
 - Human/CI access uses **short-lived credentials**: SSO for humans, **GitHub OIDC** federation for CI (no long-lived access keys). See [CI/CD](./ci-cd.md#5-aws-authentication-oidc).
-- The webhook handler may only enqueue and start; the idle-shutdown function may only stop; the instance may only consume the queue.
+- The webhook handler may only publish events; the instance starter may only start; the idle-shutdown function may only stop; the instance may only consume the queue.
 
 ---
 
-## 2. GitHub Webhook Signature Validation
+## 2. Webhook Signature Validation & Trigger Gate
 
-GitHub Webhooks are the primary entry point, so the delivery path is hardened end to end ([WH-8…WH-11](./requirements.md#22-signature-validation)). Validation happens in the **Webhook Handler Lambda**, before anything is enqueued.
+GitHub Webhooks are the entry point, so the delivery path is hardened end to end ([WH-7…WH-10](./requirements.md#72-signature-validation)). The **Webhook Handler Lambda** validates the signature **before** it evaluates the commit-message trigger, and publishes an event **only** on a match.
 
 | Control | Implementation |
 | --- | --- |
 | **HMAC SHA-256** | The `X-Hub-Signature-256` header is recomputed over the raw request body using `WEBHOOK_SECRET` |
 | **Constant-time comparison** | Signatures are compared with a constant-time function to prevent timing attacks |
-| **Reject invalid signatures** | Missing/invalid signatures are rejected with `401` and **never enqueued or processed** |
+| **Reject invalid signatures** | Missing/invalid signatures are rejected with `401` and **never evaluated or published** |
+| **Trigger gate** | Only commits matching the publish trigger (default `blog:`) are published to EventBridge; all others return `200` and stop |
 | **HTTPS only** | The API Gateway endpoint accepts TLS traffic only |
-| **Audit logging** | Every delivery — accepted **and** rejected — is logged to CloudWatch |
+| **Audit logging** | Every delivery — published, ignored, and rejected — is logged to CloudWatch |
 
-**Validation contract (illustrative):**
+**Validation + gate contract (illustrative):**
 
 ```text
 signature = "sha256=" + HMAC_SHA256(WEBHOOK_SECRET, raw_request_body)
 if not constant_time_equals(signature, header["X-Hub-Signature-256"]):
-    respond 401 and log rejection      # nothing is enqueued
+    respond 401 and log rejection        # nothing is evaluated or published
+elif not commit_message.startswith(PUBLISH_TRIGGER):
+    respond 200 and log "ignored"        # acknowledged, no processing
 else:
-    enqueue payload in SQS; start instance if stopped; respond 200
+    events.put(bus, "blog.publish.requested", payload)
+    respond 200
 ```
 
 **Operational notes:**
 
-- Rotate `WEBHOOK_SECRET` on a schedule and immediately on suspected exposure; update it in the GitHub webhook configuration in the same change window to avoid rejected deliveries.
-- GitHub retries failed deliveries; inspect **Settings → Webhooks → Recent Deliveries** to replay or debug.
+- Rotate `WEBHOOK_SECRET` on a schedule and immediately on suspected exposure; update it in the GitHub webhook configuration in the same change window.
 - Never log the raw payload or the secret — log the delivery ID, event type, and outcome only.
 
 ---
@@ -54,16 +57,23 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 {
   "Version": "2012-10-17",
   "Statement": [
-    { "Sid": "Enqueue", "Effect": "Allow",
-      "Action": ["sqs:SendMessage"],
-      "Resource": "arn:aws:sqs:us-east-1:<acct>:blog-gen-events" },
-    { "Sid": "StartHost", "Effect": "Allow",
-      "Action": ["ec2:StartInstances", "ec2:DescribeInstances"],
-      "Resource": "arn:aws:ec2:us-east-1:<acct>:instance/<instance-id>" },
+    { "Sid": "PublishMatchedEvents", "Effect": "Allow",
+      "Action": ["events:PutEvents"],
+      "Resource": "arn:aws:events:us-east-1:<acct>:event-bus/blog-gen-bus" },
     { "Sid": "Logs", "Effect": "Allow",
       "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
       "Resource": "arn:aws:logs:us-east-1:<acct>:log-group:/aws/lambda/blog-gen-webhook-handler:*" }
   ]
+}
+```
+
+**Instance Starter Lambda (illustrative):**
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["ec2:StartInstances", "ec2:DescribeInstances"],
+  "Resource": "arn:aws:ec2:us-east-1:<acct>:instance/<instance-id>"
 }
 ```
 
@@ -89,8 +99,9 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 
 | Principal | May do | May NOT do |
 | --- | --- | --- |
-| `webhook-handler` (Lambda) | Enqueue to SQS, start the instance, write its own logs | Stop the instance, read the queue, modify IAM |
-| `idle-shutdown` (Lambda) | Stop the instance, write its own logs | Start the instance, enqueue, read the queue |
+| `webhook-handler` (Lambda) | Publish matched events to EventBridge, write its own logs | Start/stop the instance, read the queue, run inference |
+| `instance-starter` (Lambda) | Start the instance, write its own logs | Stop the instance, publish events, read the queue |
+| `idle-shutdown` (Lambda) | Stop the instance, write its own logs | Start the instance, publish events, read the queue |
 | EC2 instance | Consume the queue, write logs | Modify IAM, start/stop itself, alter infrastructure |
 
 ---
@@ -99,7 +110,7 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 
 | Data | At rest | In transit |
 | --- | --- | --- |
-| EBS (persistent volume + root) | Encrypted EBS | TLS to AWS APIs |
+| EBS (models, n8n state, Repository Memory) | Encrypted EBS | TLS to AWS APIs |
 | Amazon SQS | SSE at rest | TLS |
 | Webhook endpoint | — | HTTPS only (TLS 1.2+) |
 | GitHub API & clone | — | HTTPS only |
@@ -120,17 +131,18 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 
 ## 6. Environment Variables & Secrets Management
 
-- Sensitive values (`WEBHOOK_SECRET`, any repository access tokens) are supplied via **environment variables / a secrets store** and injected at deploy or runtime — **never committed** to source, images, or CloudFormation templates ([SEC-5](./requirements.md#6-security-requirements), [SEC-6](./requirements.md#6-security-requirements)).
+- Sensitive values (`WEBHOOK_SECRET`, `PUBLISH_TRIGGER` config, any repository tokens) are supplied via **environment variables / a secrets store** and injected at deploy or runtime — **never committed** to source, images, or CloudFormation templates ([SEC-5](./requirements.md#9-security-requirements), [SEC-6](./requirements.md#9-security-requirements)).
 - `.env` and any local parameter files are git-ignored.
 - No long-lived AWS keys in code, CI, or images — CI uses **OIDC**; compute uses **instance/Lambda roles**.
 - Exported n8n workflow JSON references credentials **by ID**, never by value.
+- **Repository Memory** stores analysis and topic metadata only — never secrets ([MEM-5](./requirements.md#5-repository-memory-requirements)).
 
 ---
 
 ## 7. SSH Key Authentication
 
-- The EC2 instance uses **key-pair (public-key) authentication**; **password authentication is disabled** (`PasswordAuthentication no`) ([SEC-7](./requirements.md#6-security-requirements)).
-- The private key never leaves the operator's machine; store it securely (e.g. `~/.ssh/`, correct permissions).
+- The EC2 instance uses **key-pair (public-key) authentication**; **password authentication is disabled** (`PasswordAuthentication no`) ([SEC-7](./requirements.md#9-security-requirements)).
+- The private key never leaves the operator's machine; store it securely with correct permissions.
 - SSH is reachable only from the restricted `OperatorCidr`.
 - Rotate the key pair periodically and on suspected exposure.
 
@@ -139,7 +151,7 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 ## 8. Logging & Audit Trails
 
 - **AWS CloudTrail** records control-plane API activity (recommended: org-level trail to a dedicated, locked log bucket).
-- **CloudWatch Logs** capture handler, idle-shutdown, and n8n logs with bounded retention.
+- **CloudWatch Logs** capture handler, starter, idle-shutdown, and n8n logs with bounded retention.
 - Structured logs **must not** contain secrets or full source contents — log references (delivery IDs, run IDs), not payloads.
 
 See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.

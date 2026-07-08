@@ -2,7 +2,7 @@
 
 # GitHub AI Blog Generator
 
-**Event-driven, fully self-hosted AI platform that automatically transforms GitHub repositories into high-quality technical content — powered by OpenClaw, Ollama, and local LLMs, orchestrated with n8n, and running on cost-optimized AWS EC2 Spot Instances provisioned entirely with AWS CloudFormation.**
+**Event-driven, fully self-hosted AI platform that turns GitHub repositories into high-quality technical content — but only when you opt in with a `blog:` commit. Powered by OpenClaw, Ollama, and local LLMs, orchestrated with n8n, triggered through Amazon EventBridge, and running on cost-optimized AWS EC2 Spot Instances provisioned entirely with AWS CloudFormation.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![AWS CloudFormation](https://img.shields.io/badge/IaC-AWS%20CloudFormation-E7157B?logo=amazonaws&logoColor=white)](https://aws.amazon.com/cloudformation/)
@@ -10,6 +10,7 @@
 [![Ollama](https://img.shields.io/badge/Inference-Ollama-000000?logo=ollama&logoColor=white)](https://ollama.com/)
 [![Qwen](https://img.shields.io/badge/LLM-Qwen-615CED)](https://github.com/QwenLM)
 [![n8n](https://img.shields.io/badge/Orchestration-n8n-EA4B71?logo=n8n&logoColor=white)](https://n8n.io/)
+[![Amazon EventBridge](https://img.shields.io/badge/Events-Amazon%20EventBridge-FF4F8B?logo=amazonaws&logoColor=white)](https://aws.amazon.com/eventbridge/)
 [![Amazon SQS](https://img.shields.io/badge/Queue-Amazon%20SQS-FF4F8B?logo=amazonsqs&logoColor=white)](https://aws.amazon.com/sqs/)
 [![GitHub Webhooks](https://img.shields.io/badge/Trigger-GitHub%20Webhooks-181717?logo=github&logoColor=white)](https://docs.github.com/webhooks)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./docs/contributing.md)
@@ -21,8 +22,10 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Core Principle](#core-principle)
 - [Why This Project](#why-this-project)
 - [Features](#features)
+- [Publishing Trigger](#publishing-trigger)
 - [Architecture](#architecture)
 - [AI Workflow](#ai-workflow)
 - [Technology Stack](#technology-stack)
@@ -44,35 +47,35 @@
 
 ## Overview
 
-**GitHub AI Blog Generator** is a fully self-hosted, event-driven AI platform that automatically turns any GitHub repository into publication-ready technical content. When a repository changes, a **GitHub Webhook** fires, an **AWS Lambda** function validates the signature and enqueues the event in **Amazon SQS**, and a cost-optimized **EC2 Spot Instance** is started on demand. On that instance, **n8n** orchestrates a pipeline where **OpenClaw** analyses the repository and **Ollama** runs a **local LLM (Qwen by default)** to generate documentation and technical articles — with **zero paid inference APIs**.
+**GitHub AI Blog Generator** is a fully self-hosted, event-driven AI platform that turns any GitHub repository into publication-ready technical content — **on demand, under your explicit control**.
 
-Every run can produce a bundle of assets:
+The platform monitors repositories with **GitHub Webhooks**, but **receiving a webhook does not automatically generate anything**. Every event is first checked against a **configurable commit-message trigger** (default `blog:`). Only when a commit message matches does the platform publish the event to **Amazon EventBridge**, start a cost-optimized **EC2 Spot Instance**, and run the generation pipeline. Every other event is acknowledged with `HTTP 200` and ignored.
 
-- Technical blog posts
-- README improvements
-- Project documentation
-- Architecture summaries
-- API documentation
-- Project overviews
-- Release notes
-- Changelogs
-- Technical tutorials
+When a run does fire, **n8n** orchestrates a pipeline on the instance where **OpenClaw** analyses the repository, **Repository Memory** provides continuity across runs, and **Ollama** runs a **local LLM (Qwen by default)** to generate content — with **zero paid inference APIs**. After a configurable idle timeout, a Lambda automatically **stops the instance**, so you pay only when content is actually being produced.
 
-All AI inference happens **locally** on the instance. When processing is complete and the system has been idle for a configurable timeout, a Lambda function automatically **stops the EC2 Spot Instance**, so you pay only when AI work is actually being done.
+Supported outputs include technical blog posts, README improvements, documentation, architecture summaries, API documentation, project overviews, release notes, changelogs, and technical tutorials — all emitted as clean, portable Markdown.
 
-> This project is architected for real-world production practices: self-hosting, cost optimisation, local LLM inference, AWS-native services, event-driven compute, and Infrastructure as Code with AWS CloudFormation.
+> This project is architected for real-world production practices: **developer-controlled generation**, self-hosting, cost optimisation, local LLM inference, AWS-native event-driven design, and Infrastructure as Code with AWS CloudFormation.
+
+---
+
+## Core Principle
+
+> **AI-generated blog content is created only when a GitHub webhook event contains a commit message that matches a configurable publishing trigger. All other webhook events are acknowledged and ignored.**
+
+This single rule keeps developers in complete control of when content is produced, prevents unwanted publishing, and eliminates the AI, compute, and storage cost of processing routine commits.
 
 ---
 
 ## Why This Project
 
-Most "AI content" projects assume an unlimited budget for hosted inference APIs (OpenAI, Anthropic, Amazon Bedrock). This project takes the opposite stance:
+Most "AI content" projects assume two things this project rejects: that every repository change should be processed, and that you have an unlimited budget for hosted inference APIs (OpenAI, Anthropic, Amazon Bedrock).
 
+- **Opt-in, not automatic.** Content is generated **only** for commits you explicitly mark with a `blog:` trigger. Normal development never produces content.
 - **No paid inference.** All models run locally via Ollama. You are never billed per token.
-- **Pay only when you compute.** Event-driven EC2 Spot Instances start on a webhook and stop on idle. An idle system costs only cents per month (EBS storage).
+- **Pay only when you compute.** A Spot Instance starts on a trigger match and stops on idle. An idle system costs only cents per month (EBS storage).
 - **Own your data.** Repository content is analysed on infrastructure you control; nothing is sent to a third-party model provider.
 - **Reproducible infrastructure.** Everything is defined in modular AWS CloudFormation — no click-ops, no Terraform.
-- **Open-source best practices.** Clear documentation, least-privilege IAM, secrets management, structured logging, and a public roadmap.
 
 ---
 
@@ -80,80 +83,138 @@ Most "AI content" projects assume an unlimited budget for hosted inference APIs 
 
 | Capability | Description |
 | --- | --- |
-| 🪝 **GitHub Webhook triggers** | Push, release, and pull-request events start a generation run automatically |
-| 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before processing |
-| 📥 **Durable event queue** | Payloads are stored in Amazon SQS so nothing is lost while the instance boots |
-| ⚡ **On-demand compute** | Lambda starts an EC2 Spot Instance only when there is work to do |
+| 🎯 **Commit-message trigger gate** | Generation runs **only** when a commit message matches the configurable trigger (default `blog:`) |
+| 🪝 **GitHub Webhook ingress** | Push events are received, verified, and evaluated — never blindly processed |
+| 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
+| 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which starts compute and buffers the run |
+| 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance boots |
+| ⚡ **On-demand compute** | The EC2 Spot Instance is started only when there is a triggered run to process |
 | 🧠 **Local LLM inference** | Ollama runs Qwen (or any local model) — no external API, no per-token cost |
 | 🔍 **Deep repository analysis** | OpenClaw inspects README, source, structure, IaC, Docker, CI/CD, and docs |
+| 🗂️ **Repository Memory** | Persistent per-repo memory of prior analyses and published topics for continuity and de-duplication |
+| ✅ **Quality review** | A review stage checks generated content before publishing |
+| 🙋 **Optional human approval** | An optional gate lets a human approve content before it is published |
 | 🔗 **n8n orchestration** | Composable, observable pipeline with branching, retries, and notifications |
 | ✍️ **Multi-format output** | Blog posts, READMEs, docs, architecture summaries, changelogs, tutorials |
 | 📝 **Markdown-native** | All content is emitted as clean, portable GitHub-flavoured Markdown |
-| ▶️ **Manual execution** | Trigger a run for any repository on demand, without waiting for a webhook |
+| ▶️ **Manual execution** | Trigger a run for any repository on demand, without a webhook |
 | 🔁 **Retry & error handling** | Failed stages retry with backoff; poison messages route to a dead-letter queue |
 | 🪵 **Structured logging** | CloudWatch logs and metrics across every stage of the pipeline |
 | 🔔 **Notifications** | Users are notified when content is published or a run fails |
 | 💤 **Automatic shutdown** | An idle-timeout Lambda stops the instance so you pay only for active work |
-| 💾 **Persistent storage** | A gp3 EBS volume keeps models and n8n state across start/stop cycles |
+| 💾 **Persistent storage** | A gp3 EBS volume keeps models, n8n state, and Repository Memory across cycles |
+
+---
+
+## Publishing Trigger
+
+Content is generated **only** when a commit message matches the configured publishing trigger.
+
+### Default trigger
+
+```text
+blog:
+```
+
+Any commit whose message begins with `blog:` requests a blog run. Examples:
+
+```text
+blog: Added GitHub Webhook Support
+blog: Introduced Repository Memory
+blog: Release v1.2 Architecture Improvements
+```
+
+### Developer experience — you stay in control
+
+Routine development commits are **acknowledged and ignored** — they never generate content:
+
+```text
+fix(auth): resolve token refresh issue      # ignored
+refactor(api): simplify routing             # ignored
+docs: update README                         # ignored
+```
+
+Only commits explicitly intended for content creation trigger the workflow:
+
+```text
+blog: Added OAuth Authentication            # triggers a run
+blog: Repository Memory Implementation      # triggers a run
+```
+
+### Configurable trigger patterns *(planned)*
+
+The default is `blog:`. Future versions will let you configure custom trigger patterns without changing the core architecture:
+
+- `blog:`
+- `[blog]`
+- Regular expressions
+- Repository-specific trigger rules
+
+See [Future trigger sources](#roadmap) for additional planned entry points (releases, tags, PR labels, manual runs, and scheduled summaries).
 
 ---
 
 ## Architecture
 
-The platform is **event-driven**: nothing runs until a repository changes. A webhook triggers a lightweight serverless front door, which buffers work in a queue and wakes up a Spot Instance to do the heavy AI lifting.
+The platform is **event-driven and opt-in**. A webhook is received on every push, but the pipeline only advances when the commit message matches the trigger.
 
 ```mermaid
 flowchart TD
-    GH["GitHub Repository"] -->|"push / release / PR"| WH["GitHub Webhook"]
+    GH["GitHub Repository"] -->|"push (any commit)"| WH["GitHub Webhook"]
     WH -->|HTTPS POST| APIGW["Amazon API Gateway"]
-    APIGW --> L1["Lambda: Webhook Handler"]
+    APIGW --> L1["Lambda: Webhook Handler (lightweight)"]
 
     subgraph Handler["Webhook Handler responsibilities"]
-        V["Validate HMAC signature"]
-        Q["Store payload in Amazon SQS"]
-        S["Start EC2 Spot Instance if stopped"]
-        R["Return HTTP 200 immediately"]
+        V["Verify HMAC signature"]
+        EX["Extract commit message + repo"]
+        T{"Matches publish trigger?"}
     end
+    L1 --> V --> EX --> T
+    T -->|"No"| IGN["Return HTTP 200 — acknowledge & ignore<br/>(no further processing)"]
+    T -->|"Yes"| PUT["PutEvents → Amazon EventBridge"]
 
-    L1 --> V --> Q --> S --> R
-
-    Q --> SQS[("Amazon SQS Queue")]
-    S --> EC2
+    PUT --> EB["Amazon EventBridge (event bus)"]
+    EB --> SQS[("Amazon SQS (durable buffer + DLQ)")]
+    EB --> STARTER["Lambda: Instance Starter"]
+    STARTER -->|"StartInstances if stopped"| EC2
 
     subgraph EC2["EC2 Spot Instance (Ubuntu + Docker Compose)"]
         N8N["n8n (orchestrator)"]
         OC["OpenClaw (repo analysis)"]
+        MEM[("Repository Memory")]
         OLL["Ollama + Qwen (local LLM)"]
         N8N -->|poll| SQS
-        N8N --> OC --> OLL
+        N8N --> OC
+        OC --> MEM
+        OC --> OLL
     end
 
-    OLL --> GEN["Generate documentation & technical content"]
-    GEN --> PUB["Publish content"]
+    OLL --> REV["Quality review"]
+    REV --> APP{"Optional human approval"}
+    APP -->|"approved / auto"| PUB["Publish blog"]
     PUB --> NOTIFY["Notify users"]
 
     EBS[("Persistent gp3 EBS Volume")] --- EC2
-
-    EB["Amazon EventBridge (idle timer)"] --> L2["Lambda: Idle Shutdown"]
+    IDLE["Amazon EventBridge (idle timer)"] --> L2["Lambda: Idle Shutdown"]
     L2 -->|"stop after idle timeout"| EC2
 
     CW["Amazon CloudWatch"] -.logs/metrics.- L1
     CW -.logs/metrics.- EC2
-    CW -.logs/metrics.- L2
 ```
 
 ### Request lifecycle
 
-1. **GitHub** emits a webhook when a supported event occurs.
-2. **API Gateway** receives the HTTPS request and invokes the **Webhook Handler Lambda**.
-3. The **Lambda** validates the GitHub signature, stores the payload in **Amazon SQS**, starts the **EC2 Spot Instance** if it is stopped, and returns **HTTP 200** immediately (so GitHub never times out).
-4. The **EC2 Spot Instance** boots Ubuntu with Docker Compose running **n8n**, **OpenClaw**, and **Ollama**.
-5. **n8n polls SQS**, pulls the queued event, and drives the pipeline.
-6. **OpenClaw** clones and analyses the repository; **Ollama** performs **local inference** with Qwen.
-7. Content is **generated**, **published**, and **users are notified**.
-8. **EventBridge** tracks activity; when the system is idle beyond the configured timeout, an **Idle Shutdown Lambda** stops the instance.
+1. **GitHub** emits a webhook on every push.
+2. **API Gateway** invokes the **Webhook Handler Lambda**.
+3. The **handler** verifies the HMAC signature, extracts the commit message and repository, and **validates the publishing trigger**:
+   - **No match** → return **HTTP 200** and stop. Nothing else runs.
+   - **Match** → **publish the event to Amazon EventBridge** and return HTTP 200.
+4. **EventBridge** routes the matched event to two targets: the **SQS** durable buffer, and the **Instance Starter Lambda**, which starts the **EC2 Spot Instance** if it is stopped.
+5. The instance boots Ubuntu with Docker Compose running **n8n**, **OpenClaw**, and **Ollama**.
+6. **n8n polls SQS** and runs the pipeline: checkout → analysis → **Repository Memory** → topic identification → outline → **AI generation (Ollama/Qwen)** → quality review → **optional human approval** → publish → notify.
+7. **EventBridge**'s idle timer triggers the **Idle Shutdown Lambda**, which stops the instance once the system is idle.
 
-For a deeper treatment of components and data flow, see [`docs/architecture.md`](./docs/architecture.md).
+For a deeper treatment, see [`docs/architecture.md`](./docs/architecture.md).
 
 ---
 
@@ -164,30 +225,29 @@ sequenceDiagram
     participant GH as GitHub
     participant API as API Gateway
     participant LH as Lambda (Handler)
+    participant EB as EventBridge
     participant SQS as Amazon SQS
+    participant ST as Lambda (Starter)
     participant EC2 as EC2 Spot Instance
     participant N8N as n8n
-    participant OC as OpenClaw
-    participant OL as Ollama (Qwen)
-    participant LS as Lambda (Idle Shutdown)
 
-    GH->>API: Webhook (push/release/PR)
-    API->>LH: Invoke
-    LH->>LH: Validate HMAC signature
-    LH->>SQS: Enqueue payload
-    LH->>EC2: StartInstances (if stopped)
-    LH-->>GH: HTTP 200 (immediate)
-    Note over EC2: Cold start: boot Ubuntu + Docker Compose
-    N8N->>SQS: Poll for messages
-    SQS-->>N8N: Repository event
-    N8N->>OC: Analyse repository
-    OC->>OL: Prompt local LLM
-    OL-->>OC: Generated content
-    OC-->>N8N: Documentation / blog / summaries
-    N8N->>N8N: Publish + notify
-    N8N->>SQS: Delete processed message
-    Note over EC2: Idle timeout reached
-    LS->>EC2: StopInstances
+    GH->>API: push webhook (any commit)
+    API->>LH: invoke
+    LH->>LH: verify signature + extract commit message
+    alt Commit message does NOT match trigger
+        LH-->>GH: HTTP 200 (acknowledged, ignored)
+    else Commit message matches "blog:" trigger
+        LH->>EB: PutEvents (publish requested)
+        LH-->>GH: HTTP 200 (immediate)
+        EB->>SQS: buffer event
+        EB->>ST: start instance if stopped
+        ST->>EC2: StartInstances
+        Note over EC2: Cold start: Ubuntu + Docker Compose + Ollama
+        N8N->>SQS: poll for events
+        SQS-->>N8N: publish-requested event
+        N8N->>N8N: checkout → analyze → memory → topic → outline
+        N8N->>N8N: generate (Ollama/Qwen) → review → (approval) → publish → notify
+    end
 ```
 
 The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs/workflows.md).
@@ -198,16 +258,18 @@ The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs
 
 | Layer | Technology | Purpose |
 | --- | --- | --- |
-| **Trigger** | GitHub Webhooks | Fire on repository events |
+| **Trigger** | GitHub Webhooks | Deliver push events |
+| **Gate** | Commit-message trigger (`blog:`) | Decide whether a run should happen at all |
 | **Ingress** | Amazon API Gateway | Public HTTPS endpoint for webhooks |
-| **Serverless** | AWS Lambda | Signature validation, enqueue, start/stop instance |
+| **Serverless** | AWS Lambda | Handler (validate + publish), instance starter, idle shutdown |
+| **Event bus** | Amazon EventBridge | Route matched events; start compute; buffer via SQS |
 | **Queue** | Amazon SQS | Durable buffer so events are never lost during cold start |
-| **Scheduling** | Amazon EventBridge | Drives the idle-shutdown timer |
 | **Compute** | EC2 Spot Instance (Ubuntu) | Cost-optimized host for AI processing |
-| **Storage** | gp3 EBS Volume | Persistent models, n8n state, and workflows |
+| **Storage** | gp3 EBS Volume | Persistent models, n8n state, and Repository Memory |
 | **Runtime** | Docker + Docker Compose | Reproducible service topology on the instance |
 | **Orchestration** | n8n | Workflow engine that drives the pipeline |
 | **Analysis** | OpenClaw | Repository cloning and structural/code analysis |
+| **Memory** | Repository Memory | Per-repo continuity and topic de-duplication |
 | **Inference** | Ollama | Local model server |
 | **Model** | Qwen (default) | Local LLM for content generation |
 | **IaC** | AWS CloudFormation | Modular, reusable infrastructure templates |
@@ -221,65 +283,44 @@ The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs
 
 This project is engineered to keep AWS costs as close to zero as possible when idle.
 
-### Design principles
+### Trigger pre-filtering — a primary cost-saving mechanism
 
-- **Event-driven compute.** Nothing runs until a webhook arrives. There is no always-on server.
-- **Pay only when you process.** The EC2 Spot Instance is started on demand and stopped after an idle timeout, so compute charges accrue only during active generation.
-- **Spot pricing.** Spot Instances are typically **70–90% cheaper** than On-Demand for the same capacity — ideal for interruptible, batch-style AI workloads.
-- **Local inference.** Because Ollama runs the model locally, there are **no per-token API fees**, no matter how much content you generate.
-- **Persistent EBS, ephemeral compute.** Models and n8n state live on a persistent **gp3 EBS volume**. Only the (cheap) storage cost persists while the instance is stopped; you never re-download models on each run.
+Validating the commit-message trigger **in the lightweight Lambda, before any compute or AI runs**, is one of the platform's biggest cost levers. Because the vast majority of commits never match `blog:`, the platform:
 
-### How SQS prevents webhook loss during cold start
+- **never starts the EC2 Spot Instance** for routine commits,
+- **never invokes the local LLM** for content nobody asked for,
+- **never stores** unwanted output,
+- and **never runs** an unnecessary pipeline.
 
-An EC2 Spot Instance is not instantaneous — booting Ubuntu, starting Docker Compose, and warming Ollama takes time (the **cold start**). During this window, GitHub may deliver multiple webhooks. To ensure **no event is lost**:
+The handler simply returns `HTTP 200` and stops. You pay for AI processing only on the commits you explicitly opt in.
 
-1. The Webhook Handler Lambda writes every validated payload to **Amazon SQS** and returns HTTP 200 immediately.
-2. SQS **durably retains** messages (retention configurable up to 14 days) regardless of instance state.
-3. When n8n comes online, it **polls SQS** and processes the backlog in order.
-4. A **visibility timeout** hides a message while it is being processed, and a **dead-letter queue** captures messages that repeatedly fail.
+### Other design principles
 
-This decoupling means the webhook front door is always available even when the compute layer is asleep.
+- **Event-driven compute.** Nothing runs until a *matched* event arrives. There is no always-on server.
+- **Pay only when you process.** The Spot Instance is started on demand and stopped after an idle timeout.
+- **Spot pricing.** Spot Instances are typically **70–90% cheaper** than On-Demand.
+- **Local inference.** Ollama runs the model locally, so there are **no per-token API fees**.
+- **Persistent EBS, ephemeral compute.** Models, n8n state, and Repository Memory live on a persistent gp3 volume; only cheap storage cost persists while stopped.
 
-### Cold start, startup, and shutdown
+### How SQS prevents event loss during cold start
 
-| Phase | Trigger | Mechanism |
-| --- | --- | --- |
-| **Automatic startup** | Webhook received | Handler Lambda calls `StartInstances` if the instance is stopped |
-| **Cold start** | Instance booting | Ubuntu + Docker Compose + Ollama warm up; SQS buffers events |
-| **Automatic shutdown** | Idle timeout elapsed | EventBridge → Idle Shutdown Lambda calls `StopInstances` |
+Starting a Spot Instance is not instantaneous (the **cold start**). To ensure no matched event is lost: EventBridge writes the event to **Amazon SQS**, which durably retains it (up to 14 days) regardless of instance state; when n8n comes online it **polls SQS** and processes the backlog; a **visibility timeout** and **dead-letter queue** handle retries and poison messages.
 
-Full numbers and tuning guidance live in [`docs/cost-optimization.md`](./docs/cost-optimization.md).
+Full numbers and tuning guidance: [`docs/cost-optimization.md`](./docs/cost-optimization.md).
 
 ---
 
 ## Spot Instance Trade-offs
 
-Spot Instances are the right default for this workload, but the trade-offs are explicit.
+Spot Instances are the right default for this asynchronous, interruptible, batch-style workload.
 
-**Why Spot was selected**
+**Why Spot was selected** — runs are short, bursty, and tolerant of interruption; cost is the primary constraint, and Spot delivers the largest EC2 saving.
 
-- The workload is **asynchronous and interruptible** — content generation is a batch job, not a latency-critical service.
-- Runs are **short and bursty**, matching Spot's start-on-demand model.
-- Cost is the primary constraint, and Spot delivers the largest saving available on EC2.
+**Advantages** — 70–90% cheaper than On-Demand; same instance types and performance; ideal for GPU-backed AI batch jobs.
 
-**Advantages**
+**Disadvantages** — interruptible (two-minute reclaim warning); availability varies by type/AZ; requires idempotent, resumable processing.
 
-- **70–90% cheaper** than On-Demand.
-- Same instance types and performance as On-Demand.
-- Ideal for GPU-backed AI batch jobs that can tolerate interruption.
-
-**Disadvantages**
-
-- **Interruptible.** AWS can reclaim the instance with a two-minute warning when capacity is needed.
-- **Availability varies** by instance type and Availability Zone.
-- Requires **idempotent, resumable** processing.
-
-**How this project mitigates the disadvantages**
-
-- Work lives in **SQS**, not on the instance — an interrupted job returns to the queue after its visibility timeout and is retried.
-- Models and state persist on **EBS**, so a replacement instance resumes quickly.
-- Processing is **idempotent**; re-running a repository event produces the same content package.
-- Optionally, fall back to On-Demand when Spot capacity is unavailable (see [Roadmap](#roadmap)).
+**Mitigations** — work lives in SQS, so an interrupted job returns to the queue and is retried; models, state, and Repository Memory persist on EBS; processing is idempotent; On-Demand fallback is on the [roadmap](#roadmap).
 
 ---
 
@@ -287,26 +328,25 @@ Spot Instances are the right default for this workload, but the trade-offs are e
 
 Security is built in by default (full detail in [`docs/security.md`](./docs/security.md)):
 
-- **Least-privilege IAM roles** — every Lambda and the EC2 instance profile is scoped to only the actions and resources it needs.
-- **GitHub webhook signature validation** — every delivery is verified with **HMAC SHA-256** (constant-time comparison) before it is enqueued.
-- **Security groups** — inbound access is tightly restricted; SSH is limited to known IPs and the LLM/n8n ports are never publicly exposed.
+- **Least-privilege IAM roles** — each Lambda and the EC2 instance profile is scoped to only what it needs.
+- **GitHub webhook signature validation** — HMAC SHA-256 (constant-time) before any event is evaluated or published.
+- **Security groups** — inbound tightly restricted; SSH limited to known IPs; n8n and Ollama ports never publicly exposed.
 - **HTTPS only** — the API Gateway webhook endpoint accepts TLS traffic only.
-- **Environment variables & secrets** — the webhook secret and other sensitive values are injected via environment/secret stores, never committed to source.
-- **Secrets management** — secrets are stored outside the repository (e.g. environment variables or a secrets store) and referenced at runtime.
-- **SSH key authentication** — the EC2 instance uses key-pair authentication; password login is disabled.
+- **Environment variables & secrets** — the webhook secret and trigger config are injected via environment/secret stores, never committed.
+- **SSH key authentication** — key-pair auth only; password login disabled.
 
 ---
 
 ## Prerequisites
 
-Before deploying, ensure you have:
-
-- An **AWS account** with permissions to create VPC, EC2, Lambda, API Gateway, SQS, EventBridge, IAM, and CloudFormation resources.
+- An **AWS account** with permissions to create VPC, EC2, Lambda, API Gateway, EventBridge, SQS, IAM, and CloudWatch resources.
 - The **AWS CLI v2** installed and configured (`aws configure`).
 - A **key pair** for SSH access to the EC2 instance.
 - A **GitHub account** with admin access to the repositories you want to process (to create webhooks).
 - **Docker** and **Docker Compose** knowledge for local development (optional).
 - A shared **webhook secret** for HMAC signature validation.
+
+> **No Amazon Bedrock, OpenAI, or Anthropic access is required** — all inference runs locally via Ollama.
 
 ---
 
@@ -334,56 +374,52 @@ Configuration is provided through environment variables and CloudFormation param
 | --- | --- | --- |
 | `AWS_REGION` | Deployment region | `us-east-1` |
 | `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | `a-long-random-string` |
+| `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
 | `INSTANCE_TYPE` | EC2 instance type for the Spot request | `g4dn.xlarge` |
 | `SPOT_MAX_PRICE` | Maximum Spot price you are willing to pay | `0.20` |
 | `IDLE_TIMEOUT_MINUTES` | Minutes of inactivity before auto-shutdown | `15` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
 | `KEY_PAIR_NAME` | EC2 key pair for SSH access | `blog-generator-key` |
+| `REQUIRE_HUMAN_APPROVAL` | Require manual approval before publishing | `false` |
 
-Secrets such as `WEBHOOK_SECRET` must **never** be committed. Store them in environment variables or a secrets manager. See [`docs/security.md`](./docs/security.md).
+Secrets such as `WEBHOOK_SECRET` must **never** be committed. See [`docs/security.md`](./docs/security.md).
 
 ---
 
 ## Deployment
 
-Deployment is a two-part process: provision infrastructure with CloudFormation, then register the GitHub webhook.
-
 ```mermaid
 flowchart LR
     A["Package Lambda code"] --> B["Deploy CloudFormation stacks"]
     B --> C["Retrieve API Gateway URL"]
-    C --> D["Create GitHub Webhook"]
-    D --> E["Push a commit to test"]
-    E --> F["Watch CloudWatch logs & n8n"]
+    C --> D["Create GitHub Webhook (all pushes)"]
+    D --> E["Commit with 'blog:' to test"]
+    E --> F["Watch EventBridge, SQS, n8n"]
 ```
 
-1. Package the Lambda functions and upload them to an S3 bucket (or use inline deployment).
-2. Deploy the CloudFormation stacks (network → serverless → compute).
+1. Package the Lambda functions and upload them (or deploy inline).
+2. Deploy the CloudFormation stacks (network → serverless → compute → observability).
 3. Copy the **API Gateway invoke URL** from the stack outputs.
-4. Add a **webhook** to your GitHub repository pointing at that URL, using your `WEBHOOK_SECRET`.
-5. Trigger an event (e.g. push a commit) and watch the pipeline run.
+4. Add a **webhook** to your repository pointing at that URL, using your `WEBHOOK_SECRET`. Send **all pushes** — the handler filters by trigger.
+5. Push a commit whose message starts with `blog:` and watch the pipeline run. Push a normal commit and confirm it is acknowledged and ignored.
 
-Full step-by-step instructions are in [`docs/deployment.md`](./docs/deployment.md).
+Full instructions: [`docs/deployment.md`](./docs/deployment.md).
 
 ---
 
 ## CloudFormation Deployment Guide
 
-All infrastructure is provisioned with **AWS CloudFormation** — no Terraform. Templates are **modular and reusable** so each layer can be deployed and updated independently.
+All infrastructure is provisioned with **AWS CloudFormation** — no Terraform. Templates are **modular and reusable**.
 
-Provisioned resources include: **VPC, Public Subnet, Internet Gateway, Route Tables, Security Groups, IAM Roles, EC2 Spot Instance, persistent gp3 EBS Volume, API Gateway, Lambda functions, Amazon SQS, EventBridge, and CloudWatch.**
-
-Suggested stack layout:
+Provisioned resources include: **VPC, Public Subnet, Internet Gateway, Route Tables, Security Groups, IAM Roles, EC2 Spot Instance, persistent gp3 EBS Volume, API Gateway, Lambda functions, Amazon EventBridge, Amazon SQS, and CloudWatch.**
 
 | Stack | Template | Responsibility |
 | --- | --- | --- |
 | **Network** | `network.yaml` | VPC, public subnet, IGW, route tables, security groups |
-| **Serverless** | `serverless.yaml` | API Gateway, Lambda functions, SQS, EventBridge, IAM |
+| **Serverless** | `serverless.yaml` | API Gateway, Lambdas, EventBridge bus + rules, SQS + DLQ, IAM |
 | **Compute** | `compute.yaml` | EC2 Spot request, gp3 EBS volume, instance IAM role, user data |
 | **Observability** | `observability.yaml` | CloudWatch log groups, metrics, alarms |
-
-Example deployment:
 
 ```bash
 # 1. Network layer
@@ -392,11 +428,11 @@ aws cloudformation deploy \
   --stack-name blog-gen-network \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 2. Serverless layer (API Gateway, Lambda, SQS, EventBridge)
+# 2. Serverless layer (API Gateway, Lambdas, EventBridge, SQS)
 aws cloudformation deploy \
   --template-file infrastructure/serverless.yaml \
   --stack-name blog-gen-serverless \
-  --parameter-overrides WebhookSecret=$WEBHOOK_SECRET \
+  --parameter-overrides WebhookSecret=$WEBHOOK_SECRET PublishTrigger=$PUBLISH_TRIGGER \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 3. Compute layer (EC2 Spot + persistent EBS)
@@ -429,11 +465,12 @@ github-ai-blog-generator/
 ├── .env.example
 ├── infrastructure/            # AWS CloudFormation templates (modular)
 │   ├── network.yaml
-│   ├── serverless.yaml
+│   ├── serverless.yaml        # API Gateway, Lambdas, EventBridge, SQS
 │   ├── compute.yaml
 │   └── observability.yaml
 ├── lambdas/                   # Lambda source code
-│   ├── webhook-handler/       # Validate signature, enqueue, start instance
+│   ├── webhook-handler/       # Verify signature, validate trigger, publish to EventBridge
+│   ├── instance-starter/      # Start the Spot Instance on a matched event
 │   └── idle-shutdown/         # Stop the instance after idle timeout
 ├── instance/                  # EC2 host configuration
 │   ├── docker-compose.yml     # n8n + OpenClaw + Ollama
@@ -458,13 +495,13 @@ github-ai-blog-generator/
 
 ## Roadmap
 
+- [ ] Configurable custom trigger patterns (`[blog]`, regex, per-repo rules)
+- [ ] Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
+- [ ] Manual blog generation from the application
+- [ ] Scheduled repository summaries
 - [ ] On-Demand fallback when Spot capacity is unavailable
 - [ ] Multi-model support (switch models per content type)
-- [ ] GPU auto-detection and model right-sizing
-- [ ] Direct publishing integrations (Dev.to, Medium, Hashnode)
-- [ ] Web dashboard for run history and content review
-- [ ] Multi-repository batch processing
-- [ ] Fine-tuned local models for documentation style
+- [ ] Web dashboard for run history, approvals, and content review
 
 The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).
 
@@ -472,7 +509,7 @@ The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).
 
 ## Contributing
 
-Contributions are welcome! Please read [`docs/contributing.md`](./docs/contributing.md) for the development workflow, coding standards, and pull-request process. Good first issues are labelled in the issue tracker.
+Contributions are welcome! Please read [`docs/contributing.md`](./docs/contributing.md) for the development workflow, coding standards, and pull-request process.
 
 ---
 
@@ -480,12 +517,12 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 
 | Document | Description |
 | --- | --- |
-| [Architecture](./docs/architecture.md) | Components, data flow, and design decisions |
+| [Architecture](./docs/architecture.md) | Components, trigger path, data flow, and design decisions |
 | [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
 | [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
-| [Workflows](./docs/workflows.md) | n8n pipeline, node by node |
-| [Cost Optimisation](./docs/cost-optimization.md) | Spot strategy, cold start, and shutdown tuning |
+| [Workflows](./docs/workflows.md) | Trigger validation and the n8n pipeline, node by node |
+| [Cost Optimisation](./docs/cost-optimization.md) | Trigger pre-filtering, Spot strategy, cold start, shutdown |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |

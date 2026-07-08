@@ -1,96 +1,139 @@
 # Workflows
 
-The platform's control flow on the instance is implemented as **n8n workflows**. Each workflow is a discrete, versioned unit exported as JSON under `workflows/`. n8n **polls Amazon SQS** for events, then drives cloning, analysis (via **OpenClaw**), local inference (via **Ollama/Qwen**), publishing, and notifications, passing structured data between stages.
+Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the EC2 Spot Instance, which run the full generation pipeline. n8n **polls Amazon SQS** (fed by EventBridge), then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
 
 Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md).
 
 ---
 
-## 1. Workflow Catalog
+## 1. Trigger Gate (Webhook Handler Lambda)
 
-| Workflow | File | Trigger | Purpose |
-| --- | --- | --- | --- |
-| Event Ingestion | `event-ingestion.json` | **SQS poll** | Pulls queued events, parses the payload, decides whether to process |
-| Repository Analysis | `repository-analysis.json` | Called by ingestion | Clone + structure, README, source, config, tech-stack analysis via OpenClaw |
-| Content Generation | `content-generation.json` | Called by analysis | Runs local inference via Ollama per content type |
-| Publishing | `publishing.json` | Called by generation | Renders Markdown and publishes to the configured destination |
-| Notifications | `notifications.json` | Called on success/failure | Notifies users |
+Before any n8n workflow runs, the handler decides whether a run should happen at all.
 
-The workflows compose into a single pipeline; each can also be executed independently for testing ([WF-8](./requirements.md#4-workflow-requirements)).
+```mermaid
+flowchart TB
+    W[Webhook: payload + X-Hub-Signature-256] --> SIG{Valid HMAC?}
+    SIG -- no --> R401[401 + log rejection]
+    SIG -- yes --> EX[Extract commit message + repo]
+    EX --> T{Matches publish trigger?<br/>default 'blog:'}
+    T -- no --> ACK[HTTP 200 — acknowledge & ignore<br/>no further processing]
+    T -- yes --> PUT[PutEvents → EventBridge]
+    PUT --> OK[HTTP 200]
+```
 
-> **Trigger note:** the primary trigger is a **GitHub Webhook**, but n8n never receives it directly. The webhook is validated and enqueued by the **Webhook Handler Lambda**; n8n **polls SQS**. Manual invocation is also supported. Instance start/stop is handled by Lambda ([webhook handler](./architecture.md#4-event-driven-trigger-path) + [idle-shutdown](./cost-optimization.md#2-automatic-shutdown)), **not** by an n8n workflow.
+- The handler is **not** an n8n workflow — it is a Lambda ([Architecture §2](./architecture.md#2-commit-message-trigger-gate)).
+- It performs **only**: verify signature → parse payload → extract commit info → determine repo → validate trigger → publish matched event → return 200. It does **no** analysis or inference.
+- EventBridge routes matched events to **SQS** (buffer) and the **Instance Starter Lambda** (start the Spot host).
 
 ---
 
-## 2. End-to-End Pipeline
+## 2. Workflow Catalog (n8n)
+
+| Workflow | File | Trigger | Purpose |
+| --- | --- | --- | --- |
+| Event Ingestion | `event-ingestion.json` | **SQS poll** | Pulls matched events, parses the payload |
+| Repository Analysis | `repository-analysis.json` | Called by ingestion | Checkout + structure/README/source/config analysis via OpenClaw |
+| Repository Memory | `repository-memory.json` | Called by analysis | Looks up prior analyses and published topics; records new ones |
+| Content Generation | `content-generation.json` | Called by analysis | Topic ID, outline, and local inference via Ollama per content type |
+| Quality Review | `quality-review.json` | Called by generation | Reviews drafts before publishing |
+| Approval & Publishing | `approval-publishing.json` | Called by review | Optional human approval, then publishes Markdown |
+| Notifications | `notifications.json` | Called on success/failure | Notifies users |
+
+Each workflow can also be executed independently for testing ([WF-8](./requirements.md#4-workflow-requirements)).
+
+> **Trigger note:** every event in SQS has already passed the commit-message trigger gate in the handler. n8n never sees ignored events. Instance start/stop is handled by Lambda (starter + idle-shutdown), **not** by n8n.
+
+---
+
+## 3. End-to-End Pipeline
 
 ```mermaid
 flowchart LR
     SQS[(Amazon SQS)] --> I[Event Ingestion]
     I --> A[Repository Analysis<br/>OpenClaw]
-    A --> G[Content Generation<br/>Ollama / Qwen]
-    G --> P[Publishing]
+    A --> M[Repository Memory<br/>lookup]
+    M --> G[Content Generation<br/>topic → outline → Ollama]
+    G --> R[Quality Review]
+    R --> P[Approval & Publishing]
     P --> N[Notifications]
+    P -.record topics.-> M
     I -. on error .-> N
     A -. on error .-> N
     G -. on error .-> N
+    R -. on error .-> N
     P -. on error .-> N
 ```
 
 ---
 
-## 3. Event Ingestion
+## 4. Event Ingestion
 
-Drains the queue and starts a run per message. n8n polls SQS on the instance; each message is a validated GitHub event.
+Drains the queue and starts a run per matched event.
 
 ```mermaid
 flowchart TB
     POLL[Poll SQS] --> MSG{Message available?}
     MSG -- no --> IDLE[Idle → instance may auto-stop]
-    MSG -- yes --> PARSE[Parse payload<br/>event, repo, ref]
-    PARSE --> SUP{Supported event?}
-    SUP -- no --> SKIP[Skip + delete message + log]
-    SUP -- yes --> HANDOFF[Handoff → Analysis]
+    MSG -- yes --> PARSE[Parse matched event<br/>repo, ref, commit]
+    PARSE --> HANDOFF[Handoff → Analysis]
     HANDOFF --> DONE{Run succeeded?}
     DONE -- yes --> DEL[Delete SQS message]
     DONE -- no --> KEEP[Leave message<br/>visibility timeout → retry / DLQ]
 ```
 
-- A message is **deleted only after a successful run** ([WF-6](./requirements.md#4-workflow-requirements)); a failure lets the **visibility timeout** expire so the message is retried, and repeated failures land in the **dead-letter queue**.
-- When the queue is empty and the system stays idle, the **idle-shutdown Lambda** stops the instance ([Cost Optimisation](./cost-optimization.md#2-automatic-shutdown)).
+A message is **deleted only after a successful run** ([WF-6](./requirements.md#4-workflow-requirements)); a failure lets the visibility timeout expire so the message is retried, and repeated failures land in the **dead-letter queue**.
 
-**Input:** SQS message `{ event, repo, ref, delivery_id }` · **Output:** `{ runId, repoMeta, event }`
+**Input:** SQS message `{ repo, ref, commit, delivery_id }` · **Output:** `{ runId, repoMeta }`
 
 ---
 
-## 4. Repository Analysis
+## 5. Repository Analysis
 
 Builds a structured understanding of the repository using **OpenClaw**.
 
 ```mermaid
 flowchart TB
-    C[Clone / update repository] --> ST[Structure analysis]
+    C[Checkout / sync repository] --> ST[Structure analysis]
     ST --> RD[README analysis]
     RD --> SR[Source code analysis]
     SR --> CF[Configuration + IaC + Docker + CI/CD]
     CF --> TD[Technology stack detection]
-    TD --> CTX[Build context<br/>token-budgeted]
-    CTX --> O[Output: context manifest]
+    TD --> O[Output: context manifest]
 ```
 
 **Input:** `{ runId, repoMeta }` · **Output:** `{ context, contextManifest }`
 
-Implements [FR-2](./requirements.md#12-repository-cloning--analysis) and feeds [AI Requirements](./requirements.md#3-ai--local-inference-requirements). Repository clones are transient — they live on the instance disk during the run.
+Implements [FR-2](./requirements.md#12-repository-cloning--analysis). Clones are transient — they live on the instance disk during the run.
 
 ---
 
-## 5. Content Generation
+## 6. Repository Memory
 
-Runs **local inference via Ollama** once per content type with purpose-tuned prompts; retries transient failures with backoff.
+Provides continuity across runs so the platform avoids duplicate content and builds on prior work.
 
 ```mermaid
 flowchart TB
-    P[context + prompts] --> LOOP{For each content type}
+    IN[context manifest] --> LK[Look up prior analyses<br/>+ published topics for this repo]
+    LK --> CTX[Augment context with memory]
+    CTX --> OUT[Memory-aware context]
+    PUBLISHED[Published topics from a completed run] --> REC[Record into memory]
+```
+
+Repository Memory is a **persistent per-repository store on the EBS volume**. On lookup it returns previously identified topics and published posts; after publishing, the run records new topics ([REG-MEM requirements](./requirements.md#5-repository-memory-requirements)).
+
+**Input:** `{ context }` · **Output:** `{ memoryAwareContext }`
+
+---
+
+## 7. Content Generation
+
+Identifies topics, builds an outline, then runs **local inference via Ollama** once per content type; retries transient failures with backoff.
+
+```mermaid
+flowchart TB
+    P[memory-aware context] --> TID[Topic identification]
+    TID --> OUT[Outline generation]
+    OUT --> LOOP{For each content type}
     LOOP --> OL[Ollama generate<br/>local Qwen model]
     OL --> C{Success?}
     C -- transient --> RB[Backoff + retry ≤ N]
@@ -98,57 +141,72 @@ flowchart TB
     C -- failed --> E[Error → Notifications]
     C -- ok --> ACC[Accumulate Markdown]
     ACC --> LOOP
-    LOOP --> O[Content set]
+    LOOP --> O[Draft content set]
 ```
 
 **Content types:** technical blog post, README improvements, project documentation, architecture summary, API documentation, project overview, release notes, changelog, technical tutorial ([FR-3](./requirements.md#13-documentation--content-generation)).
 
-**Input:** `{ context, model, prompts }` · **Output:** `{ contentSet }`
-
-The model (`OLLAMA_MODEL`, default Qwen) and generation parameters come from configuration ([AI-2](./requirements.md#3-ai--local-inference-requirements)); there is **no external inference API**.
+The model (`OLLAMA_MODEL`, default Qwen) and parameters come from configuration ([AI-2](./requirements.md#6-ai--local-inference-requirements)); there is **no external inference API**.
 
 ---
 
-## 6. Publishing
+## 8. Quality Review
 
 ```mermaid
 flowchart TB
-    C[Content set] --> R[Render Markdown assets]
-    R --> PUB[Publish to configured destination]
-    PUB --> ME[Emit CloudWatch metrics]
-    ME --> OK[Success → Notifications]
+    D[Draft content set] --> Q[Automated quality checks<br/>structure, completeness, Markdown validity]
+    Q --> V{Passes?}
+    V -- no --> E[Flag → Notifications / retry]
+    V -- yes --> A[Approved for approval gate]
 ```
 
-All output is **GitHub-flavoured Markdown**. The publishing destination is deployment-configurable (for example a Git repository, an object store, or a CMS). A failure never corrupts previously published output ([FR-5.5](./requirements.md#15-reliability-retry-logging--error-handling)).
+A review stage checks drafts before they can be published ([FR-3.12](./requirements.md#13-documentation--content-generation)).
 
 ---
 
-## 7. Notifications
+## 9. Approval & Publishing
 
-A shared sub-workflow invoked on both success and failure paths.
+```mermaid
+flowchart TB
+    C[Reviewed content set] --> G{Human approval required?<br/>REQUIRE_HUMAN_APPROVAL}
+    G -- yes --> WAIT[Notify approver + wait for decision]
+    WAIT --> DEC{Approved?}
+    DEC -- no --> REJ[Discard draft + log + notify]
+    DEC -- yes --> PUB
+    G -- no --> PUB[Render Markdown + publish]
+    PUB --> REC[Record published topics → Repository Memory]
+    REC --> ME[Emit CloudWatch metrics]
+    ME --> OK[Success → Notifications]
+```
+
+**Optional human approval** (`REQUIRE_HUMAN_APPROVAL`, default `false`) pauses the pipeline for a human decision before publishing. All output is **GitHub-flavoured Markdown**; a failure never corrupts previously published output ([FR-5.5](./requirements.md#16-reliability-retry-logging--error-handling)).
+
+---
+
+## 10. Notifications
+
+A shared sub-workflow invoked on success, failure, and approval-request paths.
 
 ```mermaid
 flowchart LR
-    IN[result: success/failure + context] --> R{Channel}
+    IN[result / approval request] --> R{Channel}
     R --> EMAIL[Email]
     R --> SLACK[Slack webhook]
     R --> WH[Generic webhook]
 ```
 
-**Input:** `{ status, repo, publishedRefs?, error? }` ([FR-4](./requirements.md#14-output-publishing--notifications)).
+**Input:** `{ status, repo, publishedRefs?, approvalRequest?, error? }` ([FR-4](./requirements.md#14-output-publishing--notifications)).
 
 ---
 
-## 8. Importing Workflows
+## 11. Importing Workflows
 
 1. Start the instance and open n8n over an **SSH tunnel** (the UI is not publicly exposed — see [Deployment §5](./deployment.md#5-import-the-n8n-workflows)); locally it's `http://localhost:5678`.
 2. **Workflows → Import from File** and select each JSON in `workflows/`.
-3. Configure **Credentials** (AWS/SQS, GitHub, notification channel) in the editor.
+3. Configure **Credentials** (AWS/SQS, GitHub, notification channel).
 4. Activate the workflows.
 
 ### Exporting after changes
-
-Export edited workflows back to JSON and commit them so the repo stays the source of truth:
 
 ```bash
 # via the n8n editor: Workflow → Download

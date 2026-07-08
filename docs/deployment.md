@@ -42,12 +42,14 @@ cp .env.example .env
 | `AWS_REGION` | Deployment region | `us-east-1` |
 | `ProjectName` | Resource name prefix | `blog-gen` |
 | `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | random 32+ chars |
+| `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
 | `INSTANCE_TYPE` | EC2 instance type for the Spot request | `g4dn.xlarge` |
 | `SPOT_MAX_PRICE` | Maximum Spot price you will pay | `0.20` |
 | `IDLE_TIMEOUT_MINUTES` | Minutes of inactivity before auto-shutdown | `15` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
 | `KEY_PAIR_NAME` | EC2 key pair for SSH | `blog-generator-key` |
+| `REQUIRE_HUMAN_APPROVAL` | Require manual approval before publishing | `false` |
 | `LogRetentionDays` | CloudWatch retention | `14` |
 | `OperatorCidr` | CIDR allowed to SSH to the instance | `203.0.113.10/32` |
 
@@ -58,16 +60,17 @@ cp .env.example .env
 ## 3. Build the Lambda Functions
 
 ```bash
-# Webhook handler
-( cd lambdas/webhook-handler && \
-  GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
-  zip webhook-handler.zip bootstrap )
-
-# Idle shutdown
-( cd lambdas/idle-shutdown && \
-  GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
-  zip idle-shutdown.zip bootstrap )
+# Build all three functions
+for fn in webhook-handler instance-starter idle-shutdown; do
+  ( cd lambdas/$fn && \
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
+    zip $fn.zip bootstrap )
+done
 ```
+
+- `webhook-handler` — verify signature, validate the commit-message trigger, publish matched events to EventBridge.
+- `instance-starter` — start the Spot Instance on a matched event.
+- `idle-shutdown` — stop the Spot Instance after the idle timeout.
 
 Upload the ZIPs to a deployment bucket (or reference them inline), depending on your pipeline.
 
@@ -85,11 +88,11 @@ aws cloudformation deploy \
   --parameter-overrides OperatorCidr=$OperatorCidr \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 2. Serverless layer (API Gateway, Lambda, SQS + DLQ, EventBridge)
+# 2. Serverless layer (API Gateway, Lambdas, EventBridge, SQS + DLQ)
 aws cloudformation deploy \
   --template-file infrastructure/serverless.yaml \
   --stack-name blog-gen-serverless \
-  --parameter-overrides WebhookSecret=$WEBHOOK_SECRET \
+  --parameter-overrides WebhookSecret=$WEBHOOK_SECRET PublishTrigger=$PUBLISH_TRIGGER \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 3. Compute layer (EC2 Spot + persistent EBS)
@@ -136,7 +139,7 @@ ssh -i ~/.ssh/$KEY_PAIR_NAME.pem -L 5678:localhost:5678 ubuntu@<instance-public-
 # then open http://localhost:5678
 ```
 
-In the n8n editor: **Workflows → Import from File**, select each JSON under `workflows/`, configure credentials, and activate. See [Workflows → Importing](./workflows.md#8-importing-workflows).
+In the n8n editor: **Workflows → Import from File**, select each JSON under `workflows/`, configure credentials, and activate. See [Workflows → Importing](./workflows.md#11-importing-workflows).
 
 ---
 
@@ -147,10 +150,10 @@ In your repository: **Settings → Webhooks → Add webhook**.
 1. **Payload URL:** the `WebhookUrl` stack output.
 2. **Content type:** `application/json`.
 3. **Secret:** the same value as `WEBHOOK_SECRET`.
-4. **Events:** *push*, *release*, *pull request* (or "Send me everything" and let the handler filter).
+4. **Events:** send **Just the push event** (or "Send me everything"). The handler evaluates the commit-message trigger — no server-side event filtering is required.
 5. Save and confirm a green **✓** under **Recent Deliveries**.
 
-> The webhook front door (API Gateway + Lambda + SQS) is **always available**, even when the EC2 instance is stopped — the handler enqueues the event and starts the instance on demand.
+> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push; it only publishes an event — and starts the instance — when the commit message matches the `PUBLISH_TRIGGER` (default `blog:`).
 
 ---
 
@@ -174,14 +177,20 @@ aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
   --query 'Reservations[0].Instances[0].State.Name'
 ```
 
-**Smoke test:** push a commit (or use GitHub's **Recent Deliveries → Redeliver**). Expected sequence:
+**Smoke test:** verify both paths of the trigger gate.
+
+1. **Ignored path** — push a normal commit (e.g. `docs: tweak README`). Expect a green ✓ in GitHub, `WebhookIgnored` in CloudWatch, and **no** instance start.
+2. **Triggered path** — push a commit whose message starts with `blog:` (e.g. `blog: smoke test`), or **Redeliver** such a delivery.
+
+Expected sequence for the triggered path:
 
 | Check | Expected |
 | --- | --- |
 | GitHub Recent Deliveries | Green ✓ (HTTP 200) |
-| SQS | Message count increments, then drains |
-| EC2 | Transitions `stopped` → `running` after the webhook |
-| CloudWatch | Handler logs show validate → enqueue → start; n8n logs show the run |
+| CloudWatch (handler) | Logs show verify → trigger match → PutEvents |
+| EventBridge / SQS | Event published; SQS count increments, then drains |
+| EC2 | Transitions `stopped` → `running` after the matched event |
+| CloudWatch (n8n) | Run logs: analyze → memory → generate → review → publish |
 | Published output | New Markdown content at the configured destination |
 | EC2 (after idle timeout) | Transitions back to `stopped` |
 
