@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
@@ -27,7 +28,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "SecretsPrefix"); err != nil {
+	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "SecretsPrefix", "EventBusName", "EventSource"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -40,7 +41,7 @@ func main() {
 	handler := &webhook.Handler{
 		Repos:          metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable),
 		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix),
-		Publisher:      &eventbus.LogPublisher{Logger: a.Logger}, // EventBridge in Milestone 5
+		Publisher:      eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
 		DefaultTrigger: a.Config.PublishTrigger,
 		Logger:         a.Logger,
 	}

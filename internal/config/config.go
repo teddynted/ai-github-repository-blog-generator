@@ -29,6 +29,12 @@ const (
 type Config struct {
 	// AWSRegion is the deployment region (AWS_REGION).
 	AWSRegion string
+	// ProjectName is the resource prefix / tag value used to locate the EC2
+	// instance and name resources (PROJECT_NAME).
+	ProjectName string
+	// EventSource is the EventBridge "source" the webhook handler publishes
+	// under; the matched-event rule keys off it (EVENT_SOURCE).
+	EventSource string
 	// PublishTrigger is the default commit-message trigger prefix
 	// (PUBLISH_TRIGGER). A repository may override it via its stored
 	// trigger pattern; this is the platform default.
@@ -74,6 +80,8 @@ type Getenv func(key string) string
 func Load(getenv Getenv) (Config, error) {
 	cfg := Config{
 		AWSRegion:            getenv("AWS_REGION"),
+		ProjectName:          getenv("PROJECT_NAME"),
+		EventSource:          getenv("EVENT_SOURCE"),
 		PublishTrigger:       firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
 		RepositoriesTable:    getenv("REPOSITORIES_TABLE"),
 		SecretsPrefix:        firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
@@ -135,6 +143,10 @@ func (c Config) field(name string) (string, bool) {
 	switch name {
 	case "AWSRegion":
 		return c.AWSRegion, true
+	case "ProjectName":
+		return c.ProjectName, true
+	case "EventSource":
+		return c.EventSource, true
 	case "PublishTrigger":
 		return c.PublishTrigger, true
 	case "RepositoriesTable":
