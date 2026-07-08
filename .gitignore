@@ -1,0 +1,19 @@
+# Build artifacts
+/dist/
+bootstrap
+*.zip
+
+# Local environment / secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

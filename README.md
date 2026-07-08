@@ -565,6 +565,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 
 | Document | Description |
 | --- | --- |
+| [Development Plan](./docs/development-plan.md) | MVP milestones, implementation decisions, and current status |
 | [Architecture](./docs/architecture.md) | Components, trigger path, data flow, and design decisions |
 | [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
 | [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
