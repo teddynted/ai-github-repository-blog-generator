@@ -6,10 +6,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/retry"
 )
+
+// fastRetry avoids real backoff delays in tests.
+var fastRetry = retry.Config{MaxAttempts: 3, BaseDelay: 0}
 
 func TestGenerateSendsRequestAndReturnsResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,9 +46,29 @@ func TestGenerateMapsNon200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := New("m", WithBaseURL(srv.URL)).Generate(context.Background(), "x")
+	_, err := New("m", WithBaseURL(srv.URL), WithRetry(fastRetry)).Generate(context.Background(), "x")
 	if apperror.CodeOf(err) != apperror.CodeUpstream {
 		t.Errorf("code = %s, want upstream", apperror.CodeOf(err))
+	}
+}
+
+func TestGenerateRetriesTransientThenSucceeds(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable) // transient (model loading)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(generateResponse{Response: "ok", Done: true})
+	}))
+	defer srv.Close()
+
+	out, err := New("m", WithBaseURL(srv.URL), WithRetry(fastRetry)).Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if out != "ok" || calls.Load() != 3 {
+		t.Errorf("out=%q calls=%d (expected retry to 3rd attempt)", out, calls.Load())
 	}
 }
 

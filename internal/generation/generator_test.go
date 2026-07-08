@@ -131,5 +131,38 @@ func TestGenerateAllContinuesPastFailures(t *testing.T) {
 	}
 }
 
+func TestPromptBudgetTruncatesLargeContext(t *testing.T) {
+	huge := strings.Repeat("x", 100000)
+	snap := processing.Snapshot{RepoFullName: "acme/widget", Readme: huge}
+	m := &fakeModel{}
+	g := &Generator{Model: m, MaxPromptBytes: 2000}
+
+	if _, err := g.Generate(context.Background(), KindBlog, snap); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	p := m.gotPrompts[0]
+	if len(p) > 2000 {
+		t.Errorf("prompt exceeded budget: %d bytes", len(p))
+	}
+	// The instruction, repo name, closing, and truncation marker survive.
+	for _, want := range []string{"blog post", "acme/widget", "starting with a top-level title", "context truncated"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("budgeted prompt missing %q", want)
+		}
+	}
+}
+
+func TestPromptNotTruncatedWhenSmall(t *testing.T) {
+	snap := sampleSnapshot()
+	m := &fakeModel{}
+	g := &Generator{Model: m} // default budget
+	if _, err := g.Generate(context.Background(), KindBlog, snap); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if strings.Contains(m.gotPrompts[0], "context truncated") {
+		t.Error("small prompt should not be truncated")
+	}
+}
+
 // Guard: the concrete ollama.Client satisfies the Model port.
 var _ Model = (*ollama.Client)(nil)

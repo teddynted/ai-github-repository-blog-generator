@@ -267,6 +267,17 @@ register a repo → push a `blog:` commit.
 
 ---
 
+## Hardening (correctness vs. requirements)
+
+- **Retry with backoff (FR-6.1).** `internal/retry` — bounded exponential
+  backoff + jitter, retrying only transient (`upstream`/`unavailable`) errors and
+  respecting context cancellation. Wired into the Ollama and GitHub clients
+  (401/403/404 still fail fast); AWS SDK calls rely on the SDK's own retry.
+- **Prompt/context budget (AI-6).** `generation.Generator.MaxPromptBytes`
+  (default 24 KB) deterministically truncates the repository context so a large
+  repo cannot overflow the model window; instructions and the closing directive
+  are preserved, and a truncation marker is appended.
+
 ## Phase 2 (post-MVP) — Content Generation
 
 Beyond the MVP slice, building on `processing.Snapshot`. In progress.
