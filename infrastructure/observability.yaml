@@ -199,6 +199,22 @@ Resources:
       AlarmActions:
         - !Ref AlarmTopic
 
+  RunsFailedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-runs-failed"
+      AlarmDescription: Content-generation runs are failing.
+      Namespace: BlogGenerator
+      MetricName: RunsFailed
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -230,6 +246,35 @@ Resources:
                   [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${ProjectName}-events", { "stat": "Maximum" } ],
                   [ "AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", "${ProjectName}-events", { "stat": "Maximum" } ],
                   [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${ProjectName}-events-dlq", { "stat": "Maximum" } ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Webhook activity (triggered vs ignored)",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 300,
+                "metrics": [
+                  [ "BlogGenerator", "WebhookReceived" ],
+                  [ "BlogGenerator", "TriggerMatched" ],
+                  [ "BlogGenerator", "WebhookIgnored" ],
+                  [ "BlogGenerator", "WebhookRejected" ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Run outcomes",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 300,
+                "metrics": [
+                  [ "BlogGenerator", "RunsStarted" ],
+                  [ "BlogGenerator", "RunsSucceeded" ],
+                  [ "BlogGenerator", "RunsFailed" ],
+                  [ "BlogGenerator", "RunsHeld" ],
+                  [ "BlogGenerator", "AssetsGenerated" ]
                 ]
               }
             }

@@ -66,6 +66,15 @@ func pushBody(fullName, message string) []byte {
 	return b
 }
 
+type fakeCounter struct{ counts map[string]int }
+
+func (f *fakeCounter) Count(name string) {
+	if f.counts == nil {
+		f.counts = map[string]int{}
+	}
+	f.counts[name]++
+}
+
 func newHandler(pub *fakePublisher) *Handler {
 	return &Handler{
 		Repos:          &fakeRepos{r: registeredRepo(), ok: true},
@@ -197,5 +206,37 @@ func TestUnparseablePayloadIs400(t *testing.T) {
 	status, _ := newHandler(&fakePublisher{}).Handle(context.Background(), map[string]string{"X-GitHub-Event": "push"}, body)
 	if status != 400 {
 		t.Errorf("status = %d, want 400", status)
+	}
+}
+
+func TestMetricsEmitted(t *testing.T) {
+	// matched commit -> WebhookReceived + TriggerMatched
+	body := pushBody("acme/widget", "blog: x")
+	mc := &fakeCounter{}
+	h := newHandler(&fakePublisher{})
+	h.Metrics = mc
+	h.Handle(context.Background(), signedHeaders(body), body)
+	if mc.counts["WebhookReceived"] != 1 || mc.counts["TriggerMatched"] != 1 {
+		t.Errorf("matched metrics = %v", mc.counts)
+	}
+
+	// routine commit -> WebhookIgnored
+	mc2 := &fakeCounter{}
+	h.Metrics = mc2
+	rbody := pushBody("acme/widget", "fix: x")
+	h.Handle(context.Background(), signedHeaders(rbody), rbody)
+	if mc2.counts["WebhookIgnored"] != 1 || mc2.counts["TriggerMatched"] != 0 {
+		t.Errorf("ignored metrics = %v", mc2.counts)
+	}
+
+	// bad signature -> WebhookRejected
+	mc3 := &fakeCounter{}
+	h.Metrics = mc3
+	bbody := pushBody("acme/widget", "blog: x")
+	bh := signedHeaders(bbody)
+	bh["X-Hub-Signature-256"] = "sha256=bad"
+	h.Handle(context.Background(), bh, bbody)
+	if mc3.counts["WebhookRejected"] != 1 {
+		t.Errorf("rejected metrics = %v", mc3.counts)
 	}
 }

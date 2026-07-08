@@ -277,6 +277,13 @@ register a repo → push a `blog:` commit.
   (default 24 KB) deterministically truncates the repository context so a large
   repo cannot overflow the model window; instructions and the closing directive
   are preserved, and a truncation marker is appended.
+- **CloudWatch custom metrics (MON-2).** `internal/metrics` emits
+  Embedded-Metric-Format (EMF) records to stdout — no `PutMetricData`, no extra
+  IAM, no latency. The webhook handler emits `WebhookReceived` / `WebhookRejected`
+  / `WebhookIgnored` / `TriggerMatched`; the worker emits `RunsStarted` /
+  `RunsSucceeded` / `RunsFailed` / `RunsHeld` / `RunsSkipped` / `AssetsGenerated`.
+  The `observability.yaml` dashboard gained two `BlogGenerator`-namespace widgets
+  and a `RunsFailed` alarm.
 - **Deeper analysis (FR-2.3–2.5).** `reposource.FSAnalyzer` detects the
   technical profile from the working copy — languages, dependency managers, IaC
   (Terraform, CloudFormation), containers (Docker/Compose), and CI/CD (GitHub

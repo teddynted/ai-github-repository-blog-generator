@@ -27,6 +27,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/notify"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
@@ -115,9 +116,10 @@ func main() {
 	}
 
 	notifier := &notify.LogNotifier{Logger: a.Logger}
+	meter := metrics.New(metrics.Namespace, os.Stdout)
 
 	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "model", a.Config.OllamaModel)
-	run(ctx, a.Logger, queue, pipe, notifier)
+	run(ctx, a.Logger, queue, pipe, notifier, meter)
 	a.Logger.Info("worker stopped")
 }
 
@@ -132,7 +134,13 @@ type runner interface {
 	Run(ctx context.Context, req pipeline.Request) (pipeline.Result, error)
 }
 
-func run(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, n notify.Notifier) {
+// meter emits metrics (satisfied by *metrics.Emitter).
+type meter interface {
+	Count(name string)
+	CountN(name string, n float64)
+}
+
+func run(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, n notify.Notifier, mt meter) {
 	for ctx.Err() == nil {
 		msgs, err := q.Receive(ctx, 10, 20)
 		if err != nil {
@@ -143,12 +151,12 @@ func run(ctx context.Context, logger interface{ Error(string, ...any) }, q consu
 			continue
 		}
 		for _, m := range msgs {
-			handleMessage(ctx, logger, q, p, n, m)
+			handleMessage(ctx, logger, q, p, n, mt, m)
 		}
 	}
 }
 
-func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, n notify.Notifier, m awssqs.Message) {
+func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, n notify.Notifier, mt meter, m awssqs.Message) {
 	var env eventEnvelope
 	if err := json.Unmarshal([]byte(m.Body), &env); err != nil || env.Detail.RepoFullName == "" {
 		// Unparseable/irrelevant message: drop it so it does not loop forever.
@@ -158,6 +166,7 @@ func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) 
 	}
 
 	repo := env.Detail.RepoFullName
+	mt.Count("RunsStarted")
 	res, err := p.Run(ctx, pipeline.Request{
 		RepoFullName: repo,
 		Ref:          env.Detail.Ref,
@@ -166,14 +175,20 @@ func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) 
 	if err != nil {
 		// Leave the message for SQS to redeliver / dead-letter.
 		logger.Error("run failed; leaving message for retry", "repo", repo, "error", err.Error())
+		mt.Count("RunsFailed")
 		_ = n.Notify(ctx, notify.Event{Repo: repo, Status: notify.StatusFailed, Err: err.Error()})
 		return
 	}
 
 	switch {
+	case res.Skipped:
+		mt.Count("RunsSkipped")
 	case res.Held:
+		mt.Count("RunsHeld")
 		_ = n.Notify(ctx, notify.Event{Repo: repo, Status: notify.StatusHeld})
-	case !res.Skipped:
+	default:
+		mt.Count("RunsSucceeded")
+		mt.CountN("AssetsGenerated", float64(res.Published))
 		_ = n.Notify(ctx, notify.Event{Repo: repo, Status: notify.StatusPublished, Assets: res.Published})
 	}
 	_ = q.Delete(ctx, m.ReceiptHandle)
