@@ -11,8 +11,10 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 | Service | Purpose | CloudFormation stack |
 | --- | --- | --- |
 | Amazon VPC | Network isolation (public subnet, IGW, route tables, SGs) | `network.yaml` |
-| Amazon API Gateway | HTTPS webhook ingress | `serverless.yaml` |
-| AWS Lambda | Webhook handler, instance starter, idle-shutdown | `serverless.yaml` |
+| Amazon API Gateway | HTTPS ingress for webhooks **and registration** | `serverless.yaml` |
+| AWS Lambda | Registration, webhook handler, instance starter, idle-shutdown | `serverless.yaml` |
+| AWS Secrets Manager | GitHub PATs + per-repo webhook secrets | `serverless.yaml` |
+| Amazon DynamoDB | Repository metadata store | `serverless.yaml` |
 | Amazon EventBridge | Event bus for matched events + idle-shutdown timer | `serverless.yaml` |
 | Amazon SQS | Durable event buffer + dead-letter queue | `serverless.yaml` |
 | Amazon EC2 (Spot) | Ubuntu host running n8n + OpenClaw + Ollama | `compute.yaml` |
@@ -65,30 +67,42 @@ flowchart TB
 
 ## 4. Amazon API Gateway
 
-- Exposes a single **HTTPS** endpoint (managed TLS) that receives GitHub webhook deliveries.
-- Integrated directly with the **Webhook Handler Lambda**.
-- Returns the handler's **HTTP 200** to GitHub immediately — for both matched events and events that are acknowledged and ignored.
-- The invoke URL is a stack output (`WebhookUrl`) used when configuring the GitHub webhook.
+- Exposes **HTTPS** endpoints (managed TLS): a **webhook** route (GitHub deliveries) and a **registration** route (onboarding).
+- The webhook route integrates with the **Webhook Handler Lambda**; the registration route with the **Registration Lambda**.
+- Returns **HTTP 200** to GitHub immediately for both matched and ignored events.
+- Stack outputs include `WebhookUrl` (for the GitHub webhook) and `RegistrationUrl`.
 
 ---
 
 ## 5. AWS Lambda
 
-Three small functions form the serverless control plane. They are packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton).
+Four small functions form the serverless control plane. They are packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton).
 
 | Function | Trigger | Responsibility |
 | --- | --- | --- |
-| `webhook-handler` | API Gateway | Verify HMAC signature → extract commit message + repo → **validate publish trigger** → publish matched events to EventBridge → return 200. **No analysis or inference.** |
+| `registration` | API Gateway (registration route) | Validate repo access + token permissions → create GitHub webhook → store metadata (DynamoDB) → store PAT + webhook secret (Secrets Manager) |
+| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (per-repo secret) → **validate trigger** → publish matched events to EventBridge → return 200. **No analysis, inference, or PAT access.** |
 | `instance-starter` | EventBridge (matched event) | Start the EC2 Spot Instance if stopped |
 | `idle-shutdown` | EventBridge (idle timer) | Stop the EC2 Spot Instance after the configured idle timeout |
 
-Each has a least-privilege role:
+Least-privilege roles:
 
-- `webhook-handler` — `events:PutEvents` on the custom bus, CloudWatch Logs. (It does **not** touch SQS or EC2 directly.)
-- `instance-starter` — `ec2:StartInstances` / `ec2:DescribeInstances` on the specific instance, CloudWatch Logs.
-- `idle-shutdown` — `ec2:StopInstances` / `ec2:DescribeInstances` on the specific instance, CloudWatch Logs.
+- `registration` — `secretsmanager:CreateSecret`/`PutSecretValue` (scoped to `blog-gen/repos/*`), `dynamodb:PutItem`/`UpdateItem` on the metadata table, CloudWatch Logs.
+- `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, CloudWatch Logs. **No PAT access.**
+- `instance-starter` — `ec2:StartInstances`/`DescribeInstances` on the specific instance, CloudWatch Logs.
+- `idle-shutdown` — `ec2:StopInstances`/`DescribeInstances` on the specific instance, CloudWatch Logs.
 
-No Lambda performs content generation — that runs inside n8n/Ollama on EC2.
+No Lambda performs content generation — that runs inside n8n/Ollama on EC2, which reads the PAT from Secrets Manager only when cloning.
+
+---
+
+## 5a. AWS Secrets Manager & Amazon DynamoDB
+
+Onboarding introduces two managed stores.
+
+**AWS Secrets Manager** holds each repository's **GitHub PAT** and **webhook signing secret** under a stable prefix (e.g. `blog-gen/repos/<owner>/<name>/pat` and `.../webhook-secret`). Secrets are KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs ([Security §2](./security.md#2-github-pat--secret-storage)).
+
+**Amazon DynamoDB** (`repositories` table, on-demand capacity, encrypted at rest) stores per-repository metadata: Repository ID, owner, name, URL, default branch, webhook ID, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, and registration timestamp. It stores only the **reference** to the PAT secret — never the value ([Requirements §13](./requirements.md#13-repository-metadata-requirements)).
 
 ---
 
@@ -152,7 +166,7 @@ EventBridge is the central **event bus** and the extension point for future trig
 
 ## 11. AWS IAM
 
-Every compute identity gets a dedicated, least-privilege role. No wildcards where an ARN can be named. Details and example policies: [Security → Least Privilege](./security.md#3-least-privilege).
+Every compute identity gets a dedicated, least-privilege role. No wildcards where an ARN can be named. Details and example policies: [Security → Least Privilege](./security.md#4-least-privilege).
 
 ---
 
@@ -163,7 +177,7 @@ Templates are **modular and reusable** so each layer can be deployed and updated
 ```text
 infrastructure/
 ├── network.yaml         # VPC, public subnet, IGW, route tables, security groups
-├── serverless.yaml      # API Gateway, Lambdas (handler + starter + idle-shutdown), EventBridge bus + rules, SQS + DLQ, IAM
+├── serverless.yaml      # API Gateway (webhook + registration), Lambdas (registration + handler + starter + idle-shutdown), Secrets Manager, DynamoDB, EventBridge bus + rules, SQS + DLQ, IAM
 ├── compute.yaml         # EC2 Spot request, gp3 EBS volume, instance profile, user data
 └── observability.yaml   # CloudWatch log groups, metrics, alarms, dashboard
 ```
@@ -171,7 +185,7 @@ infrastructure/
 | Stack | Responsibility | Key outputs |
 | --- | --- | --- |
 | `network.yaml` | Networking and security groups | `VpcId`, `PublicSubnetId`, `InstanceSecurityGroupId` |
-| `serverless.yaml` | Webhook front door, event bus, queue | `WebhookUrl`, `EventBusName`, `QueueUrl`, `DeadLetterQueueUrl` |
+| `serverless.yaml` | Registration + webhook front door, secrets, metadata, event bus, queue | `WebhookUrl`, `RegistrationUrl`, `RepositoriesTableName`, `EventBusName`, `QueueUrl`, `DeadLetterQueueUrl` |
 | `compute.yaml` | Spot host and persistent volume | `InstanceId`, `EbsVolumeId` |
 | `observability.yaml` | Logs, metrics, alarms | `DashboardName`, `LogGroupNames` |
 
@@ -191,9 +205,10 @@ Deploy order is **network → serverless → compute → observability**; the co
 
 | Layer | Mechanism |
 | --- | --- |
+| Secrets Manager (PATs, webhook secrets) | KMS-encrypted at rest |
+| DynamoDB (repository metadata) | Encryption at rest |
 | EBS (persistent volume + root) | Encrypted EBS |
 | Amazon SQS | SSE at rest |
-| In transit | TLS 1.2+ for the webhook endpoint and all AWS API / GitHub calls |
-| Secrets (webhook secret, tokens) | Provided via environment/secret configuration, never committed |
+| In transit | TLS 1.2+ for the endpoints and all AWS API / GitHub calls |
 
-The webhook endpoint (API Gateway) is **HTTPS only**; the instance's n8n and Ollama ports are never publicly exposed. KMS usage and rotation: [Security → Encryption](./security.md#4-encryption).
+The webhook endpoint (API Gateway) is **HTTPS only**; the instance's n8n and Ollama ports are never publicly exposed. KMS usage and rotation: [Security → Encryption](./security.md#5-encryption).

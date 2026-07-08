@@ -1,6 +1,6 @@
 # Security
 
-Security model and controls for the **GitHub AI Blog Generator**. The platform is designed to be secure by default: least-privilege IAM, HMAC-validated webhooks, a lightweight handler that gates on the commit trigger, restricted security groups, HTTPS-only ingress, secrets kept out of source, SSH key authentication, and encryption in transit and at rest.
+Security model and controls for the **GitHub AI Blog Generator**. The platform is designed to be secure by default: GitHub PATs isolated in AWS Secrets Manager, least-privilege IAM, HMAC-validated webhooks, restricted security groups, HTTPS-only ingress, SSH key authentication, and encryption in transit and at rest.
 
 Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) · [Monitoring](./monitoring.md).
 
@@ -10,46 +10,77 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 
 - Every compute identity — each Lambda and the EC2 instance — has its **own least-privilege role**; no shared, over-broad roles.
 - Human/CI access uses **short-lived credentials**: SSO for humans, **GitHub OIDC** federation for CI (no long-lived access keys). See [CI/CD](./ci-cd.md#5-aws-authentication-oidc).
-- The webhook handler may only publish events; the instance starter may only start; the idle-shutdown function may only stop; the instance may only consume the queue.
+- The registration Lambda may write secrets/metadata; the webhook handler may read metadata and the webhook secret and publish events; the instance consumes the queue and reads the PAT only when cloning.
 
 ---
 
-## 2. Webhook Signature Validation & Trigger Gate
+## 2. GitHub PAT & Secret Storage
 
-GitHub Webhooks are the entry point, so the delivery path is hardened end to end ([WH-7…WH-10](./requirements.md#72-signature-validation)). The **Webhook Handler Lambda** validates the signature **before** it evaluates the commit-message trigger, and publishes an event **only** on a match.
+GitHub Personal Access Tokens are the most sensitive material in the MVP, so they are handled with care ([Requirements §14](./requirements.md#14-secure-credential-storage-requirements)).
 
 | Control | Implementation |
 | --- | --- |
-| **HMAC SHA-256** | The `X-Hub-Signature-256` header is recomputed over the raw request body using `WEBHOOK_SECRET` |
-| **Constant-time comparison** | Signatures are compared with a constant-time function to prevent timing attacks |
+| **Secrets Manager only** | PATs and per-repo webhook secrets are stored as secrets in **AWS Secrets Manager** |
+| **Never in plain text** | PATs are never stored in source, config files, environment variables, container images, or the metadata database |
+| **Reference, not value** | DynamoDB holds only the **secret reference** (ARN/name), never the token |
+| **Retrieved only when needed** | The PAT is fetched only for clone/webhook operations — not by the webhook handler on the hot path |
+| **Least privilege** | IAM grants `GetSecretValue` scoped to specific secret ARNs; the registration Lambda alone may create/put secrets |
+| **Never logged** | PATs (and secrets) are never written to logs or surfaced in errors |
+| **Encryption** | Secrets are KMS-encrypted at rest; retrieved over TLS |
+
+**Rotation** of PATs and webhook secrets is a **future enhancement** ([Roadmap](./roadmap.md)); when supported, a webhook-secret rotation must update the GitHub webhook configuration in the same change window to avoid rejected deliveries.
+
+---
+
+## 3. Webhook Signature Validation & Trigger Gate
+
+The **Webhook Handler Lambda** resolves the repository record, validates the signature **before** evaluating the trigger, and publishes an event **only** on a match ([WH-7…WH-10](./requirements.md#72-signature-validation)).
+
+| Control | Implementation |
+| --- | --- |
+| **Per-repo secret** | The repository's webhook secret is resolved from Secrets Manager (via the metadata record) |
+| **HMAC SHA-256** | The `X-Hub-Signature-256` header is recomputed over the raw body |
+| **Constant-time comparison** | Signatures are compared with a constant-time function |
 | **Reject invalid signatures** | Missing/invalid signatures are rejected with `401` and **never evaluated or published** |
-| **Trigger gate** | Only commits matching the publish trigger (default `blog:`) are published to EventBridge; all others return `200` and stop |
+| **Trigger gate** | Only commits matching the repo's trigger pattern (default `blog:`) are published; all others return `200` and stop |
 | **HTTPS only** | The API Gateway endpoint accepts TLS traffic only |
-| **Audit logging** | Every delivery — published, ignored, and rejected — is logged to CloudWatch |
+| **Audit logging** | Every delivery — published, ignored, and rejected — is logged (never the payload or secret) |
 
 **Validation + gate contract (illustrative):**
 
 ```text
-signature = "sha256=" + HMAC_SHA256(WEBHOOK_SECRET, raw_request_body)
-if not constant_time_equals(signature, header["X-Hub-Signature-256"]):
-    respond 401 and log rejection        # nothing is evaluated or published
-elif not commit_message.startswith(PUBLISH_TRIGGER):
-    respond 200 and log "ignored"        # acknowledged, no processing
+record   = metadata.lookup(repo_full_name)
+secret   = secretsmanager.get(record.webhook_secret_ref)
+expected = "sha256=" + HMAC_SHA256(secret, raw_request_body)
+if not constant_time_equals(expected, header["X-Hub-Signature-256"]):
+    respond 401 and log rejection
+elif not matches(commit_message, record.trigger_pattern):   # default "blog:"
+    respond 200 and log "ignored"
 else:
-    events.put(bus, "blog.publish.requested", payload)
-    respond 200
+    events.put(bus, "blog.publish.requested", payload); respond 200
 ```
-
-**Operational notes:**
-
-- Rotate `WEBHOOK_SECRET` on a schedule and immediately on suspected exposure; update it in the GitHub webhook configuration in the same change window.
-- Never log the raw payload or the secret — log the delivery ID, event type, and outcome only.
 
 ---
 
-## 3. Least Privilege
+## 4. Least Privilege
 
 Policies specify concrete actions and resource ARNs; wildcards are avoided wherever an ARN can be named.
+
+**Registration Lambda (illustrative):**
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow",
+      "Action": ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue"],
+      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/repos/*" },
+    { "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Resource": "arn:aws:dynamodb:us-east-1:<acct>:table/blog-gen-repositories" }
+  ]
+}
+```
 
 **Webhook Handler Lambda (illustrative):**
 
@@ -57,89 +88,61 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 {
   "Version": "2012-10-17",
   "Statement": [
-    { "Sid": "PublishMatchedEvents", "Effect": "Allow",
-      "Action": ["events:PutEvents"],
-      "Resource": "arn:aws:events:us-east-1:<acct>:event-bus/blog-gen-bus" },
-    { "Sid": "Logs", "Effect": "Allow",
-      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
-      "Resource": "arn:aws:logs:us-east-1:<acct>:log-group:/aws/lambda/blog-gen-webhook-handler:*" }
+    { "Effect": "Allow", "Action": ["dynamodb:GetItem"],
+      "Resource": "arn:aws:dynamodb:us-east-1:<acct>:table/blog-gen-repositories" },
+    { "Effect": "Allow", "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/repos/*/webhook-secret*" },
+    { "Effect": "Allow", "Action": ["events:PutEvents"],
+      "Resource": "arn:aws:events:us-east-1:<acct>:event-bus/blog-gen-bus" }
   ]
-}
-```
-
-**Instance Starter Lambda (illustrative):**
-
-```json
-{
-  "Effect": "Allow",
-  "Action": ["ec2:StartInstances", "ec2:DescribeInstances"],
-  "Resource": "arn:aws:ec2:us-east-1:<acct>:instance/<instance-id>"
-}
-```
-
-**Idle Shutdown Lambda (illustrative):**
-
-```json
-{
-  "Effect": "Allow",
-  "Action": ["ec2:StopInstances", "ec2:DescribeInstances"],
-  "Resource": "arn:aws:ec2:us-east-1:<acct>:instance/<instance-id>"
-}
-```
-
-**EC2 instance role (illustrative):**
-
-```json
-{
-  "Effect": "Allow",
-  "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
-  "Resource": "arn:aws:sqs:us-east-1:<acct>:blog-gen-events"
 }
 ```
 
 | Principal | May do | May NOT do |
 | --- | --- | --- |
-| `webhook-handler` (Lambda) | Publish matched events to EventBridge, write its own logs | Start/stop the instance, read the queue, run inference |
-| `instance-starter` (Lambda) | Start the instance, write its own logs | Stop the instance, publish events, read the queue |
-| `idle-shutdown` (Lambda) | Stop the instance, write its own logs | Start the instance, publish events, read the queue |
-| EC2 instance | Consume the queue, write logs | Modify IAM, start/stop itself, alter infrastructure |
+| `registration` (Lambda) | Create secrets, write metadata, create webhooks (via PAT) | Read the queue, start/stop the instance, run inference |
+| `webhook-handler` (Lambda) | Read metadata, read the webhook secret, publish matched events | **Read the PAT**, start/stop the instance, read the queue |
+| `instance-starter` (Lambda) | Start the instance | Stop it, publish events, read the queue |
+| `idle-shutdown` (Lambda) | Stop the instance | Start it, publish events |
+| EC2 instance | Consume the queue, read the PAT (to clone), write logs | Modify IAM, alter infrastructure, create secrets |
 
 ---
 
-## 4. Encryption
+## 5. Encryption
 
 | Data | At rest | In transit |
 | --- | --- | --- |
+| Secrets (PATs, webhook secrets) | KMS-encrypted (Secrets Manager) | TLS |
+| DynamoDB (metadata) | Encryption at rest | TLS |
 | EBS (models, n8n state, Repository Memory) | Encrypted EBS | TLS to AWS APIs |
 | Amazon SQS | SSE at rest | TLS |
-| Webhook endpoint | — | HTTPS only (TLS 1.2+) |
+| Webhook & registration endpoints | — | HTTPS only (TLS 1.2+) |
 | GitHub API & clone | — | HTTPS only |
-| Repository clones | On encrypted instance disk (transient) | — |
 
 Where SSE-KMS is used, keys have rotation enabled and key policies restrict use to the intended roles.
 
 ---
 
-## 5. Network Security (Security Groups & HTTPS)
+## 6. Network Security (Security Groups & HTTPS)
 
-- **Ingress to the instance** is limited to **SSH (22) from the operator CIDR(s)** only. The **n8n (5678)** and **Ollama (11434)** ports are **never** exposed to the internet — reach them through an SSH tunnel.
-- **Webhook ingress** terminates at **API Gateway (HTTPS only)**, not the instance; the instance never receives inbound webhook traffic.
+- **Ingress to the instance** is limited to **SSH (22) from the operator CIDR(s)** only. The **n8n (5678)** and **Ollama (11434)** ports are **never** exposed to the internet.
+- **Webhook and registration ingress** terminate at **API Gateway (HTTPS only)**, not the instance.
 - Restrict `OperatorCidr` to known addresses; avoid `0.0.0.0/0`.
 - Egress allows the instance to clone repositories, pull container images, and reach AWS APIs.
 
 ---
 
-## 6. Environment Variables & Secrets Management
+## 7. Environment Variables & Secrets Management
 
-- Sensitive values (`WEBHOOK_SECRET`, `PUBLISH_TRIGGER` config, any repository tokens) are supplied via **environment variables / a secrets store** and injected at deploy or runtime — **never committed** to source, images, or CloudFormation templates ([SEC-5](./requirements.md#9-security-requirements), [SEC-6](./requirements.md#9-security-requirements)).
+- Sensitive values (webhook secrets, PATs) live in **Secrets Manager** — **never committed** to source, images, or CloudFormation templates ([SEC-5](./requirements.md#9-security-requirements)).
+- Non-secret configuration (`PublishTrigger` default, `OLLAMA_MODEL`, timeouts) may be passed as environment/CloudFormation parameters.
 - `.env` and any local parameter files are git-ignored.
 - No long-lived AWS keys in code, CI, or images — CI uses **OIDC**; compute uses **instance/Lambda roles**.
-- Exported n8n workflow JSON references credentials **by ID**, never by value.
 - **Repository Memory** stores analysis and topic metadata only — never secrets ([MEM-5](./requirements.md#5-repository-memory-requirements)).
 
 ---
 
-## 7. SSH Key Authentication
+## 8. SSH Key Authentication
 
 - The EC2 instance uses **key-pair (public-key) authentication**; **password authentication is disabled** (`PasswordAuthentication no`) ([SEC-7](./requirements.md#9-security-requirements)).
 - The private key never leaves the operator's machine; store it securely with correct permissions.
@@ -148,24 +151,24 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 
 ---
 
-## 8. Logging & Audit Trails
+## 9. Logging & Audit Trails
 
 - **AWS CloudTrail** records control-plane API activity (recommended: org-level trail to a dedicated, locked log bucket).
-- **CloudWatch Logs** capture handler, starter, idle-shutdown, and n8n logs with bounded retention.
-- Structured logs **must not** contain secrets or full source contents — log references (delivery IDs, run IDs), not payloads.
+- **CloudWatch Logs** capture registration, handler, starter, idle-shutdown, and n8n logs with bounded retention.
+- Structured logs **must not** contain PATs, secrets, or full source contents — log references (delivery IDs, run IDs), not payloads.
 
 See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
 
 ---
 
-## 9. Data Handling & Privacy
+## 10. Data Handling & Privacy
 
-- Only **repository content the operator has rights to** should be processed. For private repos, access is via a scoped token.
-- **All inference is local** (Ollama) — repository content is **never sent to a third-party model provider**, a core privacy property of the design.
+- Only **repository content the operator has rights to** should be processed; access is via the scoped PAT.
+- **All inference is local** (Ollama) — repository content is **never sent to a third-party model provider**.
 - Cloned repositories are transient — they live on the instance's disk during a run and are not persisted.
 
 ---
 
-## 10. Reporting a Vulnerability
+## 11. Reporting a Vulnerability
 
 Please report security issues privately (e.g. GitHub Security Advisories or a maintainer email) rather than opening a public issue. Include reproduction steps and impact. Do not include exploit details in public channels until a fix is released.

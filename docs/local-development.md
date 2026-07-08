@@ -110,10 +110,10 @@ Local configuration lives in `.env` (git-ignored). Start from `.env.example`:
 
 ## 5. Building & Testing the Lambdas
 
-Three Go functions make up the serverless control plane: `webhook-handler` (verify + trigger gate + publish), `instance-starter` (start the Spot host), and `idle-shutdown` (stop it).
+Four Go functions make up the serverless control plane: `registration` (validate + create webhook + store metadata/secret), `webhook-handler` (verify + trigger gate + publish), `instance-starter` (start the Spot host), and `idle-shutdown` (stop it).
 
 ```bash
-for fn in webhook-handler instance-starter idle-shutdown; do
+for fn in registration webhook-handler instance-starter idle-shutdown; do
   ( cd lambdas/$fn && \
     go mod download && \
     go build ./... && go vet ./... && gofmt -l . && \

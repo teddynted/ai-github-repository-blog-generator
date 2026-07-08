@@ -60,15 +60,16 @@ cp .env.example .env
 ## 3. Build the Lambda Functions
 
 ```bash
-# Build all three functions
-for fn in webhook-handler instance-starter idle-shutdown; do
+# Build all four functions
+for fn in registration webhook-handler instance-starter idle-shutdown; do
   ( cd lambdas/$fn && \
     GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap ./cmd/lambda && \
     zip $fn.zip bootstrap )
 done
 ```
 
-- `webhook-handler` — verify signature, validate the commit-message trigger, publish matched events to EventBridge.
+- `registration` — validate repo + PAT, create the webhook, store metadata + secrets.
+- `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events.
 - `instance-starter` — start the Spot Instance on a matched event.
 - `idle-shutdown` — stop the Spot Instance after the idle timeout.
 
@@ -143,17 +144,26 @@ In the n8n editor: **Workflows → Import from File**, select each JSON under `w
 
 ---
 
-## 6. Configure the GitHub Webhook
+## 6. Register a Repository
 
-In your repository: **Settings → Webhooks → Add webhook**.
+Registration is the primary way to onboard a repo — it validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, and **creates the GitHub webhook automatically**.
 
-1. **Payload URL:** the `WebhookUrl` stack output.
-2. **Content type:** `application/json`.
-3. **Secret:** the same value as `WEBHOOK_SECRET`.
-4. **Events:** send **Just the push event** (or "Send me everything"). The handler evaluates the commit-message trigger — no server-side event filtering is required.
-5. Save and confirm a green **✓** under **Recent Deliveries**.
+```bash
+REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='RegistrationUrl'].OutputValue" --output text)
 
-> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push; it only publishes an event — and starts the instance — when the commit message matches the `PUBLISH_TRIGGER` (default `blog:`).
+curl -sS -X POST "$REGISTRATION_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
+```
+
+On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with a generated secret, stores the PAT + webhook secret in Secrets Manager, and writes metadata (including the secret reference and default trigger pattern `blog:`) to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
+
+> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push; it only publishes an event — and starts the instance — when the commit message matches the repository's trigger pattern (default `blog:`).
+
+### Manual webhook setup (fallback)
+
+If you prefer to create the webhook yourself: **Settings → Webhooks → Add webhook** → Payload URL = `WebhookUrl`, Content type = `application/json`, Secret = the repository's webhook secret, Events = **Just the push event**.
 
 ---
 
@@ -168,9 +178,12 @@ aws cloudformation describe-stacks --stack-name blog-gen-serverless \
 aws sqs get-queue-attributes --queue-url "$QUEUE_URL" \
   --attribute-names ApproximateNumberOfMessages
 
-# Handler Lambda is deployed
-aws lambda get-function --function-name blog-gen-webhook-handler \
-  --query 'Configuration.State'
+# Handler + registration Lambdas are deployed
+aws lambda get-function --function-name blog-gen-webhook-handler --query 'Configuration.State'
+aws lambda get-function --function-name blog-gen-registration --query 'Configuration.State'
+
+# Metadata table is active
+aws dynamodb describe-table --table-name blog-gen-repositories --query 'Table.TableStatus'
 
 # EC2 instance is registered (likely 'stopped' until a webhook arrives)
 aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
@@ -186,6 +199,7 @@ Expected sequence for the triggered path:
 
 | Check | Expected |
 | --- | --- |
+| Registration | `RegistrationUrl` returns success; DynamoDB item present; webhook created in GitHub |
 | GitHub Recent Deliveries | Green ✓ (HTTP 200) |
 | CloudWatch (handler) | Logs show verify → trigger match → PutEvents |
 | EventBridge / SQS | Event published; SQS count increments, then drains |

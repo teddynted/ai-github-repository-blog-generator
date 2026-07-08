@@ -1,6 +1,8 @@
 # Workflows
 
-Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the EC2 Spot Instance, which run the full generation pipeline. n8n **polls Amazon SQS** (fed by EventBridge), then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
+Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the EC2 Spot Instance, which run the full generation pipeline. Matched events are buffered in **Amazon SQS** (via EventBridge) and **invoke the n8n workflow** once the instance is healthy; n8n then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
+
+> **Registration is not an n8n workflow.** Onboarding a repository (URL + PAT → validate → create webhook → store metadata + PAT) is handled by the **Registration Lambda** ([Architecture §2](./architecture.md#2-repository-registration-mvp)). These workflows cover only the per-event generation pipeline.
 
 Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md).
 
@@ -12,17 +14,19 @@ Before any n8n workflow runs, the handler decides whether a run should happen at
 
 ```mermaid
 flowchart TB
-    W[Webhook: payload + X-Hub-Signature-256] --> SIG{Valid HMAC?}
+    W[Webhook: payload + X-Hub-Signature-256] --> LK[Resolve repo record<br/>DynamoDB]
+    LK --> GS[Get webhook secret<br/>Secrets Manager]
+    GS --> SIG{Valid HMAC?}
     SIG -- no --> R401[401 + log rejection]
-    SIG -- yes --> EX[Extract commit message + repo]
-    EX --> T{Matches publish trigger?<br/>default 'blog:'}
+    SIG -- yes --> EX[Extract commit message]
+    EX --> T{Matches repo Trigger Pattern?<br/>default 'blog:'}
     T -- no --> ACK[HTTP 200 — acknowledge & ignore<br/>no further processing]
     T -- yes --> PUT[PutEvents → EventBridge]
     PUT --> OK[HTTP 200]
 ```
 
-- The handler is **not** an n8n workflow — it is a Lambda ([Architecture §2](./architecture.md#2-commit-message-trigger-gate)).
-- It performs **only**: verify signature → parse payload → extract commit info → determine repo → validate trigger → publish matched event → return 200. It does **no** analysis or inference.
+- The handler is **not** an n8n workflow — it is a Lambda ([Architecture §3](./architecture.md#3-commit-message-trigger-gate)).
+- It performs **only**: resolve repo record → verify signature (per-repo secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
 - EventBridge routes matched events to **SQS** (buffer) and the **Instance Starter Lambda** (start the Spot host).
 
 ---
@@ -175,7 +179,8 @@ flowchart TB
     DEC -- yes --> PUB
     G -- no --> PUB[Render Markdown + publish]
     PUB --> REC[Record published topics → Repository Memory]
-    REC --> ME[Emit CloudWatch metrics]
+    REC --> SHA[Update last processed commit SHA → DynamoDB]
+    SHA --> ME[Emit CloudWatch metrics]
     ME --> OK[Success → Notifications]
 ```
 
