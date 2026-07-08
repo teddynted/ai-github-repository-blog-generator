@@ -35,7 +35,7 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | 1 | **Project foundation** — module, config, logging, errors, bootstrap, build tooling | ✅ Implemented |
 | 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ✅ Implemented |
 | 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ✅ Implemented |
-| 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ⏳ Planned |
+| 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ✅ Implemented |
 | 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ⏳ Planned |
 | 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ⏳ Planned |
 | 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ⏳ Planned |
@@ -126,3 +126,28 @@ fakes/`httptest`; the Lambda cross-compiles to `linux/arm64`.
 **Decision:** the registration endpoint is protected by an **API Gateway API
 key** (`x-api-key`); the key ID is a stack output and its value is retrieved
 from API Gateway after deploy.
+
+---
+
+## Milestone 4 — Webhook Receiver ✅
+
+The `webhook-handler` Lambda — deliberately lightweight, no cloning/analysis/AI,
+and it never reads the PAT.
+
+| Package | Responsibility |
+| --- | --- |
+| `internal/trigger` | Commit-message trigger matching (prefix, default `blog:`). 100% covered. |
+| `internal/githubsig` | HMAC-SHA256 signature verify/sign, constant-time; GitHub known-answer test. |
+| `internal/webhook` | The handler: parse payload → resolve metadata → verify signature → evaluate trigger → publish (via port). |
+| `internal/eventbus` | `LogPublisher` — a placeholder Publisher for M4 (real EventBridge adapter in M5). |
+| `lambdas/webhook-handler` | API Gateway entry point (handles base64 bodies). |
+| `internal/metadata`, `internal/secrets` | Extended with `Get` and `WebhookSecret` read paths. |
+
+Request flow and outcomes: invalid signature → `401`; unregistered repo → `404`;
+non-`push`/disabled/no-match → `200 ignored`; matched `blog:` commit → publish
++ `200 accepted`. The per-repository **Trigger Pattern** from metadata is used
+(falling back to the platform default). Every branch is unit-tested with fakes.
+
+**Placeholder:** on a match the handler calls the `Publisher` port, which is
+wired to `LogPublisher` for now. Milestone 5 swaps in the EventBridge adapter
+that publishes `blog.publish.requested` and starts the Spot instance.
