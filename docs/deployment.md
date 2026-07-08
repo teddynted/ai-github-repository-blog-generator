@@ -191,6 +191,9 @@ REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serv
 curl -sS -X POST "$REGISTRATION_URL" \
   -H "Content-Type: application/json" \
   -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
+
+# Optional: a custom per-repo trigger (literal prefix or "regex:"):
+#   -d '{"repository_url":"...","pat":"...","trigger_pattern":"regex:^(blog|post):"}'
 ```
 
 On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with a generated secret, stores the PAT + webhook secret in Secrets Manager, and writes metadata (including the secret reference and default trigger pattern `blog:`) to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.

@@ -97,6 +97,42 @@ func TestRegisterHappyPath(t *testing.T) {
 	}
 }
 
+func TestRegisterUsesCustomTriggerPattern(t *testing.T) {
+	gh := &fakeGitHub{info: github.RepoInfo{ID: 1, DefaultBranch: "main"}, hookID: 5}
+	meta := &fakeMeta{}
+	svc := newService(gh, &fakeSecrets{ref: "ref"}, meta)
+
+	out, err := svc.Register(context.Background(), Input{
+		RepositoryURL:  "https://github.com/acme/widget",
+		PAT:            "tok",
+		TriggerPattern: "regex:^(blog|post):",
+	})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if out.TriggerPattern != "regex:^(blog|post):" || meta.stored.TriggerPattern != "regex:^(blog|post):" {
+		t.Errorf("custom pattern not applied: out=%q stored=%q", out.TriggerPattern, meta.stored.TriggerPattern)
+	}
+}
+
+func TestRegisterRejectsInvalidTriggerPattern(t *testing.T) {
+	gh := &fakeGitHub{info: github.RepoInfo{ID: 1}}
+	meta := &fakeMeta{}
+	svc := newService(gh, &fakeSecrets{}, meta)
+
+	_, err := svc.Register(context.Background(), Input{
+		RepositoryURL:  "https://github.com/acme/widget",
+		PAT:            "tok",
+		TriggerPattern: "regex:[unclosed",
+	})
+	if apperror.CodeOf(err) != apperror.CodeInvalidInput {
+		t.Fatalf("code = %s, want invalid_input", apperror.CodeOf(err))
+	}
+	if meta.called {
+		t.Error("nothing should be stored when the trigger pattern is invalid")
+	}
+}
+
 func TestRegisterValidatesInput(t *testing.T) {
 	svc := newService(&fakeGitHub{}, &fakeSecrets{}, &fakeMeta{})
 	for _, in := range []Input{

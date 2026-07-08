@@ -13,6 +13,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/github"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/repo"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/trigger"
 )
 
 // GitHub is the port for the GitHub operations onboarding needs. The concrete
@@ -37,6 +38,10 @@ type MetadataStore interface {
 type Input struct {
 	RepositoryURL string `json:"repository_url"`
 	PAT           string `json:"pat"`
+	// TriggerPattern optionally overrides the default publishing trigger for
+	// this repository (e.g. "[blog]" or "regex:^(blog|post):"). Blank uses the
+	// platform default.
+	TriggerPattern string `json:"trigger_pattern,omitempty"`
 }
 
 // Output is returned on successful registration (no secret material).
@@ -77,6 +82,11 @@ func (s *Service) Register(ctx context.Context, in Input) (Output, error) {
 	if err != nil {
 		return Output{}, apperror.Wrap(err, apperror.CodeInvalidInput, "invalid repository_url")
 	}
+	if in.TriggerPattern != "" {
+		if err := trigger.Validate(in.TriggerPattern); err != nil {
+			return Output{}, apperror.Wrap(err, apperror.CodeInvalidInput, "invalid trigger_pattern")
+		}
+	}
 
 	// Validate access + token read permission.
 	info, err := s.GitHub.GetRepository(ctx, owner, name, in.PAT)
@@ -104,9 +114,12 @@ func (s *Service) Register(ctx context.Context, in Input) (Output, error) {
 		return Output{}, apperror.Wrap(err, apperror.CodeInternal, "store credentials")
 	}
 
-	trigger := s.DefaultTrigger
-	if trigger == "" {
-		trigger = "blog:"
+	triggerPattern := in.TriggerPattern
+	if triggerPattern == "" {
+		triggerPattern = s.DefaultTrigger
+	}
+	if triggerPattern == "" {
+		triggerPattern = trigger.DefaultPattern
 	}
 	r := repo.Repository{
 		RepoFullName:   repo.FullName(owner, name),
@@ -116,7 +129,7 @@ func (s *Service) Register(ctx context.Context, in Input) (Output, error) {
 		URL:            in.RepositoryURL,
 		DefaultBranch:  info.DefaultBranch,
 		WebhookID:      hookID,
-		TriggerPattern: trigger,
+		TriggerPattern: triggerPattern,
 		Enabled:        true,
 		SecretRef:      secretRef,
 		RegisteredAt:   s.now().UTC().Format(time.RFC3339),
@@ -131,7 +144,7 @@ func (s *Service) Register(ctx context.Context, in Input) (Output, error) {
 		Name:           name,
 		DefaultBranch:  info.DefaultBranch,
 		WebhookID:      hookID,
-		TriggerPattern: trigger,
+		TriggerPattern: triggerPattern,
 		Status:         "registered",
 	}, nil
 }

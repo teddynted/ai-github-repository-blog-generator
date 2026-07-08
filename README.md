@@ -212,16 +212,15 @@ blog: Added OAuth Authentication            # triggers a run
 blog: Repository Memory Implementation      # triggers a run
 ```
 
-### Configurable trigger patterns *(planned)*
+### Configurable trigger patterns
 
-The default is `blog:`. Future versions will let you configure custom trigger patterns without changing the core architecture:
+The default is `blog:`, but each repository can set its own **Trigger Pattern** at registration (stored in metadata, evaluated per delivery):
 
-- `blog:`
-- `[blog]`
-- Regular expressions
-- Repository-specific trigger rules
+- `blog:` — literal prefix (default)
+- `[blog]` — any literal prefix works
+- `regex:^(blog|post):` — a `regex:`-prefixed regular expression
 
-See [Future trigger sources](#roadmap) for additional planned entry points (releases, tags, PR labels, manual runs, and scheduled summaries).
+Pass `trigger_pattern` when registering; invalid regexes are rejected. Additional entry points (releases, tags, PR labels, manual runs, scheduled summaries) remain [planned](#roadmap).
 
 ---
 
@@ -573,7 +572,7 @@ ai-github-repository-blog-generator/
 - [ ] Automatic webhook management, fine-grained permissions, and secret rotation
 - [ ] Multiple repositories per user, repository groups/organisations, multi-user workspaces
 - [ ] Web-based repository management dashboard (run history, approvals, content review)
-- [ ] Configurable custom trigger patterns (`[blog]`, regex, per-repo rules)
+- [x] Configurable custom trigger patterns (`[blog]`, `regex:`, per-repo rules)
 - [ ] Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
 - [ ] Manual blog generation from the application, and scheduled repository summaries
 - [ ] On-Demand fallback when Spot capacity is unavailable; multi-model support

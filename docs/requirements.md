@@ -117,7 +117,7 @@ Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) · [In
 | TRG-3 | The trigger MUST be configurable — a platform default (`PublishTrigger`) and a per-repository **Trigger Pattern** stored in metadata ([META-4](#13-repository-metadata-requirements)). | MUST |
 | TRG-4 | Events whose commit message does not match MUST be acknowledged with `HTTP 200` and **not** processed further. | MUST |
 | TRG-5 | Trigger validation MUST occur **in the webhook handler, before** any compute is started or AI is invoked. | MUST |
-| TRG-6 | The system SHOULD support custom trigger patterns (e.g. `[blog]`, regular expressions) in a future version. | SHOULD |
+| TRG-6 | The system supports per-repository custom trigger patterns — literal prefixes (`blog:`, `[blog]`) and `regex:`-prefixed regular expressions, validated at registration. | ✅ |
 | TRG-7 | The system MAY support additional trigger sources (releases, tags, PR labels, manual, scheduled) that publish to the same event bus. | MAY |
 
 **Examples**
@@ -371,7 +371,6 @@ Planned capabilities (see [Roadmap](./roadmap.md)). These are **future work**, c
 
 **Trigger system**
 
-- Configurable custom trigger patterns (`[blog]`, regular expressions)
 - Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
 - Manual blog generation from the application
 - Scheduled repository summaries
