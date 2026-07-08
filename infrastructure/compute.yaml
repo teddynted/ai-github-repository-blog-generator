@@ -1,0 +1,194 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub AI Blog Generator - Compute stack. A cost-optimized EC2 Spot instance
+  (Ubuntu) that runs n8n + OpenClaw + Ollama via Docker Compose, plus a
+  persistent gp3 EBS volume that survives start/stop cycles (models, n8n state,
+  Repository Memory). Imports the subnet and security group from the network
+  stack and the SQS queue from the serverless stack.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix and tag value (must match the other stacks).
+  InstanceType:
+    Type: String
+    Default: g4dn.xlarge
+    Description: EC2 instance type for the Spot request (GPU recommended for Ollama).
+  SpotMaxPrice:
+    Type: String
+    Default: "0.20"
+    Description: Maximum hourly Spot price (USD).
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 key pair for SSH access.
+  EbsVolumeSizeGb:
+    Type: Number
+    Default: 100
+    MinValue: 20
+    Description: Size of the persistent gp3 volume (models + n8n state + memory).
+  OllamaModel:
+    Type: String
+    Default: qwen2.5:7b
+    Description: Local model served by Ollama.
+  LatestUbuntuAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
+    Description: Resolves to the latest Ubuntu 22.04 (amd64) AMI.
+
+Resources:
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: instance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Drain the events queue.
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  Fn::ImportValue: !Sub "${ProjectName}-QueueArn"
+              # Read the PAT only when cloning.
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+              # Update last-processed commit SHA after a run.
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource:
+                  Fn::Sub:
+                    - "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}"
+                    - TableName:
+                        Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
+              # Ship logs.
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # Spot options in CloudFormation must be declared via a launch template.
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${ProjectName}-lt"
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref LatestUbuntuAmi
+        KeyName: !Ref KeyPairName
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${ProjectName}-InstanceSecurityGroupId"
+        InstanceMarketOptions:
+          MarketType: spot
+          SpotOptions:
+            MaxPrice: !Ref SpotMaxPrice
+            SpotInstanceType: persistent
+            InstanceInterruptionBehavior: stop
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 30
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+            # --- Base host bootstrap (M2). n8n + OpenClaw + Ollama compose is added
+            # --- in later milestones (see docs/development-plan.md).
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -y
+            apt-get install -y ca-certificates curl gnupg
+            install -m 0755 -d /etc/apt/keyrings
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+            chmod a+r /etc/apt/keyrings/docker.gpg
+            echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+              > /etc/apt/sources.list.d/docker.list
+            apt-get update -y
+            apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+            systemctl enable --now docker
+            # Mount the persistent data volume (formatted once) at /data.
+            DEV=/dev/xvdf
+            for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
+            if [ -b "$DEV" ]; then
+              blkid "$DEV" || mkfs.ext4 -L blogdata "$DEV"
+              mkdir -p /data
+              grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
+              mount -a
+            fi
+            echo "ollama-model=${OllamaModel}" > /data/.bootstrap || true
+            echo "base host bootstrap complete"
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      SubnetId:
+        Fn::ImportValue: !Sub "${ProjectName}-PublicSubnetId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-instance"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PersistentVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt Instance.AvailabilityZone
+      Size: !Ref EbsVolumeSizeGb
+      VolumeType: gp3
+      Encrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-data"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  VolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref Instance
+      VolumeId: !Ref PersistentVolume
+      Device: /dev/sdf
+
+Outputs:
+  InstanceId:
+    Description: EC2 Spot instance ID.
+    Value: !Ref Instance
+    Export:
+      Name: !Sub "${ProjectName}-InstanceId"
+  InstancePublicIp:
+    Description: Public IP (SSH; n8n/Ollama reached via SSH tunnel only).
+    Value: !GetAtt Instance.PublicIp
+  PersistentVolumeId:
+    Description: Persistent gp3 data volume ID.
+    Value: !Ref PersistentVolume
+    Export:
+      Name: !Sub "${ProjectName}-PersistentVolumeId"

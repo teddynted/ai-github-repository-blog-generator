@@ -186,7 +186,7 @@ infrastructure/
 | --- | --- | --- |
 | `network.yaml` | Networking and security groups | `VpcId`, `PublicSubnetId`, `InstanceSecurityGroupId` |
 | `serverless.yaml` | Registration + webhook front door, secrets, metadata, event bus, queue | `WebhookUrl`, `RegistrationUrl`, `RepositoriesTableName`, `EventBusName`, `QueueUrl`, `DeadLetterQueueUrl` |
-| `compute.yaml` | Spot host and persistent volume | `InstanceId`, `EbsVolumeId` |
+| `compute.yaml` | Spot host and persistent volume | `InstanceId`, `PersistentVolumeId` |
 | `observability.yaml` | Logs, metrics, alarms | `DashboardName`, `LogGroupNames` |
 
 Deploy order is **network → serverless → compute → observability**; the compute stack imports the queue and instance security group from earlier stacks.
