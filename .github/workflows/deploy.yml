@@ -1,0 +1,98 @@
+name: deploy
+
+# Deploys the CloudFormation stacks on merge to main. Dormant (skipped, green)
+# until opted in: set repo variable DEPLOY_ENABLED=true and provide the OIDC
+# role secret and the vars below. See docs/ci-cd.md and docs/deployment.md.
+#
+# Required to enable:
+#   secret AWS_DEPLOY_ROLE_ARN  - IAM role trusting the GitHub OIDC provider
+#   var    AWS_REGION           - e.g. us-east-1
+#   var    ARTIFACTS_BUCKET     - S3 bucket for Lambda packages
+#   var    KEY_PAIR_NAME        - EC2 key pair for the instance
+#   var    OPERATOR_CIDR        - (optional) SSH source CIDR
+#   var    DEPLOY_ENABLED       - "true" to arm this workflow
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: build + package lambdas
+        run: |
+          for fn in registration webhook-handler instance-starter idle-shutdown; do
+            GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
+            (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
+          done
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: upload lambda artifacts (sha-versioned keys)
+        run: |
+          for fn in registration webhook-handler instance-starter idle-shutdown; do
+            aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
+          done
+
+      - name: deploy network stack
+        run: |
+          EXTRA=""
+          [ -n "${{ vars.OPERATOR_CIDR }}" ] && EXTRA="OperatorCidr=${{ vars.OPERATOR_CIDR }}"
+          aws cloudformation deploy \
+            --template-file infrastructure/network.yaml \
+            --stack-name blog-gen-network \
+            --capabilities CAPABILITY_NAMED_IAM \
+            ${EXTRA:+--parameter-overrides $EXTRA}
+
+      - name: deploy serverless stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/serverless.yaml \
+            --stack-name blog-gen-serverless \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              ArtifactsBucket="$ARTIFACTS_BUCKET" \
+              RegistrationCodeKey="$SHA/registration.zip" \
+              WebhookHandlerCodeKey="$SHA/webhook-handler.zip" \
+              InstanceStarterCodeKey="$SHA/instance-starter.zip" \
+              IdleShutdownCodeKey="$SHA/idle-shutdown.zip"
+
+      - name: deploy compute stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/compute.yaml \
+            --stack-name blog-gen-compute \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides KeyPairName="${{ vars.KEY_PAIR_NAME }}"
+
+      - name: deploy observability stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/observability.yaml \
+            --stack-name blog-gen-observability \
+            --capabilities CAPABILITY_NAMED_IAM

@@ -26,15 +26,31 @@ Workflows live in `.github/workflows/`:
 | --- | --- | --- | --- |
 | `go.yml` | PR, push | gofmt + vet + `go test -race` + cross-compile all Lambdas | ✅ Implemented |
 | `cloudformation.yml` | PR, push | `cfn-lint` all templates | ✅ Implemented (lint) |
-| `cloudformation.yml` (deploy) | main | Package + change set + deploy | ⏳ Planned (needs the AWS OIDC deploy role) |
+| `deploy.yml` | main, dispatch | Package Lambdas → upload → deploy the four stacks (OIDC) | ✅ Implemented (opt-in) |
 | `security.yml` | PR, push, weekly | `govulncheck` + `gosec` (SAST) + `gitleaks` (gate); `checkov` IaC (informational) | ✅ Implemented |
 
-> The implemented workflows run green without any repository secrets. `gosec`
-> gates on high-severity/high-confidence findings; `gitleaks` uses
+> The lint/test/security workflows run green without any repository secrets.
+> `gosec` gates on high-severity/high-confidence findings; `gitleaks` uses
 > `.gitleaks.toml` (default rules + placeholder allowlist); `checkov` runs
-> informationally (`--soft-fail`) until posture findings are triaged. The
-> CloudFormation deploy job is added once the AWS OIDC role exists; the sections
-> below document the intended end state.
+> informationally (`--soft-fail`) until posture findings are triaged.
+
+### Enabling `deploy.yml`
+
+The deploy workflow is **dormant** (the job is skipped, so CI stays green) until
+you arm it by setting these on the repository:
+
+| Kind | Name | Purpose |
+| --- | --- | --- |
+| Secret | `AWS_DEPLOY_ROLE_ARN` | IAM role that trusts the GitHub OIDC provider |
+| Variable | `AWS_REGION` | Deployment region (e.g. `us-east-1`) |
+| Variable | `ARTIFACTS_BUCKET` | S3 bucket for the Lambda packages |
+| Variable | `KEY_PAIR_NAME` | EC2 key pair for the instance |
+| Variable | `OPERATOR_CIDR` | (optional) SSH source CIDR |
+| Variable | `DEPLOY_ENABLED` | set to `true` to arm the workflow |
+
+On merge to `main` it builds and uploads the four Lambda packages under an
+SHA-versioned key (so function code actually updates), then runs
+`aws cloudformation deploy` for **network → serverless → compute → observability**.
 
 ---
 

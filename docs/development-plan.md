@@ -243,6 +243,9 @@ without repository secrets:
 - `security.yml` — `govulncheck` + `gosec` (SAST, high-severity gate) +
   `gitleaks` (secret scan with a placeholder allowlist); `checkov` runs
   informationally on the CloudFormation.
+- `deploy.yml` — on merge to `main`, packages the Lambdas (SHA-versioned keys)
+  and deploys network → serverless → compute → observability via OIDC. **Opt-in**:
+  dormant until `DEPLOY_ENABLED=true` and the AWS role/vars are set
+  (see [CI/CD → Enabling deploy.yml](./ci-cd.md#enabling-deployyml)).
 
-The CloudFormation deploy job (OIDC) is planned (it needs the AWS deploy role) —
-see [CI/CD](./ci-cd.md).
+CI/CD is now complete end to end; deploying just needs the AWS side configured.
