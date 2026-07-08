@@ -202,7 +202,7 @@ On success the platform validates access + token permissions, creates the webhoo
 
 ### Manual webhook setup (fallback)
 
-If you prefer to create the webhook yourself: **Settings → Webhooks → Add webhook** → Payload URL = `WebhookUrl`, Content type = `application/json`, Secret = the repository's webhook secret, Events = **Just the push event**.
+If you prefer to create the webhook yourself: **Settings → Webhooks → Add webhook** → Payload URL = `WebhookUrl`, Content type = `application/json`, Secret = the repository's webhook secret, Events = **push** and **release** (registration subscribes to both automatically).
 
 ---
 

@@ -78,6 +78,15 @@ type pushPayload struct {
 	} `json:"head_commit"`
 }
 
+// releasePayload is the minimal subset of the GitHub release event we parse.
+type releasePayload struct {
+	Action  string `json:"action"`
+	Release struct {
+		TagName string `json:"tag_name"`
+		Name    string `json:"name"`
+	} `json:"release"`
+}
+
 type result struct {
 	Status string `json:"status"`
 	Repo   string `json:"repo,omitempty"`
@@ -119,26 +128,48 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return jsonResp(apperror.New(apperror.CodeUnauthorized, "invalid signature"))
 	}
 
-	// Signature valid. Anything we choose not to process is a 200 "ignored".
-	if eventType != "push" {
-		return h.ignore(deliveryID, full, "unsupported event: "+eventType)
-	}
+	// Signature valid. Build a trigger event for supported event types; anything
+	// we choose not to process is a 200 "ignored".
 	if !r.Enabled {
 		return h.ignore(deliveryID, full, "repository disabled")
 	}
-	if p.HeadCommit == nil {
-		return h.ignore(deliveryID, full, "no head commit")
+
+	var ev Event
+	var skip string
+	switch eventType {
+	case "push":
+		ev, skip = h.pushEvent(full, p, r)
+	case "release":
+		ev, skip = h.releaseEvent(full, body, r)
+	default:
+		skip = "unsupported event: " + eventType
+	}
+	if skip != "" {
+		return h.ignore(deliveryID, full, skip)
 	}
 
+	if err := h.Publisher.Publish(ctx, ev); err != nil {
+		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "publish failed"))
+	}
+	h.log("published", deliveryID, full, "triggered by "+eventType)
+	h.count("TriggerMatched")
+	return okResp("accepted", full)
+}
+
+// pushEvent builds a trigger event for a push, gated on the commit-message
+// trigger. A non-empty second return value is the reason to ignore.
+func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (Event, string) {
+	if p.HeadCommit == nil {
+		return Event{}, "no head commit"
+	}
 	pattern := r.TriggerPattern
 	if strings.TrimSpace(pattern) == "" {
 		pattern = h.DefaultTrigger
 	}
 	if !trigger.Matches(p.HeadCommit.Message, pattern) {
-		return h.ignore(deliveryID, full, "commit does not match trigger")
+		return Event{}, "commit does not match trigger"
 	}
-
-	ev := Event{
+	return Event{
 		RepoFullName:   full,
 		Owner:          r.Owner,
 		Name:           r.Name,
@@ -146,13 +177,32 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		CommitSHA:      p.HeadCommit.ID,
 		CommitMessage:  p.HeadCommit.Message,
 		TriggerPattern: pattern,
+	}, ""
+}
+
+// releaseEvent builds a trigger event for a published release. A release is
+// itself an intentional event, so it always triggers (no commit-message gate).
+func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (Event, string) {
+	var rp releasePayload
+	if err := json.Unmarshal(body, &rp); err != nil {
+		return Event{}, "unparseable release payload"
 	}
-	if err := h.Publisher.Publish(ctx, ev); err != nil {
-		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "publish failed"))
+	if rp.Action != "published" {
+		return Event{}, "release action not published: " + rp.Action
 	}
-	h.log("published", deliveryID, full, "trigger matched")
-	h.count("TriggerMatched")
-	return okResp("accepted", full)
+	name := rp.Release.Name
+	if name == "" {
+		name = rp.Release.TagName
+	}
+	return Event{
+		RepoFullName:   full,
+		Owner:          r.Owner,
+		Name:           r.Name,
+		Ref:            "refs/tags/" + rp.Release.TagName,
+		CommitSHA:      rp.Release.TagName, // memory dedup key for releases
+		CommitMessage:  "Release " + name,
+		TriggerPattern: "release",
+	}, ""
 }
 
 // ignore logs, counts, and returns the ignored response for a delivery.

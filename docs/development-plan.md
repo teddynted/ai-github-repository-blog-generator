@@ -398,7 +398,13 @@ Notification channels: `LogNotifier` (always on), `WebhookNotifier`
 channels. The compute stack grants `ses:SendEmail` only when `EnableEmailNotify`
 is set.
 
+**Trigger sources.** Registration subscribes the webhook to `push` and
+`release`. The handler branches by event type: a `push` is commit-message gated
+(default `blog:` or the per-repo pattern); a **published `release`** always
+triggers (a release is itself an intentional event) with the tag as the memory
+dedup key. Git tags and PR labels remain future.
+
 **Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
-analysis; extra trigger sources (releases, tags, PR labels); GitHub Apps auth; a
-**web** approvals UI; and the n8n workflow as an alternative orchestration. Real
+analysis; Git-tag / PR-label trigger sources; GitHub Apps auth; a **web**
+approvals UI; and the n8n workflow as an alternative orchestration. Real
 deployment + end-to-end validation require an AWS account and a GPU instance.

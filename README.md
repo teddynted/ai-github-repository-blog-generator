@@ -573,7 +573,7 @@ ai-github-repository-blog-generator/
 - [ ] Multiple repositories per user, repository groups/organisations, multi-user workspaces
 - [x] Approvals dashboard — CLI over the pending queue (`approve -all` auto-approves); web UI still planned
 - [x] Configurable custom trigger patterns (`[blog]`, `regex:`, per-repo rules)
-- [ ] Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
+- [x] GitHub **Releases** as a trigger source (a published release always triggers); Git Tags / PR labels still planned
 - [ ] Manual blog generation from the application, and scheduled repository summaries
 - [ ] On-Demand fallback when Spot capacity is unavailable; multi-model support
 

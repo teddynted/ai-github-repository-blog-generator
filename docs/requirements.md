@@ -220,9 +220,9 @@ All AI inference MUST occur locally. The system MUST NOT depend on Amazon Bedroc
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| WH-11 | The MVP MUST support `push` events; the webhook MUST subscribe only to the events required for the MVP. | MUST |
+| WH-11 | The system MUST support `push` events (commit-message gated) and **published `release`** events (a release always triggers). | MUST |
 | WH-12 | The system SHOULD ignore/skip event types it does not handle without error. | SHOULD |
-| WH-13 | The system MAY support additional trigger sources (releases, tags, PR labels) in future. | MAY |
+| WH-13 | The system MAY support further trigger sources (tags, PR labels) in future. | MAY |
 
 ---
 

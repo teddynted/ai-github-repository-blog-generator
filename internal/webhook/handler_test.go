@@ -201,6 +201,53 @@ func TestPerRepoTriggerPatternHonoured(t *testing.T) {
 	}
 }
 
+func releaseBody(fullName, action, tag string) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"action":     action,
+		"repository": map[string]any{"full_name": fullName},
+		"release":    map[string]any{"tag_name": tag, "name": "Release " + tag},
+	})
+	return b
+}
+
+func releaseHeaders(body []byte) map[string]string {
+	return map[string]string{
+		"X-GitHub-Event":      "release",
+		"X-GitHub-Delivery":   "d-r",
+		"X-Hub-Signature-256": githubsig.Sign(secret, body),
+	}
+}
+
+func TestPublishedReleaseTriggers(t *testing.T) {
+	body := releaseBody("acme/widget", "published", "v1.2.0")
+	pub := &fakePublisher{}
+	status, resp := newHandler(pub).Handle(context.Background(), releaseHeaders(body), body)
+
+	if status != 200 || len(pub.published) != 1 {
+		t.Fatalf("published release should trigger: status=%d published=%d", status, len(pub.published))
+	}
+	ev := pub.published[0]
+	if ev.Ref != "refs/tags/v1.2.0" || ev.CommitSHA != "v1.2.0" || ev.TriggerPattern != "release" {
+		t.Errorf("release event = %+v", ev)
+	}
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "accepted" {
+		t.Errorf("status = %q", r.Status)
+	}
+}
+
+func TestNonPublishedReleaseIgnored(t *testing.T) {
+	body := releaseBody("acme/widget", "created", "v1.2.0")
+	pub := &fakePublisher{}
+	status, resp := newHandler(pub).Handle(context.Background(), releaseHeaders(body), body)
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if status != 200 || r.Status != "ignored" || len(pub.published) != 0 {
+		t.Errorf("non-published release should be ignored: status=%d field=%q published=%d", status, r.Status, len(pub.published))
+	}
+}
+
 func TestUnparseablePayloadIs400(t *testing.T) {
 	body := []byte(`{"not":"a webhook"}`)
 	status, _ := newHandler(&fakePublisher{}).Handle(context.Background(), map[string]string{"X-GitHub-Event": "push"}, body)

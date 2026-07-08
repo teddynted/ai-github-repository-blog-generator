@@ -102,7 +102,7 @@ func (s *Service) Register(ctx context.Context, in Input) (Output, error) {
 	hookID, err := s.GitHub.CreateWebhook(ctx, owner, name, in.PAT, github.WebhookConfig{
 		URL:    s.WebhookURL,
 		Secret: webhookSecret,
-		Events: []string{"push"},
+		Events: []string{"push", "release"},
 	})
 	if err != nil {
 		return Output{}, err
