@@ -33,7 +33,7 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | **Project foundation** — module, config, logging, errors, bootstrap, build tooling | ✅ Implemented |
-| 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ⏳ Planned |
+| 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ✅ Implemented |
 | 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ⏳ Planned |
 | 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ⏳ Planned |
 | 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ⏳ Planned |
@@ -67,3 +67,36 @@ make build          # compile each implemented Lambda to dist/<fn>/bootstrap (Li
 
 No external dependencies yet — the foundation is standard-library only. AWS SDK
 and `aws-lambda-go` arrive with Milestones 3–4.
+
+---
+
+## Milestone 2 — Infrastructure as Code ✅
+
+Four modular, `cfn-lint`-clean CloudFormation templates under `infrastructure/`.
+Deploy order: **network → serverless → compute → observability**.
+
+| Stack | Provisions |
+| --- | --- |
+| `network.yaml` | VPC, public subnet, Internet Gateway, route table, instance security group (SSH from operator CIDR only) |
+| `serverless.yaml` | REST API Gateway (`/webhook` open, `/repositories` API-key), 4 Lambdas, per-function IAM roles, EventBridge bus + matched-event rule + idle timer, SQS events queue + DLQ, DynamoDB metadata table |
+| `compute.yaml` | EC2 Spot launch template + instance, persistent gp3 EBS volume (retained), instance IAM role/profile, base-host user data |
+| `observability.yaml` | CloudWatch log groups (bounded retention), SNS alarm topic, failure alarms, ops dashboard |
+
+Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
+
+**Implementation notes**
+
+- **Spot via Launch Template.** CloudFormation's `AWS::EC2::Instance` does not
+  accept `InstanceMarketOptions`; Spot options are declared on an
+  `AWS::EC2::LaunchTemplate` (`SpotInstanceType: persistent`,
+  `InstanceInterruptionBehavior: stop`) that the instance references. This
+  matches the start/stop cost model — a persistent Spot instance can be stopped
+  by `idle-shutdown` and restarted by `instance-starter`.
+- **Tag-scoped start/stop.** The starter/idle Lambdas are created before the
+  instance, so their IAM grants `ec2:Start/StopInstances` conditioned on
+  `aws:ResourceTag/Project`, and they resolve the instance by tag rather than a
+  hard-coded ID. This avoids a stack dependency cycle (serverless ⇄ compute).
+- **Lambda code.** The templates reference deployment packages in an artifacts
+  S3 bucket (`ArtifactsBucket` + `*CodeKey` parameters). The function code is
+  implemented in Milestones 3–6; until then the stacks validate but the Lambdas
+  are not yet deployable with real behaviour.

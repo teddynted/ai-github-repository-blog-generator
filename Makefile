@@ -8,7 +8,7 @@ GO       ?= go
 LAMBDAS  := registration webhook-handler instance-starter idle-shutdown
 DIST     := dist
 
-.PHONY: all fmt vet test tidy build clean check
+.PHONY: all fmt vet test tidy build clean check lint-cfn
 
 all: check
 
@@ -31,6 +31,10 @@ tidy:
 ## check: the pre-commit gate (format check, vet, test)
 check: vet test
 	@test -z "$$(gofmt -l . )" || (echo "gofmt: files need formatting:"; gofmt -l .; exit 1)
+
+## lint-cfn: validate the CloudFormation templates
+lint-cfn:
+	cfn-lint infrastructure/*.yaml
 
 ## build: compile every Lambda to dist/<fn>/bootstrap (Linux/arm64)
 build:
