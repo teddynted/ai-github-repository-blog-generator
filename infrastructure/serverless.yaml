@@ -1,0 +1,511 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub AI Blog Generator - Serverless stack. The always-available front door:
+  REST API Gateway (webhook + registration routes), four Lambdas (registration,
+  webhook-handler, instance-starter, idle-shutdown), the EventBridge bus and
+  rules, the SQS events queue + dead-letter queue, and the DynamoDB metadata
+  table. GitHub PATs and per-repo webhook secrets live in Secrets Manager under
+  a fixed prefix (created at registration time, not by this stack).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix, tag value, and Secrets Manager prefix root.
+  ArtifactsBucket:
+    Type: String
+    Description: S3 bucket holding the Lambda deployment packages (bootstrap zips).
+  RegistrationCodeKey:
+    Type: String
+    Default: registration.zip
+    Description: S3 key of the registration Lambda package.
+  WebhookHandlerCodeKey:
+    Type: String
+    Default: webhook-handler.zip
+    Description: S3 key of the webhook-handler Lambda package.
+  InstanceStarterCodeKey:
+    Type: String
+    Default: instance-starter.zip
+    Description: S3 key of the instance-starter Lambda package.
+  IdleShutdownCodeKey:
+    Type: String
+    Default: idle-shutdown.zip
+    Description: S3 key of the idle-shutdown Lambda package.
+  PublishTrigger:
+    Type: String
+    Default: "blog:"
+    Description: Default commit-message trigger (per-repo overrides live in metadata).
+  StageName:
+    Type: String
+    Default: prod
+    Description: API Gateway stage name.
+  IdleTimeoutMinutes:
+    Type: Number
+    Default: 15
+    MinValue: 1
+    Description: Inactivity window before the idle-shutdown Lambda stops the instance.
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Metadata store & event plumbing
+  # ---------------------------------------------------------------------------
+  RepositoriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-repositories"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: repo_full_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: repo_full_name
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EventsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-events-dlq"
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-events"
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EventsDeadLetterQueue.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub "${ProjectName}-bus"
+
+  # Allow EventBridge to deliver matched events into the queue.
+  EventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref EventsQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridge
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt EventsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt PublishRequestedRule.Arn
+
+  # ---------------------------------------------------------------------------
+  # IAM roles (least privilege, one per function)
+  # ---------------------------------------------------------------------------
+  RegistrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: registration
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:TagResource
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: !GetAtt RepositoriesTable.Arn
+
+  WebhookHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: webhook-handler
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:GetItem
+                Resource: !GetAtt RepositoriesTable.Arn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !GetAtt EventBus.Arn
+
+  InstanceStarterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: instance-starter
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ec2:StartInstances
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: !Ref ProjectName
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+
+  IdleShutdownRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: idle-shutdown
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ec2:StopInstances
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: !Ref ProjectName
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+              - Effect: Allow
+                Action: sqs:GetQueueAttributes
+                Resource: !GetAtt EventsQueue.Arn
+
+  # ---------------------------------------------------------------------------
+  # Lambda functions
+  # ---------------------------------------------------------------------------
+  RegistrationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-registration"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt RegistrationRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref RegistrationCodeKey
+      Environment:
+        Variables:
+          REPOSITORIES_TABLE: !Ref RepositoriesTable
+          SECRETS_PREFIX: !Sub "${ProjectName}/repos"
+          PUBLISH_TRIGGER: !Ref PublishTrigger
+          WEBHOOK_URL: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/webhook"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  WebhookHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-webhook-handler"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt WebhookHandlerRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref WebhookHandlerCodeKey
+      Environment:
+        Variables:
+          REPOSITORIES_TABLE: !Ref RepositoriesTable
+          SECRETS_PREFIX: !Sub "${ProjectName}/repos"
+          EVENT_BUS_NAME: !Ref EventBus
+          PUBLISH_TRIGGER: !Ref PublishTrigger
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  InstanceStarterFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-instance-starter"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 30
+      Role: !GetAtt InstanceStarterRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref InstanceStarterCodeKey
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  IdleShutdownFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-idle-shutdown"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 30
+      Role: !GetAtt IdleShutdownRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref IdleShutdownCodeKey
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          QUEUE_URL: !Ref EventsQueue
+          IDLE_TIMEOUT_MINUTES: !Ref IdleTimeoutMinutes
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ---------------------------------------------------------------------------
+  # EventBridge rules
+  # ---------------------------------------------------------------------------
+  PublishRequestedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${ProjectName}-publish-requested"
+      EventBusName: !Ref EventBus
+      EventPattern:
+        source:
+          - !Sub "${ProjectName}.webhook"
+        detail-type:
+          - blog.publish.requested
+      Targets:
+        - Id: events-queue
+          Arn: !GetAtt EventsQueue.Arn
+        - Id: instance-starter
+          Arn: !GetAtt InstanceStarterFunction.Arn
+
+  PublishRequestedRuleStarterPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref InstanceStarterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PublishRequestedRule.Arn
+
+  IdleTimerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${ProjectName}-idle-timer"
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Id: idle-shutdown
+          Arn: !GetAtt IdleShutdownFunction.Arn
+
+  IdleTimerRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref IdleShutdownFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt IdleTimerRule.Arn
+
+  # ---------------------------------------------------------------------------
+  # REST API Gateway: /webhook (open, HMAC-verified) and /repositories (API key)
+  # ---------------------------------------------------------------------------
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${ProjectName}-api"
+      Description: Webhook ingress and repository registration.
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  WebhookResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: webhook
+
+  RepositoriesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: repositories
+
+  WebhookMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref WebhookResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebhookHandlerFunction.Arn}/invocations"
+
+  RepositoriesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref RepositoriesResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RegistrationFunction.Arn}/invocations"
+
+  WebhookInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebhookHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/webhook"
+
+  RegistrationInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RegistrationFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/repositories"
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - WebhookMethod
+      - RepositoriesMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      Description: !Sub "Deployment for ${StageName}"
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref RestApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: !Ref StageName
+
+  RegistrationApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub "${ProjectName}-registration-key"
+      Enabled: true
+
+  ApiUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: !Sub "${ProjectName}-usage-plan"
+      ApiStages:
+        - ApiId: !Ref RestApi
+          Stage: !Ref ApiStage
+
+  ApiUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref RegistrationApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref ApiUsagePlan
+
+Outputs:
+  WebhookUrl:
+    Description: GitHub webhook payload URL.
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/webhook"
+    Export:
+      Name: !Sub "${ProjectName}-WebhookUrl"
+  RegistrationUrl:
+    Description: Repository registration endpoint (requires x-api-key).
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/repositories"
+    Export:
+      Name: !Sub "${ProjectName}-RegistrationUrl"
+  RegistrationApiKeyId:
+    Description: API key ID for the registration endpoint (retrieve value via API Gateway).
+    Value: !Ref RegistrationApiKey
+  RepositoriesTableName:
+    Description: DynamoDB metadata table.
+    Value: !Ref RepositoriesTable
+    Export:
+      Name: !Sub "${ProjectName}-RepositoriesTableName"
+  EventBusName:
+    Description: EventBridge bus for matched events.
+    Value: !Ref EventBus
+    Export:
+      Name: !Sub "${ProjectName}-EventBusName"
+  QueueUrl:
+    Description: SQS events queue URL.
+    Value: !Ref EventsQueue
+    Export:
+      Name: !Sub "${ProjectName}-QueueUrl"
+  QueueArn:
+    Description: SQS events queue ARN (for the instance role in the compute stack).
+    Value: !GetAtt EventsQueue.Arn
+    Export:
+      Name: !Sub "${ProjectName}-QueueArn"
+  DeadLetterQueueUrl:
+    Description: SQS dead-letter queue URL.
+    Value: !Ref EventsDeadLetterQueue
