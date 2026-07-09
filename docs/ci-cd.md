@@ -47,6 +47,10 @@ you arm it by setting these on the repository:
 | Variable | `KEY_PAIR_NAME` | EC2 key pair for the instance |
 | Variable | `OPERATOR_CIDR` | (optional) SSH source CIDR |
 | Variable | `DEPLOY_ENABLED` | set to `true` to arm the workflow |
+| Variable | `NOTIFY_EMAIL_FROM` / `NOTIFY_EMAIL_TO` | (optional) enable email notifications |
+| Variable | `SMTP_USERNAME` / `SMTP_HOST` | (optional) Turbo SMTP account / host |
+| Variable | `NOTIFY_WEBHOOK_URL` | (optional) Slack/webhook URL |
+| Secret | `SMTP_PASSWORD` | (optional) if set, deploy.yml seeds it into the Secrets Manager `NotificationsSecret` each run; otherwise set the password manually via `put-secret-value` |
 
 On merge to `main` it builds and uploads the four Lambda packages under an
 SHA-versioned key (so function code actually updates), then runs

@@ -19,9 +19,13 @@ name: deploy
 #   var    SMTP_USERNAME        - Turbo SMTP account username
 #   var    SMTP_HOST            - (optional) defaults to pro.turbo-smtp.com
 #   var    NOTIFY_WEBHOOK_URL   - (optional) Slack/webhook URL
-# One-time, out-of-band, to set the SMTP password:
-#   aws secretsmanager put-secret-value \
-#     --secret-id blog-gen/notifications/smtp-password --secret-string '<password>'
+#
+# SMTP password — choose ONE:
+#   secret SMTP_PASSWORD        - (optional) if set, deploy.yml seeds it into the
+#                                 Secrets Manager NotificationsSecret each run
+#   or set it manually, out-of-band (nothing in GitHub):
+#     aws secretsmanager put-secret-value \
+#       --secret-id blog-gen/notifications/smtp-password --secret-string '<password>'
 
 on:
   push:
@@ -120,6 +124,21 @@ jobs:
             --stack-name blog-gen-compute \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides $PARAMS
+
+      - name: seed SMTP password into Secrets Manager (optional)
+        env:
+          # A GitHub *secret* (encrypted, masked in logs) — not a var. Leave it
+          # unset to keep managing the password manually via put-secret-value.
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: |
+          if [ -z "$SMTP_PASSWORD" ]; then
+            echo "SMTP_PASSWORD secret not set; leaving the Secrets Manager value as-is."
+            exit 0
+          fi
+          ARN=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+            --query "Stacks[0].Outputs[?OutputKey=='NotificationsSecretArn'].OutputValue" --output text)
+          aws secretsmanager put-secret-value --secret-id "$ARN" --secret-string "$SMTP_PASSWORD" >/dev/null
+          echo "SMTP password updated in $ARN"
 
       - name: deploy observability stack
         run: |

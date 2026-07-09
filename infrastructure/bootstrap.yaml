@@ -145,6 +145,25 @@ Resources:
                   - cloudwatch:*
                   - sns:*
                 Resource: "*"
+              # Manage the NotificationsSecret (compute stack) and let deploy.yml
+              # seed the SMTP password. Scoped to this project's secrets.
+              - Sid: SecretsManager
+                Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:DeleteSecret
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:UpdateSecret
+                  - secretsmanager:TagResource
+                  - secretsmanager:UntagResource
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:*:${AWS::AccountId}:secret:${ProjectName}/*"
+              # GetRandomPassword (used by GenerateSecretString) cannot be scoped.
+              - Sid: SecretsManagerRandom
+                Effect: Allow
+                Action: secretsmanager:GetRandomPassword
+                Resource: "*"
               - Sid: IAMForStacks
                 Effect: Allow
                 Action:
