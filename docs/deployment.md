@@ -207,14 +207,25 @@ In the n8n editor: **Workflows → Import from File**, select each JSON under `w
 
 ## 6. Register a Repository
 
-Registration is the primary way to onboard a repo — it validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, and **creates the GitHub webhook automatically**.
+Registration is the primary way to onboard a repo — it validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, and **creates the GitHub webhook automatically**. It's a two-part step.
+
+**1. Create the GitHub PAT** (in GitHub, not via the endpoint): **Settings → Developer settings → Personal access tokens → Fine-grained tokens**, scoped to the target repo with **Contents: Read**, **Webhooks: Read and write**, **Metadata: Read**. Copy the `github_pat_…` value.
+
+**2. POST it to the registration endpoint.**
+
+> ⚠️ **The registration route requires an API key** (`ApiKeyRequired: true`). Send the `x-api-key` header or you get **403 Forbidden**. (The webhook route is public — HMAC-signed — and takes no API key.)
 
 ```bash
 REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
   --query "Stacks[0].Outputs[?OutputKey=='RegistrationUrl'].OutputValue" --output text)
 
+API_KEY_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='RegistrationApiKeyId'].OutputValue" --output text)
+API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value --query value --output text)
+
 curl -sS -X POST "$REGISTRATION_URL" \
   -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
   -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
 
 # Optional: a custom per-repo trigger (literal prefix or "regex:"):
