@@ -94,13 +94,16 @@ jobs:
 
       - name: deploy network stack
         run: |
-          EXTRA=""
-          [ -n "${{ vars.OPERATOR_CIDR }}" ] && EXTRA="OperatorCidr=${{ vars.OPERATOR_CIDR }}"
+          # SUBNET_AZ moves the Spot host to an AZ with capacity (e.g. us-east-1b)
+          # when the default AZ is short on the chosen instance type.
+          P=""
+          [ -n "${{ vars.OPERATOR_CIDR }}" ] && P="$P OperatorCidr=${{ vars.OPERATOR_CIDR }}"
+          [ -n "${{ vars.SUBNET_AZ }}" ]     && P="$P AvailabilityZone=${{ vars.SUBNET_AZ }}"
           aws cloudformation deploy \
             --template-file infrastructure/network.yaml \
             --stack-name blog-gen-network \
             --capabilities CAPABILITY_NAMED_IAM \
-            ${EXTRA:+--parameter-overrides $EXTRA}
+            ${P:+--parameter-overrides $P}
 
       - name: deploy serverless stack
         run: |
