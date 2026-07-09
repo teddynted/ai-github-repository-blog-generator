@@ -404,6 +404,27 @@ is set.
 triggers (a release is itself an intentional event) with the tag as the memory
 dedup key. Git tags and PR labels remain future.
 
+### Architecture diagrams ✅
+
+`internal/archdiagram` turns a `processing.Snapshot` into evidence-grounded AWS
+architecture diagrams (Mermaid) that embed straight into the blog. It is
+**deterministic** — no LLM guessing — which directly serves the module's primary
+principle (repository evidence over assumption): every service carries the file +
+token that produced it, and the Mermaid is valid **by construction** (built as a
+`Graph` model, then `Validate`d for dangling edges / orphans / dup ids before
+render). Detection scans the working copy for Terraform (`aws_*`),
+CloudFormation (`AWS::*`), AWS SDK client packages, dependency hints
+(Postgres → RDS, Redis → ElastiCache, Medium), and docker-compose/K8s manifests;
+it maps LLM usage to **OpenClaw on EC2, never Bedrock**, and defaults compute to
+EC2 (Spot) only as explicit deployment context. Confidence is High / Medium /
+Low; only High + Medium reach the primary diagram (omission over speculation).
+It emits up to six diagrams — AWS Solution (primary), Component, Data Flow,
+Deployment, CI/CD (if CI/CD), AI Workflow (if AI) — plus a confidence report and
+an evidence report. Wired into the pipeline as the optional `Diagrammer` seam
+(after generation, before review), so the diagram asset flows through review,
+approval, publishing, and memory like any other. The worker enables it by
+default; a diagram failure never fails the run.
+
 **Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
 analysis; Git-tag / PR-label trigger sources; GitHub Apps auth; a **web**
 approvals UI; and the n8n workflow as an alternative orchestration. Real

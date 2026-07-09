@@ -26,6 +26,7 @@ import (
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
@@ -117,12 +118,13 @@ func main() {
 			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
 			Logger: a.Logger,
 		},
-		Publisher: publisher,
-		Memory:    &memory.Store{Dir: a.Config.MemoryDir, Logger: a.Logger},
-		Reviewer:  review.Reviewer{},
-		Approver:  approver,
-		Kinds:     defaultKinds,
-		Logger:    a.Logger,
+		Publisher:  publisher,
+		Memory:     &memory.Store{Dir: a.Config.MemoryDir, Logger: a.Logger},
+		Reviewer:   review.Reviewer{},
+		Approver:   approver,
+		Diagrammer: archdiagram.Diagrammer{},
+		Kinds:      defaultKinds,
+		Logger:     a.Logger,
 	}
 
 	notifiers := notify.Multi{&notify.LogNotifier{Logger: a.Logger}}

@@ -37,6 +37,10 @@ const (
 	KindDocs         Kind = "documentation"
 	KindArchitecture Kind = "architecture-summary"
 	KindReleaseNotes Kind = "release-notes"
+	// KindArchitectureDiagram is produced deterministically by the archdiagram
+	// package (evidence-grounded AWS diagrams), not by the LLM generator, so it
+	// has no prompt spec here.
+	KindArchitectureDiagram Kind = "architecture-diagram"
 )
 
 // Content is a generated asset (Markdown).

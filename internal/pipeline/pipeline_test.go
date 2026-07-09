@@ -47,6 +47,55 @@ func (f *fakePublisher) Publish(_ context.Context, repoFullName string, assets [
 
 func snap() processing.Snapshot { return processing.Snapshot{RepoFullName: "acme/widget"} }
 
+type fakeDiagrammer struct {
+	asset generation.Content
+	ok    bool
+	err   error
+}
+
+func (f *fakeDiagrammer) Diagram(_ context.Context, _ processing.Snapshot) (generation.Content, bool, error) {
+	return f.asset, f.ok, f.err
+}
+
+func TestRunAppendsDiagramAsset(t *testing.T) {
+	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog, Markdown: "# x"}}}
+	pub := &fakePublisher{}
+	diag := &fakeDiagrammer{asset: generation.Content{Kind: generation.KindArchitectureDiagram, Markdown: "```mermaid\nflowchart LR\n```"}, ok: true}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Diagrammer: diag}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "acme/widget"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Published != 2 {
+		t.Fatalf("published = %d, want 2 (blog + diagram)", res.Published)
+	}
+	var haveDiagram bool
+	for _, a := range pub.published {
+		if a.Kind == generation.KindArchitectureDiagram {
+			haveDiagram = true
+		}
+	}
+	if !haveDiagram {
+		t.Error("diagram asset was not published")
+	}
+}
+
+func TestRunProceedsWhenDiagramFails(t *testing.T) {
+	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog, Markdown: "# x"}}}
+	pub := &fakePublisher{}
+	diag := &fakeDiagrammer{err: errors.New("boom")}
+	p := &Pipeline{Processor: &fakeProcessor{snap: snap()}, Generator: gen, Publisher: pub, Diagrammer: diag}
+
+	res, err := p.Run(context.Background(), Request{RepoFullName: "acme/widget"})
+	if err != nil {
+		t.Fatalf("diagram failure must not fail the run: %v", err)
+	}
+	if res.Published != 1 {
+		t.Errorf("published = %d, want 1 (blog only)", res.Published)
+	}
+}
+
 func TestRunProcessGeneratePublish(t *testing.T) {
 	proc := &fakeProcessor{snap: snap()}
 	gen := &fakeGenerator{assets: []generation.Content{{Kind: generation.KindBlog, Markdown: "# x"}}}
