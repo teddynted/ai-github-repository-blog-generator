@@ -33,6 +33,33 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.LogLevel != DefaultLogLevel {
 		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, DefaultLogLevel)
 	}
+	if cfg.SMTPHost != DefaultSMTPHost {
+		t.Errorf("SMTPHost = %q, want %q", cfg.SMTPHost, DefaultSMTPHost)
+	}
+	if cfg.SMTPPort != DefaultSMTPPort {
+		t.Errorf("SMTPPort = %d, want %d", cfg.SMTPPort, DefaultSMTPPort)
+	}
+}
+
+func TestLoadReadsSMTP(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"SMTP_HOST":            "pro.eu.turbo-smtp.com",
+		"SMTP_PORT":            "465",
+		"SMTP_USERNAME":        "acct@example.com",
+		"SMTP_PASSWORD_SECRET": "blog-gen/notifications/smtp-password",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.SMTPHost != "pro.eu.turbo-smtp.com" || cfg.SMTPPort != 465 {
+		t.Errorf("host/port = %q/%d", cfg.SMTPHost, cfg.SMTPPort)
+	}
+	if cfg.SMTPUsername != "acct@example.com" {
+		t.Errorf("username = %q", cfg.SMTPUsername)
+	}
+	if cfg.SMTPPasswordSecret != "blog-gen/notifications/smtp-password" {
+		t.Errorf("password secret = %q", cfg.SMTPPasswordSecret)
+	}
 }
 
 func TestLoadReadsValues(t *testing.T) {
@@ -65,6 +92,8 @@ func TestLoadRejectsMalformedValues(t *testing.T) {
 		{"non-numeric idle timeout", "IDLE_TIMEOUT_MINUTES", "soon"},
 		{"non-positive idle timeout", "IDLE_TIMEOUT_MINUTES", "0"},
 		{"non-bool approval", "REQUIRE_HUMAN_APPROVAL", "maybe"},
+		{"non-numeric smtp port", "SMTP_PORT", "ssl"},
+		{"out-of-range smtp port", "SMTP_PORT", "70000"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := Load(envMap(map[string]string{tc.key: tc.val})); err == nil {

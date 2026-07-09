@@ -132,7 +132,10 @@ aws cloudformation deploy \
   --parameter-overrides ArtifactsBucket=$ARTIFACTS_BUCKET PublishTrigger=$PUBLISH_TRIGGER \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 3. Compute layer (EC2 Spot + persistent EBS)
+# 3. Compute layer (EC2 Spot + persistent EBS + worker service)
+#    Build & upload the worker binary first (linux/amd64):
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
+aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/worker"
 aws cloudformation deploy \
   --template-file infrastructure/compute.yaml \
   --stack-name blog-gen-compute \
@@ -142,7 +145,11 @@ aws cloudformation deploy \
       KeyPairName=$KEY_PAIR_NAME \
       OllamaModel=$OLLAMA_MODEL \
       EbsVolumeSizeGb=$EBS_VOLUME_SIZE_GB \
-      IdleTimeoutMinutes=$IDLE_TIMEOUT_MINUTES \
+      ArtifactsBucket=$ARTIFACTS_BUCKET \
+      WorkerCodeKey=worker \
+      NotifyEmailFrom=$NOTIFY_EMAIL_FROM \
+      NotifyEmailTo=$NOTIFY_EMAIL_TO \
+      SmtpUsername=$SMTP_USERNAME \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 4. Observability layer
@@ -151,6 +158,20 @@ aws cloudformation deploy \
   --stack-name blog-gen-observability \
   --capabilities CAPABILITY_NAMED_IAM
 ```
+
+Set the SMTP password (email notifications). The compute stack creates the
+secret container; the value is set out-of-band so it never appears in the
+template or parameter history:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id blog-gen/notifications/smtp-password \
+  --secret-string 'YOUR_TURBO_SMTP_PASSWORD'
+```
+
+The worker reads it at startup via `SMTP_PASSWORD_SECRET`; restart the service
+(or the instance) to pick up a changed value: `sudo systemctl restart blog-gen-worker`.
+Email is optional — leave `NotifyEmail*`/`SmtpUsername` unset to disable it.
 
 Retrieve the webhook URL:
 

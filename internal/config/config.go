@@ -99,6 +99,11 @@ type Config struct {
 	SMTPPort     int
 	SMTPUsername string
 	SMTPPassword string
+	// SMTPPasswordSecret is an optional AWS Secrets Manager id/ARN whose value is
+	// the SMTP password (SMTP_PASSWORD_SECRET). When set, it is resolved at
+	// startup and takes precedence over SMTP_PASSWORD, so the credential never
+	// lives in plaintext env/config on the instance.
+	SMTPPasswordSecret string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -143,6 +148,7 @@ func Load(getenv Getenv) (Config, error) {
 		SMTPPort:             DefaultSMTPPort,
 		SMTPUsername:         getenv("SMTP_USERNAME"),
 		SMTPPassword:         getenv("SMTP_PASSWORD"),
+		SMTPPasswordSecret:   getenv("SMTP_PASSWORD_SECRET"),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,

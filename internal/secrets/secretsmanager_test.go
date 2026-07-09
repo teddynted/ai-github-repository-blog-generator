@@ -89,3 +89,20 @@ func TestWebhookSecret(t *testing.T) {
 		t.Errorf("WebhookSecret = %q, want whsec", got)
 	}
 }
+
+func TestValueResolvesArbitrarySecret(t *testing.T) {
+	f := newFake()
+	f.created["blog-gen/notifications/smtp-password"] = "s3cr3t"
+	s := New(f, "blog-gen/repos")
+
+	got, err := s.Value(context.Background(), "blog-gen/notifications/smtp-password")
+	if err != nil {
+		t.Fatalf("Value: %v", err)
+	}
+	if got != "s3cr3t" {
+		t.Errorf("Value = %q, want s3cr3t", got)
+	}
+	if _, err := s.Value(context.Background(), "missing"); err == nil {
+		t.Error("expected error for a missing secret")
+	}
+}

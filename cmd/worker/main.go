@@ -130,10 +130,23 @@ func main() {
 	if a.Config.NotifyWebhookURL != "" {
 		notifiers = append(notifiers, notify.NewWebhook(a.Config.NotifyWebhookURL, a.Logger))
 	}
+	// Resolve the SMTP password: a Secrets Manager reference wins over a plaintext
+	// env value, so the credential need never sit in the instance's env file.
+	smtpPassword := a.Config.SMTPPassword
+	if a.Config.SMTPPasswordSecret != "" {
+		if pw, err := sec.Value(ctx, a.Config.SMTPPasswordSecret); err != nil {
+			// Email is optional; a resolution failure must not stop the worker.
+			a.Logger.Warn("could not resolve SMTP password secret; email disabled",
+				"error", err.Error())
+			smtpPassword = ""
+		} else {
+			smtpPassword = pw
+		}
+	}
 	if a.Config.NotifyEmailFrom != "" && a.Config.NotifyEmailTo != "" &&
-		a.Config.SMTPUsername != "" && a.Config.SMTPPassword != "" {
+		a.Config.SMTPUsername != "" && smtpPassword != "" {
 		sender := notify.NewSMTP(a.Config.SMTPHost, a.Config.SMTPPort,
-			a.Config.SMTPUsername, a.Config.SMTPPassword)
+			a.Config.SMTPUsername, smtpPassword)
 		notifiers = append(notifiers, notify.NewEmail(
 			sender, a.Config.NotifyEmailFrom,
 			splitCSV(a.Config.NotifyEmailTo), a.Logger))

@@ -59,6 +59,12 @@ func (s *Store) PAT(ctx context.Context, ref string) (string, error) {
 	return s.get(ctx, ref+"/pat", "pat")
 }
 
+// Value resolves an arbitrary secret by its id or ARN (not prefix-scoped). Used
+// for shared secrets such as the SMTP password. Treat the result as sensitive.
+func (s *Store) Value(ctx context.Context, secretID string) (string, error) {
+	return s.get(ctx, secretID, "value")
+}
+
 func (s *Store) get(ctx context.Context, name, what string) (string, error) {
 	out, err := s.api.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(name),

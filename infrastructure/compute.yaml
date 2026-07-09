@@ -43,10 +43,64 @@ Parameters:
       granted s3:PutObject on it (the worker publishes to S3 instead of local
       files when OUTPUT_S3_BUCKET is configured).
 
+  ArtifactsBucket:
+    Type: String
+    Default: ""
+    Description: >
+      S3 bucket holding the worker binary (same bucket used for Lambda
+      artifacts). Required to install the worker service on the instance.
+  WorkerCodeKey:
+    Type: String
+    Default: ""
+    Description: >
+      S3 key of the linux/amd64 worker binary (e.g. "<sha>/worker"). When set
+      with ArtifactsBucket, the instance downloads it and runs it as a systemd
+      service.
+  NotifyEmailFrom:
+    Type: String
+    Default: ""
+    Description: From address for email notifications (blank disables email).
+  NotifyEmailTo:
+    Type: String
+    Default: ""
+    Description: Comma-separated recipient addresses for email notifications.
+  SmtpHost:
+    Type: String
+    Default: pro.turbo-smtp.com
+    Description: SMTP relay host (Turbo SMTP).
+  SmtpPort:
+    Type: Number
+    Default: 587
+    Description: SMTP port (587 STARTTLS or 465 implicit TLS).
+  SmtpUsername:
+    Type: String
+    Default: ""
+    Description: SMTP account username (the password is stored in Secrets Manager).
+  NotifyWebhookUrl:
+    Type: String
+    Default: ""
+    Description: Optional Slack/webhook URL for notifications.
+
 Conditions:
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
+  HasWorkerCode: !And
+    - !Not [!Equals [!Ref ArtifactsBucket, ""]]
+    - !Not [!Equals [!Ref WorkerCodeKey, ""]]
 
 Resources:
+  # Container for the SMTP password. CFN creates it with a random placeholder;
+  # the operator sets the real Turbo SMTP password out-of-band (put-secret-value)
+  # so it never appears in the template or parameter history. Subsequent stack
+  # updates leave the value untouched.
+  NotificationsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/notifications/smtp-password"
+      Description: SMTP password for Turbo SMTP email notifications (set the real value with put-secret-value).
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -70,10 +124,12 @@ Resources:
                   - sqs:GetQueueAttributes
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueArn"
-              # Read the PAT only when cloning.
+              # Read the PAT (when cloning) and the SMTP password (for email).
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                  - !Ref NotificationsSecret
               # Update last-processed commit SHA after a run.
               - Effect: Allow
                 Action:
@@ -97,10 +153,17 @@ Resources:
                   Action: s3:PutObject
                   Resource: !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
                 - !Ref AWS::NoValue
+              # Download the worker binary from the artifacts bucket at boot.
+              - !If
+                - HasWorkerCode
+                - Effect: Allow
+                  Action: s3:GetObject
+                  Resource: !Sub "arn:${AWS::Partition}:s3:::${ArtifactsBucket}/*"
+                - !Ref AWS::NoValue
               # Email notifications go through Turbo SMTP (outbound SMTP over
-              # TLS), so no AWS mail permission is required. The worker only
-              # needs egress on 587/465 and the SMTP credentials supplied at
-              # runtime (SMTP_USERNAME / SMTP_PASSWORD; prefer Secrets Manager).
+              # TLS), so no AWS mail permission is required — the worker only
+              # needs egress on 587/465 and reads the SMTP password from the
+              # NotificationsSecret above.
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -135,33 +198,90 @@ Resources:
               Encrypted: true
               DeleteOnTermination: true
         UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            set -euxo pipefail
-            # --- Base host bootstrap (M2). n8n + OpenClaw + Ollama compose is added
-            # --- in later milestones (see docs/development-plan.md).
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update -y
-            apt-get install -y ca-certificates curl gnupg
-            install -m 0755 -d /etc/apt/keyrings
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-            chmod a+r /etc/apt/keyrings/docker.gpg
-            echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-              > /etc/apt/sources.list.d/docker.list
-            apt-get update -y
-            apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-            systemctl enable --now docker
-            # Mount the persistent data volume (formatted once) at /data.
-            DEV=/dev/xvdf
-            for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
-            if [ -b "$DEV" ]; then
-              blkid "$DEV" || mkfs.ext4 -L blogdata "$DEV"
-              mkdir -p /data
-              grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
-              mount -a
-            fi
-            echo "ollama-model=${OllamaModel}" > /data/.bootstrap || true
-            echo "base host bootstrap complete"
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                set -euxo pipefail
+                # --- Base host bootstrap. Ollama/OpenClaw model serving is a separate
+                # --- milestone (see docs/development-plan.md); the worker expects
+                # --- Ollama reachable at OLLAMA_BASE_URL to generate content.
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update -y
+                apt-get install -y ca-certificates curl gnupg
+                install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                chmod a+r /etc/apt/keyrings/docker.gpg
+                echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+                  > /etc/apt/sources.list.d/docker.list
+                apt-get update -y
+                apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+                systemctl enable --now docker
+                # Mount the persistent data volume (formatted once) at /data.
+                DEV=/dev/xvdf
+                for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
+                if [ -b "$DEV" ]; then
+                  blkid "$DEV" || mkfs.ext4 -L blogdata "$DEV"
+                  mkdir -p /data
+                  grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
+                  mount -a
+                fi
+                echo "ollama-model=${OllamaModel}" > /data/.bootstrap || true
+                echo "base host bootstrap complete"
+
+                # --- Worker service (only when a worker binary key is provided) ---
+                if [ -n "${WorkerCodeKey}" ]; then
+                  export AWS_DEFAULT_REGION=${AWS::Region}
+                  apt-get install -y awscli
+                  aws s3 cp "s3://${ArtifactsBucket}/${WorkerCodeKey}" /usr/local/bin/blog-gen-worker
+                  chmod +x /usr/local/bin/blog-gen-worker
+                  mkdir -p /etc/blog-gen /data/generated-content /data/work /data/memory /data/pending
+                  # Runtime config. The SMTP password is NOT here — the worker reads
+                  # it from Secrets Manager via SMTP_PASSWORD_SECRET at startup.
+                  cat > /etc/blog-gen/worker.env <<'ENVEOF'
+                AWS_REGION=${AWS::Region}
+                QUEUE_URL=${QueueUrl}
+                REPOSITORIES_TABLE=${RepositoriesTable}
+                SECRETS_PREFIX=${ProjectName}/repos
+                OLLAMA_MODEL=${OllamaModel}
+                OUTPUT_DIR=/data/generated-content
+                OUTPUT_S3_BUCKET=${OutputS3Bucket}
+                WORK_DIR=/data/work
+                MEMORY_DIR=/data/memory
+                PENDING_DIR=/data/pending
+                NOTIFY_WEBHOOK_URL=${NotifyWebhookUrl}
+                NOTIFY_EMAIL_FROM=${NotifyEmailFrom}
+                NOTIFY_EMAIL_TO=${NotifyEmailTo}
+                SMTP_HOST=${SmtpHost}
+                SMTP_PORT=${SmtpPort}
+                SMTP_USERNAME=${SmtpUsername}
+                SMTP_PASSWORD_SECRET=${NotificationsSecret}
+                ENVEOF
+                  chmod 600 /etc/blog-gen/worker.env
+                  cat > /etc/systemd/system/blog-gen-worker.service <<'UNITEOF'
+                [Unit]
+                Description=GitHub AI Blog Generator worker
+                After=network-online.target docker.service
+                Wants=network-online.target
+
+                [Service]
+                EnvironmentFile=/etc/blog-gen/worker.env
+                ExecStart=/usr/local/bin/blog-gen-worker
+                Restart=always
+                RestartSec=5
+                User=root
+
+                [Install]
+                WantedBy=multi-user.target
+                UNITEOF
+                  systemctl daemon-reload
+                  systemctl enable --now blog-gen-worker
+                  echo "worker service installed"
+                fi
+              - QueueUrl:
+                  Fn::ImportValue: !Sub "${ProjectName}-QueueUrl"
+                RepositoriesTable:
+                  Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
 
   Instance:
     Type: AWS::EC2::Instance

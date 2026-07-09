@@ -403,6 +403,22 @@ SMTP, **no AWS mail IAM is required** — the instance just needs egress on
 587/465, and the SMTP password supplied at runtime (env, or Secrets Manager at
 deploy time).
 
+### Worker runtime service ✅
+
+The compute stack installs the worker as a **systemd service**
+(`blog-gen-worker`) on the instance: `deploy.yml` builds the linux/amd64 binary
+and uploads it to the artifacts bucket (`<sha>/worker`); the instance downloads
+it, writes `/etc/blog-gen/worker.env` (0600) from stack parameters plus the
+imported `QueueUrl`/table, and runs it with `Restart=always`. Email credentials
+follow the no-plaintext principle: the stack creates a `NotificationsSecret`
+(`${ProjectName}/notifications/smtp-password`) whose value the operator sets
+out-of-band with `put-secret-value`; the worker resolves it via
+`SMTP_PASSWORD_SECRET` at startup (`secrets.Store.Value`), so the password never
+touches env files, CloudFormation parameters, or stack history. The instance
+role grants `secretsmanager:GetSecretValue` on that secret and `s3:GetObject` on
+the artifacts bucket. (Ollama/OpenClaw model serving remains a separate
+milestone; the worker expects Ollama reachable at `OLLAMA_BASE_URL`.)
+
 **Trigger sources.** Registration subscribes the webhook to `push` and
 `release`. The handler branches by event type: a `push` is commit-message gated
 (default `blog:` or the per-repo pattern); a **published `release`** always
