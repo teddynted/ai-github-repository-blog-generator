@@ -35,6 +35,7 @@
 - [Technology Stack](#technology-stack)
 - [Cost Optimisation](#cost-optimisation)
 - [Spot Instance Trade-offs](#spot-instance-trade-offs)
+- [Optimizing Spot Instance Startup](#optimizing-spot-instance-startup)
 - [Security](#security)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -398,6 +399,63 @@ Spot Instances are the right default for this asynchronous, interruptible, batch
 
 ---
 
+## Optimizing Spot Instance Startup
+
+Because the instance is stopped when idle and (re)launched per job, **startup time is on the critical path** for every generation. A stock Ubuntu boot would spend ~10–15 minutes installing NVIDIA drivers, Docker, the Ollama image, and pulling the ~4.7 GB model before it could process anything. The optimization removes almost all of that from the boot path.
+
+### Strategy
+
+- **Pre-baked custom AMI.** All slow, network-heavy setup is baked into an AMI once, so it isn't repeated on every launch. The image is defined in code ([`packer/blog-gen.pkr.hcl`](./packer/blog-gen.pkr.hcl) + [`scripts/ami/provision.sh`](./scripts/ami/provision.sh)) and rebuilt with one command.
+- **Baked model seed.** The model is baked in and *copied* to the persistent volume at first boot — **no multi-GB download at launch**.
+- **Runtime-only boot work.** Boot does just the instance-specific bits: mount `/data`, seed the model, write the worker env from stack params, drop in the small worker binary (from S3), and start the services.
+- **systemd auto-start + health gating.** `blog-gen-ollama` and `blog-gen-worker` are enabled units, so they start automatically on every boot; the worker waits (`ExecStartPre`) until Ollama has the model loaded, and `health.sh` reports overall readiness.
+- **Persistent storage unchanged.** Models, Repository Memory, and generated output live on a `Retain` gp3 EBS volume that survives Spot interruption and stop/start.
+
+### Why a custom AMI
+
+The heavy work (GPU driver install — which alone is minutes and can need a reboot; Docker; the container image; the model) is identical on every launch and **has no per-instance inputs**. Baking it is the highest-leverage way to cut startup time while keeping the architecture and cost model unchanged. The only per-launch download is the few-MB worker binary.
+
+### Build & update process
+
+```bash
+scripts/build-ami.sh --region us-east-1     # prints an AMI id
+# then set repo variable CUSTOM_AMI=<ami-id> (CI) or CustomAmi=<ami-id> (manual) and redeploy compute
+```
+
+Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, or `provision.sh`) — ordinary app changes just redeploy the worker binary. Full details in [docs/ami.md](./docs/ami.md).
+
+### Startup workflow
+
+```mermaid
+flowchart TD
+  A["Matched webhook (blog: commit / release)"] --> B["API Gateway → handler Lambda"]
+  B --> C["EventBridge → SQS (durable job)"]
+  C --> D["instance-starter Lambda: start Spot instance"]
+  D --> E{"Boot from CustomAmi?"}
+  E -->|"Yes (fast path)"| F["Runtime init only:<br/>mount /data · seed model · write env · fetch worker binary"]
+  E -->|"No (fallback)"| G["Run provision.sh at boot<br/>(Docker · NVIDIA · Ollama · model)"]
+  G --> F
+  F --> H["systemd: blog-gen-ollama → blog-gen-worker<br/>(ExecStartPre waits for model)"]
+  H --> I{"health.sh: Docker + Ollama + model + worker ready?"}
+  I -->|"ready"| J["Worker drains SQS → generate → review → publish / notify"]
+  J --> K["Idle timeout → idle-shutdown Lambda stops the instance"]
+  K --> L["EBS volume persists (models · memory · output)"]
+```
+
+### Expected improvement, cost & trade-offs
+
+| Aspect | Stock AMI (fallback) | Custom AMI (optimized) |
+| --- | --- | --- |
+| Time to "ready for jobs" | ~10–15 min (driver + Docker + image + 4.7 GB model) | **< 1 min** typical (services start; model already present) |
+| Network at boot | Hundreds of MB + model | worker binary only (few MB) |
+| Reproducibility | script at boot | same script, baked; one-command rebuild |
+
+**Cost implications** — the baked AMI stores an EBS snapshot (~5 GB incl. the model): a few cents/month. Faster startup also means the (expensive) GPU instance spends **less time booting and idle**, so per-job cost typically *drops*. The trade-off is an occasional AMI rebuild when dependencies change, and per-region AMI management. Use `--no-bake-model` to shrink the image at the cost of a one-time model pull on first boot.
+
+**Operational note** — if `CUSTOM_AMI` is unset, deploys still work: the instance falls back to running `provision.sh` at boot (slower, but nothing breaks).
+
+---
+
 ## Security
 
 Security is built in by default (full detail in [`docs/security.md`](./docs/security.md)):
@@ -670,6 +728,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Architecture](./docs/architecture.md) | Components, trigger path, data flow, and design decisions |
 | [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
 | [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
+| [Custom AMI](./docs/ami.md) | Building/updating the pre-baked worker AMI for fast Spot startup |
 | [First Deploy](./docs/first-deploy.md) | One-page runbook: bootstrap → deploy → register → trigger → verify |
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
 | [Workflows](./docs/workflows.md) | Trigger validation and the n8n pipeline, node by node |

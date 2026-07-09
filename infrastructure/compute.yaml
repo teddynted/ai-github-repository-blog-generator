@@ -41,7 +41,20 @@ Parameters:
   LatestUbuntuAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-    Description: Resolves to the latest Ubuntu 22.04 (amd64) AMI.
+    Description: Fallback base AMI (latest Ubuntu 22.04 amd64) when CustomAmi is unset.
+  CustomAmi:
+    Type: String
+    Default: ""
+    Description: >
+      Pre-baked worker AMI id from scripts/build-ami.sh (Docker, NVIDIA, Ollama +
+      model, systemd services). When set, boot skips all installs — the fast
+      path. Leave blank to fall back to the stock Ubuntu AMI (slow first boot).
+  AmiScriptsKey:
+    Type: String
+    Default: ""
+    Description: >
+      S3 key of scripts/ami/provision.sh (uploaded by deploy.yml). Used only on
+      the fallback path to provision a stock AMI at boot.
   OutputS3Bucket:
     Type: String
     Default: ""
@@ -89,6 +102,7 @@ Parameters:
     Description: Optional Slack/webhook URL for notifications.
 
 Conditions:
+  HasCustomAmi: !Not [!Equals [!Ref CustomAmi, ""]]
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
   HasWorkerCode: !And
     - !Not [!Equals [!Ref ArtifactsBucket, ""]]
@@ -185,7 +199,7 @@ Resources:
       LaunchTemplateName: !Sub "${ProjectName}-lt"
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
-        ImageId: !Ref LatestUbuntuAmi
+        ImageId: !If [HasCustomAmi, !Ref CustomAmi, !Ref LatestUbuntuAmi]
         KeyName: !Ref KeyPairName
         IamInstanceProfile:
           Arn: !GetAtt InstanceProfile.Arn
@@ -210,19 +224,12 @@ Resources:
               - |
                 #!/bin/bash
                 set -euxo pipefail
-                # --- Base host bootstrap: Docker, the persistent volume, Ollama model
-                # --- serving (local inference the worker calls), then the worker.
+                # --- Runtime init only. Heavy installs (Docker, NVIDIA, Ollama image,
+                # --- the model, systemd units) are pre-baked into the CustomAmi by
+                # --- scripts/ami/provision.sh; a stock AMI runs that same script here.
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get update -y
-                apt-get install -y ca-certificates curl gnupg
-                install -m 0755 -d /etc/apt/keyrings
-                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-                chmod a+r /etc/apt/keyrings/docker.gpg
-                echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-                  > /etc/apt/sources.list.d/docker.list
-                apt-get update -y
-                apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-                systemctl enable --now docker
+                mkdir -p /opt/blog-gen /etc/blog-gen
+
                 # Mount the persistent data volume (formatted once) at /data.
                 DEV=/dev/xvdf
                 for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
@@ -232,58 +239,39 @@ Resources:
                   grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
                   mount -a
                 fi
-                echo "ollama-model=${OllamaModel}" > /data/.bootstrap || true
-                echo "base host bootstrap complete"
+                mkdir -p /data/ollama /data/generated-content /data/work /data/memory /data/pending
 
-                # --- Ollama model serving (local inference the worker calls) ---
-                mkdir -p /opt/blog-gen /data/ollama
-                GPU_ARGS=""
-                if [ "${EnableGpu}" = "true" ]; then
-                  # NVIDIA driver + container toolkit for GPU passthrough into Docker.
-                  apt-get install -y "linux-headers-$(uname -r)" nvidia-driver-535-server || true
-                  modprobe nvidia || true
-                  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-                    | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-                  curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-                    | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-                    > /etc/apt/sources.list.d/nvidia-container-toolkit.list
-                  apt-get update -y
-                  apt-get install -y nvidia-container-toolkit
-                  nvidia-ctk runtime configure --runtime=docker
-                  systemctl restart docker
-                  GPU_ARGS="--gpus all"
+                # Fallback: a stock AMI (no baked marker) runs the canonical
+                # provisioner now. A baked CustomAmi skips this entirely (fast path).
+                if [ ! -f /opt/blog-gen/.ami-baked ]; then
+                  echo "no baked AMI marker; provisioning at boot (slow path)"
+                  apt-get update -y && apt-get install -y awscli
+                  aws s3 cp "s3://${ArtifactsBucket}/${AmiScriptsKey}" /opt/blog-gen/provision.sh
+                  chmod +x /opt/blog-gen/provision.sh
+                  OLLAMA_MODEL="${OllamaModel}" ENABLE_GPU="${EnableGpu}" BAKE_MODEL=false \
+                    /opt/blog-gen/provision.sh
                 fi
-                # Models persist on the EBS volume; the API binds to localhost only.
-                docker rm -f ollama 2>/dev/null || true
-                if ! docker run -d --name ollama --restart unless-stopped $GPU_ARGS \
-                    -p 127.0.0.1:11434:11434 -v /data/ollama:/root/.ollama ollama/ollama:latest; then
-                  echo "GPU start failed; falling back to CPU-only Ollama"
-                  docker rm -f ollama 2>/dev/null || true
-                  docker run -d --name ollama --restart unless-stopped \
-                    -p 127.0.0.1:11434:11434 -v /data/ollama:/root/.ollama ollama/ollama:latest
-                fi
-                # Pull the configured model (idempotent; cached on the volume).
-                for i in $(seq 1 30); do
-                  curl -sf http://127.0.0.1:11434/api/version >/dev/null && break || sleep 3
-                done
-                docker exec ollama ollama pull "${OllamaModel}" || echo "model pull deferred; worker will retry"
-                echo "ollama serving ${OllamaModel}"
 
-                # --- Worker service (only when a worker binary key is provided) ---
+                # Seed the model from the baked copy if the volume is empty — avoids a
+                # multi-GB download at boot.
+                if [ ! -d /data/ollama/models ] && [ -d /opt/blog-gen/ollama-seed/models ]; then
+                  cp -a /opt/blog-gen/ollama-seed/. /data/ollama/
+                fi
+
+                # --- Worker binary + env (stack-specific values). SMTP password is NOT
+                # --- here — the worker reads it from Secrets Manager via the secret ref.
                 if [ -n "${WorkerCodeKey}" ]; then
                   export AWS_DEFAULT_REGION=${AWS::Region}
-                  apt-get install -y awscli
+                  command -v aws >/dev/null 2>&1 || { apt-get update -y && apt-get install -y awscli; }
                   aws s3 cp "s3://${ArtifactsBucket}/${WorkerCodeKey}" /usr/local/bin/blog-gen-worker
                   chmod +x /usr/local/bin/blog-gen-worker
-                  mkdir -p /etc/blog-gen /data/generated-content /data/work /data/memory /data/pending
-                  # Runtime config. The SMTP password is NOT here — the worker reads
-                  # it from Secrets Manager via SMTP_PASSWORD_SECRET at startup.
                   cat > /etc/blog-gen/worker.env <<'ENVEOF'
                 AWS_REGION=${AWS::Region}
                 QUEUE_URL=${QueueUrl}
                 REPOSITORIES_TABLE=${RepositoriesTable}
                 SECRETS_PREFIX=${ProjectName}/repos
                 OLLAMA_MODEL=${OllamaModel}
+                OLLAMA_BASE_URL=http://127.0.0.1:11434
                 OUTPUT_DIR=/data/generated-content
                 OUTPUT_S3_BUCKET=${OutputS3Bucket}
                 WORK_DIR=/data/work
@@ -298,37 +286,25 @@ Resources:
                 SMTP_PASSWORD_SECRET=${NotificationsSecret}
                 ENVEOF
                   chmod 600 /etc/blog-gen/worker.env
-                  # Best-effort wait for Ollama before the worker starts generating.
-                  cat > /opt/blog-gen/wait-ollama.sh <<'WAITEOF'
-                #!/bin/sh
-                for i in $(seq 1 60); do
-                  curl -sf http://127.0.0.1:11434/api/version >/dev/null && exit 0
-                  sleep 5
-                done
-                exit 0
-                WAITEOF
-                  chmod +x /opt/blog-gen/wait-ollama.sh
-                  cat > /etc/systemd/system/blog-gen-worker.service <<'UNITEOF'
-                [Unit]
-                Description=GitHub AI Blog Generator worker
-                After=network-online.target docker.service
-                Wants=network-online.target
-
-                [Service]
-                EnvironmentFile=/etc/blog-gen/worker.env
-                ExecStartPre=/opt/blog-gen/wait-ollama.sh
-                ExecStart=/usr/local/bin/blog-gen-worker
-                Restart=always
-                RestartSec=5
-                User=root
-
-                [Install]
-                WantedBy=multi-user.target
-                UNITEOF
-                  systemctl daemon-reload
-                  systemctl enable --now blog-gen-worker
-                  echo "worker service installed"
                 fi
+
+                # --- Auto-start. The systemd units (blog-gen-ollama, blog-gen-worker)
+                # --- are baked into the AMI / written by the provisioner above;
+                # --- enabling them makes the stack restart automatically on every boot.
+                systemctl daemon-reload
+                systemctl enable --now blog-gen-ollama
+                if [ -x /usr/local/bin/blog-gen-worker ]; then
+                  systemctl enable --now blog-gen-worker
+                fi
+
+                # If the model was not baked, pull it once now (persists on /data).
+                if [ ! -d /data/ollama/models ]; then
+                  for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/version >/dev/null && break || sleep 3; done
+                  docker exec ollama ollama pull "${OllamaModel}" || echo "model pull deferred; worker retries"
+                fi
+
+                /opt/blog-gen/health.sh || echo "not healthy yet; services will converge"
+                echo "instance init complete"
               - QueueUrl:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueUrl"
                 RepositoriesTable:

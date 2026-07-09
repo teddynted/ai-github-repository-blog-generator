@@ -432,6 +432,26 @@ it does not start generating before Ollama answers. This makes the full path —
 webhook → SQS → worker → Ollama → review → publish/notify — deployable on one
 instance. (n8n as an alternative orchestrator remains optional/future.)
 
+### Spot startup optimization (custom AMI) ✅
+
+Startup is on the critical path (the instance is stopped when idle), so the
+slow, network-heavy setup — NVIDIA driver, Docker, the Ollama image, and the
+~4.7 GB model — is **pre-baked into a custom AMI** instead of run every launch.
+One canonical script, [`scripts/ami/provision.sh`](../scripts/ami/provision.sh),
+is both baked by Packer ([`packer/blog-gen.pkr.hcl`](../packer/blog-gen.pkr.hcl),
+via `scripts/build-ami.sh`) and run at boot as the stock-AMI fallback, so the two
+never drift. The model is baked as a seed and **copied** to `/data` at first boot
+(no download). UserData shrank to runtime-only work (mount, seed, write env,
+fetch the small worker binary, start services). Ollama and the worker are now
+**systemd units** (`blog-gen-ollama`, `blog-gen-worker`) that auto-start on every
+boot; `start-ollama.sh` detects the GPU at runtime (one AMI runs GPU or CPU), the
+worker's `ExecStartPre` waits for the model, and `health.sh` gates readiness. The
+compute stack gained `CustomAmi` (fast path) and `AmiScriptsKey` (fallback)
+parameters; `deploy.yml` uploads `provision.sh` and passes `CUSTOM_AMI`. Result:
+time-to-ready drops from ~10–15 min to well under a minute, with no change to the
+cost model. See README → **Optimizing Spot Instance Startup** and
+[docs/ami.md](./ami.md).
+
 **Trigger sources.** Registration subscribes the webhook to `push` and
 `release`. The handler branches by event type: a `push` is commit-message gated
 (default `blog:` or the per-repo pattern); a **published `release`** always
