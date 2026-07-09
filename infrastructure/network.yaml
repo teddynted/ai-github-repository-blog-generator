@@ -97,7 +97,9 @@ Resources:
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: >
+      # Note: >- (not >) so there is no trailing newline — EC2 rejects a
+      # security-group description containing characters outside its allowed set.
+      GroupDescription: >-
         EC2 Spot host - inbound SSH from the operator CIDR only; n8n (5678) and
         Ollama (11434) are never exposed. Egress open for cloning, image pulls,
         and AWS API access.
