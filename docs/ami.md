@@ -24,6 +24,13 @@ Everything baked lives in **one script — [`scripts/ami/provision.sh`](../scrip
 
 ## Build (or rebuild)
 
+**In CI (recommended):** Actions → **build-ami** → *Run workflow* (inputs: region,
+model, GPU, bake-model). It runs Packer on a hosted runner using the deploy OIDC
+role and prints the new AMI id in the run summary. Then set the repository
+variable `CUSTOM_AMI=<ami-id>` and redeploy `blog-gen-compute`.
+
+**Locally:**
+
 ```bash
 scripts/build-ami.sh --region us-east-1            # defaults: model qwen2.5:7b, GPU on, model baked
 # options:

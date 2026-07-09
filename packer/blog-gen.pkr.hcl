@@ -75,4 +75,10 @@ build {
       "sudo -E /tmp/provision.sh",
     ]
   }
+
+  # Machine-readable output so CI can extract the AMI id (region:ami-xxxx).
+  post-processor "manifest" {
+    output     = "packer-manifest.json"
+    strip_path = true
+  }
 }
