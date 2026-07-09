@@ -44,6 +44,10 @@ Parameters:
     Default: 15
     MinValue: 1
     Description: Inactivity window before the idle-shutdown Lambda stops the instance.
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    Description: Retention for the Lambda CloudWatch log groups.
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -236,8 +240,41 @@ Resources:
   # ---------------------------------------------------------------------------
   # Lambda functions
   # ---------------------------------------------------------------------------
+  # Lambda log groups are declared here (with the functions) rather than in the
+  # observability stack, so CloudFormation owns them before a function can run
+  # and auto-create /aws/lambda/<fn> itself (which would collide on deploy).
+  RegistrationLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-registration"
+      RetentionInDays: !Ref LogRetentionDays
+  WebhookHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-webhook-handler"
+      RetentionInDays: !Ref LogRetentionDays
+  InstanceStarterLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-instance-starter"
+      RetentionInDays: !Ref LogRetentionDays
+  IdleShutdownLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-idle-shutdown"
+      RetentionInDays: !Ref LogRetentionDays
+
   RegistrationFunction:
     Type: AWS::Lambda::Function
+    DependsOn: RegistrationLogGroup
     Properties:
       FunctionName: !Sub "${ProjectName}-registration"
       Runtime: provided.al2023
@@ -261,6 +298,7 @@ Resources:
 
   WebhookHandlerFunction:
     Type: AWS::Lambda::Function
+    DependsOn: WebhookHandlerLogGroup
     Properties:
       FunctionName: !Sub "${ProjectName}-webhook-handler"
       Runtime: provided.al2023
@@ -285,6 +323,7 @@ Resources:
 
   InstanceStarterFunction:
     Type: AWS::Lambda::Function
+    DependsOn: InstanceStarterLogGroup
     Properties:
       FunctionName: !Sub "${ProjectName}-instance-starter"
       Runtime: provided.al2023
@@ -305,6 +344,7 @@ Resources:
 
   IdleShutdownFunction:
     Type: AWS::Lambda::Function
+    DependsOn: IdleShutdownLogGroup
     Properties:
       FunctionName: !Sub "${ProjectName}-idle-shutdown"
       Runtime: provided.al2023

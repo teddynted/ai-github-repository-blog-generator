@@ -42,38 +42,10 @@ Resources:
       Endpoint: !Ref AlarmEmail
 
   # --- Log groups (bounded retention) ---
-  RegistrationLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-registration"
-      RetentionInDays: !Ref LogRetentionDays
-
-  WebhookHandlerLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-webhook-handler"
-      RetentionInDays: !Ref LogRetentionDays
-
-  InstanceStarterLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-instance-starter"
-      RetentionInDays: !Ref LogRetentionDays
-
-  IdleShutdownLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-idle-shutdown"
-      RetentionInDays: !Ref LogRetentionDays
-
+  # The Lambda log groups (/aws/lambda/<fn>) are declared in the serverless stack
+  # alongside the functions, so CloudFormation owns them before a function can
+  # auto-create its own (which collided on deploy). Only the instance group lives
+  # here.
   InstanceLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
