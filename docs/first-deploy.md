@@ -152,6 +152,20 @@ architecture diagrams**.
 
 ## 8. First-run gotchas
 
+- **`Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`** —
+  the deploy workflow can't assume the role. Almost always one of:
+  - **`AWS_DEPLOY_ROLE_ARN` points at the wrong role.** It must be **this**
+    project's role, `arn:aws:iam::<account>:role/blog-gen-deploy` — *not* a role
+    left over from another project (e.g. an n8n deploy role). A different
+    project's role trusts a different repo, so STS refuses.
+  - **Bootstrap never completed** in the target account → the role doesn't exist
+    (STS reports the same "Not authorized" either way). Run step 1.
+  - **Owner/repo mismatch** — bootstrap was run with different `--owner`/`--repo`
+    than the repo running the workflow. Re-run with the exact values.
+
+  Diagnose: `aws iam get-role --role-name blog-gen-deploy --query 'Role.AssumeRolePolicyDocument'`
+  — the `sub` must be `repo:teddynted/ai-github-repository-blog-generator:*`, and
+  the account must match the ARN in the secret.
 - **First model pull is slow** (`qwen2.5:7b` ≈ 4.7 GB) — the worker's readiness
   wait + SQS redelivery cover it; the first generation may lag a few minutes.
 - **`nvidia-smi` fails / no GPU in container** — the most likely first-launch
