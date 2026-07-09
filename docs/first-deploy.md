@@ -11,7 +11,7 @@ live, triggered blog generation. Each step links to deeper docs. Deploy is
 
 - [ ] AWS account + AWS CLI configured (`aws sts get-caller-identity` works).
 - [ ] **GPU Spot quota** for the instance family (default `g4dn.xlarge`). Request an increase for *All G and VT Spot Instance Requests* if needed, or set `EnableGpu=false` to smoke-test CPU-only first.
-- [ ] An **EC2 key pair** in your region (for SSH): `aws ec2 create-key-pair --key-name blog-gen-key ...`.
+- [ ] *(Optional)* An **EC2 key pair** if you want SSH: `aws ec2 create-key-pair --key-name blog-gen-key ...`. Skip it to launch with no key pair (use SSM Session Manager for a shell instead).
 - [ ] A **GitHub PAT** for the repo you'll onboard (fine-grained: Contents read, Webhooks read/write).
 - [ ] Local tools: `go`, `git`, `gh` (optional), and the repo cloned.
 
@@ -66,7 +66,7 @@ credentials that can create IAM roles, an OIDC provider, and an S3 bucket.
 | --- | --- | --- |
 | Secret | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
 | Variable | `AWS_REGION` | e.g. `us-east-1` |
-| Variable | `KEY_PAIR_NAME` | your EC2 key pair |
+| Variable | `KEY_PAIR_NAME` | *(optional)* your EC2 key pair — omit for no SSH |
 | Variable | `OPERATOR_CIDR` | (optional) your SSH source CIDR |
 | Variable | `DEPLOY_ENABLED` | `true` ← arms the deploy workflow |
 

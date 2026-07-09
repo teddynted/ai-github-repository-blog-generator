@@ -20,8 +20,11 @@ Parameters:
     Default: "0.20"
     Description: Maximum hourly Spot price (USD).
   KeyPairName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: EC2 key pair for SSH access.
+    Type: String
+    Default: ""
+    Description: >
+      Optional EC2 key pair for SSH. Leave blank to launch with no key pair (no
+      SSH); use SSM Session Manager or EC2 Instance Connect for shell access.
   EbsVolumeSizeGb:
     Type: Number
     Default: 100
@@ -102,6 +105,7 @@ Parameters:
     Description: Optional Slack/webhook URL for notifications.
 
 Conditions:
+  HasKeyPair: !Not [!Equals [!Ref KeyPairName, ""]]
   HasCustomAmi: !Not [!Equals [!Ref CustomAmi, ""]]
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
   HasWorkerCode: !And
@@ -200,7 +204,7 @@ Resources:
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
         ImageId: !If [HasCustomAmi, !Ref CustomAmi, !Ref LatestUbuntuAmi]
-        KeyName: !Ref KeyPairName
+        KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref "AWS::NoValue"]
         IamInstanceProfile:
           Arn: !GetAtt InstanceProfile.Arn
         SecurityGroupIds:
