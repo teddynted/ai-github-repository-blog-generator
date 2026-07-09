@@ -23,8 +23,9 @@ Parameters:
     Type: String
     Default: ""
     Description: >
-      Optional EC2 key pair for SSH. Leave blank to launch with no key pair (no
-      SSH); use SSM Session Manager or EC2 Instance Connect for shell access.
+      Existing EC2 key pair name to use for SSH. Leave blank and the stack
+      creates and manages one (named <project>-key); its private key is stored in
+      SSM Parameter Store at /ec2/keypair/<key-pair-id>.
   EbsVolumeSizeGb:
     Type: Number
     Default: 100
@@ -106,6 +107,8 @@ Parameters:
 
 Conditions:
   HasKeyPair: !Not [!Equals [!Ref KeyPairName, ""]]
+  # No external key supplied → the stack creates and manages one.
+  ManageKeyPair: !Equals [!Ref KeyPairName, ""]
   HasCustomAmi: !Not [!Equals [!Ref CustomAmi, ""]]
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
   HasWorkerCode: !And
@@ -125,6 +128,18 @@ Resources:
       GenerateSecretString:
         PasswordLength: 32
         ExcludePunctuation: true
+
+  # Created only when no external KeyPairName is supplied. CloudFormation/EC2
+  # generates the key pair and stores the private key in SSM Parameter Store at
+  # /ec2/keypair/<key-pair-id> (SecureString) — retrieve it with get-parameter.
+  ManagedKeyPair:
+    Type: AWS::EC2::KeyPair
+    Condition: ManageKeyPair
+    Properties:
+      KeyName: !Sub "${ProjectName}-key"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
 
   InstanceRole:
     Type: AWS::IAM::Role
@@ -204,7 +219,7 @@ Resources:
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
         ImageId: !If [HasCustomAmi, !Ref CustomAmi, !Ref LatestUbuntuAmi]
-        KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref "AWS::NoValue"]
+        KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref ManagedKeyPair]
         IamInstanceProfile:
           Arn: !GetAtt InstanceProfile.Arn
         SecurityGroupIds:
@@ -371,3 +386,12 @@ Outputs:
     Value: !Ref NotificationsSecret
     Export:
       Name: !Sub "${ProjectName}-NotificationsSecretArn"
+  KeyPairName:
+    Description: The key pair the instance uses (supplied or stack-managed).
+    Value: !If [HasKeyPair, !Ref KeyPairName, !Ref ManagedKeyPair]
+  ManagedKeyPrivateKeyParam:
+    Condition: ManageKeyPair
+    Description: >
+      SSM parameter holding the managed key's private key. Retrieve it with:
+      aws ssm get-parameter --name <this> --with-decryption --query Parameter.Value --output text
+    Value: !Sub "/ec2/keypair/${ManagedKeyPair.KeyPairId}"

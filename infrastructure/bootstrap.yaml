@@ -175,6 +175,15 @@ Resources:
                   - ssm:DeleteParameter
                   - ssm:AddTagsToResource
                 Resource: !Sub "arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/${ProjectName}/*"
+              # Manage the private key of a stack-created AWS::EC2::KeyPair, which
+              # EC2 stores under /ec2/keypair/<key-pair-id>.
+              - Sid: SsmKeyPairParameters
+                Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                  - ssm:GetParameter
+                  - ssm:DeleteParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/ec2/keypair/*"
               # Resolve public AWS-managed parameters (e.g. the base Ubuntu AMI
               # that compute.yaml's LatestUbuntuAmi points at).
               - Sid: SsmPublicParameters
