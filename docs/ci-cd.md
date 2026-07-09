@@ -27,7 +27,7 @@ Workflows live in `.github/workflows/`:
 | `go.yml` | PR, push | gofmt + vet + `go test -race` + cross-compile all Lambdas | ✅ Implemented |
 | `cloudformation.yml` | PR, push | `cfn-lint` all templates | ✅ Implemented (lint) |
 | `deploy.yml` | main, dispatch | Package Lambdas → upload → deploy the four stacks (OIDC) | ✅ Implemented (opt-in) |
-| `build-ami.yml` | dispatch | Build the pre-baked worker AMI with Packer; prints the AMI id for `CUSTOM_AMI` | ✅ Implemented (manual) |
+| `build-ami.yml` | dispatch | Build the pre-baked worker AMI with Packer; writes the AMI id to SSM (`/blog-gen/worker-ami`) for `deploy.yml` | ✅ Implemented (manual) |
 | `security.yml` | PR, push, weekly | `govulncheck` + `gosec` (SAST) + `gitleaks` (gate); `checkov` IaC (informational) | ✅ Implemented |
 
 > The lint/test/security workflows run green without any repository secrets.
