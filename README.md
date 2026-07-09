@@ -670,6 +670,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Architecture](./docs/architecture.md) | Components, trigger path, data flow, and design decisions |
 | [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
 | [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
+| [First Deploy](./docs/first-deploy.md) | One-page runbook: bootstrap → deploy → register → trigger → verify |
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
 | [Workflows](./docs/workflows.md) | Trigger validation and the n8n pipeline, node by node |
 | [Cost Optimisation](./docs/cost-optimization.md) | Trigger pre-filtering, Spot strategy, cold start, shutdown |
