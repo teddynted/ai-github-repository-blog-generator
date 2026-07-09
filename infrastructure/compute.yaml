@@ -333,3 +333,10 @@ Outputs:
     Value: !Ref PersistentVolume
     Export:
       Name: !Sub "${ProjectName}-PersistentVolumeId"
+  NotificationsSecretArn:
+    Description: >
+      ARN of the SMTP-password secret. Set the real Turbo SMTP password with:
+      aws secretsmanager put-secret-value --secret-id <this-arn> --secret-string '<password>'
+    Value: !Ref NotificationsSecret
+    Export:
+      Name: !Sub "${ProjectName}-NotificationsSecretArn"

@@ -164,8 +164,12 @@ secret container; the value is set out-of-band so it never appears in the
 template or parameter history:
 
 ```bash
+# The stack exports the secret ARN as an output:
+SMTP_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+  --query "Stacks[0].Outputs[?OutputKey=='NotificationsSecretArn'].OutputValue" --output text)
+
 aws secretsmanager put-secret-value \
-  --secret-id blog-gen/notifications/smtp-password \
+  --secret-id "$SMTP_SECRET_ARN" \
   --secret-string 'YOUR_TURBO_SMTP_PASSWORD'
 ```
 
