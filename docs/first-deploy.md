@@ -65,11 +65,18 @@ credentials that can create IAM roles, an OIDC provider, and an S3 bucket.
 | Kind | Name | Value |
 | --- | --- | --- |
 | Secret | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
-| Variable | `ARTIFACTS_BUCKET` | `ArtifactsBucketName` output |
 | Variable | `AWS_REGION` | e.g. `us-east-1` |
 | Variable | `KEY_PAIR_NAME` | your EC2 key pair |
 | Variable | `OPERATOR_CIDR` | (optional) your SSH source CIDR |
 | Variable | `DEPLOY_ENABLED` | `true` ← arms the deploy workflow |
+
+`ARTIFACTS_BUCKET` is **not** a variable — `deploy.yml` derives it as
+`blog-gen-artifacts-<account>-<region>` (matching bootstrap), so it can't drift.
+
+> **Environment override gotcha:** the deploy job runs in the `production`
+> environment. A variable set under **Settings → Environments → production**
+> overrides the repository-level one of the same name — check there too if a
+> value doesn't seem to take effect.
 
 Optional — email notifications ([Turbo SMTP](./local-workflow.md)):
 
