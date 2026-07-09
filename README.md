@@ -516,7 +516,7 @@ Configuration is provided through environment variables and CloudFormation param
 | `IDLE_TIMEOUT_MINUTES` | Minutes of inactivity before auto-shutdown | `15` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
-| `KEY_PAIR_NAME` | EC2 key pair for SSH access | `blog-generator-key` |
+| `KeyPairName` | (optional) existing key pair; blank = stack-managed key | (managed) |
 | `REQUIRE_HUMAN_APPROVAL` | Require manual approval before publishing | `false` |
 
 Secrets such as `WEBHOOK_SECRET` must **never** be committed. See [`docs/security.md`](./docs/security.md).
@@ -578,7 +578,6 @@ aws cloudformation deploy \
   --parameter-overrides \
       InstanceType=$INSTANCE_TYPE \
       SpotMaxPrice=$SPOT_MAX_PRICE \
-      KeyPairName=$KEY_PAIR_NAME \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 4. Retrieve the API Gateway URL for your GitHub webhook
