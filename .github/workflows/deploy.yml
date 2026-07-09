@@ -53,7 +53,7 @@ jobs:
       ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
       SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-go@v5
         with:
@@ -70,7 +70,7 @@ jobs:
       - name: build worker (linux/amd64, runs on the EC2 instance)
         run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
