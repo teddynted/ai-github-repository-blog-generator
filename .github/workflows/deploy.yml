@@ -11,8 +11,10 @@ name: deploy
 #   var    KEY_PAIR_NAME        - EC2 key pair for the instance
 #   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
-#   var    CUSTOM_AMI           - (optional) pre-baked AMI id from scripts/build-ami.sh
-#                                 for the fast Spot boot; unset = stock-AMI fallback
+#   var    CUSTOM_AMI           - (optional) pin a specific pre-baked AMI id. Normally
+#                                 unset: the AMI id is read automatically from SSM
+#                                 (/blog-gen/worker-ami, written by build-ami.yml).
+#                                 Absent from both => stock-AMI fallback.
 #
 # Optional email-notification vars (non-secret; the SMTP password is stored in
 # Secrets Manager, NOT here):
@@ -118,9 +120,14 @@ jobs:
           # password lives in Secrets Manager (NotificationsSecret) — set it once
           # with: aws secretsmanager put-secret-value \
           #   --secret-id blog-gen/notifications/smtp-password --secret-string '<pw>'
-          # CUSTOM_AMI (from scripts/build-ami.sh) enables the fast baked-AMI boot;
-          # unset falls back to the stock AMI + provision.sh at boot.
+          # Fast baked-AMI boot: use the CUSTOM_AMI variable if set, else the AMI
+          # id that build-ami.yml published to SSM. Unset/absent → stock-AMI
+          # fallback (provision.sh at boot). Fully automatic — no manual step.
           PARAMS="KeyPairName=${{ vars.KEY_PAIR_NAME }} ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
+          if [ -z "$CUSTOM_AMI" ]; then
+            CUSTOM_AMI=$(aws ssm get-parameter --name /blog-gen/worker-ami \
+              --query Parameter.Value --output text 2>/dev/null || echo "")
+          fi
           [ -n "$CUSTOM_AMI" ]       && PARAMS="$PARAMS CustomAmi=$CUSTOM_AMI"
           [ -n "$NOTIFY_EMAIL_FROM" ] && PARAMS="$PARAMS NotifyEmailFrom=$NOTIFY_EMAIL_FROM"
           [ -n "$NOTIFY_EMAIL_TO" ]   && PARAMS="$PARAMS NotifyEmailTo=$NOTIFY_EMAIL_TO"

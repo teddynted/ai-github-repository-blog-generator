@@ -164,6 +164,25 @@ Resources:
                 Effect: Allow
                 Action: secretsmanager:GetRandomPassword
                 Resource: "*"
+              # Read/write the project's SSM parameters — the worker AMI id
+              # (build-ami.yml writes it, deploy.yml reads it).
+              - Sid: SsmProjectParameters
+                Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:DeleteParameter
+                  - ssm:AddTagsToResource
+                Resource: !Sub "arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/${ProjectName}/*"
+              # Resolve public AWS-managed parameters (e.g. the base Ubuntu AMI
+              # that compute.yaml's LatestUbuntuAmi points at).
+              - Sid: SsmPublicParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:${AWS::Partition}:ssm:*::parameter/aws/service/*"
               - Sid: IAMForStacks
                 Effect: Allow
                 Action:

@@ -417,12 +417,12 @@ The heavy work (GPU driver install — which alone is minutes and can need a reb
 
 ### Build & update process
 
-```bash
-scripts/build-ami.sh --region us-east-1     # prints an AMI id
-# then set repo variable CUSTOM_AMI=<ami-id> (CI) or CustomAmi=<ami-id> (manual) and redeploy compute
-```
+Fully automated — no manual AMI id to copy:
 
-Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, or `provision.sh`) — ordinary app changes just redeploy the worker binary. Full details in [docs/ami.md](./docs/ami.md).
+1. **Actions → build-ami → Run workflow** (or `scripts/build-ami.sh` locally). It builds the image and **writes the AMI id to SSM** (`/blog-gen/worker-ami`).
+2. **Redeploy** (merge to main / run `deploy.yml`). Deploy **reads the AMI id from SSM automatically** and launches instances from it.
+
+Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, or `provision.sh`) — ordinary app changes just redeploy the worker binary. Set the `CUSTOM_AMI` variable only to *pin* a specific image. Full details in [docs/ami.md](./docs/ami.md).
 
 ### Startup workflow
 

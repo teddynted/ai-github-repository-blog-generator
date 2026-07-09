@@ -61,14 +61,18 @@ jobs:
           # shellcheck disable=SC2086
           scripts/build-ami.sh $ARGS
 
-      - name: report AMI id
+      - name: publish AMI id to SSM
         run: |
           AMI=$(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d: -f2)
           echo "AMI_ID=$AMI" >> "$GITHUB_OUTPUT"
+          # deploy.yml reads this parameter automatically — no manual variable to set.
+          aws ssm put-parameter --name "/blog-gen/worker-ami" --type String \
+            --value "$AMI" --overwrite
           {
             echo "## Built AMI"
             echo ""
             echo "\`$AMI\` (${{ inputs.region }}, model \`${{ inputs.model }}\`)"
             echo ""
-            echo "Next: set repository variable **CUSTOM_AMI=\`$AMI\`** and redeploy \`blog-gen-compute\`."
+            echo "Saved to SSM \`/blog-gen/worker-ami\`. The next \`deploy.yml\` run picks it up"
+            echo "automatically — just re-run deploy (or merge to main). No variable to set."
           } >> "$GITHUB_STEP_SUMMARY"
