@@ -447,7 +447,8 @@ fetch the small worker binary, start services). Ollama and the worker are now
 boot; `start-ollama.sh` detects the GPU at runtime (one AMI runs GPU or CPU), the
 worker's `ExecStartPre` waits for the model, and `health.sh` gates readiness. The
 compute stack gained `CustomAmi` (fast path) and `AmiScriptsKey` (fallback)
-parameters; `deploy.yml` uploads `provision.sh` and passes `CUSTOM_AMI`. Result:
+parameters; `deploy.yml` uploads `provision.sh` and passes the AMI id read from
+SSM (`/blog-gen/worker-ami`). Result:
 time-to-ready drops from ~10–15 min to well under a minute, with no change to the
 cost model. See README → **Optimizing Spot Instance Startup** and
 [docs/ami.md](./ami.md).

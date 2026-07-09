@@ -43,7 +43,7 @@ scripts/build-ami.sh --no-gpu                       # CPU-only image (cheaper te
 Packer prints the new **AMI id** at the end. Wire it in:
 
 - **CI (automatic):** the `build-ami` workflow already saves the id to SSM `/blog-gen/worker-ami`; `deploy.yml` reads it on the next run. Nothing to set. (Building locally instead? Save it yourself: `aws ssm put-parameter --name /blog-gen/worker-ami --type String --value <ami-id> --overwrite`.)
-- **Pin a specific image:** set the repository variable `CUSTOM_AMI=<ami-id>` — it overrides the SSM value.
+- **Pin a specific image:** write the id to SSM yourself — `aws ssm put-parameter --name /blog-gen/worker-ami --type String --value <ami-id> --overwrite` — or pass `CustomAmi=<ami-id>` on a manual `aws cloudformation deploy`.
 - **Manual deploy:** add `CustomAmi=<ami-id>` to the compute stack's `--parameter-overrides`.
 
 Then redeploy `blog-gen-compute`. New Spot instances launch from the baked AMI; the launch template picks up the new image on the next instance replacement.

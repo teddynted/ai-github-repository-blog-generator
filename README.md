@@ -426,7 +426,7 @@ Fully automated — no manual AMI id to copy:
 1. **Actions → build-ami → Run workflow** (or `scripts/build-ami.sh` locally). It builds the image and **writes the AMI id to SSM** (`/blog-gen/worker-ami`).
 2. **Redeploy** (merge to main / run `deploy.yml`). Deploy **reads the AMI id from SSM automatically** and launches instances from it.
 
-Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, or `provision.sh`) — ordinary app changes just redeploy the worker binary. Set the `CUSTOM_AMI` variable only to *pin* a specific image. Full details in [docs/ami.md](./docs/ami.md).
+Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, or `provision.sh`) — ordinary app changes just redeploy the worker binary. The AMI id flows automatically through SSM (`/blog-gen/worker-ami`); there's no variable to set. Full details in [docs/ami.md](./docs/ami.md).
 
 ### Startup workflow
 
@@ -456,7 +456,7 @@ flowchart TD
 
 **Cost implications** — the baked AMI stores an EBS snapshot (~5 GB incl. the model): a few cents/month. Faster startup also means the (expensive) GPU instance spends **less time booting and idle**, so per-job cost typically *drops*. The trade-off is an occasional AMI rebuild when dependencies change, and per-region AMI management. Use `--no-bake-model` to shrink the image at the cost of a one-time model pull on first boot.
 
-**Operational note** — if `CUSTOM_AMI` is unset, deploys still work: the instance falls back to running `provision.sh` at boot (slower, but nothing breaks).
+**Operational note** — if no AMI has been built (the SSM value is absent), deploys still work: the instance falls back to running `provision.sh` at boot (slower, but nothing breaks).
 
 ---
 

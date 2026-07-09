@@ -7,8 +7,8 @@ name: build-ami
 # Reuses the deploy OIDC role (secret AWS_DEPLOY_ROLE_ARN); its ec2:* permission
 # covers what Packer needs to launch a builder and register an AMI.
 #
-# After it finishes, set the repository variable CUSTOM_AMI to the printed id and
-# redeploy blog-gen-compute (deploy.yml) to launch instances from it.
+# It writes the built AMI id to SSM (/blog-gen/worker-ami); deploy.yml reads it
+# automatically on its next run. Just redeploy — no variable to set.
 
 on:
   workflow_dispatch:

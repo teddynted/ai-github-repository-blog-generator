@@ -14,10 +14,9 @@ name: deploy
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
 #   var    INSTANCE_TYPE        - (optional) override the EC2 type; e.g. t3.xlarge for a CPU smoke test
 #   var    ENABLE_GPU           - (optional) "false" to run Ollama CPU-only (pairs with INSTANCE_TYPE)
-#   var    CUSTOM_AMI           - (optional) pin a specific pre-baked AMI id. Normally
-#                                 unset: the AMI id is read automatically from SSM
-#                                 (/blog-gen/worker-ami, written by build-ami.yml).
-#                                 Absent from both => stock-AMI fallback.
+#
+# The worker AMI id is read automatically from SSM (/blog-gen/worker-ami, written
+# by build-ami.yml); absent => stock-AMI fallback. No variable to set.
 #
 # Optional email-notification vars (non-secret; the SMTP password is stored in
 # Secrets Manager, NOT here):
@@ -127,15 +126,14 @@ jobs:
           SMTP_USERNAME: ${{ vars.SMTP_USERNAME }}
           SMTP_HOST: ${{ vars.SMTP_HOST }}
           NOTIFY_WEBHOOK_URL: ${{ vars.NOTIFY_WEBHOOK_URL }}
-          CUSTOM_AMI: ${{ vars.CUSTOM_AMI }}
         run: |
           # Only the non-secret notification settings are passed here. The SMTP
           # password lives in Secrets Manager (NotificationsSecret) — set it once
           # with: aws secretsmanager put-secret-value \
           #   --secret-id blog-gen/notifications/smtp-password --secret-string '<pw>'
-          # Fast baked-AMI boot: use the CUSTOM_AMI variable if set, else the AMI
-          # id that build-ami.yml published to SSM. Unset/absent → stock-AMI
-          # fallback (provision.sh at boot). Fully automatic — no manual step.
+          # Fast baked-AMI boot: the AMI id is read from SSM (/blog-gen/worker-ami,
+          # written by build-ami.yml). Absent → stock-AMI fallback (provision.sh at
+          # boot). Fully automatic — no manual variable.
           PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
           # KEY_PAIR_NAME is optional — omit it to launch with no SSH key pair.
           [ -n "${{ vars.KEY_PAIR_NAME }}" ] && PARAMS="$PARAMS KeyPairName=${{ vars.KEY_PAIR_NAME }}"
@@ -143,11 +141,9 @@ jobs:
           # to validate the whole path on cheap, widely-available CPU capacity.
           [ -n "${{ vars.INSTANCE_TYPE }}" ] && PARAMS="$PARAMS InstanceType=${{ vars.INSTANCE_TYPE }}"
           [ -n "${{ vars.ENABLE_GPU }}" ]    && PARAMS="$PARAMS EnableGpu=${{ vars.ENABLE_GPU }}"
-          if [ -z "$CUSTOM_AMI" ]; then
-            CUSTOM_AMI=$(aws ssm get-parameter --name /blog-gen/worker-ami \
-              --query Parameter.Value --output text 2>/dev/null || echo "")
-          fi
-          [ -n "$CUSTOM_AMI" ]       && PARAMS="$PARAMS CustomAmi=$CUSTOM_AMI"
+          AMI_ID=$(aws ssm get-parameter --name /blog-gen/worker-ami \
+            --query Parameter.Value --output text 2>/dev/null || echo "")
+          [ -n "$AMI_ID" ]           && PARAMS="$PARAMS CustomAmi=$AMI_ID"
           [ -n "$NOTIFY_EMAIL_FROM" ] && PARAMS="$PARAMS NotifyEmailFrom=$NOTIFY_EMAIL_FROM"
           [ -n "$NOTIFY_EMAIL_TO" ]   && PARAMS="$PARAMS NotifyEmailTo=$NOTIFY_EMAIL_TO"
           [ -n "$SMTP_USERNAME" ]     && PARAMS="$PARAMS SmtpUsername=$SMTP_USERNAME"
