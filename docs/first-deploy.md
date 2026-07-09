@@ -29,6 +29,32 @@ An account may have only one OIDC provider for `token.actions.githubusercontent.
 the script **auto-detects an existing one and reuses it**, so you don't need
 `--existing-oidc-arn` (it stays available as an override).
 
+> **Why this step is manual (not in `deploy.yml`).** `deploy.yml` authenticates
+> by assuming the `blog-gen-deploy` role via OIDC — but that role is *created
+> here*. CI can't create its own login role (chicken-and-egg), and wiring it in
+> would mean storing long-lived **admin** AWS keys in GitHub, which OIDC exists to
+> avoid. So bootstrap runs **once per account**, with admin credentials, by you.
+> Everything after it is fully automated.
+
+### Run it in AWS CloudShell (no local AWS setup)
+
+The easiest way — CloudShell is a browser terminal in the AWS console that
+already has your credentials, with `git` and the AWS CLI preinstalled:
+
+1. AWS Console → click the **CloudShell** icon in the top navigation bar.
+2. In the shell:
+   ```bash
+   git clone https://github.com/teddynted/ai-github-repository-blog-generator.git
+   cd ai-github-repository-blog-generator
+   bash scripts/bootstrap.sh --region <your-region> \
+     --owner teddynted --repo ai-github-repository-blog-generator
+   ```
+3. Copy the printed values into **GitHub → Settings → Secrets and variables →
+   Actions** (see step 2 below), then re-run your workflow.
+
+Prefer your laptop? Same command, provided you have the AWS CLI configured with
+credentials that can create IAM roles, an OIDC provider, and an S3 bucket.
+
 > Already bootstrapped before the SMTP work landed? Re-run this — the deploy role
 > gained `secretsmanager` permissions it now needs.
 
