@@ -56,6 +56,12 @@ func Do(ctx context.Context, cfg Config, fn func() error) error {
 		if !IsRetryable(err) || attempt == cfg.MaxAttempts {
 			return err
 		}
+		// Prioritise cancellation: if the context is already done, return now
+		// rather than racing it against the backoff timer (which select would
+		// otherwise resolve non-deterministically when both are ready).
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
