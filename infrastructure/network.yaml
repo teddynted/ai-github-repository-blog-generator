@@ -28,6 +28,16 @@ Parameters:
     Description: >
       CIDR permitted to SSH (22) to the instance. Restrict to known operator
       addresses; do not use 0.0.0.0/0.
+  AvailabilityZone:
+    Type: String
+    Default: ""
+    Description: >
+      AZ for the public subnet (e.g. us-east-1b). Leave blank to use the first AZ
+      in the region. Set this to move the Spot host to an AZ that has capacity
+      for the chosen instance type.
+
+Conditions:
+  HasAz: !Not [!Equals [!Ref AvailabilityZone, ""]]
 
 Resources:
   Vpc:
@@ -63,7 +73,7 @@ Resources:
       VpcId: !Ref Vpc
       CidrBlock: !Ref PublicSubnetCidr
       MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select [0, !GetAZs ""]
+      AvailabilityZone: !If [HasAz, !Ref AvailabilityZone, !Select [0, !GetAZs ""]]
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-public-subnet"

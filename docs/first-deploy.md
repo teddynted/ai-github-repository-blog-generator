@@ -159,6 +159,14 @@ architecture diagrams**.
   notes in [development-plan.md](./development-plan.md).
 - **Spot interruption** — the instance stops; the gp3 volume (models, memory)
   persists, and the next matched event starts it again.
+- **`InsufficientInstanceCapacity` / "do not have sufficient g4dn.xlarge capacity
+  in <az>"** — that AZ is momentarily out of GPU Spot capacity. Set the
+  `SUBNET_AZ` variable to an AZ the error lists as available (e.g. `us-east-1b`)
+  and redeploy the network + compute stacks. (Changing a subnet's AZ replaces it,
+  so delete `blog-gen-compute` and `blog-gen-network` first, then re-run deploy.)
+- **`not eligible for Free Tier`** — the account is on the new AWS Free Plan,
+  which blocks non-free instance types (the GPU host). Upgrade to a Paid Plan in
+  Billing, then redeploy.
 
 ## 9. Teardown
 
