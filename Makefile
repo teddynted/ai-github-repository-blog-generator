@@ -8,29 +8,46 @@ GO       ?= go
 LAMBDAS  := registration webhook-handler instance-starter idle-shutdown
 DIST     := dist
 
-.PHONY: all fmt vet test tidy build build-worker clean check lint-cfn
+HOOKS    := scripts/hooks
+
+.PHONY: all fmt fmt-check vet lint test tidy build build-worker clean check lint-cfn hooks act
 
 all: check
 
-## fmt: format all Go code
+## hooks: install the local Git hooks (core.hooksPath = .githooks)
+hooks:
+	./scripts/install-hooks.sh
+
+## fmt: format all Go code (gofmt, and goimports if installed)
 fmt:
-	$(GO) fmt ./...
+	$(HOOKS)/format.sh
+
+## fmt-check: fail if any Go file is not gofmt-clean (CI parity)
+fmt-check:
+	$(HOOKS)/format.sh --check
 
 ## vet: run go vet across the module
 vet:
 	$(GO) vet ./...
 
+## lint: static analysis (go vet, and golangci-lint if installed)
+lint:
+	$(HOOKS)/lint.sh
+
 ## test: run unit tests with the race detector and coverage
 test:
-	$(GO) test ./... -race -cover
+	GO_TEST_FLAGS="-race -cover" $(HOOKS)/tests.sh
 
 ## tidy: sync go.mod/go.sum
 tidy:
 	$(GO) mod tidy
 
-## check: the pre-commit gate (format check, vet, test)
-check: vet test
-	@test -z "$$(gofmt -l . )" || (echo "gofmt: files need formatting:"; gofmt -l .; exit 1)
+## act: run the primary CI workflow locally with act (needs Docker + act)
+act:
+	$(HOOKS)/run-act.sh
+
+## check: the pre-commit gate (format check, lint, test)
+check: fmt-check lint test
 
 ## lint-cfn: validate the CloudFormation templates
 lint-cfn:

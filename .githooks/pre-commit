@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# pre-commit — fast, local quality gate. Delegates to scripts/hooks/*.sh.
+# Lightweight only: format, static analysis, unit tests. No Docker, no act.
+# Bypass in an emergency with: git commit --no-verify
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+H="$root/scripts/hooks"
+
+printf '\033[1mpre-commit: format · vet · test\033[0m\n'
+
+"$H/format.sh" --staged || exit 1
+"$H/lint.sh"            || exit 1
+"$H/tests.sh"          || exit 1
+
+printf '\033[32m✓ pre-commit passed\033[0m\n'

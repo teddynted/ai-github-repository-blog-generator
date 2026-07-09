@@ -43,6 +43,7 @@
 - [CloudFormation Deployment Guide](#cloudformation-deployment-guide)
 - [Project Structure](#project-structure)
 - [Roadmap](#roadmap)
+- [Local Development Workflow](#local-development-workflow)
 - [Contributing](#contributing)
 - [Documentation](#documentation)
 - [License](#license)
@@ -581,6 +582,80 @@ The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).
 
 ---
 
+## Local Development Workflow
+
+This project ships versioned Git hooks and an [`act`](https://nektosact.com) integration that mirror GitHub Actions locally, so problems are caught **before** they reach CI. The hooks **complement** GitHub Actions — CI remains the source of truth — and are designed to keep commits fast.
+
+### Install the hooks
+
+```bash
+make hooks          # or: ./scripts/install-hooks.sh
+```
+
+This sets `git config core.hooksPath .githooks` (no files are copied — the hooks are versioned and update with the repo). Uninstall with `git config --unset core.hooksPath`.
+
+### What runs, and when
+
+```
+write code
+   │
+   ▼
+git commit ──▶ pre-commit         (fast, no Docker)
+   │            • gofmt  (auto-formats & re-stages your staged Go files)
+   │            • go vet (static analysis; golangci-lint too, if installed)
+   │            • go test ./...    (unit tests)
+   │
+   ▼         commit-msg
+   │            • Conventional Commits validation
+   ▼
+git commit succeeds
+   │
+   ▼
+git push ───▶ pre-push
+   │            • act runs the primary CI workflow (.github/workflows/go.yml)
+   ▼
+GitHub Actions  ──▶  review  ──▶  merge
+```
+
+The `pre-commit` and CI both call the **same scripts** in [`scripts/hooks/`](./scripts/hooks) (`format.sh`, `lint.sh`, `tests.sh`), so local and CI checks never drift. Running them locally means fewer red builds on GitHub.
+
+### The `act` pre-push mirror
+
+[`act`](https://nektosact.com) runs your GitHub Actions workflows in Docker. The `pre-push` hook runs the primary `go` workflow before every push; if it fails, the push is aborted with the failing job shown.
+
+**Requirements**
+
+| Requirement | Install |
+| --- | --- |
+| Docker (running daemon) | [Docker Desktop](https://docs.docker.com/get-docker/) (macOS/Windows) or Docker Engine (Linux) |
+| `act` | `brew install act` (macOS) · `curl -fsSL https://raw.githubusercontent.com/nektos/act/master/install.sh \| sudo bash` (Linux) |
+| OS | Linux or macOS (on Windows use **WSL2**) |
+
+The runner image is pinned in [`.actrc`](./.actrc) to `catthehacker/ubuntu:act-latest` (act's "medium" image — includes Go and git). Run it any time with `make act`.
+
+**Graceful by design:** if Docker or `act` is missing, `pre-push` prints an actionable message and **allows the push** (it does not block contributors who haven't installed `act`). Set `PREPUSH_STRICT=1` to require it instead.
+
+### Escape hatches
+
+| Situation | Command |
+| --- | --- |
+| Skip all commit hooks (emergency) | `git commit --no-verify` |
+| Skip the `act` mirror for one push | `SKIP_ACT=1 git push` |
+| Bypass pre-push entirely | `git push --no-verify` |
+| Run checks manually | `make check` (fmt-check · lint · test) |
+
+### Troubleshooting
+
+- **`gofmt not found` / `Go toolchain not found`** — install Go (<https://go.dev/dl/>); the hooks read the pinned version from `go.mod`.
+- **`Docker ... daemon is not reachable`** — start Docker Desktop (macOS) or the Docker service (Linux), then retry.
+- **`act` is slow on first run** — it pulls the runner image once (~ hundreds of MB); subsequent runs are cached.
+- **Apple Silicon** — if a workflow needs amd64, add `--container-architecture linux/amd64` via `ACT_EXTRA_ARGS`.
+- **"staged files need formatting but also have unstaged changes"** — stage or stash the unstaged edits first, so the hook never commits partial work on your behalf.
+
+See [`docs/local-workflow.md`](./docs/local-workflow.md) for the full reference, and **Future enhancements** (commitizen, CHANGELOG automation, semantic-release, commit signing, secret/vulnerability scanning) documented there.
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please read [`docs/contributing.md`](./docs/contributing.md) for the development workflow, coding standards, and pull-request process.
@@ -601,6 +676,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |
+| [Local Workflow](./docs/local-workflow.md) | Git hooks, Conventional Commits, and the `act` CI mirror |
 | [CI/CD](./docs/ci-cd.md) | Continuous integration and delivery |
 | [Contributing](./docs/contributing.md) | How to contribute |
 | [Roadmap](./docs/roadmap.md) | Planned features |
