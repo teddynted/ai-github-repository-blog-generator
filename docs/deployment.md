@@ -254,6 +254,16 @@ aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
   --query 'Reservations[0].Instances[0].State.Name'
 ```
 
+On the instance (via SSH), confirm Ollama and the worker are up:
+
+```bash
+docker ps --filter name=ollama            # ollama/ollama container running
+curl -s http://127.0.0.1:11434/api/tags   # lists the pulled model(s)
+nvidia-smi                                # GPU visible (when EnableGpu=true)
+systemctl status blog-gen-worker          # active (running)
+journalctl -u blog-gen-worker -n 50       # recent worker logs
+```
+
 **Smoke test:** verify both paths of the trigger gate.
 
 1. **Ignored path** — push a normal commit (e.g. `docs: tweak README`). Expect a green ✓ in GitHub, `WebhookIgnored` in CloudWatch, and **no** instance start.

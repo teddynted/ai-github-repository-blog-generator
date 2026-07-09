@@ -416,8 +416,21 @@ out-of-band with `put-secret-value`; the worker resolves it via
 `SMTP_PASSWORD_SECRET` at startup (`secrets.Store.Value`), so the password never
 touches env files, CloudFormation parameters, or stack history. The instance
 role grants `secretsmanager:GetSecretValue` on that secret and `s3:GetObject` on
-the artifacts bucket. (Ollama/OpenClaw model serving remains a separate
-milestone; the worker expects Ollama reachable at `OLLAMA_BASE_URL`.)
+the artifacts bucket.
+
+### Ollama model serving ✅
+
+The compute UserData now provisions **Ollama** — the local inference the worker
+calls — completing the on-instance pipeline. When `EnableGpu=true` (default) it
+installs the NVIDIA driver + container toolkit and runs the `ollama/ollama`
+container with `--gpus all`; if the GPU start fails it falls back to CPU, and
+`EnableGpu=false` forces CPU (useful for testing on a non-GPU instance). Models
+are pulled once (`OllamaModel`, default `qwen2.5:7b`) and **persist on the gp3
+volume** (`/data/ollama`), so they survive Spot stop/start; the API binds to
+`127.0.0.1:11434` only. The worker unit gains an `ExecStartPre` readiness wait so
+it does not start generating before Ollama answers. This makes the full path —
+webhook → SQS → worker → Ollama → review → publish/notify — deployable on one
+instance. (n8n as an alternative orchestrator remains optional/future.)
 
 **Trigger sources.** Registration subscribes the webhook to `push` and
 `release`. The handler branches by event type: a `push` is commit-message gated
