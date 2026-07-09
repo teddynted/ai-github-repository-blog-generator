@@ -26,7 +26,6 @@ Verify access:
 
 ```bash
 aws sts get-caller-identity
-aws ec2 describe-key-pairs --key-names "$KEY_PAIR_NAME"
 ```
 
 ---
@@ -50,7 +49,6 @@ This deploys [`infrastructure/bootstrap.yaml`](../infrastructure/bootstrap.yaml)
 | Secret | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
 | Variable | `ARTIFACTS_BUCKET` | `ArtifactsBucketName` output |
 | Variable | `AWS_REGION` | your Region |
-| Variable | `KEY_PAIR_NAME` | your EC2 key pair |
 | Variable | `OPERATOR_CIDR` | your SSH CIDR (optional) |
 | Variable | `DEPLOY_ENABLED` | `true` |
 
@@ -77,7 +75,7 @@ cp .env.example .env
 | `IDLE_TIMEOUT_MINUTES` | Minutes of inactivity before auto-shutdown | `15` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
-| `KEY_PAIR_NAME` | EC2 key pair for SSH | `blog-generator-key` |
+| `KeyPairName` | (optional) existing key pair; blank = stack-managed | (managed) |
 | `REQUIRE_HUMAN_APPROVAL` | Require manual approval before publishing | `false` |
 | `LogRetentionDays` | CloudWatch retention | `14` |
 | `OperatorCidr` | CIDR allowed to SSH to the instance | `203.0.113.10/32` |
@@ -142,7 +140,6 @@ aws cloudformation deploy \
   --parameter-overrides \
       InstanceType=$INSTANCE_TYPE \
       SpotMaxPrice=$SPOT_MAX_PRICE \
-      KeyPairName=$KEY_PAIR_NAME \
       OllamaModel=$OLLAMA_MODEL \
       EbsVolumeSizeGb=$EBS_VOLUME_SIZE_GB \
       ArtifactsBucket=$ARTIFACTS_BUCKET \
@@ -196,8 +193,12 @@ INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
 
 aws ec2 start-instances --instance-ids "$INSTANCE_ID"
 
-# Tunnel the n8n UI (5678) over SSH
-ssh -i ~/.ssh/$KEY_PAIR_NAME.pem -L 5678:localhost:5678 ubuntu@<instance-public-ip>
+# Retrieve the stack-managed private key from SSM, then tunnel the n8n UI (5678)
+PARAM=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+  --query "Stacks[0].Outputs[?OutputKey=='ManagedKeyPrivateKeyParam'].OutputValue" --output text)
+aws ssm get-parameter --name "$PARAM" --with-decryption --query Parameter.Value --output text > blog-gen-key.pem
+chmod 400 blog-gen-key.pem
+ssh -i blog-gen-key.pem -L 5678:localhost:5678 ubuntu@<instance-public-ip>
 # then open http://localhost:5678
 ```
 
@@ -306,7 +307,7 @@ git checkout <previous-good-sha> -- infrastructure/
 aws cloudformation deploy \
   --template-file infrastructure/compute.yaml \
   --stack-name blog-gen-compute \
-  --parameter-overrides InstanceType=$INSTANCE_TYPE SpotMaxPrice=$SPOT_MAX_PRICE KeyPairName=$KEY_PAIR_NAME \
+  --parameter-overrides InstanceType=$INSTANCE_TYPE SpotMaxPrice=$SPOT_MAX_PRICE \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 

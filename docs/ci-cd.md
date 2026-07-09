@@ -45,7 +45,6 @@ you arm it by setting these on the repository:
 | Secret | `AWS_DEPLOY_ROLE_ARN` | IAM role that trusts the GitHub OIDC provider |
 | Variable | `AWS_REGION` | Deployment region (e.g. `us-east-1`) |
 | _(auto)_ | `ARTIFACTS_BUCKET` | Derived by deploy.yml as `blog-gen-artifacts-<account>-<region>` — no variable needed |
-| Variable | `KEY_PAIR_NAME` | EC2 key pair for the instance |
 | Variable | `OPERATOR_CIDR` | (optional) SSH source CIDR |
 | Variable | `DEPLOY_ENABLED` | set to `true` to arm the workflow |
 | Variable | `NOTIFY_EMAIL_FROM` / `NOTIFY_EMAIL_TO` | (optional) enable email notifications |
