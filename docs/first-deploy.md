@@ -110,17 +110,51 @@ aws secretsmanager put-secret-value --secret-id "$SMTP_SECRET_ARN" --secret-stri
 
 ## 5. Register the repository
 
+Registration is a **two-part** step: create a GitHub PAT (in GitHub), then POST it
+to the registration API Gateway endpoint.
+
+### 5a. Create the GitHub PAT (in GitHub — not via the endpoint)
+
+GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained
+tokens → Generate new token**:
+
+- **Repository access:** the repo you want to onboard.
+- **Permissions:** **Contents** = Read · **Webhooks** = Read and write · **Metadata** = Read (auto).
+- Generate and copy the `github_pat_…` value.
+
+### 5b. Register via the endpoint (requires the API key)
+
+> [!IMPORTANT]
+> The registration route has **`ApiKeyRequired: true`** — you **must** send an
+> `x-api-key` header, or the call returns **403 Forbidden**. (The webhook route is
+> different: it's public and secured by an HMAC signature, no API key.)
+
 ```bash
 REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
   --query "Stacks[0].Outputs[?OutputKey=='RegistrationUrl'].OutputValue" --output text)
 
-curl -sS -X POST "$REGISTRATION_URL" -H "Content-Type: application/json" \
-  -d '{"repository_url":"https://github.com/<you>/<repo>","pat":"github_pat_xxx"}'
+# The registration API key (retrieve its value from the key id output)
+API_KEY_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='RegistrationApiKeyId'].OutputValue" --output text)
+API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value \
+  --query value --output text)
+
+curl -sS -X POST "$REGISTRATION_URL" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+        "repository_url": "https://github.com/<you>/<repo>",
+        "pat": "github_pat_xxx",
+        "trigger_pattern": "blog:"
+      }'
 ```
 
-This validates access, stores the PAT + webhook secret in Secrets Manager, writes
-DynamoDB metadata, and **creates the GitHub webhook automatically**. Confirm a
-green ✓ under the repo's **Settings → Webhooks → Recent Deliveries**.
+`trigger_pattern` is optional (defaults to `blog:`; supports a literal prefix or
+`regex:`). This validates access with the PAT, stores the **PAT + a generated
+webhook secret in Secrets Manager** (never plaintext), writes DynamoDB metadata,
+and **creates the GitHub webhook automatically** (subscribed to `push` +
+`release`). Confirm a green ✓ under the repo's **Settings → Webhooks → Recent
+Deliveries**.
 
 ## 6. Trigger a generation
 

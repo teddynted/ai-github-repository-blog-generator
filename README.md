@@ -163,6 +163,10 @@ flowchart TB
     SEC --> DONE[Repository successfully registered]
 ```
 
+> **To register a repo**, POST the repository URL + PAT to the registration API
+> Gateway endpoint. That route **requires an `x-api-key` header** (403 without it).
+> Copy-paste commands, including how to fetch the API key: **[First Deploy → Register the repository](./docs/first-deploy.md#5-register-the-repository)**.
+
 ### Why a PAT for the MVP
 
 A PAT keeps onboarding simple while providing a clear migration path to **GitHub Apps** in future releases (see [Roadmap](#roadmap)). The token is required to access repository contents, create the webhook, and read repository metadata.
