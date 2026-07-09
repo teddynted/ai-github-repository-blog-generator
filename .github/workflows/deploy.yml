@@ -7,7 +7,8 @@ name: deploy
 # Required to enable:
 #   secret AWS_DEPLOY_ROLE_ARN  - IAM role trusting the GitHub OIDC provider
 #   var    AWS_REGION           - e.g. us-east-1
-#   var    ARTIFACTS_BUCKET     - S3 bucket for Lambda + worker packages
+#   (ARTIFACTS_BUCKET is derived automatically as blog-gen-artifacts-<account>-<region>,
+#    matching bootstrap.yaml — no variable needed.)
 #   var    KEY_PAIR_NAME        - EC2 key pair for the instance
 #   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
@@ -50,7 +51,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
       SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -74,6 +74,14 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      - name: resolve artifacts bucket
+        run: |
+          # Derived, not hand-entered: bootstrap.yaml always names it
+          # blog-gen-artifacts-<account>-<region>, so compute it to avoid a
+          # wrong ARTIFACTS_BUCKET variable pointing at a non-existent bucket.
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          echo "ARTIFACTS_BUCKET=blog-gen-artifacts-${ACCOUNT}-${{ vars.AWS_REGION }}" >> "$GITHUB_ENV"
 
       - name: upload artifacts (sha-versioned keys)
         run: |
