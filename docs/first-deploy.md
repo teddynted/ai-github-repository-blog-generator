@@ -96,8 +96,22 @@ observability**.
 gh run watch    # or watch it in the Actions tab
 ```
 
-CPU-only smoke test instead? Deploy compute manually with `EnableGpu=false`
-(see [deployment.md §4](./deployment.md)).
+### CPU smoke test (recommended first run)
+
+GPU Spot capacity is scarce and the GPU host is pricey — so **prove the whole
+pipeline on cheap CPU capacity first**, then switch to GPU. Set two variables and
+deploy normally:
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `INSTANCE_TYPE` | `t3.xlarge` | 4 vCPU / 16 GB, widely available, ~cents/hour on Spot |
+| `ENABLE_GPU` | `false` | Ollama runs CPU-only; the AMI skips the NVIDIA install |
+
+The full path (webhook → SQS → worker → Ollama → review → publish) runs exactly
+the same, just with slower inference. This flushes out any account/config
+gremlins without fighting GPU quota or capacity. When it's green end-to-end,
+**delete both variables** (and the failed compute stack) and redeploy to go back
+to the GPU default (`g4dn.xlarge`, `EnableGpu=true`).
 
 ## 4. Set the SMTP password (skip if not using email, or if you set the `SMTP_PASSWORD` GitHub secret)
 
