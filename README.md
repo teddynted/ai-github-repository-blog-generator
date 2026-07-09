@@ -5,6 +5,8 @@
 **Event-driven, fully self-hosted AI platform that turns GitHub repositories into high-quality technical content — but only when you opt in with a `blog:` commit. Powered by OpenClaw, Ollama, and local LLMs, orchestrated with n8n, triggered through Amazon EventBridge, and running on cost-optimized AWS EC2 Spot Instances provisioned entirely with AWS CloudFormation.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![MVP: implemented](https://img.shields.io/badge/MVP-implemented-brightgreen.svg)](./docs/development-plan.md)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![AWS CloudFormation](https://img.shields.io/badge/IaC-AWS%20CloudFormation-E7157B?logo=amazonaws&logoColor=white)](https://aws.amazon.com/cloudformation/)
 [![EC2 Spot](https://img.shields.io/badge/Compute-EC2%20Spot-FF9900?logo=amazonec2&logoColor=white)](https://aws.amazon.com/ec2/spot/)
 [![Ollama](https://img.shields.io/badge/Inference-Ollama-000000?logo=ollama&logoColor=white)](https://ollama.com/)
@@ -22,6 +24,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Status](#status)
 - [Core Principle](#core-principle)
 - [Why This Project](#why-this-project)
 - [Features](#features)
@@ -32,6 +35,7 @@
 - [Technology Stack](#technology-stack)
 - [Cost Optimisation](#cost-optimisation)
 - [Spot Instance Trade-offs](#spot-instance-trade-offs)
+- [Optimizing Spot Instance Startup](#optimizing-spot-instance-startup)
 - [Security](#security)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -40,6 +44,7 @@
 - [CloudFormation Deployment Guide](#cloudformation-deployment-guide)
 - [Project Structure](#project-structure)
 - [Roadmap](#roadmap)
+- [Local Development Workflow](#local-development-workflow)
 - [Contributing](#contributing)
 - [Documentation](#documentation)
 - [License](#license)
@@ -57,6 +62,31 @@ When a run does fire, **n8n** orchestrates a pipeline on the instance where **Op
 Supported outputs include technical blog posts, README improvements, documentation, architecture summaries, API documentation, project overviews, release notes, changelogs, and technical tutorials — all emitted as clean, portable Markdown.
 
 > This project is architected for real-world production practices: **developer-controlled generation**, self-hosting, cost optimisation, local LLM inference, AWS-native event-driven design, and Infrastructure as Code with AWS CloudFormation.
+
+---
+
+## Status
+
+**The MVP is implemented and unit-tested** (a single Go module + four AWS Lambdas + an instance worker, all backed by modular CloudFormation). It has **not yet been deployed** to a live AWS account — deployment needs your AWS credentials and a GPU instance. Milestone-by-milestone detail lives in the [Development Plan](./docs/development-plan.md).
+
+**What works end to end today:**
+
+register repo → webhook (HMAC + commit-trigger gate) → EventBridge → SQS → EC2 Spot start → **worker**: skip-if-already-published → clone repo (go-git) → read README/docs/commits → generate 5 content types via local Ollama → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → idle shutdown.
+
+| Area | Status |
+| --- | --- |
+| Repository registration (URL + PAT → Secrets Manager + DynamoDB, auto webhook) | ✅ Implemented |
+| Webhook handler — HMAC verify + commit-message trigger gate (no AI, never reads the PAT) | ✅ Implemented |
+| Event processing — EventBridge → SQS buffer + EC2 Spot start | ✅ Implemented |
+| Instance lifecycle — on-demand start, idle shutdown | ✅ Implemented |
+| Content pipeline — clone, analyse, generate (5 types), review, approval, publish, memory, notify | ✅ Implemented |
+| Local inference — Ollama + Qwen (no paid API) | ✅ Implemented |
+| Infrastructure — modular CloudFormation (`cfn-lint`-clean) | ✅ Implemented |
+| CI/CD — Go tests, cfn-lint, security scanning, opt-in OIDC deploy | ✅ Implemented |
+| Deploy to AWS + end-to-end validation | ⏳ Needs your AWS account + GPU instance |
+| Future roadmap — email notifications, extra trigger sources, GitHub Apps, a web approvals UI | ⏳ Planned |
+
+> **Implementation note.** The MVP runtime is a **Go worker** (`cmd/worker`) that drains SQS and drives the pipeline — chosen for testability. The **n8n** orchestration described throughout these docs remains a valid alternative for the same seams; the pipeline stages are composable ports either can drive. See the [Development Plan](./docs/development-plan.md) for the runtime decision.
 
 ---
 
@@ -184,16 +214,15 @@ blog: Added OAuth Authentication            # triggers a run
 blog: Repository Memory Implementation      # triggers a run
 ```
 
-### Configurable trigger patterns *(planned)*
+### Configurable trigger patterns
 
-The default is `blog:`. Future versions will let you configure custom trigger patterns without changing the core architecture:
+The default is `blog:`, but each repository can set its own **Trigger Pattern** at registration (stored in metadata, evaluated per delivery):
 
-- `blog:`
-- `[blog]`
-- Regular expressions
-- Repository-specific trigger rules
+- `blog:` — literal prefix (default)
+- `[blog]` — any literal prefix works
+- `regex:^(blog|post):` — a `regex:`-prefixed regular expression
 
-See [Future trigger sources](#roadmap) for additional planned entry points (releases, tags, PR labels, manual runs, and scheduled summaries).
+Pass `trigger_pattern` when registering; invalid regexes are rejected. Additional entry points (releases, tags, PR labels, manual runs, scheduled summaries) remain [planned](#roadmap).
 
 ---
 
@@ -370,6 +399,63 @@ Spot Instances are the right default for this asynchronous, interruptible, batch
 
 ---
 
+## Optimizing Spot Instance Startup
+
+Because the instance is stopped when idle and (re)launched per job, **startup time is on the critical path** for every generation. A stock Ubuntu boot would spend ~10–15 minutes installing NVIDIA drivers, Docker, the Ollama image, and pulling the ~4.7 GB model before it could process anything. The optimization removes almost all of that from the boot path.
+
+### Strategy
+
+- **Pre-baked custom AMI.** All slow, network-heavy setup is baked into an AMI once, so it isn't repeated on every launch. The image is defined in code ([`packer/blog-gen.pkr.hcl`](./packer/blog-gen.pkr.hcl) + [`scripts/ami/provision.sh`](./scripts/ami/provision.sh)) and rebuilt with one command.
+- **Baked model seed.** The model is baked in and *copied* to the persistent volume at first boot — **no multi-GB download at launch**.
+- **Runtime-only boot work.** Boot does just the instance-specific bits: mount `/data`, seed the model, write the worker env from stack params, drop in the small worker binary (from S3), and start the services.
+- **systemd auto-start + health gating.** `blog-gen-ollama` and `blog-gen-worker` are enabled units, so they start automatically on every boot; the worker waits (`ExecStartPre`) until Ollama has the model loaded, and `health.sh` reports overall readiness.
+- **Persistent storage unchanged.** Models, Repository Memory, and generated output live on a `Retain` gp3 EBS volume that survives Spot interruption and stop/start.
+
+### Why a custom AMI
+
+The heavy work (GPU driver install — which alone is minutes and can need a reboot; Docker; the container image; the model) is identical on every launch and **has no per-instance inputs**. Baking it is the highest-leverage way to cut startup time while keeping the architecture and cost model unchanged. The only per-launch download is the few-MB worker binary.
+
+### Build & update process
+
+Fully automated — no manual AMI id to copy:
+
+1. **Actions → build-ami → Run workflow** (or `scripts/build-ami.sh` locally). It builds the image and **writes the AMI id to SSM** (`/blog-gen/worker-ami`).
+2. **Redeploy** (merge to main / run `deploy.yml`). Deploy **reads the AMI id from SSM automatically** and launches instances from it.
+
+Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, or `provision.sh`) — ordinary app changes just redeploy the worker binary. Set the `CUSTOM_AMI` variable only to *pin* a specific image. Full details in [docs/ami.md](./docs/ami.md).
+
+### Startup workflow
+
+```mermaid
+flowchart TD
+  A["Matched webhook (blog: commit / release)"] --> B["API Gateway → handler Lambda"]
+  B --> C["EventBridge → SQS (durable job)"]
+  C --> D["instance-starter Lambda: start Spot instance"]
+  D --> E{"Boot from CustomAmi?"}
+  E -->|"Yes (fast path)"| F["Runtime init only:<br/>mount /data · seed model · write env · fetch worker binary"]
+  E -->|"No (fallback)"| G["Run provision.sh at boot<br/>(Docker · NVIDIA · Ollama · model)"]
+  G --> F
+  F --> H["systemd: blog-gen-ollama → blog-gen-worker<br/>(ExecStartPre waits for model)"]
+  H --> I{"health.sh: Docker + Ollama + model + worker ready?"}
+  I -->|"ready"| J["Worker drains SQS → generate → review → publish / notify"]
+  J --> K["Idle timeout → idle-shutdown Lambda stops the instance"]
+  K --> L["EBS volume persists (models · memory · output)"]
+```
+
+### Expected improvement, cost & trade-offs
+
+| Aspect | Stock AMI (fallback) | Custom AMI (optimized) |
+| --- | --- | --- |
+| Time to "ready for jobs" | ~10–15 min (driver + Docker + image + 4.7 GB model) | **< 1 min** typical (services start; model already present) |
+| Network at boot | Hundreds of MB + model | worker binary only (few MB) |
+| Reproducibility | script at boot | same script, baked; one-command rebuild |
+
+**Cost implications** — the baked AMI stores an EBS snapshot (~5 GB incl. the model): a few cents/month. Faster startup also means the (expensive) GPU instance spends **less time booting and idle**, so per-job cost typically *drops*. The trade-off is an occasional AMI rebuild when dependencies change, and per-region AMI management. Use `--no-bake-model` to shrink the image at the cost of a one-time model pull on first boot.
+
+**Operational note** — if `CUSTOM_AMI` is unset, deploys still work: the instance falls back to running `provision.sh` at boot (slower, but nothing breaks).
+
+---
+
 ## Security
 
 Security is built in by default (full detail in [`docs/security.md`](./docs/security.md)):
@@ -504,38 +590,37 @@ See [`docs/infrastructure.md`](./docs/infrastructure.md) for the full parameter 
 
 ## Project Structure
 
+Single Go module (monorepo): shared code in `internal/`, entry points under `lambdas/` and `cmd/`.
+
 ```text
-github-ai-blog-generator/
-├── README.md
-├── LICENSE
-├── .env.example
-├── infrastructure/            # AWS CloudFormation templates (modular)
+ai-github-repository-blog-generator/
+├── README.md · LICENSE · Makefile · go.mod · .env.example
+├── .github/workflows/         # CI: go, cloudformation, security, deploy (OIDC, opt-in)
+├── infrastructure/            # AWS CloudFormation (modular; cfn-lint clean)
+│   ├── bootstrap.yaml         # artifacts bucket + OIDC provider + deploy role (once)
 │   ├── network.yaml
-│   ├── serverless.yaml        # API Gateway, Lambdas, EventBridge, SQS
-│   ├── compute.yaml
-│   └── observability.yaml
-├── lambdas/                   # Lambda source code
-│   ├── registration/          # Validate repo + PAT, create webhook, store metadata + secret
-│   ├── webhook-handler/       # Resolve metadata, verify signature, validate trigger, publish
-│   ├── instance-starter/      # Start the Spot Instance on a matched event
-│   └── idle-shutdown/         # Stop the instance after idle timeout
-├── instance/                  # EC2 host configuration
-│   ├── docker-compose.yml     # n8n + OpenClaw + Ollama
-│   └── user-data.sh           # Bootstraps Docker, Compose, and services
-├── workflows/                 # Exported n8n workflow definitions
-└── docs/                      # Project documentation
-    ├── architecture.md
-    ├── requirements.md
-    ├── infrastructure.md
-    ├── deployment.md
-    ├── workflows.md
-    ├── cost-optimization.md
-    ├── security.md
-    ├── monitoring.md
-    ├── local-development.md
-    ├── ci-cd.md
-    ├── contributing.md
-    └── roadmap.md
+│   ├── serverless.yaml        # API Gateway, Lambdas, EventBridge, SQS, Secrets Manager, DynamoDB
+│   ├── compute.yaml           # EC2 Spot + persistent gp3 EBS
+│   └── observability.yaml     # log groups, alarms, dashboard
+├── lambdas/                   # Lambda entry points (Go)
+│   ├── registration/          # validate repo + PAT → create webhook → store metadata + secret
+│   ├── webhook-handler/       # resolve metadata, verify HMAC, trigger gate, publish
+│   ├── instance-starter/      # start the Spot Instance on a matched event
+│   └── idle-shutdown/         # stop the instance when idle
+├── cmd/
+│   └── worker/                # instance worker: drain SQS → run the content pipeline
+├── internal/                  # shared library code (Clean Architecture, ports + adapters)
+│   ├── config · logging · apperror · app          # foundation
+│   ├── github · repo · registration · secrets · metadata   # onboarding
+│   ├── trigger · githubsig · webhook · eventbus            # trigger + events
+│   ├── awsec2 · awssqs · lifecycle                         # instance lifecycle
+│   ├── reposource · processing                            # clone (go-git) + retrieval
+│   └── ollama · generation · review · approval · memory · publish · notify · pipeline
+├── instance/
+│   └── docker-compose.yml     # n8n + Ollama (OpenClaw placeholder)
+├── scripts/
+│   └── bootstrap.sh           # one-time deploy bootstrap
+└── docs/                      # architecture, requirements, development-plan, deployment, …
 ```
 
 ---
@@ -545,13 +630,87 @@ github-ai-blog-generator/
 - [ ] **GitHub App authentication** (recommended long-term approach, replacing per-repo PATs) + OAuth login
 - [ ] Automatic webhook management, fine-grained permissions, and secret rotation
 - [ ] Multiple repositories per user, repository groups/organisations, multi-user workspaces
-- [ ] Web-based repository management dashboard (run history, approvals, content review)
-- [ ] Configurable custom trigger patterns (`[blog]`, regex, per-repo rules)
-- [ ] Additional trigger sources: GitHub Releases, Git Tags, Pull Request labels
+- [x] Approvals dashboard — CLI over the pending queue (`approve -all` auto-approves); web UI still planned
+- [x] Configurable custom trigger patterns (`[blog]`, `regex:`, per-repo rules)
+- [x] GitHub **Releases** as a trigger source (a published release always triggers); Git Tags / PR labels still planned
 - [ ] Manual blog generation from the application, and scheduled repository summaries
 - [ ] On-Demand fallback when Spot capacity is unavailable; multi-model support
 
 The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).
+
+---
+
+## Local Development Workflow
+
+This project ships versioned Git hooks and an [`act`](https://nektosact.com) integration that mirror GitHub Actions locally, so problems are caught **before** they reach CI. The hooks **complement** GitHub Actions — CI remains the source of truth — and are designed to keep commits fast.
+
+### Install the hooks
+
+```bash
+make hooks          # or: ./scripts/install-hooks.sh
+```
+
+This sets `git config core.hooksPath .githooks` (no files are copied — the hooks are versioned and update with the repo). Uninstall with `git config --unset core.hooksPath`.
+
+### What runs, and when
+
+```
+write code
+   │
+   ▼
+git commit ──▶ pre-commit         (fast, no Docker)
+   │            • gofmt  (auto-formats & re-stages your staged Go files)
+   │            • go vet (static analysis; golangci-lint too, if installed)
+   │            • go test ./...    (unit tests)
+   │
+   ▼         commit-msg
+   │            • Conventional Commits validation
+   ▼
+git commit succeeds
+   │
+   ▼
+git push ───▶ pre-push
+   │            • act runs the primary CI workflow (.github/workflows/go.yml)
+   ▼
+GitHub Actions  ──▶  review  ──▶  merge
+```
+
+The `pre-commit` and CI both call the **same scripts** in [`scripts/hooks/`](./scripts/hooks) (`format.sh`, `lint.sh`, `tests.sh`), so local and CI checks never drift. Running them locally means fewer red builds on GitHub.
+
+### The `act` pre-push mirror
+
+[`act`](https://nektosact.com) runs your GitHub Actions workflows in Docker. The `pre-push` hook runs the primary `go` workflow before every push; if it fails, the push is aborted with the failing job shown.
+
+**Requirements**
+
+| Requirement | Install |
+| --- | --- |
+| Docker (running daemon) | [Docker Desktop](https://docs.docker.com/get-docker/) (macOS/Windows) or Docker Engine (Linux) |
+| `act` | `brew install act` (macOS) · `curl -fsSL https://raw.githubusercontent.com/nektos/act/master/install.sh \| sudo bash` (Linux) |
+| OS | Linux or macOS (on Windows use **WSL2**) |
+
+The runner image is pinned in [`.actrc`](./.actrc) to `catthehacker/ubuntu:act-latest` (act's "medium" image — includes Go and git). Run it any time with `make act`.
+
+**Graceful by design:** if Docker or `act` is missing, `pre-push` prints an actionable message and **allows the push** (it does not block contributors who haven't installed `act`). Set `PREPUSH_STRICT=1` to require it instead.
+
+### Escape hatches
+
+| Situation | Command |
+| --- | --- |
+| Skip all commit hooks (emergency) | `git commit --no-verify` |
+| Skip the `act` mirror for one push | `SKIP_ACT=1 git push` |
+| Bypass pre-push entirely | `git push --no-verify` |
+| Run checks manually | `make check` (fmt-check · lint · test) |
+
+### Troubleshooting
+
+- **`gofmt not found` / `Go toolchain not found`** — install Go (<https://go.dev/dl/>); the hooks read the pinned version from `go.mod`.
+- **`Docker ... daemon is not reachable`** — start Docker Desktop (macOS) or the Docker service (Linux), then retry.
+- **`act` is slow on first run** — it pulls the runner image once (~ hundreds of MB); subsequent runs are cached.
+- **Apple Silicon** — if a workflow needs amd64, add `--container-architecture linux/amd64` via `ACT_EXTRA_ARGS`.
+- **"staged files need formatting but also have unstaged changes"** — stage or stash the unstaged edits first, so the hook never commits partial work on your behalf.
+
+See [`docs/local-workflow.md`](./docs/local-workflow.md) for the full reference, and **Future enhancements** (commitizen, CHANGELOG automation, semantic-release, commit signing, secret/vulnerability scanning) documented there.
 
 ---
 
@@ -569,12 +728,15 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Architecture](./docs/architecture.md) | Components, trigger path, data flow, and design decisions |
 | [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
 | [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
+| [Custom AMI](./docs/ami.md) | Building/updating the pre-baked worker AMI for fast Spot startup |
+| [First Deploy](./docs/first-deploy.md) | One-page runbook: bootstrap → deploy → register → trigger → verify |
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
 | [Workflows](./docs/workflows.md) | Trigger validation and the n8n pipeline, node by node |
 | [Cost Optimisation](./docs/cost-optimization.md) | Trigger pre-filtering, Spot strategy, cold start, shutdown |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |
+| [Local Workflow](./docs/local-workflow.md) | Git hooks, Conventional Commits, and the `act` CI mirror |
 | [CI/CD](./docs/ci-cd.md) | Continuous integration and delivery |
 | [Contributing](./docs/contributing.md) | How to contribute |
 | [Roadmap](./docs/roadmap.md) | Planned features |

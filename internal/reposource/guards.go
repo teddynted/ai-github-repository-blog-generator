@@ -8,5 +8,6 @@ var (
 	_ processing.ReadmeRetriever = FSReadme{}
 	_ processing.DocsRetriever   = FSDocs{}
 	_ processing.CommitRetriever = GitCommits{}
+	_ processing.Analyzer        = FSAnalyzer{}
 	_ TokenSource                = (*MetaTokenSource)(nil)
 )

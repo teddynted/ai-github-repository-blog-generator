@@ -13,21 +13,19 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version-file: "go.mod"
           cache: true
 
+      # These steps call the same scripts the local Git hooks use, so local
+      # validation and CI never drift (single source of truth).
       - name: gofmt
-        run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "These files need gofmt:"; echo "$unformatted"; exit 1
-          fi
+        run: scripts/hooks/format.sh --check
 
-      - name: vet
-        run: go vet ./...
+      - name: vet / lint
+        run: scripts/hooks/lint.sh
 
       - name: test
-        run: go test ./... -race -cover
+        run: GO_TEST_FLAGS="-race -cover" scripts/hooks/tests.sh
 
       - name: cross-compile lambdas (linux/arm64)
         run: |

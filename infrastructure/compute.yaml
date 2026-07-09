@@ -31,12 +31,97 @@ Parameters:
     Type: String
     Default: qwen2.5:7b
     Description: Local model served by Ollama.
+  EnableGpu:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Install NVIDIA drivers + container toolkit and give Ollama the GPU. Set to
+      "false" to run Ollama CPU-only (e.g. testing on a non-GPU instance type).
   LatestUbuntuAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-    Description: Resolves to the latest Ubuntu 22.04 (amd64) AMI.
+    Description: Fallback base AMI (latest Ubuntu 22.04 amd64) when CustomAmi is unset.
+  CustomAmi:
+    Type: String
+    Default: ""
+    Description: >
+      Pre-baked worker AMI id from scripts/build-ami.sh (Docker, NVIDIA, Ollama +
+      model, systemd services). When set, boot skips all installs — the fast
+      path. Leave blank to fall back to the stock Ubuntu AMI (slow first boot).
+  AmiScriptsKey:
+    Type: String
+    Default: ""
+    Description: >
+      S3 key of scripts/ami/provision.sh (uploaded by deploy.yml). Used only on
+      the fallback path to provision a stock AMI at boot.
+  OutputS3Bucket:
+    Type: String
+    Default: ""
+    Description: >
+      Optional S3 bucket for published content. When set, the instance role is
+      granted s3:PutObject on it (the worker publishes to S3 instead of local
+      files when OUTPUT_S3_BUCKET is configured).
+
+  ArtifactsBucket:
+    Type: String
+    Default: ""
+    Description: >
+      S3 bucket holding the worker binary (same bucket used for Lambda
+      artifacts). Required to install the worker service on the instance.
+  WorkerCodeKey:
+    Type: String
+    Default: ""
+    Description: >
+      S3 key of the linux/amd64 worker binary (e.g. "<sha>/worker"). When set
+      with ArtifactsBucket, the instance downloads it and runs it as a systemd
+      service.
+  NotifyEmailFrom:
+    Type: String
+    Default: ""
+    Description: From address for email notifications (blank disables email).
+  NotifyEmailTo:
+    Type: String
+    Default: ""
+    Description: Comma-separated recipient addresses for email notifications.
+  SmtpHost:
+    Type: String
+    Default: pro.turbo-smtp.com
+    Description: SMTP relay host (Turbo SMTP).
+  SmtpPort:
+    Type: Number
+    Default: 587
+    Description: SMTP port (587 STARTTLS or 465 implicit TLS).
+  SmtpUsername:
+    Type: String
+    Default: ""
+    Description: SMTP account username (the password is stored in Secrets Manager).
+  NotifyWebhookUrl:
+    Type: String
+    Default: ""
+    Description: Optional Slack/webhook URL for notifications.
+
+Conditions:
+  HasCustomAmi: !Not [!Equals [!Ref CustomAmi, ""]]
+  HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
+  HasWorkerCode: !And
+    - !Not [!Equals [!Ref ArtifactsBucket, ""]]
+    - !Not [!Equals [!Ref WorkerCodeKey, ""]]
 
 Resources:
+  # Container for the SMTP password. CFN creates it with a random placeholder;
+  # the operator sets the real Turbo SMTP password out-of-band (put-secret-value)
+  # so it never appears in the template or parameter history. Subsequent stack
+  # updates leave the value untouched.
+  NotificationsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/notifications/smtp-password"
+      Description: SMTP password for Turbo SMTP email notifications (set the real value with put-secret-value).
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -60,10 +145,12 @@ Resources:
                   - sqs:GetQueueAttributes
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueArn"
-              # Read the PAT only when cloning.
+              # Read the PAT (when cloning) and the SMTP password (for email).
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                  - !Ref NotificationsSecret
               # Update last-processed commit SHA after a run.
               - Effect: Allow
                 Action:
@@ -80,6 +167,24 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+              # Publish generated content to S3 (only when an output bucket is set).
+              - !If
+                - HasOutputBucket
+                - Effect: Allow
+                  Action: s3:PutObject
+                  Resource: !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
+                - !Ref AWS::NoValue
+              # Download the worker binary from the artifacts bucket at boot.
+              - !If
+                - HasWorkerCode
+                - Effect: Allow
+                  Action: s3:GetObject
+                  Resource: !Sub "arn:${AWS::Partition}:s3:::${ArtifactsBucket}/*"
+                - !Ref AWS::NoValue
+              # Email notifications go through Turbo SMTP (outbound SMTP over
+              # TLS), so no AWS mail permission is required — the worker only
+              # needs egress on 587/465 and reads the SMTP password from the
+              # NotificationsSecret above.
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -94,7 +199,7 @@ Resources:
       LaunchTemplateName: !Sub "${ProjectName}-lt"
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
-        ImageId: !Ref LatestUbuntuAmi
+        ImageId: !If [HasCustomAmi, !Ref CustomAmi, !Ref LatestUbuntuAmi]
         KeyName: !Ref KeyPairName
         IamInstanceProfile:
           Arn: !GetAtt InstanceProfile.Arn
@@ -114,33 +219,96 @@ Resources:
               Encrypted: true
               DeleteOnTermination: true
         UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            set -euxo pipefail
-            # --- Base host bootstrap (M2). n8n + OpenClaw + Ollama compose is added
-            # --- in later milestones (see docs/development-plan.md).
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update -y
-            apt-get install -y ca-certificates curl gnupg
-            install -m 0755 -d /etc/apt/keyrings
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-            chmod a+r /etc/apt/keyrings/docker.gpg
-            echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-              > /etc/apt/sources.list.d/docker.list
-            apt-get update -y
-            apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-            systemctl enable --now docker
-            # Mount the persistent data volume (formatted once) at /data.
-            DEV=/dev/xvdf
-            for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
-            if [ -b "$DEV" ]; then
-              blkid "$DEV" || mkfs.ext4 -L blogdata "$DEV"
-              mkdir -p /data
-              grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
-              mount -a
-            fi
-            echo "ollama-model=${OllamaModel}" > /data/.bootstrap || true
-            echo "base host bootstrap complete"
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                set -euxo pipefail
+                # --- Runtime init only. Heavy installs (Docker, NVIDIA, Ollama image,
+                # --- the model, systemd units) are pre-baked into the CustomAmi by
+                # --- scripts/ami/provision.sh; a stock AMI runs that same script here.
+                export DEBIAN_FRONTEND=noninteractive
+                mkdir -p /opt/blog-gen /etc/blog-gen
+
+                # Mount the persistent data volume (formatted once) at /data.
+                DEV=/dev/xvdf
+                for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
+                if [ -b "$DEV" ]; then
+                  blkid "$DEV" || mkfs.ext4 -L blogdata "$DEV"
+                  mkdir -p /data
+                  grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
+                  mount -a
+                fi
+                mkdir -p /data/ollama /data/generated-content /data/work /data/memory /data/pending
+
+                # Fallback: a stock AMI (no baked marker) runs the canonical
+                # provisioner now. A baked CustomAmi skips this entirely (fast path).
+                if [ ! -f /opt/blog-gen/.ami-baked ]; then
+                  echo "no baked AMI marker; provisioning at boot (slow path)"
+                  apt-get update -y && apt-get install -y awscli
+                  aws s3 cp "s3://${ArtifactsBucket}/${AmiScriptsKey}" /opt/blog-gen/provision.sh
+                  chmod +x /opt/blog-gen/provision.sh
+                  OLLAMA_MODEL="${OllamaModel}" ENABLE_GPU="${EnableGpu}" BAKE_MODEL=false \
+                    /opt/blog-gen/provision.sh
+                fi
+
+                # Seed the model from the baked copy if the volume is empty — avoids a
+                # multi-GB download at boot.
+                if [ ! -d /data/ollama/models ] && [ -d /opt/blog-gen/ollama-seed/models ]; then
+                  cp -a /opt/blog-gen/ollama-seed/. /data/ollama/
+                fi
+
+                # --- Worker binary + env (stack-specific values). SMTP password is NOT
+                # --- here — the worker reads it from Secrets Manager via the secret ref.
+                if [ -n "${WorkerCodeKey}" ]; then
+                  export AWS_DEFAULT_REGION=${AWS::Region}
+                  command -v aws >/dev/null 2>&1 || { apt-get update -y && apt-get install -y awscli; }
+                  aws s3 cp "s3://${ArtifactsBucket}/${WorkerCodeKey}" /usr/local/bin/blog-gen-worker
+                  chmod +x /usr/local/bin/blog-gen-worker
+                  cat > /etc/blog-gen/worker.env <<'ENVEOF'
+                AWS_REGION=${AWS::Region}
+                QUEUE_URL=${QueueUrl}
+                REPOSITORIES_TABLE=${RepositoriesTable}
+                SECRETS_PREFIX=${ProjectName}/repos
+                OLLAMA_MODEL=${OllamaModel}
+                OLLAMA_BASE_URL=http://127.0.0.1:11434
+                OUTPUT_DIR=/data/generated-content
+                OUTPUT_S3_BUCKET=${OutputS3Bucket}
+                WORK_DIR=/data/work
+                MEMORY_DIR=/data/memory
+                PENDING_DIR=/data/pending
+                NOTIFY_WEBHOOK_URL=${NotifyWebhookUrl}
+                NOTIFY_EMAIL_FROM=${NotifyEmailFrom}
+                NOTIFY_EMAIL_TO=${NotifyEmailTo}
+                SMTP_HOST=${SmtpHost}
+                SMTP_PORT=${SmtpPort}
+                SMTP_USERNAME=${SmtpUsername}
+                SMTP_PASSWORD_SECRET=${NotificationsSecret}
+                ENVEOF
+                  chmod 600 /etc/blog-gen/worker.env
+                fi
+
+                # --- Auto-start. The systemd units (blog-gen-ollama, blog-gen-worker)
+                # --- are baked into the AMI / written by the provisioner above;
+                # --- enabling them makes the stack restart automatically on every boot.
+                systemctl daemon-reload
+                systemctl enable --now blog-gen-ollama
+                if [ -x /usr/local/bin/blog-gen-worker ]; then
+                  systemctl enable --now blog-gen-worker
+                fi
+
+                # If the model was not baked, pull it once now (persists on /data).
+                if [ ! -d /data/ollama/models ]; then
+                  for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/version >/dev/null && break || sleep 3; done
+                  docker exec ollama ollama pull "${OllamaModel}" || echo "model pull deferred; worker retries"
+                fi
+
+                /opt/blog-gen/health.sh || echo "not healthy yet; services will converge"
+                echo "instance init complete"
+              - QueueUrl:
+                  Fn::ImportValue: !Sub "${ProjectName}-QueueUrl"
+                RepositoriesTable:
+                  Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
 
   Instance:
     Type: AWS::EC2::Instance
@@ -192,3 +360,10 @@ Outputs:
     Value: !Ref PersistentVolume
     Export:
       Name: !Sub "${ProjectName}-PersistentVolumeId"
+  NotificationsSecretArn:
+    Description: >
+      ARN of the SMTP-password secret. Set the real Turbo SMTP password with:
+      aws secretsmanager put-secret-value --secret-id <this-arn> --secret-string '<password>'
+    Value: !Ref NotificationsSecret
+    Export:
+      Name: !Sub "${ProjectName}-NotificationsSecretArn"

@@ -26,6 +26,9 @@ const (
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
+	// Turbo SMTP defaults for email notifications. Port 587 uses STARTTLS.
+	DefaultSMTPHost = "pro.turbo-smtp.com"
+	DefaultSMTPPort = 587
 )
 
 // Config holds the runtime configuration shared across the platform's
@@ -68,14 +71,39 @@ type Config struct {
 	OllamaModel string
 	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
 	OllamaBaseURL string
-	// OutputDir is where generated content is written (OUTPUT_DIR).
+	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
+	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
+	// local filesystem (OUTPUT_S3_BUCKET).
+	OutputS3Bucket string
+	// OutputS3Prefix is the S3 key prefix (OUTPUT_S3_PREFIX).
+	OutputS3Prefix string
 	// WorkDir is the parent directory for repository clones (WORK_DIR).
 	WorkDir string
 	// MemoryDir is the base directory for Repository Memory (MEMORY_DIR).
 	MemoryDir string
 	// PendingDir is where content awaiting human approval is stashed (PENDING_DIR).
 	PendingDir string
+	// NotifyWebhookURL is an optional Slack/webhook URL for notifications
+	// (NOTIFY_WEBHOOK_URL). When blank, notifications are logged only.
+	NotifyWebhookURL string
+	// NotifyEmailFrom / NotifyEmailTo enable email notifications when both are
+	// set (NOTIFY_EMAIL_FROM, NOTIFY_EMAIL_TO — comma-separated recipients).
+	// Delivery is over SMTP (Turbo SMTP), configured by the SMTP* fields below.
+	NotifyEmailFrom string
+	NotifyEmailTo   string
+	// SMTP* configure the SMTP relay used for email notifications (Turbo SMTP by
+	// default). SMTPUsername + SMTPPassword are required to actually send; the
+	// password is a credential (SMTP_PASSWORD) — keep it out of source control.
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	// SMTPPasswordSecret is an optional AWS Secrets Manager id/ARN whose value is
+	// the SMTP password (SMTP_PASSWORD_SECRET). When set, it is resolved at
+	// startup and takes precedence over SMTP_PASSWORD, so the credential never
+	// lives in plaintext env/config on the instance.
+	SMTPPasswordSecret string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -108,9 +136,19 @@ func Load(getenv Getenv) (Config, error) {
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
+		OutputS3Bucket:       getenv("OUTPUT_S3_BUCKET"),
+		OutputS3Prefix:       firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
 		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
 		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
 		PendingDir:           firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
+		NotifyWebhookURL:     getenv("NOTIFY_WEBHOOK_URL"),
+		NotifyEmailFrom:      getenv("NOTIFY_EMAIL_FROM"),
+		NotifyEmailTo:        getenv("NOTIFY_EMAIL_TO"),
+		SMTPHost:             firstNonEmpty(getenv("SMTP_HOST"), DefaultSMTPHost),
+		SMTPPort:             DefaultSMTPPort,
+		SMTPUsername:         getenv("SMTP_USERNAME"),
+		SMTPPassword:         getenv("SMTP_PASSWORD"),
+		SMTPPasswordSecret:   getenv("SMTP_PASSWORD_SECRET"),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,
@@ -125,6 +163,17 @@ func Load(getenv Getenv) (Config, error) {
 			return Config{}, fmt.Errorf("config: IDLE_TIMEOUT_MINUTES must be positive, got %d", v)
 		}
 		cfg.IdleTimeoutMinutes = v
+	}
+
+	if raw := getenv("SMTP_PORT"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: SMTP_PORT %q is not an integer: %w", raw, err)
+		}
+		if v <= 0 || v > 65535 {
+			return Config{}, fmt.Errorf("config: SMTP_PORT must be 1-65535, got %d", v)
+		}
+		cfg.SMTPPort = v
 	}
 
 	if raw := getenv("REQUIRE_HUMAN_APPROVAL"); raw != "" {

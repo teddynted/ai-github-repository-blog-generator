@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# pre-push — mirror the primary CI workflow locally with act before pushing.
+#
+# Policy:
+#   act passes            → push proceeds
+#   act fails             → push aborted (fix the job, or `git push --no-verify`)
+#   act/Docker missing    → warn and proceed (non-blocking), unless PREPUSH_STRICT=1
+#
+# Skip entirely with SKIP_ACT=1 (e.g. slow connection, offline).
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+
+if [ "${SKIP_ACT:-0}" = "1" ]; then
+	printf 'SKIP_ACT=1 — skipping local GitHub Actions run.\n'
+	exit 0
+fi
+
+set +e
+"$root/scripts/hooks/run-act.sh"
+code=$?
+set -e
+
+case "$code" in
+0)
+	exit 0
+	;;
+2)
+	if [ "${PREPUSH_STRICT:-0}" = "1" ]; then
+		printf '\033[31m✗ Push aborted:\033[0m act prerequisites unavailable and PREPUSH_STRICT=1.\n' >&2
+		exit 1
+	fi
+	printf 'Proceeding with push (local CI mirror skipped — see message above).\n'
+	exit 0
+	;;
+*)
+	printf '\n\033[31m✗ Local CI (act) failed. Push aborted.\033[0m\n' >&2
+	printf '  Fix the failing job shown above, or bypass with: git push --no-verify\n' >&2
+	exit 1
+	;;
+esac

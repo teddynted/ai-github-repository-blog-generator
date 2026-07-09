@@ -107,7 +107,8 @@ Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
 
 The `registration` Lambda, built with Clean Architecture: a pure use case with
 small ports, plus thin AWS/GitHub adapters. Introduces `aws-lambda-go` and the
-AWS SDK v2 (which raise the module's minimum Go to 1.24).
+AWS SDK v2 (which raise the module's minimum Go to 1.25; the build toolchain is
+pinned in `go.mod` to a patched release).
 
 | Package | Responsibility |
 | --- | --- |
@@ -232,6 +233,15 @@ routing, on-demand Spot compute, automatic shutdown, and the processing seam —
 all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
 Intelligence and content generation on top of the `processing.Snapshot`.
 
+## Testing
+
+Every package is unit-tested (ports exercised with fakes; HTTP clients with
+`httptest`; git operations against real local repos via go-git). An **end-to-end
+integration test** (`internal/pipeline`) wires the real adapters — filesystem
+retrieval, analysis, quality review, file publish, and Repository Memory —
+through the pipeline with only the LLM stubbed, and verifies the memory-based
+skip on a repeat commit. Run with `make check` (`-race`).
+
 ## Continuous integration
 
 GitHub Actions under `.github/workflows/` run on every push/PR and are green
@@ -250,7 +260,45 @@ without repository secrets:
 
 CI/CD is now complete end to end; deploying just needs the AWS side configured.
 
+### Deployment enablement
+
+`infrastructure/bootstrap.yaml` + `scripts/bootstrap.sh` provision, once with
+admin credentials, the pieces the deploy path needs: the **Lambda artifacts S3
+bucket**, the **GitHub Actions OIDC provider** (optional), and the **deploy
+role** the workflow assumes. The script prints the exact repository
+secrets/variables to set (`AWS_DEPLOY_ROLE_ARN`, `ARTIFACTS_BUCKET`, …,
+`DEPLOY_ENABLED=true`); after that, a merge to `main` deploys the app stacks.
+Runbook: [Deployment → First-Time Bootstrap](./deployment.md#first-time-bootstrap-automated-deploy).
+
+**Remaining to actually run in AWS (your side):** an account, a GPU Spot
+instance type, and an EC2 key pair — then bootstrap → set the vars → deploy →
+register a repo → push a `blog:` commit.
+
 ---
+
+## Hardening (correctness vs. requirements)
+
+- **Retry with backoff (FR-6.1).** `internal/retry` — bounded exponential
+  backoff + jitter, retrying only transient (`upstream`/`unavailable`) errors and
+  respecting context cancellation. Wired into the Ollama and GitHub clients
+  (401/403/404 still fail fast); AWS SDK calls rely on the SDK's own retry.
+- **Prompt/context budget (AI-6).** `generation.Generator.MaxPromptBytes`
+  (default 24 KB) deterministically truncates the repository context so a large
+  repo cannot overflow the model window; instructions and the closing directive
+  are preserved, and a truncation marker is appended.
+- **CloudWatch custom metrics (MON-2).** `internal/metrics` emits
+  Embedded-Metric-Format (EMF) records to stdout — no `PutMetricData`, no extra
+  IAM, no latency. The webhook handler emits `WebhookReceived` / `WebhookRejected`
+  / `WebhookIgnored` / `TriggerMatched`; the worker emits `RunsStarted` /
+  `RunsSucceeded` / `RunsFailed` / `RunsHeld` / `RunsSkipped` / `AssetsGenerated`.
+  The `observability.yaml` dashboard gained two `BlogGenerator`-namespace widgets
+  and a `RunsFailed` alarm.
+- **Deeper analysis (FR-2.3–2.5).** `reposource.FSAnalyzer` detects the
+  technical profile from the working copy — languages, dependency managers, IaC
+  (Terraform, CloudFormation), containers (Docker/Compose), and CI/CD (GitHub
+  Actions, GitLab CI, …). It is added to the `processing.Snapshot` and rendered
+  into every generation prompt as a "Technical profile" section, so content is
+  grounded in the real stack rather than just the README.
 
 ## Phase 2 (post-MVP) — Content Generation
 
@@ -320,6 +368,118 @@ Two more pipeline stages, both optional ports:
 
 Pipeline order is now **process → generate → review → approve → publish → record memory**. The worker always runs review and enables the approval gate from config. Tested: review pass/fail split, held-not-published-nor-recorded, approved-publishes.
 
-**Still future (not blocking the slice).** OpenClaw-based deeper analysis and a
-remote publish destination (currently local files). The MVP slice — and every
-documented pipeline stage — is now implemented end to end.
+### Notifications ✅
+
+`internal/notify` delivers run outcomes (`published` / `held` / `failed`). The
+worker notifies after each run: failure (message retained for SQS retry), held
+(approval pending), or published. Channels behind the `Notifier` port:
+`LogNotifier` (always on) and `WebhookNotifier` — a Slack-compatible (`text` +
+structured fields) HTTP POST, retried on transient failure, enabled by setting
+`NOTIFY_WEBHOOK_URL`. `Multi` fans out to both. Email is future.
+
+**Functional MVP complete.** Every documented functional requirement and
+pipeline stage now has real, tested code.
+
+Publishing destinations behind the `Publisher` port: `FilePublisher` (default,
+to `/data` on the EBS volume) and `S3Publisher` — set `OUTPUT_S3_BUCKET` to
+publish to `s3://<bucket>/<prefix>/<owner>/<name>/<date>/<kind>.md` instead. The
+compute stack grants the instance `s3:PutObject` on that bucket only when
+`OutputS3Bucket` is set.
+
+**Approvals dashboard.** When `REQUIRE_HUMAN_APPROVAL` holds content under
+`PENDING_DIR`, the `approve` CLI (`cmd/approve`, built with the worker) is the
+review queue: `approve` lists pending packages, `approve -all` auto-approves
+(publishes) everything to the live destination and clears the queue, and
+`approve -reject-all` discards. `internal/approval.PendingStore` is unit-tested.
+
+Notification channels: `LogNotifier` (always on), `WebhookNotifier`
+(Slack/webhook, `NOTIFY_WEBHOOK_URL`), and `EmailNotifier` over **SMTP (Turbo
+SMTP)**, enabled by `NOTIFY_EMAIL_FROM` + `NOTIFY_EMAIL_TO` plus `SMTP_USERNAME`
++ `SMTP_PASSWORD` (host/port default to `pro.turbo-smtp.com:587`, STARTTLS);
+`Multi` fans out to all configured channels. `SMTPClient` supports STARTTLS
+(587) and implicit TLS (465), authenticates with PLAIN over an encrypted
+connection, and guards against header injection. Because delivery is outbound
+SMTP, **no AWS mail IAM is required** — the instance just needs egress on
+587/465, and the SMTP password supplied at runtime (env, or Secrets Manager at
+deploy time).
+
+### Worker runtime service ✅
+
+The compute stack installs the worker as a **systemd service**
+(`blog-gen-worker`) on the instance: `deploy.yml` builds the linux/amd64 binary
+and uploads it to the artifacts bucket (`<sha>/worker`); the instance downloads
+it, writes `/etc/blog-gen/worker.env` (0600) from stack parameters plus the
+imported `QueueUrl`/table, and runs it with `Restart=always`. Email credentials
+follow the no-plaintext principle: the stack creates a `NotificationsSecret`
+(`${ProjectName}/notifications/smtp-password`) whose value the operator sets
+out-of-band with `put-secret-value`; the worker resolves it via
+`SMTP_PASSWORD_SECRET` at startup (`secrets.Store.Value`), so the password never
+touches env files, CloudFormation parameters, or stack history. The instance
+role grants `secretsmanager:GetSecretValue` on that secret and `s3:GetObject` on
+the artifacts bucket.
+
+### Ollama model serving ✅
+
+The compute UserData now provisions **Ollama** — the local inference the worker
+calls — completing the on-instance pipeline. When `EnableGpu=true` (default) it
+installs the NVIDIA driver + container toolkit and runs the `ollama/ollama`
+container with `--gpus all`; if the GPU start fails it falls back to CPU, and
+`EnableGpu=false` forces CPU (useful for testing on a non-GPU instance). Models
+are pulled once (`OllamaModel`, default `qwen2.5:7b`) and **persist on the gp3
+volume** (`/data/ollama`), so they survive Spot stop/start; the API binds to
+`127.0.0.1:11434` only. The worker unit gains an `ExecStartPre` readiness wait so
+it does not start generating before Ollama answers. This makes the full path —
+webhook → SQS → worker → Ollama → review → publish/notify — deployable on one
+instance. (n8n as an alternative orchestrator remains optional/future.)
+
+### Spot startup optimization (custom AMI) ✅
+
+Startup is on the critical path (the instance is stopped when idle), so the
+slow, network-heavy setup — NVIDIA driver, Docker, the Ollama image, and the
+~4.7 GB model — is **pre-baked into a custom AMI** instead of run every launch.
+One canonical script, [`scripts/ami/provision.sh`](../scripts/ami/provision.sh),
+is both baked by Packer ([`packer/blog-gen.pkr.hcl`](../packer/blog-gen.pkr.hcl),
+via `scripts/build-ami.sh`) and run at boot as the stock-AMI fallback, so the two
+never drift. The model is baked as a seed and **copied** to `/data` at first boot
+(no download). UserData shrank to runtime-only work (mount, seed, write env,
+fetch the small worker binary, start services). Ollama and the worker are now
+**systemd units** (`blog-gen-ollama`, `blog-gen-worker`) that auto-start on every
+boot; `start-ollama.sh` detects the GPU at runtime (one AMI runs GPU or CPU), the
+worker's `ExecStartPre` waits for the model, and `health.sh` gates readiness. The
+compute stack gained `CustomAmi` (fast path) and `AmiScriptsKey` (fallback)
+parameters; `deploy.yml` uploads `provision.sh` and passes `CUSTOM_AMI`. Result:
+time-to-ready drops from ~10–15 min to well under a minute, with no change to the
+cost model. See README → **Optimizing Spot Instance Startup** and
+[docs/ami.md](./ami.md).
+
+**Trigger sources.** Registration subscribes the webhook to `push` and
+`release`. The handler branches by event type: a `push` is commit-message gated
+(default `blog:` or the per-repo pattern); a **published `release`** always
+triggers (a release is itself an intentional event) with the tag as the memory
+dedup key. Git tags and PR labels remain future.
+
+### Architecture diagrams ✅
+
+`internal/archdiagram` turns a `processing.Snapshot` into evidence-grounded AWS
+architecture diagrams (Mermaid) that embed straight into the blog. It is
+**deterministic** — no LLM guessing — which directly serves the module's primary
+principle (repository evidence over assumption): every service carries the file +
+token that produced it, and the Mermaid is valid **by construction** (built as a
+`Graph` model, then `Validate`d for dangling edges / orphans / dup ids before
+render). Detection scans the working copy for Terraform (`aws_*`),
+CloudFormation (`AWS::*`), AWS SDK client packages, dependency hints
+(Postgres → RDS, Redis → ElastiCache, Medium), and docker-compose/K8s manifests;
+it maps LLM usage to **OpenClaw on EC2, never Bedrock**, and defaults compute to
+EC2 (Spot) only as explicit deployment context. Confidence is High / Medium /
+Low; only High + Medium reach the primary diagram (omission over speculation).
+It emits up to six diagrams — AWS Solution (primary), Component, Data Flow,
+Deployment, CI/CD (if CI/CD), AI Workflow (if AI) — plus a confidence report and
+an evidence report. Wired into the pipeline as the optional `Diagrammer` seam
+(after generation, before review), so the diagram asset flows through review,
+approval, publishing, and memory like any other. The worker enables it by
+default; a diagram failure never fails the run.
+
+**Still future (roadmap, not blocking the MVP).** OpenClaw-based deeper
+analysis; Git-tag / PR-label trigger sources; GitHub Apps auth; a **web**
+approvals UI; and the n8n workflow as an alternative orchestration. Real
+deployment + end-to-end validation require an AWS account and a GPU instance.

@@ -10,10 +10,18 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 )
+
+// DefaultMaxPromptBytes bounds prompt size so a large repository cannot overflow
+// the local model's context window. ~24 KB is a conservative budget (roughly a
+// few thousand tokens).
+const DefaultMaxPromptBytes = 24000
+
+const truncationMarker = "\n\n[context truncated to fit the model budget]\n"
 
 // Model is the local-inference port. *ollama.Client satisfies it.
 type Model interface {
@@ -29,6 +37,10 @@ const (
 	KindDocs         Kind = "documentation"
 	KindArchitecture Kind = "architecture-summary"
 	KindReleaseNotes Kind = "release-notes"
+	// KindArchitectureDiagram is produced deterministically by the archdiagram
+	// package (evidence-grounded AWS diagrams), not by the LLM generator, so it
+	// has no prompt spec here.
+	KindArchitectureDiagram Kind = "architecture-diagram"
 )
 
 // Content is a generated asset (Markdown).
@@ -39,22 +51,50 @@ type Content struct {
 
 // Generator produces content from a Snapshot via the local model.
 type Generator struct {
-	Model  Model
-	Logger *slog.Logger
+	Model Model
+	// MaxPromptBytes bounds each prompt; <= 0 uses DefaultMaxPromptBytes.
+	MaxPromptBytes int
+	Logger         *slog.Logger
 }
 
-// promptBuilders maps each output kind to its (pure) prompt builder.
-var promptBuilders = map[Kind]func(processing.Snapshot) string{
-	KindBlog:         buildBlogPrompt,
-	KindReadme:       buildReadmePrompt,
-	KindDocs:         buildDocsPrompt,
-	KindArchitecture: buildArchitecturePrompt,
-	KindReleaseNotes: buildReleaseNotesPrompt,
+// promptSpec holds the varying parts of a prompt for a content kind.
+type promptSpec struct {
+	role        string
+	instruction string
+	closing     string
+}
+
+var promptSpecs = map[Kind]promptSpec{
+	KindBlog: {
+		role:        "You are a senior software engineer writing a technical blog post.",
+		instruction: "Write a clear, accurate, publication-ready blog post in GitHub-flavoured Markdown about the repository below. Use only the provided material; do not invent facts.",
+		closing:     "Produce only the Markdown blog post, starting with a top-level title.",
+	},
+	KindReadme: {
+		role:        "You are an experienced open-source maintainer improving a project's README.",
+		instruction: "Suggest concrete improvements to the repository's README as GitHub-flavoured Markdown. Base every suggestion on the provided material.",
+		closing:     "Produce a Markdown document of prioritised, actionable README improvements.",
+	},
+	KindDocs: {
+		role:        "You are a technical writer producing project documentation.",
+		instruction: "Write clear project documentation in GitHub-flavoured Markdown from the provided material. Do not invent features.",
+		closing:     "Produce a Markdown documentation page.",
+	},
+	KindArchitecture: {
+		role:        "You are a software architect summarising a system.",
+		instruction: "Write a concise architecture summary in GitHub-flavoured Markdown from the provided material, covering components and how they fit together.",
+		closing:     "Produce a Markdown architecture summary.",
+	},
+	KindReleaseNotes: {
+		role:        "You are preparing release notes for a software project.",
+		instruction: "Write release notes in GitHub-flavoured Markdown based on the recent commits and repository material below. Group related changes.",
+		closing:     "Produce Markdown release notes.",
+	},
 }
 
 // Generate produces a single content asset of the given kind.
 func (g *Generator) Generate(ctx context.Context, kind Kind, snap processing.Snapshot) (Content, error) {
-	build, ok := promptBuilders[kind]
+	spec, ok := promptSpecs[kind]
 	if !ok {
 		return Content{}, apperror.New(apperror.CodeInvalidInput, fmt.Sprintf("unknown content kind %q", kind))
 	}
@@ -62,7 +102,7 @@ func (g *Generator) Generate(ctx context.Context, kind Kind, snap processing.Sna
 		return Content{}, apperror.New(apperror.CodeInvalidInput, "snapshot is missing a repository")
 	}
 
-	out, err := g.Model.Generate(ctx, build(snap))
+	out, err := g.Model.Generate(ctx, g.buildPrompt(spec, snap))
 	if err != nil {
 		return Content{}, fmt.Errorf("generate %s: %w", kind, err)
 	}
@@ -100,66 +140,40 @@ func (g *Generator) GenerateAll(ctx context.Context, snap processing.Snapshot, k
 	return out, nil
 }
 
-// --- prompt builders (pure, unit-tested) ---
+// buildPrompt assembles a deterministic prompt (role, instruction, repository
+// context, closing) and enforces the prompt-size budget by truncating only the
+// repository context — the instructions and closing directive are preserved.
+func (g *Generator) buildPrompt(spec promptSpec, snap processing.Snapshot) string {
+	max := g.MaxPromptBytes
+	if max <= 0 {
+		max = DefaultMaxPromptBytes
+	}
+	head := spec.role + "\n" + spec.instruction + "\n\n"
+	tail := "\n" + spec.closing + "\n"
 
-func buildBlogPrompt(snap processing.Snapshot) string {
-	return promptWith(
-		"You are a senior software engineer writing a technical blog post.",
-		"Write a clear, accurate, publication-ready blog post in GitHub-flavoured Markdown about the repository below. Use only the provided material; do not invent facts.",
-		snap,
-		"Produce only the Markdown blog post, starting with a top-level title.",
-	)
+	body := repoContext(snap)
+	budget := max - len(head) - len(tail)
+	if budget < len(truncationMarker) {
+		budget = len(truncationMarker) // never negative; degrade gracefully
+	}
+	if len(body) > budget {
+		body = safeTruncate(body, budget-len(truncationMarker)) + truncationMarker
+	}
+	return head + body + tail
 }
 
-func buildReadmePrompt(snap processing.Snapshot) string {
-	return promptWith(
-		"You are an experienced open-source maintainer improving a project's README.",
-		"Suggest concrete improvements to the repository's README as GitHub-flavoured Markdown. Base every suggestion on the provided material.",
-		snap,
-		"Produce a Markdown document of prioritised, actionable README improvements.",
-	)
-}
-
-func buildDocsPrompt(snap processing.Snapshot) string {
-	return promptWith(
-		"You are a technical writer producing project documentation.",
-		"Write clear project documentation in GitHub-flavoured Markdown from the provided material. Do not invent features.",
-		snap,
-		"Produce a Markdown documentation page.",
-	)
-}
-
-func buildArchitecturePrompt(snap processing.Snapshot) string {
-	return promptWith(
-		"You are a software architect summarising a system.",
-		"Write a concise architecture summary in GitHub-flavoured Markdown from the provided material, covering components and how they fit together.",
-		snap,
-		"Produce a Markdown architecture summary.",
-	)
-}
-
-func buildReleaseNotesPrompt(snap processing.Snapshot) string {
-	return promptWith(
-		"You are preparing release notes for a software project.",
-		"Write release notes in GitHub-flavoured Markdown based on the recent commits and repository material below. Group related changes.",
-		snap,
-		"Produce Markdown release notes.",
-	)
-}
-
-// promptWith assembles a deterministic prompt: a role, an instruction, the
-// shared repository context, and a closing directive.
-func promptWith(role, instruction string, snap processing.Snapshot, closing string) string {
-	var b strings.Builder
-	b.WriteString(role)
-	b.WriteString("\n")
-	b.WriteString(instruction)
-	b.WriteString("\n\n")
-	b.WriteString(repoContext(snap))
-	b.WriteString("\n")
-	b.WriteString(closing)
-	b.WriteString("\n")
-	return b.String()
+// safeTruncate cuts s to at most max bytes without splitting a UTF-8 rune.
+func safeTruncate(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if len(s) <= max {
+		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
+	}
+	return s[:max]
 }
 
 // repoContext renders the snapshot material shared by every prompt.
@@ -168,6 +182,10 @@ func repoContext(snap processing.Snapshot) string {
 	fmt.Fprintf(&b, "Repository: %s\n", snap.RepoFullName)
 	if snap.Ref != "" {
 		fmt.Fprintf(&b, "Ref: %s\n", snap.Ref)
+	}
+	if tp := techProfile(snap.Analysis); tp != "" {
+		b.WriteString("\n## Technical profile\n")
+		b.WriteString(tp)
 	}
 	if strings.TrimSpace(snap.Readme) != "" {
 		b.WriteString("\n## README\n")
@@ -186,6 +204,23 @@ func repoContext(snap processing.Snapshot) string {
 			fmt.Fprintf(&b, "- %s %s\n", shortSHA(c.SHA), firstLine(c.Message))
 		}
 	}
+	return b.String()
+}
+
+// techProfile renders the detected analysis as Markdown bullet lines (empty
+// when nothing was detected).
+func techProfile(a processing.Analysis) string {
+	var b strings.Builder
+	line := func(label string, vals []string) {
+		if len(vals) > 0 {
+			fmt.Fprintf(&b, "- %s: %s\n", label, strings.Join(vals, ", "))
+		}
+	}
+	line("Languages", a.Languages)
+	line("Package managers", a.PackageManagers)
+	line("Infrastructure as Code", a.IaC)
+	line("Containers", a.Containers)
+	line("CI/CD", a.CICD)
 	return b.String()
 }
 

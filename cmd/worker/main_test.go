@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/notify"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
 )
 
@@ -25,22 +26,45 @@ func (f *fakeConsumer) Delete(_ context.Context, receiptHandle string) error {
 
 type fakeRunner struct {
 	ran []pipeline.Request
+	res pipeline.Result
 	err error
 }
 
 func (f *fakeRunner) Run(_ context.Context, req pipeline.Request) (pipeline.Result, error) {
 	f.ran = append(f.ran, req)
-	return pipeline.Result{RepoFullName: req.RepoFullName}, f.err
+	res := f.res
+	res.RepoFullName = req.RepoFullName
+	return res, f.err
+}
+
+type fakeNotifier struct{ events []notify.Event }
+
+func (f *fakeNotifier) Notify(_ context.Context, e notify.Event) error {
+	f.events = append(f.events, e)
+	return nil
+}
+
+type fakeMeter struct{ counts map[string]float64 }
+
+func (f *fakeMeter) Count(name string)             { f.add(name, 1) }
+func (f *fakeMeter) CountN(name string, n float64) { f.add(name, n) }
+func (f *fakeMeter) add(name string, n float64) {
+	if f.counts == nil {
+		f.counts = map[string]float64{}
+	}
+	f.counts[name] += n
 }
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
 
 func msg(body string) awssqs.Message { return awssqs.Message{Body: body, ReceiptHandle: "rh"} }
 
-func TestHandleMessageDeletesOnSuccess(t *testing.T) {
+func TestHandleMessageDeletesAndNotifiesOnSuccess(t *testing.T) {
 	q := &fakeConsumer{}
-	r := &fakeRunner{}
-	handleMessage(context.Background(), discardLogger(), q, r,
+	r := &fakeRunner{res: pipeline.Result{Published: 5}}
+	n := &fakeNotifier{}
+	mt := &fakeMeter{}
+	handleMessage(context.Background(), discardLogger(), q, r, n, mt,
 		msg(`{"detail":{"repo_full_name":"acme/widget","ref":"refs/heads/main"}}`))
 
 	if len(r.ran) != 1 || r.ran[0].RepoFullName != "acme/widget" || r.ran[0].Ref != "refs/heads/main" {
@@ -49,26 +73,55 @@ func TestHandleMessageDeletesOnSuccess(t *testing.T) {
 	if len(q.deleted) != 1 {
 		t.Errorf("message should be deleted on success, deleted=%v", q.deleted)
 	}
+	if len(n.events) != 1 || n.events[0].Status != notify.StatusPublished || n.events[0].Assets != 5 {
+		t.Errorf("expected published notification: %+v", n.events)
+	}
+	if mt.counts["RunsStarted"] != 1 || mt.counts["RunsSucceeded"] != 1 || mt.counts["AssetsGenerated"] != 5 {
+		t.Errorf("metrics = %v", mt.counts)
+	}
 }
 
-func TestHandleMessageRetainsOnRunError(t *testing.T) {
+func TestHandleMessageNotifiesHeld(t *testing.T) {
+	q := &fakeConsumer{}
+	r := &fakeRunner{res: pipeline.Result{Held: true}}
+	n := &fakeNotifier{}
+	mt := &fakeMeter{}
+	handleMessage(context.Background(), discardLogger(), q, r, n, mt,
+		msg(`{"detail":{"repo_full_name":"acme/widget"}}`))
+	if len(q.deleted) != 1 {
+		t.Error("held run is a terminal outcome; message should be deleted")
+	}
+	if len(n.events) != 1 || n.events[0].Status != notify.StatusHeld {
+		t.Errorf("expected held notification: %+v", n.events)
+	}
+	if mt.counts["RunsHeld"] != 1 || mt.counts["RunsSucceeded"] != 0 {
+		t.Errorf("metrics = %v", mt.counts)
+	}
+}
+
+func TestHandleMessageRetainsAndNotifiesOnRunError(t *testing.T) {
 	q := &fakeConsumer{}
 	r := &fakeRunner{err: errors.New("ollama down")}
-	handleMessage(context.Background(), discardLogger(), q, r,
+	n := &fakeNotifier{}
+	mt := &fakeMeter{}
+	handleMessage(context.Background(), discardLogger(), q, r, n, mt,
 		msg(`{"detail":{"repo_full_name":"acme/widget"}}`))
 
-	if len(r.ran) != 1 {
-		t.Errorf("runner should have been called")
-	}
 	if len(q.deleted) != 0 {
 		t.Errorf("message must NOT be deleted on failure (SQS retry), deleted=%v", q.deleted)
+	}
+	if len(n.events) != 1 || n.events[0].Status != notify.StatusFailed || n.events[0].Err == "" {
+		t.Errorf("expected failed notification: %+v", n.events)
+	}
+	if mt.counts["RunsFailed"] != 1 {
+		t.Errorf("metrics = %v", mt.counts)
 	}
 }
 
 func TestHandleMessageDropsUnparseable(t *testing.T) {
 	q := &fakeConsumer{}
 	r := &fakeRunner{}
-	handleMessage(context.Background(), discardLogger(), q, r, msg(`not json`))
+	handleMessage(context.Background(), discardLogger(), q, r, &fakeNotifier{}, &fakeMeter{}, msg(`not json`))
 	if len(r.ran) != 0 {
 		t.Error("runner should not run for an unparseable message")
 	}
@@ -80,7 +133,7 @@ func TestHandleMessageDropsUnparseable(t *testing.T) {
 func TestHandleMessageDropsEmptyDetail(t *testing.T) {
 	q := &fakeConsumer{}
 	r := &fakeRunner{}
-	handleMessage(context.Background(), discardLogger(), q, r, msg(`{"detail":{}}`))
+	handleMessage(context.Background(), discardLogger(), q, r, &fakeNotifier{}, &fakeMeter{}, msg(`{"detail":{}}`))
 	if len(r.ran) != 0 || len(q.deleted) != 1 {
 		t.Errorf("empty-detail message should be dropped without running: ran=%d deleted=%d", len(r.ran), len(q.deleted))
 	}

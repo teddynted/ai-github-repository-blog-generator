@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# commit-msg — validate the message against Conventional Commits.
+# Git passes the path to the message file as $1.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+exec "$root/scripts/hooks/validate-commit.sh" "$1"

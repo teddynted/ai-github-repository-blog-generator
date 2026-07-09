@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"log"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -19,6 +20,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/eventbus"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
 )
@@ -42,6 +44,7 @@ func main() {
 		Repos:          metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable),
 		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix),
 		Publisher:      eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
+		Metrics:        metrics.New(metrics.Namespace, os.Stdout),
 		DefaultTrigger: a.Config.PublishTrigger,
 		Logger:         a.Logger,
 	}

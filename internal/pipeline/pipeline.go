@@ -49,6 +49,13 @@ type Approver interface {
 	Approve(ctx context.Context, repoFullName string, assets []generation.Content) (approved bool, err error)
 }
 
+// Diagrammer produces an evidence-grounded architecture-diagram asset from the
+// snapshot. It returns ok=false when nothing worth drawing was detected.
+// archdiagram.Diagrammer satisfies it. Optional.
+type Diagrammer interface {
+	Diagram(ctx context.Context, snap processing.Snapshot) (asset generation.Content, ok bool, err error)
+}
+
 // Request is a single pipeline run (typically derived from a matched event).
 type Request struct {
 	RepoFullName string
@@ -66,14 +73,15 @@ type Result struct {
 
 // Pipeline runs process → generate → review → approve → publish.
 type Pipeline struct {
-	Processor Snapshotter
-	Generator ContentGenerator
-	Publisher Publisher
-	Memory    Memory            // optional; de-duplicates already-published commits
-	Reviewer  Reviewer          // optional; quality review before publishing
-	Approver  Approver          // optional; human-approval gate before publishing
-	Kinds     []generation.Kind // defaults to blog when empty
-	Logger    *slog.Logger
+	Processor  Snapshotter
+	Generator  ContentGenerator
+	Publisher  Publisher
+	Memory     Memory            // optional; de-duplicates already-published commits
+	Reviewer   Reviewer          // optional; quality review before publishing
+	Approver   Approver          // optional; human-approval gate before publishing
+	Diagrammer Diagrammer        // optional; appends an AWS architecture-diagram asset
+	Kinds      []generation.Kind // defaults to blog when empty
+	Logger     *slog.Logger
 }
 
 // Run executes the pipeline. Generation is resilient: if some kinds fail, the
@@ -107,6 +115,16 @@ func (p *Pipeline) Run(ctx context.Context, req Request) (Result, error) {
 	}
 
 	assets, genErr := p.Generator.GenerateAll(ctx, snap, kinds...)
+
+	// Architecture diagrams: deterministic, evidence-grounded, appended as an
+	// extra asset so they flow through review, approval, and publishing too.
+	if p.Diagrammer != nil {
+		if asset, ok, derr := p.Diagrammer.Diagram(ctx, snap); derr != nil {
+			p.logMemoryIssue("diagram generation failed; proceeding without it", req.RepoFullName, derr)
+		} else if ok {
+			assets = append(assets, asset)
+		}
+	}
 
 	// Quality review: publish only the assets that pass.
 	if p.Reviewer != nil && len(assets) > 0 {

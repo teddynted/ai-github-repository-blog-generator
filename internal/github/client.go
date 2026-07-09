@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/retry"
 )
 
 // DefaultBaseURL is the public GitHub REST API root.
@@ -38,6 +39,7 @@ type WebhookConfig struct {
 type Client struct {
 	baseURL string
 	http    *http.Client
+	retry   retry.Config
 }
 
 // Option configures a Client.
@@ -49,9 +51,13 @@ func WithBaseURL(u string) Option { return func(c *Client) { c.baseURL = strings
 // WithHTTPClient injects a custom *http.Client.
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 
-// New returns a Client with sensible defaults.
+// WithRetry overrides the retry policy (e.g. faster in tests).
+func WithRetry(cfg retry.Config) Option { return func(c *Client) { c.retry = cfg } }
+
+// New returns a Client with sensible defaults. Transient failures (network,
+// unexpected 5xx) are retried; 401/403/404 fail fast.
 func New(opts ...Option) *Client {
-	c := &Client{baseURL: DefaultBaseURL, http: &http.Client{Timeout: 15 * time.Second}}
+	c := &Client{baseURL: DefaultBaseURL, http: &http.Client{Timeout: 15 * time.Second}, retry: retry.Default}
 	for _, o := range opts {
 		o(c)
 	}
@@ -61,16 +67,12 @@ func New(opts ...Option) *Client {
 // GetRepository validates that the PAT can read the repository and returns its
 // core metadata. A 401/403 maps to unauthorized, 404 to not_found.
 func (c *Client) GetRepository(ctx context.Context, owner, name, pat string) (RepoInfo, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/%s", owner, name), pat, nil)
-	if err != nil {
-		return RepoInfo{}, err
-	}
 	var body struct {
 		ID            int64  `json:"id"`
 		FullName      string `json:"full_name"`
 		DefaultBranch string `json:"default_branch"`
 	}
-	if err := c.do(req, http.StatusOK, &body); err != nil {
+	if err := c.exec(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/%s", owner, name), pat, nil, http.StatusOK, &body); err != nil {
 		return RepoInfo{}, err
 	}
 	return RepoInfo{ID: body.ID, FullName: body.FullName, DefaultBranch: body.DefaultBranch}, nil
@@ -91,17 +93,25 @@ func (c *Client) CreateWebhook(ctx context.Context, owner, name, pat string, cfg
 		},
 	}
 	raw, _ := json.Marshal(payload)
-	req, err := c.newRequest(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/%s/hooks", owner, name), pat, raw)
-	if err != nil {
-		return 0, err
-	}
 	var body struct {
 		ID int64 `json:"id"`
 	}
-	if err := c.do(req, http.StatusCreated, &body); err != nil {
+	if err := c.exec(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/%s/hooks", owner, name), pat, raw, http.StatusCreated, &body); err != nil {
 		return 0, err
 	}
 	return body.ID, nil
+}
+
+// exec builds and executes a request, retrying transient failures. The request
+// is rebuilt each attempt so the body reader is fresh.
+func (c *Client) exec(ctx context.Context, method, path, pat string, reqBody []byte, wantStatus int, out any) error {
+	return retry.Do(ctx, c.retry, func() error {
+		req, err := c.newRequest(ctx, method, path, pat, reqBody)
+		if err != nil {
+			return err
+		}
+		return c.do(req, wantStatus, out)
+	})
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path, pat string, body []byte) (*http.Request, error) {

@@ -40,6 +40,9 @@ func initRepo(t *testing.T, dir string) {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +147,51 @@ func TestGitClonerClonesLocalRepo(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "README.md")); err != nil {
 		t.Errorf("cloned working copy missing README: %v", err)
+	}
+}
+
+func TestFSAnalyzer(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module x")
+	writeFile(t, filepath.Join(dir, "web", "app.ts"), "export {}")
+	writeFile(t, filepath.Join(dir, "web", "package.json"), "{}")
+	writeFile(t, filepath.Join(dir, "Dockerfile"), "FROM scratch")
+	writeFile(t, filepath.Join(dir, "infra", "main.tf"), "resource {}")
+	writeFile(t, filepath.Join(dir, "infra", "stack.yaml"), "AWSTemplateFormatVersion: \"2010-09-09\"\nResources: {}")
+	writeFile(t, filepath.Join(dir, ".github", "workflows", "ci.yml"), "on: push")
+	// ignored dir content must not be scanned
+	writeFile(t, filepath.Join(dir, "node_modules", "junk.rb"), "ruby")
+
+	a, err := FSAnalyzer{}.Analyze(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	has := func(list []string, v string) bool {
+		for _, x := range list {
+			if x == v {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(a.Languages, "Go") || !has(a.Languages, "TypeScript") {
+		t.Errorf("languages = %v", a.Languages)
+	}
+	if has(a.Languages, "Ruby") {
+		t.Error("node_modules should be ignored (no Ruby)")
+	}
+	if !has(a.PackageManagers, "Go modules") || !has(a.PackageManagers, "npm/Node") {
+		t.Errorf("package managers = %v", a.PackageManagers)
+	}
+	if !has(a.Containers, "Docker") {
+		t.Errorf("containers = %v", a.Containers)
+	}
+	if !has(a.IaC, "Terraform") || !has(a.IaC, "CloudFormation") {
+		t.Errorf("iac = %v", a.IaC)
+	}
+	if !has(a.CICD, "GitHub Actions") {
+		t.Errorf("cicd = %v", a.CICD)
 	}
 }
 

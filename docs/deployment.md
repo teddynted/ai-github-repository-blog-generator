@@ -15,10 +15,12 @@ Related: [Local Development](./local-development.md) · [Infrastructure](./infra
 | AWS CLI v2 | Configured with credentials (`aws configure` or SSO) |
 | EC2 key pair | For SSH access to the instance |
 | `cfn-lint` | Template linting ([Install](https://github.com/aws-cloudformation/cfn-lint)) |
-| Go ≥ 1.24 | To build the Lambda binaries |
+| Go ≥ 1.25 | To build the Lambda binaries (build toolchain pinned in `go.mod`) |
 | Docker | For local build/testing (optional) |
 
 > **No Amazon Bedrock, OpenAI, or Anthropic access is required.** All inference runs locally via Ollama on the instance.
+>
+> The instance runs Ollama, so choose a **GPU instance type** (e.g. `g4dn.xlarge`) and a Region/AZ with Spot capacity for it.
 
 Verify access:
 
@@ -26,6 +28,33 @@ Verify access:
 aws sts get-caller-identity
 aws ec2 describe-key-pairs --key-names "$KEY_PAIR_NAME"
 ```
+
+---
+
+## First-Time Bootstrap (automated deploy)
+
+Two ways to deploy: **manually** (Sections 3–4 below) or via the **`deploy.yml` GitHub Actions workflow** (recommended for repeatable deploys). Both need a one-time bootstrap that creates the **Lambda artifacts bucket**, and the workflow additionally needs a **GitHub OIDC deploy role**.
+
+Run once, with admin credentials:
+
+```bash
+scripts/bootstrap.sh --region us-east-1 --owner <you> --repo <repo>
+# If the account already has a GitHub OIDC provider:
+#   scripts/bootstrap.sh --no-oidc-provider --existing-oidc-arn <arn>
+```
+
+This deploys [`infrastructure/bootstrap.yaml`](../infrastructure/bootstrap.yaml) (artifacts bucket, OIDC provider, deploy role) and prints the values to set on the repository (**Settings → Secrets and variables → Actions**):
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Secret | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
+| Variable | `ARTIFACTS_BUCKET` | `ArtifactsBucketName` output |
+| Variable | `AWS_REGION` | your Region |
+| Variable | `KEY_PAIR_NAME` | your EC2 key pair |
+| Variable | `OPERATOR_CIDR` | your SSH CIDR (optional) |
+| Variable | `DEPLOY_ENABLED` | `true` |
+
+With those set, merging to `main` runs [`deploy.yml`](./ci-cd.md#enabling-deployyml), which packages the Lambdas and deploys **network → serverless → compute → observability**. For a manual deploy instead, set `ARTIFACTS_BUCKET` locally and follow Sections 3–4.
 
 ---
 
@@ -74,7 +103,13 @@ done
 - `instance-starter` — start the Spot Instance on a matched event.
 - `idle-shutdown` — stop the Spot Instance after the idle timeout.
 
-Upload the ZIPs to a deployment bucket (or reference them inline), depending on your pipeline.
+Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless template's default code keys are `<fn>.zip` at the bucket root:
+
+```bash
+for fn in registration webhook-handler instance-starter idle-shutdown; do
+  aws s3 cp "dist/$fn/$fn.zip" "s3://$ARTIFACTS_BUCKET/$fn.zip"
+done
+```
 
 ---
 
@@ -97,7 +132,10 @@ aws cloudformation deploy \
   --parameter-overrides ArtifactsBucket=$ARTIFACTS_BUCKET PublishTrigger=$PUBLISH_TRIGGER \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 3. Compute layer (EC2 Spot + persistent EBS)
+# 3. Compute layer (EC2 Spot + persistent EBS + worker service)
+#    Build & upload the worker binary first (linux/amd64):
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
+aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/worker"
 aws cloudformation deploy \
   --template-file infrastructure/compute.yaml \
   --stack-name blog-gen-compute \
@@ -107,7 +145,11 @@ aws cloudformation deploy \
       KeyPairName=$KEY_PAIR_NAME \
       OllamaModel=$OLLAMA_MODEL \
       EbsVolumeSizeGb=$EBS_VOLUME_SIZE_GB \
-      IdleTimeoutMinutes=$IDLE_TIMEOUT_MINUTES \
+      ArtifactsBucket=$ARTIFACTS_BUCKET \
+      WorkerCodeKey=worker \
+      NotifyEmailFrom=$NOTIFY_EMAIL_FROM \
+      NotifyEmailTo=$NOTIFY_EMAIL_TO \
+      SmtpUsername=$SMTP_USERNAME \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 4. Observability layer
@@ -116,6 +158,24 @@ aws cloudformation deploy \
   --stack-name blog-gen-observability \
   --capabilities CAPABILITY_NAMED_IAM
 ```
+
+Set the SMTP password (email notifications). The compute stack creates the
+secret container; the value is set out-of-band so it never appears in the
+template or parameter history:
+
+```bash
+# The stack exports the secret ARN as an output:
+SMTP_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+  --query "Stacks[0].Outputs[?OutputKey=='NotificationsSecretArn'].OutputValue" --output text)
+
+aws secretsmanager put-secret-value \
+  --secret-id "$SMTP_SECRET_ARN" \
+  --secret-string 'YOUR_TURBO_SMTP_PASSWORD'
+```
+
+The worker reads it at startup via `SMTP_PASSWORD_SECRET`; restart the service
+(or the instance) to pick up a changed value: `sudo systemctl restart blog-gen-worker`.
+Email is optional — leave `NotifyEmail*`/`SmtpUsername` unset to disable it.
 
 Retrieve the webhook URL:
 
@@ -156,6 +216,9 @@ REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serv
 curl -sS -X POST "$REGISTRATION_URL" \
   -H "Content-Type: application/json" \
   -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
+
+# Optional: a custom per-repo trigger (literal prefix or "regex:"):
+#   -d '{"repository_url":"...","pat":"...","trigger_pattern":"regex:^(blog|post):"}'
 ```
 
 On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with a generated secret, stores the PAT + webhook secret in Secrets Manager, and writes metadata (including the secret reference and default trigger pattern `blog:`) to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
@@ -164,7 +227,7 @@ On success the platform validates access + token permissions, creates the webhoo
 
 ### Manual webhook setup (fallback)
 
-If you prefer to create the webhook yourself: **Settings → Webhooks → Add webhook** → Payload URL = `WebhookUrl`, Content type = `application/json`, Secret = the repository's webhook secret, Events = **Just the push event**.
+If you prefer to create the webhook yourself: **Settings → Webhooks → Add webhook** → Payload URL = `WebhookUrl`, Content type = `application/json`, Secret = the repository's webhook secret, Events = **push** and **release** (registration subscribes to both automatically).
 
 ---
 
@@ -189,6 +252,16 @@ aws dynamodb describe-table --table-name blog-gen-repositories --query 'Table.Ta
 # EC2 instance is registered (likely 'stopped' until a webhook arrives)
 aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
   --query 'Reservations[0].Instances[0].State.Name'
+```
+
+On the instance (via SSH), confirm Ollama and the worker are up:
+
+```bash
+docker ps --filter name=ollama            # ollama/ollama container running
+curl -s http://127.0.0.1:11434/api/tags   # lists the pulled model(s)
+nvidia-smi                                # GPU visible (when EnableGpu=true)
+systemctl status blog-gen-worker          # active (running)
+journalctl -u blog-gen-worker -n 50       # recent worker logs
 ```
 
 **Smoke test:** verify both paths of the trigger gate.

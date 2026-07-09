@@ -1,0 +1,5 @@
+# act configuration — pins the runner image so every contributor's local run
+# matches CI as closely as practical. This is the "medium" image recommended by
+# act: it includes the Go toolchain, git, and common tools without being huge.
+# Override per-run with `act -P ubuntu-latest=<image>` if needed.
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
