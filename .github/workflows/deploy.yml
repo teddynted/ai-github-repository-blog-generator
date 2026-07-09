@@ -9,7 +9,7 @@ name: deploy
 #   var    AWS_REGION           - e.g. us-east-1
 #   (ARTIFACTS_BUCKET is derived automatically as blog-gen-artifacts-<account>-<region>,
 #    matching bootstrap.yaml — no variable needed.)
-#   var    KEY_PAIR_NAME        - EC2 key pair for the instance
+#   var    KEY_PAIR_NAME        - (optional) EC2 key pair for SSH; omit for no key pair
 #   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
 #   var    CUSTOM_AMI           - (optional) pin a specific pre-baked AMI id. Normally
@@ -134,7 +134,9 @@ jobs:
           # Fast baked-AMI boot: use the CUSTOM_AMI variable if set, else the AMI
           # id that build-ami.yml published to SSM. Unset/absent → stock-AMI
           # fallback (provision.sh at boot). Fully automatic — no manual step.
-          PARAMS="KeyPairName=${{ vars.KEY_PAIR_NAME }} ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
+          PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
+          # KEY_PAIR_NAME is optional — omit it to launch with no SSH key pair.
+          [ -n "${{ vars.KEY_PAIR_NAME }}" ] && PARAMS="$PARAMS KeyPairName=${{ vars.KEY_PAIR_NAME }}"
           if [ -z "$CUSTOM_AMI" ]; then
             CUSTOM_AMI=$(aws ssm get-parameter --name /blog-gen/worker-ami \
               --query Parameter.Value --output text 2>/dev/null || echo "")
