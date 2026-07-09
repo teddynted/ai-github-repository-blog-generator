@@ -25,6 +25,10 @@ This deploys `blog-gen-bootstrap` (artifacts bucket + GitHub OIDC provider +
 least-privilege deploy role, **including the Secrets Manager permissions the
 compute stack needs**) and prints the exact GitHub values to set next.
 
+An account may have only one OIDC provider for `token.actions.githubusercontent.com`;
+the script **auto-detects an existing one and reuses it**, so you don't need
+`--existing-oidc-arn` (it stays available as an override).
+
 > Already bootstrapped before the SMTP work landed? Re-run this — the deploy role
 > gained `secretsmanager` permissions it now needs.
 

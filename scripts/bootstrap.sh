@@ -11,8 +11,12 @@
 #     [--owner teddynted] [--repo ai-github-repository-blog-generator] \
 #     [--no-oidc-provider] [--existing-oidc-arn ARN]
 #
+# An account may have only ONE OIDC provider for token.actions.githubusercontent.com.
+# This script auto-detects an existing one and reuses it, so you normally don't
+# need --existing-oidc-arn; the flags remain for overrides.
+#
 # Requires: AWS CLI v2, credentials with permission to create the bootstrap
-# resources (IAM role, OIDC provider, S3 bucket).
+# resources (IAM role, OIDC provider, S3 bucket) and iam:ListOpenIDConnectProviders.
 
 set -euo pipefail
 
@@ -39,6 +43,32 @@ done
 
 STACK_NAME="${PROJECT}-bootstrap"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Resolve the GitHub OIDC provider. Only one per account is allowed, so if one
+# already exists we must reuse it rather than fail creating a duplicate (the
+# cause of "Not authorized to perform sts:AssumeRoleWithWebIdentity" when the
+# role ends up trusting a non-existent/empty provider). An explicit
+# --existing-oidc-arn is respected as-is.
+if [ -z "$EXISTING_OIDC_ARN" ]; then
+  DETECTED="$(aws iam list-open-id-connect-providers \
+    --query "OpenIDConnectProviderList[?contains(Arn, 'token.actions.githubusercontent.com')].Arn | [0]" \
+    --output text 2>/dev/null || true)"
+  if [ -n "$DETECTED" ] && [ "$DETECTED" != "None" ]; then
+    echo "Detected existing GitHub OIDC provider; reusing it:"
+    echo "  $DETECTED"
+    EXISTING_OIDC_ARN="$DETECTED"
+    CREATE_OIDC="false"
+  fi
+fi
+
+# Guard: not creating and no ARN would leave the trust policy pointing at an
+# empty provider, and every role assumption would fail.
+if [ "$CREATE_OIDC" = "false" ] && [ -z "$EXISTING_OIDC_ARN" ]; then
+  echo "error: no GitHub OIDC provider was found or supplied." >&2
+  echo "Re-run allowing creation (drop --no-oidc-provider), or pass" >&2
+  echo "--existing-oidc-arn <arn>." >&2
+  exit 1
+fi
 
 echo "Deploying ${STACK_NAME} in ${REGION} (create OIDC provider: ${CREATE_OIDC})..."
 aws cloudformation deploy \
