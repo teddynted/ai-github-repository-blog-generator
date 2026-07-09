@@ -26,6 +26,9 @@ const (
 	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
+	// Turbo SMTP defaults for email notifications. Port 587 uses STARTTLS.
+	DefaultSMTPHost = "pro.turbo-smtp.com"
+	DefaultSMTPPort = 587
 )
 
 // Config holds the runtime configuration shared across the platform's
@@ -84,10 +87,18 @@ type Config struct {
 	// NotifyWebhookURL is an optional Slack/webhook URL for notifications
 	// (NOTIFY_WEBHOOK_URL). When blank, notifications are logged only.
 	NotifyWebhookURL string
-	// NotifyEmailFrom / NotifyEmailTo enable SES email notifications when both
-	// are set (NOTIFY_EMAIL_FROM, NOTIFY_EMAIL_TO — comma-separated recipients).
+	// NotifyEmailFrom / NotifyEmailTo enable email notifications when both are
+	// set (NOTIFY_EMAIL_FROM, NOTIFY_EMAIL_TO — comma-separated recipients).
+	// Delivery is over SMTP (Turbo SMTP), configured by the SMTP* fields below.
 	NotifyEmailFrom string
 	NotifyEmailTo   string
+	// SMTP* configure the SMTP relay used for email notifications (Turbo SMTP by
+	// default). SMTPUsername + SMTPPassword are required to actually send; the
+	// password is a credential (SMTP_PASSWORD) — keep it out of source control.
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
 	// RequireHumanApproval gates publishing behind a manual approval
 	// (REQUIRE_HUMAN_APPROVAL).
 	RequireHumanApproval bool
@@ -128,6 +139,10 @@ func Load(getenv Getenv) (Config, error) {
 		NotifyWebhookURL:     getenv("NOTIFY_WEBHOOK_URL"),
 		NotifyEmailFrom:      getenv("NOTIFY_EMAIL_FROM"),
 		NotifyEmailTo:        getenv("NOTIFY_EMAIL_TO"),
+		SMTPHost:             firstNonEmpty(getenv("SMTP_HOST"), DefaultSMTPHost),
+		SMTPPort:             DefaultSMTPPort,
+		SMTPUsername:         getenv("SMTP_USERNAME"),
+		SMTPPassword:         getenv("SMTP_PASSWORD"),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
 		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,
@@ -142,6 +157,17 @@ func Load(getenv Getenv) (Config, error) {
 			return Config{}, fmt.Errorf("config: IDLE_TIMEOUT_MINUTES must be positive, got %d", v)
 		}
 		cfg.IdleTimeoutMinutes = v
+	}
+
+	if raw := getenv("SMTP_PORT"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: SMTP_PORT %q is not an integer: %w", raw, err)
+		}
+		if v <= 0 || v > 65535 {
+			return Config{}, fmt.Errorf("config: SMTP_PORT must be 1-65535, got %d", v)
+		}
+		cfg.SMTPPort = v
 	}
 
 	if raw := getenv("REQUIRE_HUMAN_APPROVAL"); raw != "" {

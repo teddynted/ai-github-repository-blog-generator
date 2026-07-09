@@ -393,10 +393,15 @@ review queue: `approve` lists pending packages, `approve -all` auto-approves
 `approve -reject-all` discards. `internal/approval.PendingStore` is unit-tested.
 
 Notification channels: `LogNotifier` (always on), `WebhookNotifier`
-(Slack/webhook, `NOTIFY_WEBHOOK_URL`), and `EmailNotifier` (SES, enabled by
-`NOTIFY_EMAIL_FROM` + `NOTIFY_EMAIL_TO`); `Multi` fans out to all configured
-channels. The compute stack grants `ses:SendEmail` only when `EnableEmailNotify`
-is set.
+(Slack/webhook, `NOTIFY_WEBHOOK_URL`), and `EmailNotifier` over **SMTP (Turbo
+SMTP)**, enabled by `NOTIFY_EMAIL_FROM` + `NOTIFY_EMAIL_TO` plus `SMTP_USERNAME`
++ `SMTP_PASSWORD` (host/port default to `pro.turbo-smtp.com:587`, STARTTLS);
+`Multi` fans out to all configured channels. `SMTPClient` supports STARTTLS
+(587) and implicit TLS (465), authenticates with PLAIN over an encrypted
+connection, and guards against header injection. Because delivery is outbound
+SMTP, **no AWS mail IAM is required** — the instance just needs egress on
+587/465, and the SMTP password supplied at runtime (env, or Secrets Manager at
+deploy time).
 
 **Trigger sources.** Registration subscribes the webhook to `push` and
 `release`. The handler branches by event type: a `push` is commit-message gated

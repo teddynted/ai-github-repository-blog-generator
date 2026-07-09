@@ -42,15 +42,9 @@ Parameters:
       Optional S3 bucket for published content. When set, the instance role is
       granted s3:PutObject on it (the worker publishes to S3 instead of local
       files when OUTPUT_S3_BUCKET is configured).
-  EnableEmailNotify:
-    Type: String
-    Default: "false"
-    AllowedValues: ["true", "false"]
-    Description: Grant the instance ses:SendEmail (for email notifications).
 
 Conditions:
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
-  EmailNotifyOn: !Equals [!Ref EnableEmailNotify, "true"]
 
 Resources:
   InstanceRole:
@@ -103,13 +97,10 @@ Resources:
                   Action: s3:PutObject
                   Resource: !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
                 - !Ref AWS::NoValue
-              # Send email notifications (only when enabled).
-              - !If
-                - EmailNotifyOn
-                - Effect: Allow
-                  Action: ses:SendEmail
-                  Resource: "*"
-                - !Ref AWS::NoValue
+              # Email notifications go through Turbo SMTP (outbound SMTP over
+              # TLS), so no AWS mail permission is required. The worker only
+              # needs egress on 587/465 and the SMTP credentials supplied at
+              # runtime (SMTP_USERNAME / SMTP_PASSWORD; prefer Secrets Manager).
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile

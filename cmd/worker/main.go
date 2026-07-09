@@ -21,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
@@ -131,9 +130,12 @@ func main() {
 	if a.Config.NotifyWebhookURL != "" {
 		notifiers = append(notifiers, notify.NewWebhook(a.Config.NotifyWebhookURL, a.Logger))
 	}
-	if a.Config.NotifyEmailFrom != "" && a.Config.NotifyEmailTo != "" {
+	if a.Config.NotifyEmailFrom != "" && a.Config.NotifyEmailTo != "" &&
+		a.Config.SMTPUsername != "" && a.Config.SMTPPassword != "" {
+		sender := notify.NewSMTP(a.Config.SMTPHost, a.Config.SMTPPort,
+			a.Config.SMTPUsername, a.Config.SMTPPassword)
 		notifiers = append(notifiers, notify.NewEmail(
-			sesv2.NewFromConfig(awsCfg), a.Config.NotifyEmailFrom,
+			sender, a.Config.NotifyEmailFrom,
 			splitCSV(a.Config.NotifyEmailTo), a.Logger))
 	}
 	var notifier notify.Notifier = notifiers
