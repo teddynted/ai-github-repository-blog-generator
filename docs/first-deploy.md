@@ -91,6 +91,11 @@ Merge to `main` (or **Actions → deploy → Run workflow**). `deploy.yml` build
 uploads the Lambdas + worker, then deploys **network → serverless → compute →
 observability**.
 
+Before the stacks, a **preflight** step ([`scripts/deploy/preflight.sh`](../scripts/deploy/preflight.sh))
+runs automatically under the deploy role: it creates the EC2 Spot service-linked
+role if missing and deletes any project stack stuck in a non-updatable failed
+state — so you don't run those setup/cleanup commands by hand.
+
 ```bash
 gh run watch    # or watch it in the Actions tab
 ```
