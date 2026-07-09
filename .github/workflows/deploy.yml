@@ -12,6 +12,8 @@ name: deploy
 #   var    KEY_PAIR_NAME        - (optional) EC2 key pair for SSH; omit for no key pair
 #   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
+#   var    INSTANCE_TYPE        - (optional) override the EC2 type; e.g. t3.xlarge for a CPU smoke test
+#   var    ENABLE_GPU           - (optional) "false" to run Ollama CPU-only (pairs with INSTANCE_TYPE)
 #   var    CUSTOM_AMI           - (optional) pin a specific pre-baked AMI id. Normally
 #                                 unset: the AMI id is read automatically from SSM
 #                                 (/blog-gen/worker-ami, written by build-ami.yml).
@@ -137,6 +139,10 @@ jobs:
           PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
           # KEY_PAIR_NAME is optional — omit it to launch with no SSH key pair.
           [ -n "${{ vars.KEY_PAIR_NAME }}" ] && PARAMS="$PARAMS KeyPairName=${{ vars.KEY_PAIR_NAME }}"
+          # CPU smoke test: set INSTANCE_TYPE (e.g. t3.xlarge) + ENABLE_GPU=false
+          # to validate the whole path on cheap, widely-available CPU capacity.
+          [ -n "${{ vars.INSTANCE_TYPE }}" ] && PARAMS="$PARAMS InstanceType=${{ vars.INSTANCE_TYPE }}"
+          [ -n "${{ vars.ENABLE_GPU }}" ]    && PARAMS="$PARAMS EnableGpu=${{ vars.ENABLE_GPU }}"
           if [ -z "$CUSTOM_AMI" ]; then
             CUSTOM_AMI=$(aws ssm get-parameter --name /blog-gen/worker-ami \
               --query Parameter.Value --output text 2>/dev/null || echo "")

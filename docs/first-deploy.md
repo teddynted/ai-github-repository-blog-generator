@@ -11,7 +11,7 @@ live, triggered blog generation. Each step links to deeper docs. Deploy is
 
 - [ ] AWS account + AWS CLI configured (`aws sts get-caller-identity` works).
 - [ ] **GPU Spot quota** for the instance family (default `g4dn.xlarge`). Request an increase for *All G and VT Spot Instance Requests* if needed, or set `EnableGpu=false` to smoke-test CPU-only first.
-- [ ] *(Optional)* An **EC2 key pair** if you want SSH: `aws ec2 create-key-pair --key-name blog-gen-key ...`. Skip it to launch with no key pair (use SSM Session Manager for a shell instead).
+- [ ] *(Optional)* An **EC2 key pair** — only if you want to reuse an existing one. Otherwise leave `KEY_PAIR_NAME` unset and the compute stack **creates and manages** one for you (private key in SSM).
 - [ ] A **GitHub PAT** for the repo you'll onboard (fine-grained: Contents read, Webhooks read/write).
 - [ ] Local tools: `go`, `git`, `gh` (optional), and the repo cloned.
 
@@ -66,7 +66,7 @@ credentials that can create IAM roles, an OIDC provider, and an S3 bucket.
 | --- | --- | --- |
 | Secret | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` output |
 | Variable | `AWS_REGION` | e.g. `us-east-1` |
-| Variable | `KEY_PAIR_NAME` | *(optional)* your EC2 key pair — omit for no SSH |
+| Variable | `KEY_PAIR_NAME` | *(optional)* existing key pair — **leave unset** and the stack creates one (private key in SSM at `/ec2/keypair/<id>`) |
 | Variable | `OPERATOR_CIDR` | (optional) your SSH source CIDR |
 | Variable | `DEPLOY_ENABLED` | `true` ← arms the deploy workflow |
 
@@ -96,8 +96,22 @@ observability**.
 gh run watch    # or watch it in the Actions tab
 ```
 
-CPU-only smoke test instead? Deploy compute manually with `EnableGpu=false`
-(see [deployment.md §4](./deployment.md)).
+### CPU smoke test (recommended first run)
+
+GPU Spot capacity is scarce and the GPU host is pricey — so **prove the whole
+pipeline on cheap CPU capacity first**, then switch to GPU. Set two variables and
+deploy normally:
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `INSTANCE_TYPE` | `t3.xlarge` | 4 vCPU / 16 GB, widely available, ~cents/hour on Spot |
+| `ENABLE_GPU` | `false` | Ollama runs CPU-only; the AMI skips the NVIDIA install |
+
+The full path (webhook → SQS → worker → Ollama → review → publish) runs exactly
+the same, just with slower inference. This flushes out any account/config
+gremlins without fighting GPU quota or capacity. When it's green end-to-end,
+**delete both variables** (and the failed compute stack) and redeploy to go back
+to the GPU default (`g4dn.xlarge`, `EnableGpu=true`).
 
 ## 4. Set the SMTP password (skip if not using email, or if you set the `SMTP_PASSWORD` GitHub secret)
 
@@ -110,17 +124,51 @@ aws secretsmanager put-secret-value --secret-id "$SMTP_SECRET_ARN" --secret-stri
 
 ## 5. Register the repository
 
+Registration is a **two-part** step: create a GitHub PAT (in GitHub), then POST it
+to the registration API Gateway endpoint.
+
+### 5a. Create the GitHub PAT (in GitHub — not via the endpoint)
+
+GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained
+tokens → Generate new token**:
+
+- **Repository access:** the repo you want to onboard.
+- **Permissions:** **Contents** = Read · **Webhooks** = Read and write · **Metadata** = Read (auto).
+- Generate and copy the `github_pat_…` value.
+
+### 5b. Register via the endpoint (requires the API key)
+
+> [!IMPORTANT]
+> The registration route has **`ApiKeyRequired: true`** — you **must** send an
+> `x-api-key` header, or the call returns **403 Forbidden**. (The webhook route is
+> different: it's public and secured by an HMAC signature, no API key.)
+
 ```bash
 REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
   --query "Stacks[0].Outputs[?OutputKey=='RegistrationUrl'].OutputValue" --output text)
 
-curl -sS -X POST "$REGISTRATION_URL" -H "Content-Type: application/json" \
-  -d '{"repository_url":"https://github.com/<you>/<repo>","pat":"github_pat_xxx"}'
+# The registration API key (retrieve its value from the key id output)
+API_KEY_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='RegistrationApiKeyId'].OutputValue" --output text)
+API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value \
+  --query value --output text)
+
+curl -sS -X POST "$REGISTRATION_URL" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+        "repository_url": "https://github.com/<you>/<repo>",
+        "pat": "github_pat_xxx",
+        "trigger_pattern": "blog:"
+      }'
 ```
 
-This validates access, stores the PAT + webhook secret in Secrets Manager, writes
-DynamoDB metadata, and **creates the GitHub webhook automatically**. Confirm a
-green ✓ under the repo's **Settings → Webhooks → Recent Deliveries**.
+`trigger_pattern` is optional (defaults to `blog:`; supports a literal prefix or
+`regex:`). This validates access with the PAT, stores the **PAT + a generated
+webhook secret in Secrets Manager** (never plaintext), writes DynamoDB metadata,
+and **creates the GitHub webhook automatically** (subscribed to `push` +
+`release`). Confirm a green ✓ under the repo's **Settings → Webhooks → Recent
+Deliveries**.
 
 ## 6. Trigger a generation
 
@@ -152,6 +200,20 @@ architecture diagrams**.
 
 ## 8. First-run gotchas
 
+- **`Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`** —
+  the deploy workflow can't assume the role. Almost always one of:
+  - **`AWS_DEPLOY_ROLE_ARN` points at the wrong role.** It must be **this**
+    project's role, `arn:aws:iam::<account>:role/blog-gen-deploy` — *not* a role
+    left over from another project (e.g. an n8n deploy role). A different
+    project's role trusts a different repo, so STS refuses.
+  - **Bootstrap never completed** in the target account → the role doesn't exist
+    (STS reports the same "Not authorized" either way). Run step 1.
+  - **Owner/repo mismatch** — bootstrap was run with different `--owner`/`--repo`
+    than the repo running the workflow. Re-run with the exact values.
+
+  Diagnose: `aws iam get-role --role-name blog-gen-deploy --query 'Role.AssumeRolePolicyDocument'`
+  — the `sub` must be `repo:teddynted/ai-github-repository-blog-generator:*`, and
+  the account must match the ARN in the secret.
 - **First model pull is slow** (`qwen2.5:7b` ≈ 4.7 GB) — the worker's readiness
   wait + SQS redelivery cover it; the first generation may lag a few minutes.
 - **`nvidia-smi` fails / no GPU in container** — the most likely first-launch
