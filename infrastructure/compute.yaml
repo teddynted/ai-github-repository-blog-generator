@@ -228,8 +228,16 @@ Resources:
           MarketType: spot
           SpotOptions:
             MaxPrice: !Ref SpotMaxPrice
-            SpotInstanceType: persistent
-            InstanceInterruptionBehavior: stop
+            # one-time (not persistent): the Spot request closes once fulfilled
+            # and is NOT relaunched after an interruption. This avoids the
+            # orphaned-request leak a persistent request causes on stack
+            # delete/replacement. Trade-off: no auto-recovery — a Spot
+            # interruption terminates the host and it stays down until the next
+            # deploy. Ollama models + agent memory survive on the Retain'd /data
+            # volume, so recovery is a redeploy, not a data-loss event.
+            # (one-time requires terminate; AWS rejects stop/hibernate here.)
+            SpotInstanceType: one-time
+            InstanceInterruptionBehavior: terminate
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs:
