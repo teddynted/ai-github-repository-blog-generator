@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Scheduled power management for an existing EC2 Spot instance. Two EventBridge
+  Schedules (start + stop) invoke two Go Lambdas that start/stop a specific
+  instance by ID on a daily, timezone-aware cron. Defaults keep the instance
+  running overnight: start 18:00, stop 08:00. Idempotent, least-privilege, and
+  independent of the blog-gen application stacks (it targets any instance ID).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Target instance }
+        Parameters: [InstanceId, ProjectName, Environment]
+      - Label: { default: Schedule }
+        Parameters: [ScheduleTimezone, StartExpression, StopExpression, ScheduleState, ManageSchedules]
+      - Label: { default: Lambda code + runtime }
+        Parameters: [ArtifactsBucket, StartCodeKey, StopCodeKey, LambdaMemorySize, LambdaTimeout, LogRetentionDays]
+    ParameterLabels:
+      InstanceId: { default: EC2 instance ID to start/stop }
+      ScheduleTimezone: { default: IANA timezone for the cron expressions }
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix and Project tag value.
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment tag applied to every resource.
+  InstanceId:
+    Type: AWS::EC2::Instance::Id
+    Description: ID of the existing EC2 instance the schedules start and stop.
+  ScheduleTimezone:
+    Type: String
+    Default: Etc/UTC
+    Description: >
+      IANA timezone name the cron expressions are evaluated in (e.g.
+      Africa/Johannesburg, Europe/London, America/New_York). Configurable so the
+      18:00/08:00 window is local wall-clock time, not hardcoded UTC.
+  StartExpression:
+    Type: String
+    Default: cron(0 18 * * ? *)
+    Description: EventBridge Scheduler expression for the daily START (default 18:00).
+  StopExpression:
+    Type: String
+    Default: cron(0 8 * * ? *)
+    Description: EventBridge Scheduler expression for the daily STOP (default 08:00).
+  ScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+    Description: Set DISABLED to pause both schedules without deleting the stack.
+  ManageSchedules:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Set "false" to deploy only the Lambdas + roles (e.g. to drive them
+      manually) and skip creating the EventBridge Schedules.
+  ArtifactsBucket:
+    Type: String
+    Description: S3 bucket holding the two Lambda deployment packages (zips).
+  StartCodeKey:
+    Type: String
+    Default: scheduled-start.zip
+    Description: S3 key of the scheduled-start Lambda package.
+  StopCodeKey:
+    Type: String
+    Default: scheduled-stop.zip
+    Description: S3 key of the scheduled-stop Lambda package.
+  LambdaMemorySize:
+    Type: Number
+    Default: 128
+    MinValue: 128
+    MaxValue: 512
+    Description: Memory (MB) for both Lambdas; 128 is ample for a single EC2 API call.
+  LambdaTimeout:
+    Type: Number
+    Default: 30
+    MinValue: 5
+    MaxValue: 120
+    Description: Timeout (seconds) for both Lambdas; covers describe + start/stop with retries.
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+    Description: Retention for the Lambda CloudWatch log groups.
+
+Conditions:
+  # Lets operators deploy just the functions (ManageSchedules=false) and drive
+  # start/stop manually, without the two EventBridge Schedules.
+  CreateSchedules: !Equals [!Ref ManageSchedules, "true"]
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # CloudWatch log groups (declared explicitly so retention is managed and the
+  # group exists before the function first writes to it).
+  # ---------------------------------------------------------------------------
+  StartLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-scheduled-start"
+      RetentionInDays: !Ref LogRetentionDays
+
+  StopLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-scheduled-stop"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ---------------------------------------------------------------------------
+  # IAM execution roles (least privilege, one per function). ec2:Start/Stop are
+  # scoped to the single target instance ARN; ec2:DescribeInstances cannot be
+  # resource-scoped so it is granted on "*" (read-only, no state change).
+  # ---------------------------------------------------------------------------
+  StartFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-scheduled-start-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: start-instance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: StartTargetInstance
+                Effect: Allow
+                Action: ec2:StartInstances
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}"
+              - Sid: DescribeInstances
+                Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  StopFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-scheduled-stop-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: stop-instance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: StopTargetInstance
+                Effect: Allow
+                Action: ec2:StopInstances
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}"
+              - Sid: DescribeInstances
+                Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  # Role EventBridge Scheduler assumes to invoke the Lambdas. Scoped to this
+  # account (confused-deputy guard) and to only these two function ARNs.
+  SchedulerInvokeRole:
+    Type: AWS::IAM::Role
+    Condition: CreateSchedules
+    Properties:
+      RoleName: !Sub "${ProjectName}-scheduler-invoke-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-power-lambdas
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt StartFunction.Arn
+                  - !GetAtt StopFunction.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  # ---------------------------------------------------------------------------
+  # Lambda functions (Go, provided.al2023, arm64).
+  # ---------------------------------------------------------------------------
+  StartFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: StartLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-scheduled-start"
+      Description: Starts the target EC2 instance on the daily start schedule.
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+      Role: !GetAtt StartFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref StartCodeKey
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          INSTANCE_ID: !Ref InstanceId
+          LOG_LEVEL: info
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  StopFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: StopLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-scheduled-stop"
+      Description: Stops the target EC2 instance on the daily stop schedule.
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+      Role: !GetAtt StopFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref StopCodeKey
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          INSTANCE_ID: !Ref InstanceId
+          LOG_LEVEL: info
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  # ---------------------------------------------------------------------------
+  # EventBridge Schedules. ScheduleExpressionTimezone evaluates the cron in the
+  # configured IANA timezone; FlexibleTimeWindow OFF fires at the exact minute.
+  # The RetryPolicy hardens against a transient Lambda-invoke failure.
+  # ---------------------------------------------------------------------------
+  StartSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: CreateSchedules
+    Properties:
+      Name: !Sub "${ProjectName}-scheduled-start"
+      Description: Daily start of the target EC2 instance.
+      State: !Ref ScheduleState
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: !Ref StartExpression
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      Target:
+        Arn: !GetAtt StartFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+        RetryPolicy:
+          MaximumRetryAttempts: 5
+          MaximumEventAgeInSeconds: 3600
+
+  StopSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: CreateSchedules
+    Properties:
+      Name: !Sub "${ProjectName}-scheduled-stop"
+      Description: Daily stop of the target EC2 instance.
+      State: !Ref ScheduleState
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: !Ref StopExpression
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      Target:
+        Arn: !GetAtt StopFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+        RetryPolicy:
+          MaximumRetryAttempts: 5
+          MaximumEventAgeInSeconds: 3600
+
+Outputs:
+  StartFunctionArn:
+    Description: ARN of the start Lambda (invoke manually to force a start).
+    Value: !GetAtt StartFunction.Arn
+  StopFunctionArn:
+    Description: ARN of the stop Lambda (invoke manually to force a stop).
+    Value: !GetAtt StopFunction.Arn
+  StartScheduleName:
+    Condition: CreateSchedules
+    Description: Name of the daily start schedule.
+    Value: !Ref StartSchedule
+  StopScheduleName:
+    Condition: CreateSchedules
+    Description: Name of the daily stop schedule.
+    Value: !Ref StopSchedule
+  ScheduleWindow:
+    Description: Human-readable summary of the configured on/off window.
+    Value: !Sub "start '${StartExpression}' / stop '${StopExpression}' (${ScheduleTimezone}), state=${ScheduleState}"

@@ -11,6 +11,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/lifecycle"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/power"
 )
 
 // API is the subset of the EC2 client this adapter uses.
@@ -55,6 +56,27 @@ func (c *Client) FindInstance(ctx context.Context, project string) (lifecycle.In
 	return lifecycle.Instance{}, nil
 }
 
+// InstanceState returns the current state name of a specific instance located
+// by ID (e.g. "running", "stopped"). It returns an empty string when no such
+// instance exists, so callers can distinguish "absent" from a real state. A
+// terminated instance may briefly remain visible and is reported as such.
+func (c *Client) InstanceState(ctx context.Context, id string) (string, error) {
+	out, err := c.api.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
+		InstanceIds: []string{id},
+	})
+	if err != nil {
+		return "", fmt.Errorf("describe instances: %w", err)
+	}
+	for _, r := range out.Reservations {
+		for _, inst := range r.Instances {
+			if inst.State != nil {
+				return string(inst.State.Name), nil
+			}
+		}
+	}
+	return "", nil
+}
+
 // StartInstance starts the given instance.
 func (c *Client) StartInstance(ctx context.Context, id string) error {
 	_, err := c.api.StartInstances(ctx, &ec2.StartInstancesInput{InstanceIds: []string{id}})
@@ -73,5 +95,9 @@ func (c *Client) StopInstance(ctx context.Context, id string) error {
 	return nil
 }
 
-// Guard: *Client satisfies the lifecycle.EC2 port.
-var _ lifecycle.EC2 = (*Client)(nil)
+// Guards: *Client satisfies both the tag-based lifecycle.EC2 port and the
+// ID-based power.Instances port (scheduled start/stop).
+var (
+	_ lifecycle.EC2   = (*Client)(nil)
+	_ power.Instances = (*Client)(nil)
+)

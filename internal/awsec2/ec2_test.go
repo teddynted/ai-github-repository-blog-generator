@@ -68,6 +68,35 @@ func TestFindInstanceEmptyWhenNone(t *testing.T) {
 	}
 }
 
+func TestInstanceStateReturnsState(t *testing.T) {
+	f := &fakeAPI{reservs: []ec2types.Reservation{{
+		Instances: []ec2types.Instance{{
+			InstanceId: aws.String("i-abc"),
+			State:      &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning},
+		}},
+	}}}
+	state, err := New(f).InstanceState(context.Background(), "i-abc")
+	if err != nil {
+		t.Fatalf("InstanceState: %v", err)
+	}
+	if state != "running" {
+		t.Errorf("state = %q, want running", state)
+	}
+	if len(f.describeIn.InstanceIds) != 1 || f.describeIn.InstanceIds[0] != "i-abc" {
+		t.Errorf("expected lookup by instance id, got %+v", f.describeIn.InstanceIds)
+	}
+}
+
+func TestInstanceStateEmptyWhenAbsent(t *testing.T) {
+	state, err := New(&fakeAPI{}).InstanceState(context.Background(), "i-missing")
+	if err != nil {
+		t.Fatalf("InstanceState: %v", err)
+	}
+	if state != "" {
+		t.Errorf("expected empty state for absent instance, got %q", state)
+	}
+}
+
 func TestStartInstance(t *testing.T) {
 	f := &fakeAPI{}
 	if err := New(f).StartInstance(context.Background(), "i-xyz"); err != nil {
