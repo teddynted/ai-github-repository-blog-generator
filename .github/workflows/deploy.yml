@@ -62,7 +62,12 @@ jobs:
 
       - name: build + package lambdas
         run: |
-          for fn in registration webhook-handler instance-starter idle-shutdown; do
+          # scheduled-start/scheduled-stop back the optional scheduler.yaml stack.
+          # They are built + uploaded here so the sha-versioned artifacts exist,
+          # but the scheduler stack itself is deployed out-of-band
+          # (scripts/deploy-scheduler.sh) since it targets a chosen instance ID
+          # and has a lifecycle independent of the app stacks.
+          for fn in registration webhook-handler instance-starter idle-shutdown scheduled-start scheduled-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -85,7 +90,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration webhook-handler instance-starter idle-shutdown; do
+          for fn in registration webhook-handler instance-starter idle-shutdown scheduled-start scheduled-stop; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
