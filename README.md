@@ -595,14 +595,15 @@ See [`docs/infrastructure.md`](./docs/infrastructure.md) for the full parameter 
 ## Scheduled Power Management
 
 An **optional, self-contained** stack (`scheduler.yaml`) starts an EC2 instance
-every evening and stops it every morning — keeping a dev environment available
-overnight (default **18:00 → 08:00**) without paying for daytime compute. It
-targets **any** instance by ID and is independent of the application stacks.
+in the evening and stops it later the same night — keeping a dev environment
+available during a chosen window (default **18:00 → 20:00**) without paying for
+compute the rest of the day. It targets **any** instance by ID and is
+independent of the application stacks.
 
 ```mermaid
 flowchart LR
   S1["EventBridge Schedule<br/>start · cron(0 18 * * ? *)"] --> R[Scheduler invoke role]
-  S2["EventBridge Schedule<br/>stop · cron(0 8 * * ? *)"] --> R
+  S2["EventBridge Schedule<br/>stop · cron(0 20 * * ? *)"] --> R
   R --> LS["Lambda: scheduled-start<br/>(Go, idempotent)"]
   R --> LT["Lambda: scheduled-stop<br/>(Go, idempotent)"]
   LS -->|StartInstances| EC2["EC2 instance (by ID)"]
@@ -624,7 +625,7 @@ INSTANCE_ID=i-0123456789abcdef0 TIMEZONE=Africa/Johannesburg \
   scripts/deploy-scheduler.sh
 ```
 
-Running 14 h/day instead of 24 cuts compute cost by **~58%** (≈$26/mo vs ≈$44/mo
+Running 2 h/day instead of 24 cuts compute cost by **~92%** (≈$4/mo vs ≈$44/mo
 for a `t3.xlarge` on Spot). Full details — parameters, timezone, cost math,
 manual start/stop, and troubleshooting — in
 [**`docs/scheduling.md`**](./docs/scheduling.md).

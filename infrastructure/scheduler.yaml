@@ -2,8 +2,8 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   Scheduled power management for an existing EC2 Spot instance. Two EventBridge
   Schedules (start + stop) invoke two Go Lambdas that start/stop a specific
-  instance by ID on a daily, timezone-aware cron. Defaults keep the instance
-  running overnight: start 18:00, stop 08:00. Idempotent, least-privilege, and
+  instance by ID on a daily, timezone-aware cron. Defaults run the instance in
+  the evening: start 18:00, stop 20:00. Idempotent, least-privilege, and
   independent of the blog-gen application stacks (it targets any instance ID).
 
 Metadata:
@@ -38,15 +38,15 @@ Parameters:
     Description: >
       IANA timezone name the cron expressions are evaluated in (e.g.
       Africa/Johannesburg, Europe/London, America/New_York). Configurable so the
-      18:00/08:00 window is local wall-clock time, not hardcoded UTC.
+      18:00/20:00 window is local wall-clock time, not hardcoded UTC.
   StartExpression:
     Type: String
     Default: cron(0 18 * * ? *)
     Description: EventBridge Scheduler expression for the daily START (default 18:00).
   StopExpression:
     Type: String
-    Default: cron(0 8 * * ? *)
-    Description: EventBridge Scheduler expression for the daily STOP (default 08:00).
+    Default: cron(0 20 * * ? *)
+    Description: EventBridge Scheduler expression for the daily STOP (default 20:00).
   ScheduleState:
     Type: String
     Default: ENABLED
