@@ -556,6 +556,7 @@ Provisioned resources include: **VPC, Public Subnet, Internet Gateway, Route Tab
 | **Serverless** | `serverless.yaml` | API Gateway, Lambdas, EventBridge bus + rules, SQS + DLQ, IAM |
 | **Compute** | `compute.yaml` | EC2 Spot request, gp3 EBS volume, instance IAM role, user data |
 | **Observability** | `observability.yaml` | CloudWatch log groups, metrics, alarms |
+| **Scheduler** *(optional)* | `scheduler.yaml` | EventBridge Schedules + 2 Go Lambdas to start/stop an instance on a daily, timezone-aware cron ([docs](./docs/scheduling.md)) |
 
 ```bash
 # 1. Network layer
@@ -588,6 +589,45 @@ aws cloudformation describe-stacks \
 ```
 
 See [`docs/infrastructure.md`](./docs/infrastructure.md) for the full parameter reference and stack outputs.
+
+---
+
+## Scheduled Power Management
+
+An **optional, self-contained** stack (`scheduler.yaml`) starts an EC2 instance
+every evening and stops it every morning — keeping a dev environment available
+overnight (default **18:00 → 08:00**) without paying for daytime compute. It
+targets **any** instance by ID and is independent of the application stacks.
+
+```mermaid
+flowchart LR
+  S1["EventBridge Schedule<br/>start · cron(0 18 * * ? *)"] --> R[Scheduler invoke role]
+  S2["EventBridge Schedule<br/>stop · cron(0 8 * * ? *)"] --> R
+  R --> LS["Lambda: scheduled-start<br/>(Go, idempotent)"]
+  R --> LT["Lambda: scheduled-stop<br/>(Go, idempotent)"]
+  LS -->|StartInstances| EC2["EC2 instance (by ID)"]
+  LT -->|StopInstances| EC2
+```
+
+- **EventBridge Scheduler** (preferred over Rules) evaluates the cron in a
+  configurable **IANA timezone** (`ScheduleTimezone`), handling DST — no
+  hardcoded UTC.
+- Two **Go Lambdas** (`provided.al2023`, arm64) read `INSTANCE_ID`, check current
+  state, and start/stop **only when needed** (idempotent); actions are logged as
+  structured JSON.
+- **Least-privilege IAM**: `ec2:Start/StopInstances` scoped to the single target
+  instance ARN.
+
+```bash
+# Build, package, and deploy in one step
+INSTANCE_ID=i-0123456789abcdef0 TIMEZONE=Africa/Johannesburg \
+  scripts/deploy-scheduler.sh
+```
+
+Running 14 h/day instead of 24 cuts compute cost by **~58%** (≈$26/mo vs ≈$44/mo
+for a `t3.xlarge` on Spot). Full details — parameters, timezone, cost math,
+manual start/stop, and troubleshooting — in
+[**`docs/scheduling.md`**](./docs/scheduling.md).
 
 ---
 
@@ -731,6 +771,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Architecture](./docs/architecture.md) | Components, trigger path, data flow, and design decisions |
 | [Requirements](./docs/requirements.md) | Functional, non-functional, infrastructure, and security requirements |
 | [Infrastructure](./docs/infrastructure.md) | CloudFormation stacks, parameters, and outputs |
+| [Scheduled Power Management](./docs/scheduling.md) | Daily start/stop of an EC2 instance via EventBridge Scheduler + Go Lambdas |
 | [Custom AMI](./docs/ami.md) | Building/updating the pre-baked worker AMI for fast Spot startup |
 | [First Deploy](./docs/first-deploy.md) | One-page runbook: bootstrap → deploy → register → trigger → verify |
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |

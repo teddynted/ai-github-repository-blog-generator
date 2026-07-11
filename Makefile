@@ -5,12 +5,12 @@
 # Lambda binaries target Linux/arm64 (provided.al2023).
 
 GO       ?= go
-LAMBDAS  := registration webhook-handler instance-starter idle-shutdown
+LAMBDAS  := registration webhook-handler instance-starter idle-shutdown scheduled-start scheduled-stop
 DIST     := dist
 
 HOOKS    := scripts/hooks
 
-.PHONY: all fmt fmt-check vet lint test tidy build build-worker clean check lint-cfn hooks act
+.PHONY: all fmt fmt-check vet lint test tidy build build-worker clean check lint-cfn hooks act deploy-scheduler
 
 all: check
 
@@ -69,6 +69,11 @@ build:
 build-worker:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/worker ./cmd/worker
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/approve ./cmd/approve
+
+## deploy-scheduler: build, package, and deploy the scheduled start/stop stack
+## Usage: make deploy-scheduler INSTANCE_ID=i-0123... [REGION=us-east-1] [TIMEZONE=Africa/Johannesburg]
+deploy-scheduler:
+	./scripts/deploy-scheduler.sh
 
 ## clean: remove build artifacts
 clean:
