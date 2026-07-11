@@ -1,8 +1,8 @@
 # Scheduled EC2 Power Management
 
-Automatically **start** an EC2 instance every evening and **stop** it every
-morning, so a development environment is available overnight (18:00 → 08:00) but
-not billed for compute during the day.
+Automatically **start** an EC2 instance in the evening and **stop** it later the
+same night, so a development environment is available during a chosen window
+(default 18:00 → 20:00) but not billed for compute the rest of the day.
 
 This is a self-contained stack (`infrastructure/scheduler.yaml` + two Go
 Lambdas). It targets **any** instance by ID and is independent of the blog-gen
@@ -17,7 +17,7 @@ instance.
 flowchart LR
   subgraph EB[Amazon EventBridge Scheduler]
     S1["Start schedule<br/>cron(0 18 * * ? *)<br/>timezone-aware"]
-    S2["Stop schedule<br/>cron(0 8 * * ? *)<br/>timezone-aware"]
+    S2["Stop schedule<br/>cron(0 20 * * ? *)<br/>timezone-aware"]
   end
 
   R["Scheduler invoke role<br/>(lambda:InvokeFunction)"]
@@ -47,7 +47,7 @@ transition is needed** (idempotent). All actions are logged as structured JSON.
 ### Why EventBridge Scheduler (not EventBridge Rules)
 
 `AWS::Scheduler::Schedule` supports **`ScheduleExpressionTimezone`** natively, so
-the 18:00/08:00 window is evaluated in local wall-clock time (including DST)
+the 18:00/20:00 window is evaluated in local wall-clock time (including DST)
 without hardcoding UTC. It also invokes Lambda through an **execution role**
 (no resource-based `AWS::Lambda::Permission` needed) and has a built-in
 `RetryPolicy`.
@@ -58,7 +58,7 @@ without hardcoding UTC. It also invokes Lambda through an **execution role**
 
 | Resource | Purpose |
 | --- | --- |
-| `AWS::Scheduler::Schedule` × 2 | Daily start (18:00) and stop (08:00), timezone-aware |
+| `AWS::Scheduler::Schedule` × 2 | Daily start (18:00) and stop (20:00), timezone-aware |
 | `AWS::Lambda::Function` × 2 | `scheduled-start`, `scheduled-stop` (Go, `provided.al2023`, arm64) |
 | `AWS::IAM::Role` × 2 | Per-function execution roles (least privilege) |
 | `AWS::IAM::Role` × 1 | Scheduler invoke role (`lambda:InvokeFunction` on the two functions only) |
@@ -142,7 +142,7 @@ Scheduler can assume the created roles.
 | `Environment` | `dev` | `Environment` tag (`dev`/`staging`/`prod`) |
 | `ScheduleTimezone` | `Etc/UTC` | IANA timezone for the cron expressions |
 | `StartExpression` | `cron(0 18 * * ? *)` | Daily start time |
-| `StopExpression` | `cron(0 8 * * ? *)` | Daily stop time |
+| `StopExpression` | `cron(0 20 * * ? *)` | Daily stop time |
 | `ScheduleState` | `ENABLED` | `DISABLED` pauses both schedules without deleting the stack |
 | `ManageSchedules` | `true` | `false` deploys only the Lambdas/roles (manual driving) |
 | `ArtifactsBucket` | *(required)* | S3 bucket holding the two Lambda zips |
@@ -163,11 +163,11 @@ EventBridge Scheduler cron format is `cron(Minutes Hours Day-of-month Month Day-
 | Expression | Meaning |
 | --- | --- |
 | `cron(0 18 * * ? *)` | 18:00 every day |
-| `cron(0 8 * * ? *)` | 08:00 every day |
+| `cron(0 20 * * ? *)` | 20:00 every day |
 
 `?` in the day-of-week field means "no specific value" (required when
-day-of-month is `*`). The instance therefore runs **18:00 → 08:00 (14 h/day)**
-and is stopped **08:00 → 18:00 (10 h/day)**.
+day-of-month is `*`). The instance therefore runs **18:00 → 20:00 (2 h/day)**
+and is stopped **20:00 → 18:00 (22 h/day)**.
 
 ### Example EventBridge Scheduler configuration
 
@@ -213,7 +213,7 @@ aws cloudformation deploy --template-file infrastructure/scheduler.yaml \
     ScheduleTimezone="Europe/London"
 ```
 
-**Weekdays only?** Use `cron(0 18 ? * MON-FRI *)` / `cron(0 8 ? * MON-FRI *)`.
+**Weekdays only?** Use `cron(0 18 ? * MON-FRI *)` / `cron(0 20 ? * MON-FRI *)`.
 **Pause entirely:** redeploy with `ScheduleState=DISABLED` (keeps the stack).
 
 ## How to manually start / stop
@@ -258,7 +258,7 @@ Structured JSON (one object per line). **Start, instance was stopped:**
 **Stop failure (surfaced + retried by Scheduler):**
 
 ```json
-{"time":"2026-07-11T08:00:00.740Z","level":"ERROR","msg":"scheduled stop failed","error":"stop instance i-0123456789abcdef0: operation error EC2: StopInstances, ... RequestLimitExceeded"}
+{"time":"2026-07-11T20:00:00.740Z","level":"ERROR","msg":"scheduled stop failed","error":"stop instance i-0123456789abcdef0: operation error EC2: StopInstances, ... RequestLimitExceeded"}
 ```
 
 ---
@@ -270,10 +270,10 @@ For this scheduler specifically:
 
 ### Why scheduling reduces EC2 cost
 
-You pay for an EC2 instance only while it is **running**. Stopping it 10 h/day
-removes that compute charge for those hours. Running 18:00 → 08:00 is **14 h/day
-≈ 42%** of the day, so you pay roughly **42% of an always-on instance** for
-compute — a **~58% saving**.
+You pay for an EC2 instance only while it is **running**. Stopping it 22 h/day
+removes that compute charge for those hours. Running 18:00 → 20:00 is **2 h/day
+≈ 8%** of the day, so you pay roughly **8% of an always-on instance** for
+compute — a **~92% saving**.
 
 ### Estimated monthly savings
 
@@ -282,11 +282,11 @@ For a `t3.xlarge` at the observed Spot rate of **$0.0608/h** (us-east-1):
 | Mode | Hours/month | Compute cost/month |
 | --- | --- | --- |
 | Always-on (24 h) | ~730 | **~$44.38** |
-| Scheduled (14 h) | ~426 | **~$25.90** |
-| **Saving** | | **~$18.48/mo (~58%)** |
+| Scheduled (2 h) | ~61 | **~$3.70** |
+| **Saving** | | **~$40.68/mo (~92%)** |
 
 On-demand `t3.xlarge` ($0.1664/h) always-on is ~$121/mo, so **Spot + scheduling
-together** cut it to ~$26/mo — a ~78% reduction. (EBS storage is billed
+together** cut it to ~$3.70/mo — a ~97% reduction. (EBS storage is billed
 separately and is **not** affected by stopping — see below.)
 
 ### Spot instance considerations
