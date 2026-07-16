@@ -150,6 +150,7 @@ EventBridge is the central **event bus** and the extension point for future trig
 
 - A **persistent gp3 volume** holds **Ollama model weights**, **n8n state and credentials**, **Repository Memory**, and **exported workflows**.
 - The volume is **retained across the daily start/stop cycles** (and independent of the instance lifecycle), so a restarted or replaced instance re-attaches it and is ready to infer **without re-downloading models** — and with its Repository Memory intact.
+- **Attached at boot, not by CloudFormation.** The instance locates the volume by its `Project`/`Name` tags and attaches it in user data (granted `ec2:AttachVolume`), retrying until it is free. This deliberately avoids an `AWS::EC2::VolumeAttachment` resource: a single retained volume managed that way makes **every instance-replacing update fail** with `volume already exists / already attached` (CloudFormation creates the new attachment before deleting the old, but a volume attaches to only one instance). Boot-time attach lets the old instance terminate first, then the new one claims the volume — so replacements are seamless.
 - Sized via `EbsVolumeSizeGb` (default 100 GB).
 - Encrypted at rest.
 

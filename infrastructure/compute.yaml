@@ -185,6 +185,23 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+              # Attach the persistent data volume at boot (see UserData). The
+              # volume is managed by CloudFormation but attached by the instance
+              # itself, so a stack update that replaces the instance never hits
+              # the CloudFormation "volume already attached" failure. Scoped to
+              # this project's tagged volume + instances; DescribeVolumes cannot
+              # be resource-scoped.
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: !Ref ProjectName
+              - Effect: Allow
+                Action: ec2:DescribeVolumes
+                Resource: "*"
               # Publish generated content to S3 (only when an output bucket is set).
               - !If
                 - HasOutputBucket
@@ -247,7 +264,36 @@ Resources:
                 export DEBIAN_FRONTEND=noninteractive
                 mkdir -p /opt/blog-gen /etc/blog-gen
 
-                # Mount the persistent data volume (formatted once) at /data.
+                # --- Attach the persistent data volume, then mount it at /data.
+                # The volume is created by CloudFormation (Retain) but attached
+                # HERE at boot — NOT via an AWS::EC2::VolumeAttachment — so a
+                # stack update that REPLACES this instance never fails with
+                # "volume already attached": CloudFormation terminates the old
+                # instance and the volume is then free to (re)attach here. The
+                # loop also covers first boot (waits for the volume to exist).
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                command -v aws >/dev/null 2>&1 || { apt-get update -y && apt-get install -y awscli; }
+                TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300" || true)
+                imds() { curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1" || true; }
+                INSTANCE_ID=$(imds instance-id)
+                AZ=$(imds placement/availability-zone)
+                for i in $(seq 1 90); do
+                  VOL_ID=$(aws ec2 describe-volumes \
+                    --filters "Name=tag:Project,Values=${ProjectName}" "Name=tag:Name,Values=${ProjectName}-data" "Name=availability-zone,Values=$AZ" \
+                    --query 'Volumes[0].VolumeId' --output text 2>/dev/null || echo None)
+                  if [ "$VOL_ID" = "None" ] || [ -z "$VOL_ID" ]; then echo "waiting for data volume to exist [$i]"; sleep 10; continue; fi
+                  HOLDER=$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].Attachments[0].InstanceId' --output text 2>/dev/null || echo None)
+                  VST=$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].State' --output text 2>/dev/null || echo unknown)
+                  if [ "$HOLDER" = "$INSTANCE_ID" ]; then echo "data volume $VOL_ID already attached here"; break; fi
+                  if [ "$VST" = "available" ]; then
+                    if aws ec2 attach-volume --volume-id "$VOL_ID" --instance-id "$INSTANCE_ID" --device /dev/sdf >/dev/null 2>&1; then
+                      echo "attached data volume $VOL_ID"; break
+                    fi
+                  fi
+                  echo "waiting for data volume $VOL_ID (state=$VST holder=$HOLDER) [$i]"; sleep 10
+                done
+
+                # Wait for the block device, format once, and mount at /data.
                 DEV=/dev/xvdf
                 for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
                 if [ -b "$DEV" ]; then
@@ -341,6 +387,14 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  # The data volume is deliberately NOT attached with an AWS::EC2::VolumeAttachment.
+  # A single retained volume plus that resource makes every instance-replacing
+  # update fail with "volume already attached" (CloudFormation creates the new
+  # attachment before deleting the old one, but a volume attaches to only one
+  # instance). Instead the instance attaches this volume itself at boot, by tag
+  # (see UserData + the ec2:AttachVolume grant on InstanceRole). The Name/Project
+  # tags below are how the instance locates it. AZ is pinned to the instance's AZ
+  # (same subnet), so a replacement keeps the volume in place.
   PersistentVolume:
     Type: AWS::EC2::Volume
     DeletionPolicy: Retain
@@ -355,13 +409,6 @@ Resources:
           Value: !Sub "${ProjectName}-data"
         - Key: Project
           Value: !Ref ProjectName
-
-  VolumeAttachment:
-    Type: AWS::EC2::VolumeAttachment
-    Properties:
-      InstanceId: !Ref Instance
-      VolumeId: !Ref PersistentVolume
-      Device: /dev/sdf
 
 Outputs:
   InstanceId:
