@@ -26,6 +26,13 @@ type fakeWindow struct {
 
 func (w fakeWindow) Open(_ context.Context) (bool, error) { return w.open, w.err }
 
+type fakeStarter struct {
+	started bool
+	err     error
+}
+
+func (s *fakeStarter) Start(_ context.Context) error { s.started = true; return s.err }
+
 func sampleEvent() Event { return Event{RepoFullName: "acme/widget", Source: "manual"} }
 
 func TestSubmitAcceptedWhenWindowOpen(t *testing.T) {
@@ -63,6 +70,32 @@ func TestSubmitRejectedWhenClosedAndRejecting(t *testing.T) {
 	}
 	if len(pub.published) != 0 {
 		t.Errorf("rejected must NOT publish, got %d", len(pub.published))
+	}
+}
+
+func TestSubmitStartsWhenClosedAndStarting(t *testing.T) {
+	pub := &fakePub{}
+	st := &fakeStarter{}
+	s := &Service{Publisher: pub, Window: fakeWindow{open: false}, Starter: st}
+	d, err := s.Submit(context.Background(), sampleEvent(), StartOutsideWindow)
+	if err != nil || d != Started {
+		t.Fatalf("decision=%q err=%v, want started", d, err)
+	}
+	if !st.started || len(pub.published) != 1 {
+		t.Errorf("must start the host and publish: started=%v published=%d", st.started, len(pub.published))
+	}
+}
+
+func TestSubmitStartFailureDefersNotDrops(t *testing.T) {
+	pub := &fakePub{}
+	st := &fakeStarter{err: errors.New("start failed")}
+	s := &Service{Publisher: pub, Window: fakeWindow{open: false}, Starter: st}
+	d, err := s.Submit(context.Background(), sampleEvent(), StartOutsideWindow)
+	if err != nil || d != Deferred {
+		t.Fatalf("decision=%q err=%v, want deferred (buffered)", d, err)
+	}
+	if len(pub.published) != 1 {
+		t.Error("a start failure must still buffer the event")
 	}
 }
 

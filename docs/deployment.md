@@ -105,7 +105,7 @@ done
 
 - `registration` — validate repo + PAT, create the webhook, store metadata + secrets.
 - `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events, and report processed-now vs deferred (the window gate).
-- `manual-trigger` — the authenticated `POST /process` endpoint; validates the request and submits it through the shared intake service (202 accepted / 503 outside the window). See [Manual Trigger](./manual-trigger.md).
+- `manual-trigger` — the authenticated `POST /process` endpoint; validates the request and submits it through the shared intake service, **starting the On-Demand host on demand** if it is stopped (202 accepted). See [Manual Trigger](./manual-trigger.md).
 - `scheduled-start` — start the On-Demand instance at 18:00 Mon–Fri (scheduler stack).
 - `scheduled-stop` — stop the instance at 20:00 Mon–Fri (scheduler stack).
 

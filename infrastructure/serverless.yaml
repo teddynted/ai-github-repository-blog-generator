@@ -225,11 +225,19 @@ Resources:
               - Effect: Allow
                 Action: events:PutEvents
                 Resource: !GetAtt EventBus.Arn
-              # Read-only window gate (reject outside operational hours); never
-              # starts or stops the instance. Cannot be resource-scoped.
+              # Window gate (read-only). DescribeInstances cannot be scoped.
               - Effect: Allow
                 Action: ec2:DescribeInstances
                 Resource: "*"
+              # A manual run overrides the schedule: start the host on demand if
+              # it is stopped. Scoped to this project's tagged instance. It never
+              # stops the instance (that stays with the scheduler stack).
+              - Effect: Allow
+                Action: ec2:StartInstances
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: !Ref ProjectName
 
   # ---------------------------------------------------------------------------
   # Lambda functions

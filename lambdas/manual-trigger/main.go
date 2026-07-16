@@ -47,10 +47,13 @@ func main() {
 		log.Fatalf("aws config: %v", err)
 	}
 
+	ec2Client := awsec2.New(ec2.NewFromConfig(awsCfg))
 	svc := &intake.Service{
 		Publisher: eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
-		Window:    awsec2.NewInstanceWindow(awsec2.New(ec2.NewFromConfig(awsCfg)), a.Config.ProjectName),
-		Logger:    a.Logger,
+		Window:    awsec2.NewInstanceWindow(ec2Client, a.Config.ProjectName),
+		// Manual runs override the schedule: start the host on demand if stopped.
+		Starter: awsec2.NewInstanceStarter(ec2Client, a.Config.ProjectName),
+		Logger:  a.Logger,
 	}
 
 	lambda.Start(func(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -98,26 +101,26 @@ func handle(ctx context.Context, svc *intake.Service, logger *slog.Logger, reque
 	}
 
 	ev := r.ToEvent(triggerSource)
-	decision, err := svc.Submit(ctx, ev, intake.RejectOutsideWindow)
+	// Manual runs override the schedule: start the instance if it is stopped,
+	// then publish. The worker processes the event once the host is healthy.
+	decision, err := svc.Submit(ctx, ev, intake.StartOutsideWindow)
 	logResult(logger, requestID, ev, decision, err, time.Since(start))
 
-	switch {
-	case err != nil:
+	if err != nil {
 		return jsonErr(500, "internal error")
-	case decision == intake.Rejected:
-		// Outside the operating window: nothing published, instance not started.
-		return jsonResp(503, errorResponse{
-			Status: "rejected",
-			Reason: "AI platform is currently outside operational hours.",
-		})
-	default: // Accepted
-		return jsonResp(202, acceptedResponse{
-			Status:    "accepted",
-			Trigger:   triggerSource,
-			RequestID: requestID,
-			Message:   "AI processing has been initiated.",
-		})
 	}
+	msg := "AI processing has been initiated."
+	if decision == intake.Started {
+		msg = "AI platform is starting; processing will begin shortly."
+	} else if decision == intake.Deferred {
+		msg = "AI platform could not be started now; processing will begin at the next scheduled runtime."
+	}
+	return jsonResp(202, acceptedResponse{
+		Status:    "accepted",
+		Trigger:   triggerSource,
+		RequestID: requestID,
+		Message:   msg,
+	})
 }
 
 // logResult emits one structured line identifying the trigger source and run

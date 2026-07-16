@@ -71,7 +71,7 @@ flowchart TB
 - Exposes **HTTPS** endpoints (managed TLS): a **webhook** route (GitHub deliveries), a **registration** route (onboarding), and a **`POST /process`** route (the manual trigger).
 - The webhook route integrates with the **Webhook Handler Lambda**; the registration route with the **Registration Lambda**; `POST /process` with the **Manual Trigger Lambda**.
 - The webhook route is public (HMAC-verified); the **registration** and **`/process`** routes require an **API key** (`x-api-key`) via the shared usage plan. See [Manual Trigger](./manual-trigger.md).
-- Returns **HTTP 200** to GitHub immediately for both matched and ignored events; `POST /process` returns **202** (accepted) or **503** (outside the operating window).
+- Returns **HTTP 200** to GitHub immediately for both matched and ignored events; `POST /process` returns **202** (published; instance running or started on demand).
 - Stack outputs include `WebhookUrl`, `RegistrationUrl`, and `ProcessUrl`.
 
 ---
@@ -84,7 +84,7 @@ Five small functions form the serverless control plane (three in `serverless.yam
 | --- | --- | --- |
 | `registration` | API Gateway (registration route) | Validate repo access + token permissions → create GitHub webhook → store metadata (DynamoDB) → store PAT + webhook secret (Secrets Manager) |
 | `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (webhook secret from the shared secret) → **validate trigger** → hand to `intake.Service` (buffer policy) → report `accepted`/`deferred` → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
-| `manual-trigger` | API Gateway (`POST /process`, API key) | Validate JSON request → hand to `intake.Service` (reject policy) → **202 accepted** in-window, **503 rejected** outside it. Never starts the instance. See [Manual Trigger](./manual-trigger.md). |
+| `manual-trigger` | API Gateway (`POST /process`, API key) | Validate JSON request → hand to `intake.Service` (start policy) → **202**; starts the On-Demand host on demand if it is stopped (schedule override), then publishes. See [Manual Trigger](./manual-trigger.md). |
 | `scheduled-start` | EventBridge Scheduler (18:00 Mon–Fri) | Start the On-Demand instance if stopped (idempotent) |
 | `scheduled-stop` | EventBridge Scheduler (20:00 Mon–Fri) | Stop the On-Demand instance if running (idempotent) |
 
@@ -92,7 +92,7 @@ Least-privilege roles:
 
 - `registration` — `secretsmanager:GetSecretValue`/`PutSecretValue` on the **single** shared secret, `dynamodb:PutItem`/`UpdateItem`/`GetItem`/`DeleteItem` on the metadata table, CloudWatch Logs. Runs with **reserved concurrency 1** (single writer for the shared secret).
 - `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, CloudWatch Logs. **No PAT access; no start/stop.**
-- `manual-trigger` — `events:PutEvents` on the bus, read-only `ec2:DescribeInstances` (window gate), CloudWatch Logs. **No start/stop.**
+- `manual-trigger` — `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, tag-scoped `ec2:StartInstances` (on-demand override), CloudWatch Logs. **No stop.**
 - `scheduled-start` — `ec2:StartInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
 - `scheduled-stop` — `ec2:StopInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
 
