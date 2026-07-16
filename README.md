@@ -794,7 +794,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
 | [Workflows](./docs/workflows.md) | Trigger validation and the n8n pipeline, node by node |
 | [Cost Optimisation](./docs/cost-optimization.md) | Trigger pre-filtering, scheduled runtime, On-Demand rationale, cost math |
-| [Registration](./docs/registration.md) | `POST /repositories` API — onboarding, PAT scopes, payload, responses, errors |
+| [Registration](./docs/registration.md) | `/repositories` API — shared-secret credential storage, register/update/delete, PAT scopes, responses, migration |
 | [Manual Trigger](./docs/manual-trigger.md) | `POST /process` API — auth, payload, responses, errors, CloudFormation |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |

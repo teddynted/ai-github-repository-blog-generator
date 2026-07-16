@@ -13,7 +13,7 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 | Amazon VPC | Network isolation (public subnet, IGW, route tables, SGs) | `network.yaml` |
 | Amazon API Gateway | HTTPS ingress: webhook, registration, and manual `POST /process` | `serverless.yaml` |
 | AWS Lambda | Registration, webhook handler, manual-trigger (`serverless.yaml`); scheduled-start, scheduled-stop (`scheduler.yaml`) | `serverless.yaml` / `scheduler.yaml` |
-| AWS Secrets Manager | GitHub PATs + per-repo webhook secrets | `serverless.yaml` |
+| AWS Secrets Manager | One shared secret holding all repos' PAT + webhook secret (JSON keyed by owner/name) | `serverless.yaml` |
 | Amazon DynamoDB | Repository metadata store | `serverless.yaml` |
 | Amazon EventBridge | Event bus for matched events | `serverless.yaml` |
 | Amazon EventBridge Scheduler | Weekday start/stop schedules (owns instance power) | `scheduler.yaml` |
@@ -83,14 +83,14 @@ Five small functions form the serverless control plane (three in `serverless.yam
 | Function | Trigger | Responsibility |
 | --- | --- | --- |
 | `registration` | API Gateway (registration route) | Validate repo access + token permissions → create GitHub webhook → store metadata (DynamoDB) → store PAT + webhook secret (Secrets Manager) |
-| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (per-repo secret) → **validate trigger** → hand to `intake.Service` (buffer policy) → report `accepted`/`deferred` → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
+| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (webhook secret from the shared secret) → **validate trigger** → hand to `intake.Service` (buffer policy) → report `accepted`/`deferred` → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
 | `manual-trigger` | API Gateway (`POST /process`, API key) | Validate JSON request → hand to `intake.Service` (reject policy) → **202 accepted** in-window, **503 rejected** outside it. Never starts the instance. See [Manual Trigger](./manual-trigger.md). |
 | `scheduled-start` | EventBridge Scheduler (18:00 Mon–Fri) | Start the On-Demand instance if stopped (idempotent) |
 | `scheduled-stop` | EventBridge Scheduler (20:00 Mon–Fri) | Stop the On-Demand instance if running (idempotent) |
 
 Least-privilege roles:
 
-- `registration` — `secretsmanager:CreateSecret`/`PutSecretValue` (scoped to `blog-gen/repos/*`), `dynamodb:PutItem`/`UpdateItem` on the metadata table, CloudWatch Logs.
+- `registration` — `secretsmanager:GetSecretValue`/`PutSecretValue` on the **single** shared secret, `dynamodb:PutItem`/`UpdateItem`/`GetItem`/`DeleteItem` on the metadata table, CloudWatch Logs. Runs with **reserved concurrency 1** (single writer for the shared secret).
 - `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, CloudWatch Logs. **No PAT access; no start/stop.**
 - `manual-trigger` — `events:PutEvents` on the bus, read-only `ec2:DescribeInstances` (window gate), CloudWatch Logs. **No start/stop.**
 - `scheduled-start` — `ec2:StartInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
@@ -104,7 +104,7 @@ No Lambda performs content generation — that runs inside n8n/Ollama on EC2, wh
 
 Onboarding introduces two managed stores.
 
-**AWS Secrets Manager** holds each repository's **GitHub PAT** and **webhook signing secret** together in a **single JSON secret** at `blog-gen/repos/<owner>/<name>` (`{"pat":…,"webhook_secret":…}`) — one secret per repo. Secrets are KMS-encrypted; access is least-privilege and per-ARN (scoped to `blog-gen/repos/*`). The PAT is **never** stored in DynamoDB, config, or logs ([Security §2](./security.md#2-github-pat--secret-storage)).
+**AWS Secrets Manager** holds **one shared secret** — `blog-gen/github/repositories` — whose value is a JSON object keyed by `"<owner>/<name>"`, each entry `{"pat":…,"webhook_secret":…}`. Registration read-modify-writes it (single writer via reserved concurrency 1); the webhook handler and worker read it and index by key. One secret regardless of repo count. It is KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs. Full detail: [Registration](./registration.md) · [Security §2](./security.md#2-github-pat--secret-storage).
 
 **Amazon DynamoDB** (`repositories` table, on-demand capacity, encrypted at rest) stores per-repository metadata: Repository ID, owner, name, URL, default branch, webhook ID, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, and registration timestamp. It stores only the **reference** to the PAT secret — never the value ([Requirements §13](./requirements.md#13-repository-metadata-requirements)).
 

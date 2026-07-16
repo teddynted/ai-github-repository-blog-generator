@@ -49,8 +49,11 @@ type Config struct {
 	// RepositoriesTable is the DynamoDB metadata table (REPOSITORIES_TABLE).
 	RepositoriesTable string
 	// SecretsPrefix is the Secrets Manager path prefix for per-repo secrets
-	// (SECRETS_PREFIX).
+	// (SECRETS_PREFIX). Retained for compatibility; superseded by RepoSecretID.
 	SecretsPrefix string
+	// RepoSecretID is the name/ARN of the single shared secret holding every
+	// repository's credentials, keyed by "<owner>/<name>" (REPO_SECRET_ID).
+	RepoSecretID string
 	// EventBusName is the EventBridge bus for matched events (EVENT_BUS_NAME).
 	EventBusName string
 	// QueueURL is the SQS events queue URL (QUEUE_URL).
@@ -125,6 +128,7 @@ func Load(getenv Getenv) (Config, error) {
 		PublishTrigger:       firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
 		RepositoriesTable:    getenv("REPOSITORIES_TABLE"),
 		SecretsPrefix:        firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
+		RepoSecretID:         getenv("REPO_SECRET_ID"),
 		EventBusName:         getenv("EVENT_BUS_NAME"),
 		QueueURL:             getenv("QUEUE_URL"),
 		InstanceID:           getenv("INSTANCE_ID"),
@@ -207,6 +211,8 @@ func (c Config) field(name string) (string, bool) {
 		return c.RepositoriesTable, true
 	case "SecretsPrefix":
 		return c.SecretsPrefix, true
+	case "RepoSecretID":
+		return c.RepoSecretID, true
 	case "EventBusName":
 		return c.EventBusName, true
 	case "QueueURL":

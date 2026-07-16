@@ -62,7 +62,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "QueueURL", "RepositoriesTable", "SecretsPrefix"); err != nil {
+	if err := a.Config.Require("AWSRegion", "QueueURL", "RepositoriesTable", "RepoSecretID"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -79,7 +79,7 @@ func main() {
 	// Real repository processing: resolve the PAT from the repo's metadata
 	// secret reference, then clone and read the working copy.
 	meta := metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable)
-	sec := secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix)
+	sec := secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.RepoSecretID)
 	processor := &processing.Processor{
 		Cloner: &reposource.GitCloner{
 			Tokens:  &reposource.MetaTokenSource{Meta: meta, Secrets: sec},

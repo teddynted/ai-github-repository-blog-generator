@@ -20,7 +20,7 @@ GitHub Personal Access Tokens are the most sensitive material in the MVP, so the
 
 | Control | Implementation |
 | --- | --- |
-| **Secrets Manager only** | PATs and per-repo webhook secrets are stored as secrets in **AWS Secrets Manager** |
+| **Secrets Manager only** | All repositories' PATs and webhook secrets are stored in **one shared AWS Secrets Manager secret** (JSON keyed by owner/name) |
 | **Never in plain text** | PATs are never stored in source, config files, environment variables, container images, or the metadata database |
 | **Reference, not value** | DynamoDB holds only the **secret reference** (ARN/name), never the token |
 | **Retrieved only when needed** | The PAT is fetched only for clone/webhook operations — not by the webhook handler on the hot path |
@@ -28,7 +28,7 @@ GitHub Personal Access Tokens are the most sensitive material in the MVP, so the
 | **Never logged** | PATs (and secrets) are never written to logs or surfaced in errors |
 | **Encryption** | Secrets are KMS-encrypted at rest; retrieved over TLS |
 
-**Rotation** of PATs and webhook secrets is a **future enhancement** ([Roadmap](./roadmap.md)); when supported, a webhook-secret rotation must update the GitHub webhook configuration in the same change window to avoid rejected deliveries.
+**Rotation** of a repository's PAT or webhook secret is supported: re-`POST /repositories` with `"update": true` and the new value(s). The registration Lambda updates the GitHub webhook's configuration in the **same call**, so signed deliveries keep verifying (see [Registration §5](./registration.md#5-update-credentials-rotation)).
 
 ---
 
@@ -73,10 +73,10 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
   "Version": "2012-10-17",
   "Statement": [
     { "Effect": "Allow",
-      "Action": ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue"],
-      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/repos/*" },
+      "Action": ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"],
+      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/github/repositories-*" },
     { "Effect": "Allow",
-      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:DeleteItem"],
       "Resource": "arn:aws:dynamodb:us-east-1:<acct>:table/blog-gen-repositories" }
   ]
 }
@@ -91,7 +91,7 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
     { "Effect": "Allow", "Action": ["dynamodb:GetItem"],
       "Resource": "arn:aws:dynamodb:us-east-1:<acct>:table/blog-gen-repositories" },
     { "Effect": "Allow", "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/repos/*" },
+      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/github/repositories-*" },
     { "Effect": "Allow", "Action": ["events:PutEvents"],
       "Resource": "arn:aws:events:us-east-1:<acct>:event-bus/blog-gen-bus" }
   ]

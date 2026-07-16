@@ -135,7 +135,7 @@ flowchart TB
 | Component | Responsibility |
 | --- | --- |
 | Registration API (API Gateway + Lambda) | Validate repo access + token permissions, create webhook, store metadata (DynamoDB) and PAT/webhook secret (Secrets Manager) |
-| AWS Secrets Manager | Securely store PATs and per-repo webhook secrets; retrieved only when needed |
+| AWS Secrets Manager | One shared secret holding all repos' PATs + webhook secrets (JSON keyed by owner/name); retrieved only when needed |
 | Amazon DynamoDB | Repository metadata (secret reference, trigger pattern, webhook ID, …) — **never the PAT** |
 | API Gateway | Public HTTPS ingress for webhook + registration |
 | Webhook Handler (Lambda) | Resolve repo metadata, verify signature, **validate trigger**, publish matched events. **No analysis or inference; never fetches the PAT** |
@@ -287,7 +287,7 @@ flowchart LR
 
 | Store | Contents | Notes |
 | --- | --- | --- |
-| **AWS Secrets Manager** | GitHub PATs, per-repo webhook secrets | Encrypted; retrieved only when needed; **never** in the database or logs |
+| **AWS Secrets Manager** | One shared secret (all repos' PATs + webhook secrets, keyed by owner/name) | Encrypted; retrieved only when needed; **never** in the database or logs |
 | **Amazon DynamoDB** | Repository metadata (incl. secret reference) | Encrypted at rest; **never** stores the PAT |
 | **gp3 EBS volume** | Ollama models, n8n state, **Repository Memory**, workflows | Persistent across start/stop; encrypted |
 | Repository clones | Working copy during a run | Transient — discarded after the run |

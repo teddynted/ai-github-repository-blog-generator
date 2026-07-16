@@ -120,7 +120,7 @@ The instance runs only 18:00–20:00 on weekdays, so a matched event can arrive 
 | Lambda (registration + handler + scheduled-start + scheduled-stop) | Low volume | ~$0 |
 | API Gateway | Low request volume | ~$0–1 |
 | EventBridge + SQS | Low event volume | ~$0 |
-| Secrets Manager | 1 JSON secret per repo (PAT + webhook secret) | ~$0.40+/repo |
+| Secrets Manager | 1 shared secret for ALL repos | ~$0.40 flat |
 | DynamoDB (on-demand) | Low read/write | ~$0–1 |
 | CloudWatch (logs + metrics) | 14-day retention | ~$1–3 |
 | **Inference (Ollama, local)** | No per-token fee | **$0** |
@@ -129,6 +129,6 @@ The instance runs only 18:00–20:00 on weekdays, so a matched event can arrive 
 **Notes & levers:**
 - **The schedule caps EC2 cost.** ~40 h/month at On-Demand rates is the largest line item and is fixed regardless of webhook volume; narrow the window to cut it further.
 - **Trigger pre-filtering** still means routine commits add **$0** — they never buffer work for a run to process.
-- **EBS** is the largest *fixed storage* item; **Secrets Manager** adds a small per-repo cost.
+- **EBS** is the largest *fixed storage* item; **Secrets Manager** is a single shared secret (~$0.40 flat, not per repo).
 - There is **no NAT gateway** and **no inference API bill**.
 - For comparison, an always-on (24×7) On-Demand `g4dn.xlarge` is ~$380/month — the weekday window is a **~94% compute saving**.

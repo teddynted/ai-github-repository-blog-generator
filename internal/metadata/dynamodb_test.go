@@ -23,6 +23,14 @@ func (f *fakeDDB) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...fun
 	return &dynamodb.PutItemOutput{}, nil
 }
 
+func (f *fakeDDB) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	if pk, ok := in.Key["repo_full_name"].(*ddbtypes.AttributeValueMemberS); ok {
+		f.getKey = pk.Value
+	}
+	f.item = nil
+	return &dynamodb.DeleteItemOutput{}, nil
+}
+
 func (f *fakeDDB) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 	if pk, ok := in.Key["repo_full_name"].(*ddbtypes.AttributeValueMemberS); ok {
 		f.getKey = pk.Value

@@ -4,7 +4,9 @@ Description: >
   REST API Gateway (webhook, registration + manual /process routes), three
   Lambdas (registration, webhook-handler, manual-trigger), the EventBridge bus
   and rule, the SQS events queue +
-  dead-letter queue, and the DynamoDB metadata table. Instance power is owned by
+  dead-letter queue, the DynamoDB metadata table, and one shared Secrets Manager
+  secret holding every repository's credentials (keyed by owner/name). Instance
+  power is owned by
   the scheduler stack (fixed weekday window), so this stack never starts or
   stops the compute host: a matched webhook is published to EventBridge and
   buffered in SQS, then drained by the worker while the instance is up. GitHub
@@ -63,6 +65,21 @@ Resources:
         SSEEnabled: true
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # One shared secret holds every repository's credentials as a JSON object
+  # keyed by "<owner>/<name>": {"octocat/widget": {"pat":…,"webhook_secret":…}}.
+  # Registration read-modify-writes this secret; the webhook handler and worker
+  # read it. Created with an empty document; CloudFormation never rewrites the
+  # value on later updates (the template value stays "{}"), so entries persist.
+  RepoCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/github/repositories"
+      Description: Shared GitHub credentials for all registered repositories (JSON, keyed by owner/name).
+      SecretString: "{}"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -135,17 +152,19 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Read + write ONLY the single shared credentials secret. No
+              # create/delete of per-repo secrets any more.
               - Effect: Allow
                 Action:
-                  - secretsmanager:CreateSecret
+                  - secretsmanager:GetSecretValue
                   - secretsmanager:PutSecretValue
-                  - secretsmanager:TagResource
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                Resource: !Ref RepoCredentialsSecret
               - Effect: Allow
                 Action:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:GetItem
+                  - dynamodb:DeleteItem
                 Resource: !GetAtt RepositoriesTable.Arn
 
   WebhookHandlerRole:
@@ -170,7 +189,7 @@ Resources:
                 Resource: !GetAtt RepositoriesTable.Arn
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                Resource: !Ref RepoCredentialsSecret
               - Effect: Allow
                 Action: events:PutEvents
                 Resource: !GetAtt EventBus.Arn
@@ -250,6 +269,9 @@ Resources:
       Architectures: [arm64]
       MemorySize: 256
       Timeout: 30
+      # Single writer for the shared credentials secret: reserved concurrency 1
+      # serializes registrations so read-modify-write updates cannot be lost.
+      ReservedConcurrentExecutions: 1
       Role: !GetAtt RegistrationRole.Arn
       Code:
         S3Bucket: !Ref ArtifactsBucket
@@ -257,7 +279,7 @@ Resources:
       Environment:
         Variables:
           REPOSITORIES_TABLE: !Ref RepositoriesTable
-          SECRETS_PREFIX: !Sub "${ProjectName}/repos"
+          REPO_SECRET_ID: !Ref RepoCredentialsSecret
           PUBLISH_TRIGGER: !Ref PublishTrigger
           WEBHOOK_URL: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/webhook"
       Tags:
@@ -281,7 +303,7 @@ Resources:
       Environment:
         Variables:
           REPOSITORIES_TABLE: !Ref RepositoriesTable
-          SECRETS_PREFIX: !Sub "${ProjectName}/repos"
+          REPO_SECRET_ID: !Ref RepoCredentialsSecret
           EVENT_BUS_NAME: !Ref EventBus
           EVENT_SOURCE: !Sub "${ProjectName}.webhook"
           PUBLISH_TRIGGER: !Ref PublishTrigger
@@ -399,6 +421,21 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RegistrationFunction.Arn}/invocations"
 
+  # DELETE /repositories deregisters a repo (removes its shared-secret entry,
+  # webhook, and metadata). Same Lambda; it routes on the HTTP method.
+  RepositoriesDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref RepositoriesResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RegistrationFunction.Arn}/invocations"
+
   # POST /process — the manual trigger. Secured with an API key (x-api-key),
   # the same simple scheme as the registration route, and covered by the shared
   # usage plan on this stage. Not publicly accessible without the key.
@@ -437,27 +474,29 @@ Resources:
       FunctionName: !Ref RegistrationFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/repositories"
+      # POST (register/update) and DELETE (deregister) both invoke the function.
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/repositories"
 
   # A Deployment is an immutable snapshot of the API. Changing methods does NOT
   # redeploy an existing Deployment (same logical id = no-op), so the stage would
   # keep serving the old set. Bump the logical id (…V2, V3, …) whenever methods
-  # change to force a fresh snapshot — this V2 adds POST /process.
-  ApiDeploymentV2:
+  # change to force a fresh snapshot — V3 adds DELETE /repositories.
+  ApiDeploymentV3:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - WebhookMethod
       - RepositoriesMethod
+      - RepositoriesDeleteMethod
       - ProcessMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "Deployment for ${StageName} (webhook, repositories, process)"
+      Description: !Sub "Deployment for ${StageName} (webhook, repositories POST+DELETE, process)"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       RestApiId: !Ref RestApi
-      DeploymentId: !Ref ApiDeploymentV2
+      DeploymentId: !Ref ApiDeploymentV3
       StageName: !Ref StageName
 
   RegistrationApiKey:
@@ -505,6 +544,11 @@ Outputs:
     Value: !Ref RepositoriesTable
     Export:
       Name: !Sub "${ProjectName}-RepositoriesTableName"
+  RepoCredentialsSecretArn:
+    Description: ARN of the shared repository-credentials secret (worker reads it via the instance role).
+    Value: !Ref RepoCredentialsSecret
+    Export:
+      Name: !Sub "${ProjectName}-RepoCredentialsSecretArn"
   EventBusName:
     Description: EventBridge bus for matched events.
     Value: !Ref EventBus

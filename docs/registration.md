@@ -1,157 +1,204 @@
-# Repository Registration (POST /repositories)
+# Repository Registration (`/repositories`)
 
-The onboarding endpoint. It validates repository access with a GitHub PAT,
-**creates the push/release webhook automatically**, stores the PAT + webhook
-secret in Secrets Manager, and writes repository metadata to DynamoDB. After
-registration the platform reacts to that repository's events with no further
-setup.
+The onboarding API. It validates repository access with a GitHub PAT, creates
+(or updates) the push/release webhook, and stores the repository's credentials
+in **one shared Secrets Manager secret** shared by all repositories. A companion
+`DELETE` deregisters a repository.
 
 Related: [Deployment → Register a Repository](./deployment.md#6-register-a-repository) ·
 [Manual Trigger](./manual-trigger.md) · [Security](./security.md) ·
-[Architecture](./architecture.md).
+[Infrastructure](./infrastructure.md).
 
 ---
 
-## 1. Endpoint
+## 1. Shared credentials secret
+
+Instead of two Secrets Manager secrets per repository, the platform keeps a
+**single** secret — `blog-gen/github/repositories` — whose value is a JSON
+object keyed by `"<owner>/<name>"`:
+
+```json
+{
+  "octocat/widget": { "pat": "ghp_xxxxxxxx", "webhook_secret": "xxxxxxxx" },
+  "acme/gadget":    { "pat": "ghp_yyyyyyyy", "webhook_secret": "yyyyyyyy" }
+}
+```
+
+- **Registration** read-modify-writes this document (add/update an entry).
+- **Deletion** removes an entry, leaving the rest intact.
+- **Lookups** (webhook handler, worker) read the secret and index by
+  `"<owner>/<name>"` to get the PAT / webhook secret.
+
+This keeps the number of Secrets Manager resources constant (one) regardless of
+how many repositories are registered.
+
+### Concurrency
+
+Writes are **read-modify-write**, so concurrent registrations could otherwise
+lose updates. Two safeguards prevent that:
+
+1. The registration Lambda runs with **reserved concurrency 1** — a single
+   writer, so updates are serialized.
+2. The store retries the read-modify-write on transient Secrets Manager errors.
+
+Readers are unaffected (concurrent reads are safe).
+
+---
+
+## 2. Endpoint & auth
 
 ```text
-POST /repositories
+POST   /repositories     register or update a repository
+DELETE /repositories     deregister a repository
 Host: https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 Content-Type: application/json
 x-api-key: <api key>
 ```
 
-Resolve the URL, the API-key id, and the key value from stack outputs:
+Both methods require an **API key** (`x-api-key`) via the shared usage plan;
+without it API Gateway returns **403** before the Lambda runs. Resolve the URL +
+key from stack outputs:
 
 ```bash
-REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+REG=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
   --query "Stacks[0].Outputs[?OutputKey=='RegistrationUrl'].OutputValue" --output text)
-
-API_KEY_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+KEY_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
   --query "Stacks[0].Outputs[?OutputKey=='RegistrationApiKeyId'].OutputValue" --output text)
-API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value --query value --output text)
+API_KEY=$(aws apigateway get-api-key --api-key "$KEY_ID" --include-value --query value --output text)
 ```
-
-## 2. Authentication
-
-Requires an **API key** (`x-api-key`) — covered by the shared API Gateway usage
-plan on the stage (the same key authorises `POST /process`). A request without a
-valid key is **403 Forbidden** from API Gateway before the Lambda runs. The
-endpoint is never publicly accessible.
 
 ## 3. GitHub PAT (prerequisite)
 
-Create a **fine-grained** Personal Access Token in GitHub (**Settings → Developer
-settings → Personal access tokens → Fine-grained tokens**) scoped to the target
-repository with:
+Create a **fine-grained** PAT scoped to the target repo with **Contents: Read**,
+**Webhooks: Read and write**, **Metadata: Read**. The PAT is stored in the
+shared secret and never returned, logged, or written to DynamoDB.
 
-| Permission | Level | Why |
-| --- | --- | --- |
-| Contents | Read | clone + read the repo during a run |
-| Webhooks | Read and write | create the push/release webhook |
-| Metadata | Read | resolve repository info |
-
-The PAT is sent **once**, at registration; it is stored in Secrets Manager and
-never returned, logged, or written to DynamoDB.
-
-## 4. Request payload
+## 4. Register — `POST /repositories`
 
 ```json
 {
-  "repository_url": "https://github.com/acme/widget",
-  "pat": "github_pat_xxx",
-  "trigger_pattern": "regex:^(blog|post):"
+  "owner": "octocat",
+  "repository": "designing-an-ai-agent-platform-on-aws",
+  "pat": "ghp_xxxxxxxxxxxxxxxxx",
+  "webhook_secret": "myWebhookSecret",
+  "trigger_pattern": "regex:^(blog|post):",
+  "update": false
 }
 ```
 
-| Field | Required | Default | Notes |
-| --- | --- | --- | --- |
-| `repository_url` | **yes** | — | full HTTPS repo URL (`https://github.com/<owner>/<name>`) |
-| `pat` | **yes** | — | fine-grained GitHub PAT (see §3); stored, never returned |
-| `trigger_pattern` | no | platform default (`blog:`) | per-repo publishing trigger — a literal prefix, `regex:<expr>`, or `[literal]`; validated |
-
-## 5. Responses
-
-**Success — 200 OK** (no secret material):
-
-```json
-{
-  "repo_full_name": "acme/widget",
-  "owner": "acme",
-  "name": "widget",
-  "default_branch": "main",
-  "webhook_id": 512345678,
-  "trigger_pattern": "blog:",
-  "status": "registered"
-}
-```
-
-**Errors** — `{"error":"<code>","message":"<safe message>"}`:
-
-| Status | Code | When |
+| Field | Required | Notes |
 | --- | --- | --- |
-| 400 | `invalid_input` | body is not JSON; `repository_url`/`pat` missing; `repository_url` unparseable; `trigger_pattern` invalid |
-| 401 | `unauthorized` | GitHub rejected the token (insufficient scope or no access) |
-| 404 | `not_found` | repository not found or not accessible with this token |
-| 403 | — | missing/invalid `x-api-key` (API Gateway default) |
-| 502 | `upstream_error` | GitHub request failed or returned an unexpected status |
-| 500 | `internal_error` | storing credentials or metadata failed |
+| `owner` | **yes** | repository owner/org |
+| `repository` | **yes** | repository name (without owner) |
+| `pat` | **yes** | fine-grained GitHub PAT; stored, never returned |
+| `webhook_secret` | **yes** | HMAC secret used for the webhook (you choose it) |
+| `trigger_pattern` | no | per-repo publishing trigger (literal / `regex:` / `[literal]`); validated |
+| `update` | no | must be `true` to overwrite an already-registered repo |
 
-Ordering guarantees no half-registered repo: the webhook and secret are created
-**before** metadata is written, so a failure never leaves a visible-but-broken
-entry.
+Behaviour:
 
-## 6. Example
+- **New repo** → validate access, **create** the webhook with `webhook_secret`,
+  add the entry to the shared secret, write metadata. → `registered`.
+- **Existing repo + `update: true`** → validate access, **update** the webhook
+  secret on GitHub, overwrite the entry, update metadata. → `updated`.
+- **Existing repo, `update` not set** → **409** duplicate; nothing changes.
+
+### Responses
+
+| Status | Body |
+| --- | --- |
+| **200** register | `{"status":"success","message":"Repository registered successfully.","repository":"octocat/…"}` |
+| **200** update | `{"status":"success","message":"Repository credentials updated successfully.","repository":"octocat/…"}` |
+| **409** duplicate | `{"status":"error","message":"Repository is already registered."}` |
+| **400** validation | `{"status":"error","message":"missing required field(s): pat, webhook_secret"}` |
+| **401 / 404** | `{"status":"error","message":"…"}` (GitHub rejected the token / repo not found) |
+| **403** | missing/invalid API key (API Gateway) |
 
 ```bash
-curl -sS -X POST "$REGISTRATION_URL" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
-  -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
-# → 200 {"repo_full_name":"acme/widget", … ,"status":"registered"}
-
-# With a custom per-repo trigger:
-#   -d '{"repository_url":"…","pat":"…","trigger_pattern":"regex:^(blog|post):"}'
+curl -sS -X POST "$REG" -H "Content-Type: application/json" -H "x-api-key: $API_KEY" \
+  -d '{"owner":"octocat","repository":"widget","pat":"ghp_x","webhook_secret":"s3cret"}'
 ```
 
-Confirm a green **✓** under the repo's **Settings → Webhooks → Recent
-Deliveries**. To create the webhook by hand instead, see
-[Deployment → Manual webhook setup](./deployment.md#6-register-a-repository).
+## 5. Update credentials (rotation)
 
-## 7. What registration does
+Re-send the `POST` with `"update": true` and the new `pat` and/or
+`webhook_secret`. The webhook's secret on GitHub is updated in the same call, so
+signed deliveries keep verifying.
 
-1. Validate `repository_url` + `trigger_pattern`.
-2. `GetRepository` with the PAT — proves access + read permission.
-3. Generate a webhook signing secret and `CreateWebhook` for **push** and
-   **release** events, pointing at `WebhookUrl` (this also proves webhook
-   permission).
-4. Store the PAT + webhook secret in **Secrets Manager** as a **single JSON
-   secret** at `blog-gen/repos/<owner>/<name>` (`{"pat":…,"webhook_secret":…}`);
-   keep only that reference.
-5. Write metadata to **DynamoDB**: full name, repo id, owner, name, URL, default
-   branch, webhook id, trigger pattern, `enabled=true`, the secret reference, and
-   the registration timestamp — **never the PAT**.
+```bash
+curl -sS -X POST "$REG" -H "Content-Type: application/json" -H "x-api-key: $API_KEY" \
+  -d '{"owner":"octocat","repository":"widget","pat":"ghp_new","webhook_secret":"rotated","update":true}'
+```
+
+## 6. Delete — `DELETE /repositories`
+
+```json
+{ "owner": "octocat", "repository": "widget" }
+```
+
+Removes the repository's **webhook** (best-effort), its **entry** in the shared
+secret (others untouched), and its **metadata**.
+
+| Status | Body |
+| --- | --- |
+| **200** | `{"status":"success","message":"Repository deleted successfully.","repository":"octocat/widget"}` |
+| **404** | `{"status":"error","message":"repository is not registered"}` |
+
+```bash
+curl -sS -X DELETE "$REG" -H "Content-Type: application/json" -H "x-api-key: $API_KEY" \
+  -d '{"owner":"octocat","repository":"widget"}'
+```
+
+## 7. Lookup (how credentials are retrieved)
+
+The webhook handler and worker never fetch a per-repo secret. They:
+
+1. read the shared secret `blog-gen/github/repositories`,
+2. parse the JSON,
+3. index by `"<owner>/<name>"` (stored as the repo's `SecretRef` in metadata),
+4. use `.webhook_secret` (HMAC verification) or `.pat` (cloning).
 
 ## 8. Logging
 
-The `registration` Lambda logs the outcome only — `repo` + `webhook_id` on
-success, or the error **code** on failure. The PAT and webhook secret are never
-logged.
+The Lambda logs `owner`, `repository`, `action` (registered/updated/deleted),
+`secret_status`, and `outcome` (success/failure) — **never** the PAT, webhook
+secret, or request body.
 
-## 9. CloudFormation (`serverless.yaml`)
+## 9. IAM & CloudFormation
 
-| Resource | Purpose |
-| --- | --- |
-| `RegistrationRole` | `secretsmanager:CreateSecret`/`PutSecretValue`/`TagResource` (scoped to `${ProjectName}/repos/*`), `dynamodb:PutItem`/`UpdateItem`/`GetItem` on the metadata table, CloudWatch Logs |
-| `RegistrationLogGroup` | `/aws/lambda/${ProjectName}-registration`, retention-bounded |
-| `RegistrationFunction` | Go Lambda (`provided.al2023`, arm64); env `REPOSITORIES_TABLE`, `SECRETS_PREFIX`, `PUBLISH_TRIGGER`, `WEBHOOK_URL` |
-| `RepositoriesResource` / `RepositoriesMethod` | `POST /repositories`, `ApiKeyRequired: true`, `AWS_PROXY` integration |
-| `RegistrationInvokePermission` | lets API Gateway invoke the Lambda |
-| `RegistrationApiKey` / `ApiUsagePlan` / `ApiUsagePlanKey` | the API key + usage plan shared with `/process` |
-| Output `RegistrationUrl` / `RegistrationApiKeyId` | endpoint URL + key id |
+- **Shared secret** `RepoCredentialsSecret` (`blog-gen/github/repositories`),
+  created with `{}` — CloudFormation never rewrites the value on later updates,
+  so entries persist.
+- **Registration role**: `secretsmanager:GetSecretValue` + `PutSecretValue` on
+  the **one** shared secret; `dynamodb:PutItem/UpdateItem/GetItem/DeleteItem`.
+  (The old per-repo `CreateSecret`/`…/repos/*` grants are gone.)
+- **Webhook handler / worker roles**: `secretsmanager:GetSecretValue` on the
+  **one** shared secret only.
+- **Registration function**: `ReservedConcurrentExecutions: 1`;
+  env `REPO_SECRET_ID`.
+- **API**: `POST` and `DELETE` on `/repositories` (both API-key-required) →
+  the registration Lambda, which routes on HTTP method. Output
+  `RepoCredentialsSecretArn` is exported for the compute stack.
 
-## 10. Deployment
+## 10. Security considerations
 
-No dedicated step — the `serverless` stack ships it (see
-[Deployment §3–4](./deployment.md#3-build-the-lambda-functions)). After deploy,
-fetch `RegistrationUrl` + the API key (§1) and POST a repository.
+- One secret, least-privilege access: registration read-writes it; readers get
+  read-only; per-ARN scoping (no wildcards) — see [Security](./security.md).
+- The PAT and webhook secret are never returned by the API, logged, or stored in
+  DynamoDB (only the `"<owner>/<name>"` reference is).
+- Reserved concurrency 1 guarantees a single writer, preventing lost updates
+  from concurrent registrations.
+
+## 11. Migration from per-repo secrets
+
+Existing deployments have per-repo secrets under `blog-gen/repos/…`. Move them
+into the shared secret with [`scripts/migrate-shared-secret.sh`](../scripts/migrate-shared-secret.sh):
+
+```bash
+REGION=us-east-1 scripts/migrate-shared-secret.sh          # dry run (masked preview)
+REGION=us-east-1 APPLY=1 scripts/migrate-shared-secret.sh  # write the shared secret
+```
+
+It reads both historical layouts (`…/pat` + `…/webhook-secret`, or a single JSON
+per repo), merges them into `blog-gen/github/repositories`, and prints how to
+delete the old secrets once you've verified the platform still works.

@@ -163,11 +163,12 @@ Resources:
                   - sqs:GetQueueAttributes
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueArn"
-              # Read the PAT (when cloning) and the SMTP password (for email).
+              # Read the shared repository-credentials secret (PAT, when cloning)
+              # and the SMTP password (for email).
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                  - Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
                   - !Ref NotificationsSecret
               # Update last-processed commit SHA after a run.
               - Effect: Allow
@@ -332,7 +333,7 @@ Resources:
                 AWS_REGION=${AWS::Region}
                 QUEUE_URL=${QueueUrl}
                 REPOSITORIES_TABLE=${RepositoriesTable}
-                SECRETS_PREFIX=${ProjectName}/repos
+                REPO_SECRET_ID=${RepoSecretId}
                 OLLAMA_MODEL=${OllamaModel}
                 OLLAMA_BASE_URL=http://127.0.0.1:11434
                 OUTPUT_DIR=/data/generated-content
@@ -372,6 +373,8 @@ Resources:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueUrl"
                 RepositoriesTable:
                   Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
+                RepoSecretId:
+                  Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
 
   Instance:
     Type: AWS::EC2::Instance

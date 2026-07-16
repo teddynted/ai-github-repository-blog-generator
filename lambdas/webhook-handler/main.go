@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "SecretsPrefix", "EventBusName", "EventSource"); err != nil {
+	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID", "EventBusName", "EventSource"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func main() {
 
 	handler := &webhook.Handler{
 		Repos:          metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable),
-		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix),
+		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.RepoSecretID),
 		Intake:         svc,
 		Metrics:        metrics.New(metrics.Namespace, os.Stdout),
 		DefaultTrigger: a.Config.PublishTrigger,

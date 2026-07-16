@@ -228,11 +228,11 @@ In the n8n editor: **Workflows → Import from File**, select each JSON under `w
 
 ## 6. Register a Repository
 
-Registration is the primary way to onboard a repo — it validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, and **creates the GitHub webhook automatically**. It's a two-part step. Full endpoint spec (payload, responses, error codes): [Registration](./registration.md).
+Registration validates access, creates the GitHub webhook, and stores the repo's credentials in the **shared** Secrets Manager secret (`blog-gen/github/repositories`). Full endpoint spec (payload, responses, errors, delete, migration): [Registration](./registration.md).
 
 **1. Create the GitHub PAT** (in GitHub, not via the endpoint): **Settings → Developer settings → Personal access tokens → Fine-grained tokens**, scoped to the target repo with **Contents: Read**, **Webhooks: Read and write**, **Metadata: Read**. Copy the `github_pat_…` value.
 
-**2. POST it to the registration endpoint.**
+**2. POST it to the registration endpoint** with `owner`, `repository`, `pat`, and a `webhook_secret` you choose.
 
 > ⚠️ **The registration route requires an API key** (`ApiKeyRequired: true`). Send the `x-api-key` header or you get **403 Forbidden**. (The webhook route is public — HMAC-signed — and takes no API key.)
 
@@ -247,13 +247,16 @@ API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value --q
 curl -sS -X POST "$REGISTRATION_URL" \
   -H "Content-Type: application/json" \
   -H "x-api-key: $API_KEY" \
-  -d '{"repository_url":"https://github.com/acme/widget","pat":"github_pat_xxx"}'
+  -d '{"owner":"acme","repository":"widget","pat":"github_pat_xxx","webhook_secret":"myWebhookSecret"}'
 
-# Optional: a custom per-repo trigger (literal prefix or "regex:"):
-#   -d '{"repository_url":"...","pat":"...","trigger_pattern":"regex:^(blog|post):"}'
+# Rotate credentials for an existing repo (add "update": true):
+#   -d '{"owner":"acme","repository":"widget","pat":"github_pat_new","webhook_secret":"rotated","update":true}'
+# Deregister a repo:
+#   curl -sS -X DELETE "$REGISTRATION_URL" -H "x-api-key: $API_KEY" \
+#     -H "Content-Type: application/json" -d '{"owner":"acme","repository":"widget"}'
 ```
 
-On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with a generated secret, stores the PAT + webhook secret in Secrets Manager, and writes metadata (including the secret reference and default trigger pattern `blog:`) to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
+On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with your `webhook_secret`, adds the credentials to the shared secret keyed by `acme/widget`, and writes metadata to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
 
 > The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push and only publishes an event when the commit message matches the repository's trigger pattern (default `blog:`). It never starts the instance — that is owned by the scheduler's weekday window; a matched event that arrives outside the window is buffered in SQS and processed at the next 18:00 start.
 
