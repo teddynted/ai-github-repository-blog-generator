@@ -1,6 +1,6 @@
-// Package awssqs adapts Amazon SQS to the lifecycle.Queue port, reporting the
-// events queue depth (visible + in-flight) so the idle-shutdown use case knows
-// whether there is outstanding work.
+// Package awssqs adapts Amazon SQS for the platform: the worker receives and
+// deletes matched events, and Depth reports the queue backlog (visible +
+// in-flight) for operational visibility.
 package awssqs
 
 import (

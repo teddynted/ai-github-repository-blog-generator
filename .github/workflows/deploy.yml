@@ -62,12 +62,10 @@ jobs:
 
       - name: build + package lambdas
         run: |
-          # scheduled-start/scheduled-stop back the optional scheduler.yaml stack.
-          # They are built + uploaded here so the sha-versioned artifacts exist,
-          # but the scheduler stack itself is deployed out-of-band
-          # (scripts/deploy-scheduler.sh) since it targets a chosen instance ID
-          # and has a lifecycle independent of the app stacks.
-          for fn in registration webhook-handler instance-starter idle-shutdown scheduled-start scheduled-stop; do
+          # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
+          # owns instance power on the fixed weekday window (deployed below,
+          # wired to the compute stack's InstanceId).
+          for fn in registration webhook-handler scheduled-start scheduled-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -93,7 +91,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration webhook-handler instance-starter idle-shutdown scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler scheduled-start scheduled-stop; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
@@ -102,7 +100,7 @@ jobs:
 
       - name: deploy network stack
         run: |
-          # SUBNET_AZ moves the Spot host to an AZ with capacity (e.g. us-east-1b)
+          # SUBNET_AZ places the On-Demand host in a specific AZ (e.g. us-east-1b)
           # when the default AZ is short on the chosen instance type.
           P=""
           [ -n "${{ vars.OPERATOR_CIDR }}" ] && P="$P OperatorCidr=${{ vars.OPERATOR_CIDR }}"
@@ -122,9 +120,7 @@ jobs:
             --parameter-overrides \
               ArtifactsBucket="$ARTIFACTS_BUCKET" \
               RegistrationCodeKey="$SHA/registration.zip" \
-              WebhookHandlerCodeKey="$SHA/webhook-handler.zip" \
-              InstanceStarterCodeKey="$SHA/instance-starter.zip" \
-              IdleShutdownCodeKey="$SHA/idle-shutdown.zip"
+              WebhookHandlerCodeKey="$SHA/webhook-handler.zip"
 
       - name: deploy compute stack
         env:
@@ -161,6 +157,27 @@ jobs:
             --stack-name blog-gen-compute \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides $PARAMS
+
+      - name: deploy scheduler stack (weekday power window)
+        env:
+          # Optional overrides; defaults are Etc/UTC and 18:00-20:00 Mon-Fri
+          # (the scheduler.yaml defaults). Set SCHEDULE_TIMEZONE to run the
+          # window in local wall-clock time (e.g. Africa/Johannesburg).
+          SCHEDULE_TIMEZONE: ${{ vars.SCHEDULE_TIMEZONE }}
+        run: |
+          # The scheduler stack owns instance power: it starts the On-Demand host
+          # at 18:00 and stops it at 20:00, Mon-Fri. Wire it to the compute
+          # stack's InstanceId so the schedule targets the real host.
+          INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+            --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
+          P="ProjectName=blog-gen InstanceId=$INSTANCE_ID ArtifactsBucket=$ARTIFACTS_BUCKET"
+          P="$P StartCodeKey=$SHA/scheduled-start.zip StopCodeKey=$SHA/scheduled-stop.zip"
+          [ -n "$SCHEDULE_TIMEZONE" ] && P="$P ScheduleTimezone=$SCHEDULE_TIMEZONE"
+          aws cloudformation deploy \
+            --template-file infrastructure/scheduler.yaml \
+            --stack-name blog-gen-scheduler \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides $P
 
       - name: seed SMTP password into Secrets Manager (optional)
         env:

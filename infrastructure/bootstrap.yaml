@@ -215,15 +215,7 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
                   - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*"
-              # Let preflight create the EC2 Spot service-linked role the first
-              # time a Spot instance launches in the account.
-              - Sid: SpotServiceLinkedRole
-                Effect: Allow
-                Action: iam:CreateServiceLinkedRole
-                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/spot.amazonaws.com/*"
-                Condition:
-                  StringEquals:
-                    iam:AWSServiceName: spot.amazonaws.com
+              # (The On-Demand compute host needs no Spot service-linked role.)
 
 Outputs:
   ArtifactsBucketName:

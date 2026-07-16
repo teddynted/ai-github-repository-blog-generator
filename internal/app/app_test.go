@@ -26,7 +26,7 @@ func TestNewFromBootstrapsConfigAndLogger(t *testing.T) {
 }
 
 func TestNewFromPropagatesConfigError(t *testing.T) {
-	env := map[string]string{"IDLE_TIMEOUT_MINUTES": "not-a-number"}
+	env := map[string]string{"SMTP_PORT": "not-a-number"}
 	if _, err := newFrom(func(k string) string { return env[k] }, io.Discard); err == nil {
 		t.Fatal("expected bootstrap to fail on malformed config")
 	}

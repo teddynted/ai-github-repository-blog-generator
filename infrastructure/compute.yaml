@@ -1,10 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  GitHub AI Blog Generator - Compute stack. A cost-optimized EC2 Spot instance
-  (Ubuntu) that runs n8n + OpenClaw + Ollama via Docker Compose, plus a
-  persistent gp3 EBS volume that survives start/stop cycles (models, n8n state,
-  Repository Memory). Imports the subnet and security group from the network
-  stack and the SQS queue from the serverless stack.
+  GitHub AI Blog Generator - Compute stack. An On-Demand EC2 instance (Ubuntu)
+  that runs n8n + OpenClaw + Ollama via Docker Compose, plus a persistent gp3
+  EBS volume that survives start/stop cycles (models, n8n state, Repository
+  Memory). The instance is powered on/off on a fixed weekday schedule by the
+  scheduler stack (default 18:00-20:00 Mon-Fri); On-Demand is used so a start
+  always succeeds within that window (no Spot-capacity dependency). Imports the
+  subnet and security group from the network stack and the SQS queue from the
+  serverless stack.
 
 Parameters:
   ProjectName:
@@ -14,11 +17,7 @@ Parameters:
   InstanceType:
     Type: String
     Default: g4dn.xlarge
-    Description: EC2 instance type for the Spot request (GPU recommended for Ollama).
-  SpotMaxPrice:
-    Type: String
-    Default: "0.20"
-    Description: Maximum hourly Spot price (USD).
+    Description: EC2 instance type for the On-Demand instance (GPU recommended for Ollama).
   KeyPairName:
     Type: String
     Default: ""
@@ -211,7 +210,12 @@ Resources:
       Roles:
         - !Ref InstanceRole
 
-  # Spot options in CloudFormation must be declared via a launch template.
+  # A launch template centralizes the instance configuration (type, AMI, key,
+  # profile, security group, root volume, user data) so the AWS::EC2::Instance
+  # below stays a thin reference. This is an On-Demand instance: there are no
+  # InstanceMarketOptions, so a start (from the scheduler stack at 18:00 on a
+  # weekday, or a manual maintenance start) always succeeds without depending on
+  # Spot capacity at a max price.
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -224,20 +228,6 @@ Resources:
           Arn: !GetAtt InstanceProfile.Arn
         SecurityGroupIds:
           - Fn::ImportValue: !Sub "${ProjectName}-InstanceSecurityGroupId"
-        InstanceMarketOptions:
-          MarketType: spot
-          SpotOptions:
-            MaxPrice: !Ref SpotMaxPrice
-            # one-time (not persistent): the Spot request closes once fulfilled
-            # and is NOT relaunched after an interruption. This avoids the
-            # orphaned-request leak a persistent request causes on stack
-            # delete/replacement. Trade-off: no auto-recovery — a Spot
-            # interruption terminates the host and it stays down until the next
-            # deploy. Ollama models + agent memory survive on the Retain'd /data
-            # volume, so recovery is a redeploy, not a data-loss event.
-            # (one-time requires terminate; AWS rejects stop/hibernate here.)
-            SpotInstanceType: one-time
-            InstanceInterruptionBehavior: terminate
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs:
@@ -375,7 +365,7 @@ Resources:
 
 Outputs:
   InstanceId:
-    Description: EC2 Spot instance ID.
+    Description: EC2 On-Demand instance ID (pass to the scheduler stack as InstanceId).
     Value: !Ref Instance
     Export:
       Name: !Sub "${ProjectName}-InstanceId"

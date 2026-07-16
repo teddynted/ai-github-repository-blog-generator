@@ -1,11 +1,14 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   GitHub AI Blog Generator - Serverless stack. The always-available front door:
-  REST API Gateway (webhook + registration routes), four Lambdas (registration,
-  webhook-handler, instance-starter, idle-shutdown), the EventBridge bus and
-  rules, the SQS events queue + dead-letter queue, and the DynamoDB metadata
-  table. GitHub PATs and per-repo webhook secrets live in Secrets Manager under
-  a fixed prefix (created at registration time, not by this stack).
+  REST API Gateway (webhook + registration routes), two Lambdas (registration,
+  webhook-handler), the EventBridge bus and rule, the SQS events queue +
+  dead-letter queue, and the DynamoDB metadata table. Instance power is owned by
+  the scheduler stack (fixed weekday window), so this stack never starts or
+  stops the compute host: a matched webhook is published to EventBridge and
+  buffered in SQS, then drained by the worker while the instance is up. GitHub
+  PATs and per-repo webhook secrets live in Secrets Manager under a fixed prefix
+  (created at registration time, not by this stack).
 
 Parameters:
   ProjectName:
@@ -23,14 +26,6 @@ Parameters:
     Type: String
     Default: webhook-handler.zip
     Description: S3 key of the webhook-handler Lambda package.
-  InstanceStarterCodeKey:
-    Type: String
-    Default: instance-starter.zip
-    Description: S3 key of the instance-starter Lambda package.
-  IdleShutdownCodeKey:
-    Type: String
-    Default: idle-shutdown.zip
-    Description: S3 key of the idle-shutdown Lambda package.
   PublishTrigger:
     Type: String
     Default: "blog:"
@@ -39,11 +34,6 @@ Parameters:
     Type: String
     Default: prod
     Description: API Gateway stage name.
-  IdleTimeoutMinutes:
-    Type: Number
-    Default: 15
-    MinValue: 1
-    Description: Inactivity window before the idle-shutdown Lambda stops the instance.
   LogRetentionDays:
     Type: Number
     Default: 14
@@ -179,63 +169,14 @@ Resources:
               - Effect: Allow
                 Action: events:PutEvents
                 Resource: !GetAtt EventBus.Arn
-
-  InstanceStarterRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: instance-starter
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ec2:StartInstances
-                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/Project: !Ref ProjectName
+              # Read-only: the handler checks whether the compute host is
+              # currently running so it can report a matched delivery as
+              # processed-now ("accepted") vs deferred to the next scheduled
+              # window. It never starts or stops the instance. DescribeInstances
+              # cannot be resource-scoped, so it is granted on "*" (read-only).
               - Effect: Allow
                 Action: ec2:DescribeInstances
                 Resource: "*"
-
-  IdleShutdownRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: idle-shutdown
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ec2:StopInstances
-                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/Project: !Ref ProjectName
-              - Effect: Allow
-                Action: ec2:DescribeInstances
-                Resource: "*"
-              - Effect: Allow
-                Action: sqs:GetQueueAttributes
-                Resource: !GetAtt EventsQueue.Arn
 
   # ---------------------------------------------------------------------------
   # Lambda functions
@@ -256,20 +197,6 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-webhook-handler"
-      RetentionInDays: !Ref LogRetentionDays
-  InstanceStarterLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-instance-starter"
-      RetentionInDays: !Ref LogRetentionDays
-  IdleShutdownLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-idle-shutdown"
       RetentionInDays: !Ref LogRetentionDays
 
   RegistrationFunction:
@@ -317,56 +244,18 @@ Resources:
           EVENT_BUS_NAME: !Ref EventBus
           EVENT_SOURCE: !Sub "${ProjectName}.webhook"
           PUBLISH_TRIGGER: !Ref PublishTrigger
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  InstanceStarterFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: InstanceStarterLogGroup
-    Properties:
-      FunctionName: !Sub "${ProjectName}-instance-starter"
-      Runtime: provided.al2023
-      Handler: bootstrap
-      Architectures: [arm64]
-      MemorySize: 128
-      Timeout: 30
-      Role: !GetAtt InstanceStarterRole.Arn
-      Code:
-        S3Bucket: !Ref ArtifactsBucket
-        S3Key: !Ref InstanceStarterCodeKey
-      Environment:
-        Variables:
+          # Lets the handler locate the compute host by its Project tag to
+          # report processed-now vs deferred (the window gate). Optional: unset
+          # it and every matched delivery is reported "accepted".
           PROJECT_NAME: !Ref ProjectName
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  IdleShutdownFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: IdleShutdownLogGroup
-    Properties:
-      FunctionName: !Sub "${ProjectName}-idle-shutdown"
-      Runtime: provided.al2023
-      Handler: bootstrap
-      Architectures: [arm64]
-      MemorySize: 128
-      Timeout: 30
-      Role: !GetAtt IdleShutdownRole.Arn
-      Code:
-        S3Bucket: !Ref ArtifactsBucket
-        S3Key: !Ref IdleShutdownCodeKey
-      Environment:
-        Variables:
-          PROJECT_NAME: !Ref ProjectName
-          QUEUE_URL: !Ref EventsQueue
-          IDLE_TIMEOUT_MINUTES: !Ref IdleTimeoutMinutes
       Tags:
         - Key: Project
           Value: !Ref ProjectName
 
   # ---------------------------------------------------------------------------
-  # EventBridge rules
+  # EventBridge rule: matched events are buffered in SQS and drained by the
+  # worker while the instance is up (started/stopped by the scheduler stack).
+  # There is no start-on-event target — the scheduled window owns instance power.
   # ---------------------------------------------------------------------------
   PublishRequestedRule:
     Type: AWS::Events::Rule
@@ -381,34 +270,6 @@ Resources:
       Targets:
         - Id: events-queue
           Arn: !GetAtt EventsQueue.Arn
-        - Id: instance-starter
-          Arn: !GetAtt InstanceStarterFunction.Arn
-
-  PublishRequestedRuleStarterPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref InstanceStarterFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt PublishRequestedRule.Arn
-
-  IdleTimerRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: !Sub "${ProjectName}-idle-timer"
-      ScheduleExpression: rate(5 minutes)
-      State: ENABLED
-      Targets:
-        - Id: idle-shutdown
-          Arn: !GetAtt IdleShutdownFunction.Arn
-
-  IdleTimerRulePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref IdleShutdownFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt IdleTimerRule.Arn
 
   # ---------------------------------------------------------------------------
   # REST API Gateway: /webhook (open, HMAC-verified) and /repositories (API key)

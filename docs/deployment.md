@@ -20,7 +20,7 @@ Related: [Local Development](./local-development.md) · [Infrastructure](./infra
 
 > **No Amazon Bedrock, OpenAI, or Anthropic access is required.** All inference runs locally via Ollama on the instance.
 >
-> The instance runs Ollama, so choose a **GPU instance type** (e.g. `g4dn.xlarge`) and a Region/AZ with Spot capacity for it.
+> The instance runs Ollama, so choose a **GPU instance type** (e.g. `g4dn.xlarge`) and a Region/AZ that offers it. The host is **On-Demand**, so a scheduled start does not depend on Spot capacity.
 
 Verify access:
 
@@ -52,7 +52,7 @@ This deploys [`infrastructure/bootstrap.yaml`](../infrastructure/bootstrap.yaml)
 | Variable | `OPERATOR_CIDR` | your SSH CIDR (optional) |
 | Variable | `DEPLOY_ENABLED` | `true` |
 
-With those set, merging to `main` runs [`deploy.yml`](./ci-cd.md#enabling-deployyml), which packages the Lambdas and deploys **network → serverless → compute → observability**. For a manual deploy instead, set `ARTIFACTS_BUCKET` locally and follow Sections 3–4.
+With those set, merging to `main` runs [`deploy.yml`](./ci-cd.md#enabling-deployyml), which packages the Lambdas and deploys **network → serverless → compute → scheduler → observability**. For a manual deploy instead, set `ARTIFACTS_BUCKET` locally and follow Sections 3–4.
 
 ---
 
@@ -70,9 +70,10 @@ cp .env.example .env
 | `ProjectName` | Resource name prefix | `blog-gen` |
 | `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | random 32+ chars |
 | `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
-| `INSTANCE_TYPE` | EC2 instance type for the Spot request | `g4dn.xlarge` |
-| `SPOT_MAX_PRICE` | Maximum Spot price you will pay | `0.20` |
-| `IDLE_TIMEOUT_MINUTES` | Minutes of inactivity before auto-shutdown | `15` |
+| `INSTANCE_TYPE` | EC2 instance type for the On-Demand instance | `g4dn.xlarge` |
+| `StartExpression` | Scheduler cron for the weekday START (scheduler stack) | `cron(0 18 ? * MON-FRI *)` |
+| `StopExpression` | Scheduler cron for the weekday STOP (scheduler stack) | `cron(0 20 ? * MON-FRI *)` |
+| `ScheduleTimezone` | IANA timezone the crons evaluate in (scheduler stack) | `Etc/UTC` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
 | `KeyPairName` | (optional) existing key pair; blank = stack-managed | (managed) |
@@ -91,20 +92,20 @@ cp .env.example .env
 make build
 
 # Package each for Lambda (provided.al2023, arm64)
-for fn in registration webhook-handler instance-starter idle-shutdown; do
+for fn in registration webhook-handler scheduled-start scheduled-stop; do
   [ -f "dist/$fn/bootstrap" ] && ( cd dist/$fn && zip $fn.zip bootstrap )
 done
 ```
 
 - `registration` — validate repo + PAT, create the webhook, store metadata + secrets.
-- `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events.
-- `instance-starter` — start the Spot Instance on a matched event.
-- `idle-shutdown` — stop the Spot Instance after the idle timeout.
+- `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events, and report processed-now vs deferred (the window gate).
+- `scheduled-start` — start the On-Demand instance at 18:00 Mon–Fri (scheduler stack).
+- `scheduled-stop` — stop the instance at 20:00 Mon–Fri (scheduler stack).
 
-Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless template's default code keys are `<fn>.zip` at the bucket root:
+Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless/scheduler templates' default code keys are `<fn>.zip` at the bucket root:
 
 ```bash
-for fn in registration webhook-handler instance-starter idle-shutdown; do
+for fn in registration webhook-handler scheduled-start scheduled-stop; do
   aws s3 cp "dist/$fn/$fn.zip" "s3://$ARTIFACTS_BUCKET/$fn.zip"
 done
 ```
@@ -113,7 +114,7 @@ done
 
 ## 4. Deploy the Stacks
 
-Deploy in order: **network → serverless → compute → observability**. Templates are modular and reusable.
+Deploy in order: **network → serverless → compute → scheduler → observability**. Templates are modular and reusable.
 
 ```bash
 # 1. Network layer
@@ -130,7 +131,7 @@ aws cloudformation deploy \
   --parameter-overrides ArtifactsBucket=$ARTIFACTS_BUCKET PublishTrigger=$PUBLISH_TRIGGER \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 3. Compute layer (EC2 Spot + persistent EBS + worker service)
+# 3. Compute layer (On-Demand EC2 + persistent EBS + worker service)
 #    Build & upload the worker binary first (linux/amd64):
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
 aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/worker"
@@ -139,7 +140,6 @@ aws cloudformation deploy \
   --stack-name blog-gen-compute \
   --parameter-overrides \
       InstanceType=$INSTANCE_TYPE \
-      SpotMaxPrice=$SPOT_MAX_PRICE \
       OllamaModel=$OLLAMA_MODEL \
       EbsVolumeSizeGb=$EBS_VOLUME_SIZE_GB \
       ArtifactsBucket=$ARTIFACTS_BUCKET \
@@ -149,7 +149,20 @@ aws cloudformation deploy \
       SmtpUsername=$SMTP_USERNAME \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 4. Observability layer
+# 4. Scheduler layer — owns instance power (start 18:00 / stop 20:00, Mon–Fri).
+#    Wire it to the compute stack's InstanceId:
+INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+  --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
+aws cloudformation deploy \
+  --template-file infrastructure/scheduler.yaml \
+  --stack-name blog-gen-scheduler \
+  --parameter-overrides \
+      InstanceId=$INSTANCE_ID \
+      ArtifactsBucket=$ARTIFACTS_BUCKET \
+  --capabilities CAPABILITY_NAMED_IAM
+# (Override ScheduleTimezone/StartExpression/StopExpression to change the window.)
+
+# 5. Observability layer
 aws cloudformation deploy \
   --template-file infrastructure/observability.yaml \
   --stack-name blog-gen-observability \
@@ -185,7 +198,7 @@ aws cloudformation describe-stacks --stack-name blog-gen-serverless \
 
 ## 5. Import the n8n Workflows
 
-The instance is stopped by default; it starts on the first webhook. To import workflows, start it once and open n8n through an SSH tunnel (the UI is not publicly exposed):
+The instance is stopped outside its scheduled window. To import workflows, start it once (manually or wait for the 18:00 window) and open n8n through an SSH tunnel (the UI is not publicly exposed):
 
 ```bash
 INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
@@ -235,7 +248,7 @@ curl -sS -X POST "$REGISTRATION_URL" \
 
 On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with a generated secret, stores the PAT + webhook secret in Secrets Manager, and writes metadata (including the secret reference and default trigger pattern `blog:`) to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
 
-> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push; it only publishes an event — and starts the instance — when the commit message matches the repository's trigger pattern (default `blog:`).
+> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push and only publishes an event when the commit message matches the repository's trigger pattern (default `blog:`). It never starts the instance — that is owned by the scheduler's weekday window; a matched event that arrives outside the window is buffered in SQS and processed at the next 18:00 start.
 
 ### Manual webhook setup (fallback)
 
@@ -278,21 +291,21 @@ journalctl -u blog-gen-worker -n 50       # recent worker logs
 
 **Smoke test:** verify both paths of the trigger gate.
 
-1. **Ignored path** — push a normal commit (e.g. `docs: tweak README`). Expect a green ✓ in GitHub, `WebhookIgnored` in CloudWatch, and **no** instance start.
-2. **Triggered path** — push a commit whose message starts with `blog:` (e.g. `blog: smoke test`), or **Redeliver** such a delivery.
+1. **Ignored path** — push a normal commit (e.g. `docs: tweak README`). Expect a green ✓ in GitHub, `WebhookIgnored` in CloudWatch, and **nothing buffered** to SQS.
+2. **Triggered path** — push a commit whose message starts with `blog:` (e.g. `blog: smoke test`), or **Redeliver** such a delivery. Inside the window the response is `accepted`; outside it, `deferred`.
 
 Expected sequence for the triggered path:
 
 | Check | Expected |
 | --- | --- |
 | Registration | `RegistrationUrl` returns success; DynamoDB item present; webhook created in GitHub |
-| GitHub Recent Deliveries | Green ✓ (HTTP 200) |
-| CloudWatch (handler) | Logs show verify → trigger match → PutEvents |
-| EventBridge / SQS | Event published; SQS count increments, then drains |
-| EC2 | Transitions `stopped` → `running` after the matched event |
-| CloudWatch (n8n) | Run logs: analyze → memory → generate → review → publish |
+| GitHub Recent Deliveries | Green ✓ (HTTP 200); body `accepted` (in window) or `deferred` (outside) |
+| CloudWatch (handler) | Logs show verify → trigger match → PutEvents → window gate (accepted/deferred) |
+| EventBridge / SQS | Event published; SQS count increments (drains once the instance is up) |
+| EC2 (scheduled-start, 18:00 Mon–Fri) | Transitions `stopped` → `running`; verify with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` to force a start now |
+| CloudWatch (n8n / worker) | Run logs: analyze → memory → generate → review → publish |
 | Published output | New Markdown content at the configured destination |
-| EC2 (after idle timeout) | Transitions back to `stopped` |
+| EC2 (scheduled-stop, 20:00 Mon–Fri) | Transitions back to `stopped` |
 
 ---
 
@@ -307,7 +320,7 @@ git checkout <previous-good-sha> -- infrastructure/
 aws cloudformation deploy \
   --template-file infrastructure/compute.yaml \
   --stack-name blog-gen-compute \
-  --parameter-overrides InstanceType=$INSTANCE_TYPE SpotMaxPrice=$SPOT_MAX_PRICE \
+  --parameter-overrides InstanceType=$INSTANCE_TYPE \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 

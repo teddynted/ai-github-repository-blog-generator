@@ -1,5 +1,6 @@
-// Package awsec2 adapts the EC2 API to the lifecycle.EC2 port, locating the
-// platform's instance by its Project tag and starting it.
+// Package awsec2 adapts the EC2 API to the lifecycle.EC2 and power.Instances
+// ports: it locates the platform's instance by its Project tag (for the webhook
+// window gate) and starts/stops a specific instance by ID (for the scheduler).
 package awsec2
 
 import (

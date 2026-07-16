@@ -24,9 +24,6 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.OllamaModel != DefaultOllamaModel {
 		t.Errorf("OllamaModel = %q, want %q", cfg.OllamaModel, DefaultOllamaModel)
 	}
-	if cfg.IdleTimeoutMinutes != DefaultIdleTimeoutMinutes {
-		t.Errorf("IdleTimeoutMinutes = %d, want %d", cfg.IdleTimeoutMinutes, DefaultIdleTimeoutMinutes)
-	}
 	if cfg.RequireHumanApproval != DefaultRequireHumanApprove {
 		t.Errorf("RequireHumanApproval = %v, want %v", cfg.RequireHumanApproval, DefaultRequireHumanApprove)
 	}
@@ -67,7 +64,6 @@ func TestLoadReadsValues(t *testing.T) {
 		"AWS_REGION":             "eu-west-1",
 		"PUBLISH_TRIGGER":        "[blog]",
 		"REPOSITORIES_TABLE":     "blog-gen-repositories",
-		"IDLE_TIMEOUT_MINUTES":   "30",
 		"REQUIRE_HUMAN_APPROVAL": "true",
 	}))
 	if err != nil {
@@ -79,9 +75,6 @@ func TestLoadReadsValues(t *testing.T) {
 	if cfg.PublishTrigger != "[blog]" {
 		t.Errorf("PublishTrigger = %q", cfg.PublishTrigger)
 	}
-	if cfg.IdleTimeoutMinutes != 30 {
-		t.Errorf("IdleTimeoutMinutes = %d", cfg.IdleTimeoutMinutes)
-	}
 	if !cfg.RequireHumanApproval {
 		t.Error("RequireHumanApproval = false, want true")
 	}
@@ -89,8 +82,6 @@ func TestLoadReadsValues(t *testing.T) {
 
 func TestLoadRejectsMalformedValues(t *testing.T) {
 	for _, tc := range []struct{ name, key, val string }{
-		{"non-numeric idle timeout", "IDLE_TIMEOUT_MINUTES", "soon"},
-		{"non-positive idle timeout", "IDLE_TIMEOUT_MINUTES", "0"},
 		{"non-bool approval", "REQUIRE_HUMAN_APPROVAL", "maybe"},
 		{"non-numeric smtp port", "SMTP_PORT", "ssl"},
 		{"out-of-range smtp port", "SMTP_PORT", "70000"},

@@ -1,7 +1,7 @@
 // Command scheduled-stop is the AWS Lambda invoked by the EventBridge Scheduler
-// "stop" schedule (default 08:00 in the configured timezone). It stops the EC2
-// instance named by INSTANCE_ID, and is idempotent: if the instance is already
-// stopped the invocation succeeds without action.
+// "stop" schedule (default 20:00 Mon-Fri in the configured timezone). It stops
+// the EC2 instance named by INSTANCE_ID, and is idempotent: if the instance is
+// already stopped the invocation succeeds without action.
 package main
 
 import (

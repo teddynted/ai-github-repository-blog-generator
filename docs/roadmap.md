@@ -7,8 +7,8 @@ Related: [Requirements](./requirements.md) · [Contributing](./contributing.md).
 ```mermaid
 timeline
     title Release Roadmap
-    v1.0 : Commit-message trigger gate : Local inference (Ollama/Qwen) : EventBridge + Spot + CloudFormation
-    v1.1 : Custom trigger patterns : Better prompts : On-Demand fallback
+    v1.0 : Commit-message trigger gate : Local inference (Ollama/Qwen) : EventBridge + scheduled On-Demand + CloudFormation
+    v1.1 : Custom trigger patterns : Better prompts : Per-repo schedules
     v2.0 : More trigger sources : Multi-model : Web dashboard + approvals
     v3.0 : Multi-repo : Fine-tuned models : Collaboration
 ```
@@ -22,17 +22,17 @@ The core opt-in, event-driven pipeline, deployable from scratch with CloudFormat
 - ✅ **Repository registration (MVP)** — onboard with URL + GitHub PAT; validate access, create the webhook, store metadata (DynamoDB) and the PAT (Secrets Manager)
 - ✅ **Commit-message trigger gate** — generation runs only on a `blog:` commit; all other events are acknowledged and ignored
 - ✅ GitHub Webhook + HMAC SHA-256 signature validation (API Gateway + lightweight Lambda handler)
-- ✅ EventBridge event bus routing matched events to SQS + the instance starter
+- ✅ EventBridge event bus routing matched events to the SQS buffer
 - ✅ Durable event buffering with Amazon SQS (+ dead-letter queue)
-- ✅ On-demand EC2 Spot Instance start (instance-starter) and idle-timeout stop (idle-shutdown)
+- ✅ Scheduled On-Demand EC2 start/stop on a weekday window (EventBridge Scheduler + scheduled-start/scheduled-stop)
 - ✅ Local inference via Ollama + Qwen — no paid inference API
 - ✅ Repository analysis via OpenClaw and **Repository Memory** for continuity
 - ✅ Quality review and **optional human approval** before publishing
 - ✅ Persistent gp3 EBS volume for models, n8n state, and Repository Memory
-- ✅ CloudFormation deployment (VPC, public subnet, IGW, route tables, SGs, IAM, EC2 Spot, EBS, API Gateway, Lambdas, EventBridge, SQS, CloudWatch)
+- ✅ CloudFormation deployment (VPC, public subnet, IGW, route tables, SGs, IAM, On-Demand EC2, EBS, API Gateway, Lambdas, EventBridge, EventBridge Scheduler, SQS, CloudWatch)
 - ✅ n8n workflow orchestration with retries, error handling, and notifications
 
-**Exit criteria:** deploying the stacks + importing the workflows + configuring the webhook yields a pipeline where a `blog:` commit generates and publishes content, a routine commit is ignored, and the instance stops on idle.
+**Exit criteria:** deploying the stacks + importing the workflows + configuring the webhook yields a pipeline where a `blog:` commit generates and publishes content during the scheduled window, a routine commit is ignored, and the instance starts at 18:00 and stops at 20:00 on weekdays.
 
 ---
 
@@ -42,8 +42,8 @@ Make the trigger configurable and the compute layer more robust.
 
 - **Configurable custom trigger patterns** — `[blog]`, regular expressions, per-repository rules
 - Improved prompts (better structure, tighter context selection, few-shot examples)
-- **On-Demand fallback** when Spot capacity is unavailable
-- Multi-Availability-Zone Spot placement
+- **Configurable per-repository schedule windows** (beyond the default 18:00–20:00, Mon–Fri)
+- Multi-Availability-Zone instance placement
 - GPU auto-detection and model right-sizing
 - Faster cold start (pre-warmed AMI, model preload tuning)
 

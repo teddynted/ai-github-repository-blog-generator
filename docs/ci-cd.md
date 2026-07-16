@@ -99,7 +99,7 @@ jobs:
 
 ## 3. Go Jobs
 
-All four Lambda functions (`registration`, `webhook-handler`, `instance-starter`, `idle-shutdown`) are built and tested. The handler's **commit-message trigger** logic and the registration function's **validation/webhook-creation** logic should have dedicated unit tests.
+All four Lambda functions (`registration`, `webhook-handler`, `scheduled-start`, `scheduled-stop`) are built and tested. The handler's **commit-message trigger** logic and the registration function's **validation/webhook-creation** logic should have dedicated unit tests.
 
 | Step | Command |
 | --- | --- |
