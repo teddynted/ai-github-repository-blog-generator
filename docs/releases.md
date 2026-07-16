@@ -118,20 +118,36 @@ The CLI validates auth before attempting to create a release.
 
 ## 7. CLI usage
 
+### How to invoke it
+
+The CLI is `cmd/release`. Run it any of these ways (they're equivalent):
+
 ```bash
-make build-release            # compiles dist/release
-# or run directly:
-go run ./cmd/release <command> [flags]
+go run ./cmd/release <command> [flags]       # no build needed
+make release ARGS="<command> [flags]"        # via the Makefile
+make build-release && ./dist/release ...     # build once to dist/release
+```
 
-release major                 # force a major release
-release minor
-release patch
-release                       # auto-derive the bump from commits
+Throughout this doc, `release <command>` is shorthand for one of the above —
+substitute your preferred form. If you use the binary a lot, alias it:
+`alias release='go run ./cmd/release'` (from the repo root).
 
-release validate              # run all pre-release checks; no changes
-release version               # print current + next version
-release notes                 # print the release notes for the next version
-release changelog             # print CHANGELOG with the next release added
+> **Flag order matters.** Flags must come **before** the subcommand
+> (`release --dry-run minor` ✓, `release minor --dry-run` ✗) — Go's flag parser
+> stops at the first non-flag argument.
+
+### Commands
+
+```bash
+go run ./cmd/release major        # force a major release
+go run ./cmd/release minor
+go run ./cmd/release patch
+go run ./cmd/release              # auto-derive the bump from commits
+
+go run ./cmd/release validate     # run all pre-release checks; no changes
+go run ./cmd/release version      # print current + next version
+go run ./cmd/release notes        # print the release notes for the next version
+go run ./cmd/release changelog    # print CHANGELOG with the next release added
 ```
 
 Flags: `--dry-run`, `--pre <id>` / `--prerelease`, `--config <path>`,
@@ -140,24 +156,33 @@ success, `1` runtime/validation failure, `2` usage error.
 
 ### Dry-run examples
 
+A **dry-run still runs validation** (it's a rehearsal of the whole workflow), so
+on a feature branch / without a token it will report the blockers and exit `1`
+*before* the preview. Add **`--no-verify`** to skip the checks and just see the
+computed version, CHANGELOG, and notes:
+
 ```bash
-# Preview the next minor release (version, CHANGELOG, notes) — no changes:
-release --dry-run minor
+# Pure preview — version, CHANGELOG section, and release notes; no checks, no changes:
+go run ./cmd/release --dry-run --no-verify minor
+
+# Full dry-run including validation (as it would run for real):
+go run ./cmd/release --dry-run minor
 
 # What version would auto-derivation choose?
-release version
+go run ./cmd/release version
 #   current: v1.4.2
 #   next:    v1.5.0 (minor)
 
 # Pre-release candidate:
-release --dry-run --pre rc.1 major     # → v2.0.0-rc.1
+go run ./cmd/release --dry-run --pre rc.1 major     # → v2.0.0-rc.1
 ```
 
-A real release:
+A real release (on the release branch, clean tree, token set):
 
 ```bash
+git checkout main
 export GITHUB_TOKEN=ghp_xxx
-release minor
+go run ./cmd/release minor
 #   → minor release: v1.4.2 → v1.5.0
 #   ✓ validation passed
 #   ✓ released v1.5.0
@@ -203,8 +228,12 @@ readable progress goes to stdout. Tokens and other secrets are never logged.
 | `no GitHub authentication available` | export `GITHUB_TOKEN` or `GH_TOKEN` |
 | release published but CHANGELOG not committed | commit the updated `CHANGELOG.md` (the CLI writes it locally) |
 
-Use `release validate` or any command with `--dry-run` to diagnose without
-making changes.
+Use `go run ./cmd/release validate` (or any command with `--dry-run`
+`--no-verify`) to diagnose without making changes.
+
+> **Note:** with **no baseline tag**, validation scans *all* history, so an old
+> non-conventional commit (e.g. an initial "first commit") is reported. Create a
+> baseline tag (see the migration guide) and only commits *after* it are checked.
 
 ## 11. Migration guide
 
@@ -218,10 +247,10 @@ Adopting this on an existing repository:
    current version as an annotated tag so the CLI computes the *next* version
    from it, e.g. `git tag -a v1.4.2 -m "v1.4.2" && git push origin v1.4.2`.
    Without any tag, the first `release` uses `initial_version` (`0.1.0`).
-4. **Dry-run first**: `release --dry-run` to preview the version, CHANGELOG, and
-   notes before publishing.
-5. **Cut the release**: with `GITHUB_TOKEN` set, run `release <bump>` and commit
-   the updated `CHANGELOG.md`.
+4. **Dry-run first**: `go run ./cmd/release --dry-run --no-verify` to preview the
+   version, CHANGELOG, and notes before publishing.
+5. **Cut the release**: on `main` with a clean tree and `GITHUB_TOKEN` set, run
+   `go run ./cmd/release <bump>` and commit the updated `CHANGELOG.md`.
 
 No existing functionality changes — the release tooling is additive and lives
 entirely in `cmd/release` + `internal/{semver,conventional,changelog,release}`.
