@@ -1,0 +1,19 @@
+{
+  "initial_version": "0.1.0",
+  "tag_prefix": "v",
+  "release_branch": "main",
+  "prerelease_id": "rc",
+  "ignored_types": ["docs", "style", "test", "chore", "ci", "build"],
+  "commit": {
+    "types": ["feat", "fix", "docs", "refactor", "perf", "test", "build", "ci", "chore", "revert"],
+    "minor_types": ["feat"],
+    "patch_types": ["fix", "perf", "revert"]
+  },
+  "changelog_categories": [
+    { "title": "Features", "types": ["feat"] },
+    { "title": "Bug Fixes", "types": ["fix"] },
+    { "title": "Performance", "types": ["perf"] },
+    { "title": "Refactoring", "types": ["refactor"] },
+    { "title": "Documentation", "types": ["docs"] }
+  ]
+}

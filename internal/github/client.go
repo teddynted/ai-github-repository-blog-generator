@@ -102,6 +102,50 @@ func (c *Client) CreateWebhook(ctx context.Context, owner, name, pat string, cfg
 	return body.ID, nil
 }
 
+// ReleaseRequest describes a GitHub Release to create.
+type ReleaseRequest struct {
+	Tag        string
+	Name       string
+	Body       string
+	PreRelease bool
+	Draft      bool
+}
+
+// ReleaseExistsForTag reports whether a published GitHub Release already exists
+// for the given tag (used to prevent duplicate releases).
+func (c *Client) ReleaseExistsForTag(ctx context.Context, owner, name, token, tag string) (bool, error) {
+	path := fmt.Sprintf("/repos/%s/%s/releases/tags/%s", owner, name, tag)
+	err := c.exec(ctx, http.MethodGet, path, token, nil, http.StatusOK, nil)
+	if err == nil {
+		return true, nil
+	}
+	if apperror.CodeOf(err) == apperror.CodeNotFound {
+		return false, nil
+	}
+	return false, err
+}
+
+// CreateRelease creates a GitHub Release from an existing tag and returns its
+// html_url.
+func (c *Client) CreateRelease(ctx context.Context, owner, name, token string, r ReleaseRequest) (string, error) {
+	payload := map[string]any{
+		"tag_name":   r.Tag,
+		"name":       r.Name,
+		"body":       r.Body,
+		"draft":      r.Draft,
+		"prerelease": r.PreRelease,
+	}
+	raw, _ := json.Marshal(payload)
+	var body struct {
+		HTMLURL string `json:"html_url"`
+	}
+	path := fmt.Sprintf("/repos/%s/%s/releases", owner, name)
+	if err := c.exec(ctx, http.MethodPost, path, token, raw, http.StatusCreated, &body); err != nil {
+		return "", err
+	}
+	return body.HTMLURL, nil
+}
+
 // UpdateWebhook updates an existing webhook's config (used when a repository's
 // webhook secret is rotated on re-registration, so GitHub keeps signing with
 // the current secret).
