@@ -38,6 +38,18 @@ type Counter interface {
 	Count(name string)
 }
 
+// InstanceGate reports whether the platform's compute host is currently
+// running. It is optional and read-only: the handler never starts or stops the
+// instance — the scheduler stack owns instance power on its fixed weekday
+// window. When the gate is nil, every matched delivery is reported "accepted"
+// (legacy behaviour). When it is set and the instance is stopped (i.e. the
+// delivery arrived outside the operational window), the event is still
+// published so it buffers in SQS for the next scheduled runtime, but the
+// delivery is reported "deferred".
+type InstanceGate interface {
+	Running(ctx context.Context) (bool, error)
+}
+
 // Event is the payload published when a commit matches the trigger.
 type Event struct {
 	RepoFullName   string `json:"repo_full_name"`
@@ -54,7 +66,8 @@ type Handler struct {
 	Repos          RepoLookup
 	Secrets        SecretGetter
 	Publisher      Publisher
-	Metrics        Counter // optional
+	Metrics        Counter      // optional
+	Gate           InstanceGate // optional; see InstanceGate
 	DefaultTrigger string
 	Logger         *slog.Logger
 }
@@ -151,9 +164,37 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 	if err := h.Publisher.Publish(ctx, ev); err != nil {
 		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "publish failed"))
 	}
-	h.log("published", deliveryID, full, "triggered by "+eventType)
 	h.count("TriggerMatched")
-	return okResp("accepted", full)
+	return okResp(h.deliveryStatus(ctx, deliveryID, full, eventType), full)
+}
+
+// deliveryStatus records a published match and reports whether it will be
+// processed now or deferred. The scheduled runtime — not the webhook — owns
+// instance power, so the handler never starts the host; it only reports. With
+// no gate configured, or when the host is running (inside the operational
+// window), the delivery is "accepted" and the worker drains it promptly. When
+// the host is stopped (outside the window) the event is already buffered in SQS
+// and will be processed at the next scheduled start, so the delivery is
+// "deferred". A gate error fails open (report "accepted"): the event is safely
+// buffered regardless, and SQS retention covers the delay.
+func (h *Handler) deliveryStatus(ctx context.Context, deliveryID, full, eventType string) string {
+	if h.Gate == nil {
+		h.log("published", deliveryID, full, "triggered by "+eventType)
+		return "accepted"
+	}
+	running, err := h.Gate.Running(ctx)
+	switch {
+	case err != nil:
+		h.log("published", deliveryID, full, "triggered by "+eventType+"; instance-state check failed, buffered: "+err.Error())
+		return "accepted"
+	case running:
+		h.log("published", deliveryID, full, "triggered by "+eventType+"; instance running, processing in this window")
+		return "accepted"
+	default:
+		h.count("WebhookDeferred")
+		h.log("deferred", deliveryID, full, "triggered by "+eventType+"; outside operational window, buffered for next scheduled runtime")
+		return "deferred"
+	}
 }
 
 // pushEvent builds a trigger event for a push, gated on the commit-message

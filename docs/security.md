@@ -101,9 +101,9 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 | Principal | May do | May NOT do |
 | --- | --- | --- |
 | `registration` (Lambda) | Create secrets, write metadata, create webhooks (via PAT) | Read the queue, start/stop the instance, run inference |
-| `webhook-handler` (Lambda) | Read metadata, read the webhook secret, publish matched events | **Read the PAT**, start/stop the instance, read the queue |
-| `instance-starter` (Lambda) | Start the instance | Stop it, publish events, read the queue |
-| `idle-shutdown` (Lambda) | Stop the instance | Start it, publish events |
+| `webhook-handler` (Lambda) | Read metadata, read the webhook secret, publish matched events, **describe** instances (read-only window gate) | **Read the PAT**, **start/stop** the instance, read the queue |
+| `scheduled-start` (Lambda) | Start the target instance (by ID) | Stop it, publish events, read the queue |
+| `scheduled-stop` (Lambda) | Stop the target instance (by ID) | Start it, publish events |
 | EC2 instance | Consume the queue, read the PAT (to clone), write logs | Modify IAM, alter infrastructure, create secrets |
 
 ---
@@ -154,7 +154,7 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 ## 9. Logging & Audit Trails
 
 - **AWS CloudTrail** records control-plane API activity (recommended: org-level trail to a dedicated, locked log bucket).
-- **CloudWatch Logs** capture registration, handler, starter, idle-shutdown, and n8n logs with bounded retention.
+- **CloudWatch Logs** capture registration, handler, scheduled-start, scheduled-stop, and n8n logs with bounded retention.
 - Structured logs **must not** contain PATs, secrets, or full source contents — log references (delivery IDs, run IDs), not payloads.
 
 See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.

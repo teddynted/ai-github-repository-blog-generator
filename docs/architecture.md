@@ -12,7 +12,7 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 - **Opt-in generation** — a webhook is received on every push, but a run happens **only** when the commit message matches the repository's publishing trigger (default `blog:`). All other events are acknowledged and ignored.
 - **Event-driven** — matched events are published to **Amazon EventBridge**, which starts compute and delivers the run. Nothing runs speculatively.
 - **Self-hosted inference** — all AI runs locally via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
-- **Pay only when you compute** — a cost-optimized **EC2 Spot Instance** starts on a matched event and stops after workflow completion / idle timeout.
+- **Pay only during the window** — an **On-Demand EC2 instance** runs on a fixed weekday schedule (18:00–20:00, Mon–Fri) set by EventBridge Scheduler; compute cost is bounded and predictable.
 - **Durable buffering** — every matched event is buffered in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
 - **Persistent state, ephemeral compute** — models, n8n state, and **Repository Memory** live on a persistent **gp3 EBS volume**.
 - **Secure by default** — least-privilege IAM, secrets in Secrets Manager (never logged), HMAC-verified webhooks, encryption everywhere.
@@ -96,9 +96,9 @@ flowchart TB
         DDB[(DynamoDB<br/>repository metadata)]
         EB[Amazon EventBridge]
         SQS[(Amazon SQS + DLQ)]
-        ST[Lambda: Instance Starter]
-        LS[Lambda: Idle Shutdown]
-        subgraph EC2["EC2 Spot Instance (Ubuntu + Docker Compose)"]
+        SCH[EventBridge Scheduler<br/>18:00 / 20:00 Mon–Fri]
+        PWR[Lambda: scheduled-start / scheduled-stop]
+        subgraph EC2["EC2 On-Demand Instance (Ubuntu + Docker Compose)"]
             N8N[n8n Orchestrator]
             OC[OpenClaw]
             MEM[(Repository Memory)]
@@ -118,15 +118,14 @@ flowchart TB
     LH -->|trigger match → PutEvents| EB
     LH -->|no match → 200| EVT
     EB --> SQS
-    EB --> ST -->|StartInstances if stopped| EC2
-    EB -.->|invoke once healthy| N8N
+    SCH --> PWR -->|Start/StopInstances| EC2
+    SQS -.->|drained while up| N8N
     N8N --> OC --> MEM
     OC -->|PAT| SM
     OC --> OLL
     OLL -->|content| N8N
     N8N -->|publish + notify| OUT[Published content / users]
     EBS --- EC2
-    LS -->|StopInstances on idle| EC2
     LH -. logs .-> CW
     N8N -. logs .-> CW
 ```
@@ -140,14 +139,14 @@ flowchart TB
 | Amazon DynamoDB | Repository metadata (secret reference, trigger pattern, webhook ID, …) — **never the PAT** |
 | API Gateway | Public HTTPS ingress for webhook + registration |
 | Webhook Handler (Lambda) | Resolve repo metadata, verify signature, **validate trigger**, publish matched events. **No analysis or inference; never fetches the PAT** |
-| Amazon EventBridge | Route matched events; start compute; deliver the run |
-| Amazon SQS | Durable buffer so no matched event is lost during cold start; DLQ |
-| Instance Starter (Lambda) | Start the EC2 Spot Instance if stopped |
-| EC2 Spot Instance | Host running n8n, OpenClaw, Ollama via Docker Compose |
+| Amazon EventBridge | Route matched events to the SQS buffer |
+| Amazon SQS | Durable buffer so no matched event is lost while the instance is outside its window; DLQ |
+| EventBridge Scheduler | Authority for instance power — starts/stops the host on the weekday window (18:00–20:00, Mon–Fri) |
+| scheduled-start / scheduled-stop (Lambda) | Start/stop the On-Demand instance on the schedule (idempotent) |
+| EC2 On-Demand Instance | Host running n8n, OpenClaw, Ollama via Docker Compose |
 | OpenClaw | Clone (using the PAT) and analyse the repository |
 | Repository Memory | Per-repo continuity and topic de-duplication |
 | Ollama + Qwen | Local LLM inference |
-| Idle Shutdown (Lambda) | Stop the instance after workflow completion / idle timeout |
 
 ---
 
@@ -177,15 +176,15 @@ flowchart TB
     APIGW --> RL[Registration Lambda]
     LH --> EB[EventBridge]
     EB --> SQS[(SQS)]
-    EB --> ST[Instance Starter Lambda]
+    SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda]
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
-            EC2[(EC2 Spot Instance<br/>n8n + OpenClaw + Ollama)]
+            EC2[(EC2 On-Demand Instance<br/>n8n + OpenClaw + Ollama)]
             EBS[(gp3 EBS volume)]
         end
     end
-    ST -->|StartInstances| EC2
+    PWR -->|Start/StopInstances| EC2
     EC2 --- EBS
     EC2 --- IGW
     ADMIN[Operator] -->|SSH key auth<br/>restricted CIDR| EC2
@@ -269,7 +268,8 @@ flowchart LR
     LH -->|match → PutEvents| EB[(EventBridge)]
     LH -->|no match → 200| STOP[Ignored]
     EB --> SQS[(SQS)]
-    EB --> ST[Instance Starter]
+    SCH[EventBridge Scheduler<br/>18:00 / 20:00 Mon–Fri] --> PWR[scheduled-start / scheduled-stop]
+    PWR -.->|power| N8N
     SQS --> N8N[n8n]
     GH[(GitHub repo)] -->|clone w/ PAT| OC[OpenClaw]
     N8N --> OC

@@ -22,7 +22,7 @@ so behaviour is never undocumented.
 | **Go module layout** | **Single monorepo module** | One `go.mod` at the root; shared code in `internal/`; each Lambda is `lambdas/<fn>/` built with `go build ./lambdas/<fn>`. Maximises reuse (config, logging, signature, GitHub client) and suits Clean Architecture. |
 | **Lambda runtime** | `provided.al2023`, **Linux/arm64** (Graviton) | Documented; best price/performance. |
 | **Registration auth (MVP)** | **API Gateway API key** (`x-api-key`) | Simplest way to satisfy REG-9 "access-controlled"; revisited if GitHub App onboarding lands. |
-| **n8n invocation** | EventBridge → SQS buffer + `instance-starter`; n8n invoked once healthy | Preserves cold-start durability (hybrid model). |
+| **Instance power** | EventBridge → SQS buffer; **EventBridge Scheduler** starts/stops the On-Demand host on a weekday window; the worker drains SQS while up | The schedule owns availability; SQS keeps events durable between windows. |
 
 ---
 
@@ -36,8 +36,8 @@ Each milestone compiles, is independently testable, and ships as a small PR.
 | 2 | **Infrastructure as Code** — CloudFormation stacks (network, serverless, compute, observability) | ✅ Implemented |
 | 3 | **Repository registration** — validate repo + PAT, create webhook, store metadata + secret | ✅ Implemented |
 | 4 | **Webhook receiver** — signature verification + commit-message trigger validation | ✅ Implemented |
-| 5 | **Event processing** — matched event → EventBridge → SQS + Spot start (n8n stubbed) | ✅ Implemented |
-| 6 | **Infrastructure lifecycle** — Spot start, health/readiness, n8n invoke, idle shutdown, retries | ✅ Implemented |
+| 5 | **Event processing** — matched event → EventBridge → SQS buffer (n8n stubbed) | ✅ Implemented |
+| 6 | **Infrastructure lifecycle** — scheduled On-Demand start/stop (EventBridge Scheduler), health/readiness, retries | ✅ Implemented |
 | 7 | **Repository processing** — placeholder clone / README / docs / commit retrieval | ✅ Implemented |
 
 Out of scope for the MVP (see [Roadmap](./roadmap.md)): GitHub Apps, multi-user,
@@ -78,24 +78,26 @@ Deploy order: **network → serverless → compute → observability**.
 | Stack | Provisions |
 | --- | --- |
 | `network.yaml` | VPC, public subnet, Internet Gateway, route table, instance security group (SSH from operator CIDR only) |
-| `serverless.yaml` | REST API Gateway (`/webhook` open, `/repositories` API-key), 4 Lambdas, per-function IAM roles, EventBridge bus + matched-event rule + idle timer, SQS events queue + DLQ, DynamoDB metadata table |
-| `compute.yaml` | EC2 Spot launch template + instance, persistent gp3 EBS volume (retained), instance IAM role/profile, base-host user data |
+| `serverless.yaml` | REST API Gateway (`/webhook` open, `/repositories` API-key), 2 Lambdas (registration, webhook-handler), per-function IAM roles, EventBridge bus + matched-event rule, SQS events queue + DLQ, DynamoDB metadata table |
+| `compute.yaml` | On-Demand EC2 launch template + instance, persistent gp3 EBS volume (retained), instance IAM role/profile, base-host user data |
+| `scheduler.yaml` | EventBridge Scheduler weekday start/stop schedules + `scheduled-start`/`scheduled-stop` Lambdas + least-privilege roles (targets the instance by ID) |
 | `observability.yaml` | CloudWatch log groups (bounded retention), SNS alarm topic, failure alarms, ops dashboard |
 
 Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
 
 **Implementation notes**
 
-- **Spot via Launch Template.** CloudFormation's `AWS::EC2::Instance` does not
-  accept `InstanceMarketOptions`; Spot options are declared on an
-  `AWS::EC2::LaunchTemplate` (`SpotInstanceType: persistent`,
-  `InstanceInterruptionBehavior: stop`) that the instance references. This
-  matches the start/stop cost model — a persistent Spot instance can be stopped
-  by `idle-shutdown` and restarted by `instance-starter`.
-- **Tag-scoped start/stop.** The starter/idle Lambdas are created before the
-  instance, so their IAM grants `ec2:Start/StopInstances` conditioned on
-  `aws:ResourceTag/Project`, and they resolve the instance by tag rather than a
-  hard-coded ID. This avoids a stack dependency cycle (serverless ⇄ compute).
+- **On-Demand via Launch Template.** A launch template centralizes the instance
+  configuration (type, AMI, key, profile, security group, root volume, user
+  data) that the `AWS::EC2::Instance` references. There are no
+  `InstanceMarketOptions`: it is an On-Demand instance, so a scheduled or manual
+  start always succeeds without depending on Spot capacity. Instance power is
+  owned by `scheduler.yaml` (start 18:00 / stop 20:00, Mon–Fri).
+- **ID-scoped start/stop.** The scheduler's `scheduled-start`/`scheduled-stop`
+  Lambdas take the compute stack's `InstanceId` and grant
+  `ec2:Start/StopInstances` scoped to that single instance ARN. The webhook
+  handler keeps a read-only tag-based lookup (`ec2:DescribeInstances`) to report
+  processed-now vs deferred, but never starts or stops the host.
 - **Lambda code.** The templates reference deployment packages in an artifacts
   S3 bucket (`ArtifactsBucket` + `*CodeKey` parameters). The function code is
   implemented in Milestones 3–6; until then the stacks validate but the Lambdas
@@ -151,48 +153,50 @@ non-`push`/disabled/no-match → `200 ignored`; matched `blog:` commit → publi
 
 **Placeholder:** on a match the handler calls the `Publisher` port, which is
 wired to `LogPublisher` for now. Milestone 5 swaps in the EventBridge adapter
-that publishes `blog.publish.requested` and starts the Spot instance.
+that publishes `blog.publish.requested` (buffered in SQS for the scheduled
+window).
 
 ---
 
 ## Milestone 5 — Event Processing ✅
 
-The matched event now flows all the way to compute:
-**webhook-handler → EventBridge → (SQS buffer + instance-starter → EC2 Spot start)**.
+The matched event now flows to the durable buffer:
+**webhook-handler → EventBridge → SQS buffer** (drained by the worker during the scheduled window).
 
 | Package | Responsibility |
 | --- | --- |
 | `internal/eventbus` | `EventBridgePublisher` — `PutEvents` of `blog.publish.requested`; swapped into the webhook handler in place of `LogPublisher`. |
-| `internal/lifecycle` | `Starter.EnsureRunning` — start the instance unless already running (idempotent), located by Project tag. |
-| `internal/awsec2` | EC2 adapter (`DescribeInstances` by tag, `StartInstances`). |
-| `lambdas/instance-starter` | EventBridge-invoked Lambda that ensures the Spot host is running. |
+| `internal/lifecycle` | `Instance` type + `EC2` port (`FindInstance` by Project tag) — reused by the webhook window gate. |
+| `internal/awsec2` | EC2 adapter (`DescribeInstances` by tag/ID, `Start`/`StopInstances`). |
+| `lambdas/webhook-handler` | Reports `accepted` (instance running, in-window) vs `deferred` (stopped) via the read-only window gate; never starts the host. |
 
 Config gains `PROJECT_NAME` and `EVENT_SOURCE`; the serverless template passes
-`EVENT_SOURCE=<project>.webhook` to the handler (matching the rule pattern).
+`EVENT_SOURCE=<project>.webhook` to the handler (matching the rule pattern) and
+`PROJECT_NAME` for the window gate.
 
-**Stub:** the instance-starter ensures the host is running but does **not** yet
-invoke the n8n workflow — that (and readiness detection + idle shutdown) is
-Milestone 6. The event payload is available to the starter for that step.
+> **Migration note.** Earlier revisions started a Spot instance per matched event
+> via an `instance-starter` Lambda. That was replaced by On-Demand compute on a
+> fixed weekday schedule (Milestone 6); the webhook no longer starts the host.
 
 ---
 
 ## Milestone 6 — Infrastructure Lifecycle ✅
 
-Completes the cost-optimised compute loop with automatic shutdown.
+Completes the cost-optimised compute loop with a scheduled weekday window.
 
 | Package | Responsibility |
 | --- | --- |
-| `internal/lifecycle` | `Shutdowner.StopIfIdle` — stop the instance once it has been up beyond the idle timeout **and** the queue is drained (visible + in-flight == 0). Idempotent. `EC2` port extended with `StopInstance` and an `Instance` value (id/state/launch time). |
-| `internal/awssqs` | SQS adapter reporting queue depth (visible + not-visible). |
-| `internal/awsec2` | Extended with `StopInstances` and launch-time. |
-| `lambdas/idle-shutdown` | Scheduled Lambda (EventBridge idle timer) that runs `StopIfIdle`. |
+| `internal/power` | `Switch.EnsureStarted`/`EnsureStopped` — start/stop a specific instance by ID unless already in the target state. Idempotent, inspects current state first. |
+| `internal/awssqs` | SQS adapter: receive/delete for the worker, plus `Depth` (visible + not-visible) for operational visibility. |
+| `internal/awsec2` | `InstanceState`/`Start`/`StopInstances` by ID (for the scheduler) and `FindInstance` by tag (for the window gate). |
+| `lambdas/scheduled-start`, `lambdas/scheduled-stop` | EventBridge Scheduler-invoked Lambdas that power the On-Demand host on/off at 18:00/20:00 Mon–Fri (`scheduler.yaml`). |
 
 **Readiness & n8n invocation (design decision).** In the hybrid model, n8n
 **pulls** work from SQS (its SQS-trigger workflow) rather than being pushed an
 HTTP call. So there is no Lambda-side n8n invoke or readiness probe: EventBridge
-buffers the matched event in SQS, the instance-starter brings the host up, and
-n8n drains SQS via long-polling once its container is healthy. This keeps n8n
-unexposed (no inbound) and needs no Lambda-in-VPC networking. The n8n
+buffers the matched event in SQS, EventBridge Scheduler brings the host up at
+18:00, and n8n drains SQS via long-polling once its container is healthy. This
+keeps n8n unexposed (no inbound) and needs no Lambda-in-VPC networking. The n8n
 SQS-trigger workflow + Docker Compose bring-up live on the instance and are part
 of the instance configuration (`instance/`, Milestone 7).
 
@@ -229,7 +233,7 @@ output — all deliberately deferred, with the seams in place.
 
 Milestones 1–7 are complete: an opt-in, event-driven, cost-optimised vertical
 slice from repository registration through the commit-trigger gate, event
-routing, on-demand Spot compute, automatic shutdown, and the processing seam —
+routing, scheduled On-Demand compute (weekday window), and the processing seam —
 all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
 Intelligence and content generation on top of the `processing.Snapshot`.
 
@@ -270,9 +274,9 @@ secrets/variables to set (`AWS_DEPLOY_ROLE_ARN`, `ARTIFACTS_BUCKET`, …,
 `DEPLOY_ENABLED=true`); after that, a merge to `main` deploys the app stacks.
 Runbook: [Deployment → First-Time Bootstrap](./deployment.md#first-time-bootstrap-automated-deploy).
 
-**Remaining to actually run in AWS (your side):** an account, a GPU Spot
-instance type, and an EC2 key pair — then bootstrap → set the vars → deploy →
-register a repo → push a `blog:` commit.
+**Remaining to actually run in AWS (your side):** an account and On-Demand quota
+for a GPU instance type (the key pair is stack-managed) — then bootstrap → set
+the vars → deploy → register a repo → push a `blog:` commit.
 
 ---
 
@@ -426,16 +430,17 @@ installs the NVIDIA driver + container toolkit and runs the `ollama/ollama`
 container with `--gpus all`; if the GPU start fails it falls back to CPU, and
 `EnableGpu=false` forces CPU (useful for testing on a non-GPU instance). Models
 are pulled once (`OllamaModel`, default `qwen2.5:7b`) and **persist on the gp3
-volume** (`/data/ollama`), so they survive Spot stop/start; the API binds to
+volume** (`/data/ollama`), so they survive the daily stop/start; the API binds to
 `127.0.0.1:11434` only. The worker unit gains an `ExecStartPre` readiness wait so
 it does not start generating before Ollama answers. This makes the full path —
 webhook → SQS → worker → Ollama → review → publish/notify — deployable on one
 instance. (n8n as an alternative orchestrator remains optional/future.)
 
-### Spot startup optimization (custom AMI) ✅
+### Instance startup optimization (custom AMI) ✅
 
-Startup is on the critical path (the instance is stopped when idle), so the
-slow, network-heavy setup — NVIDIA driver, Docker, the Ollama image, and the
+Startup still matters (the instance is stopped outside its window and started at
+18:00, so a faster boot means more of the window is usable), so the slow,
+network-heavy setup — NVIDIA driver, Docker, the Ollama image, and the
 ~4.7 GB model — is **pre-baked into a custom AMI** instead of run every launch.
 One canonical script, [`scripts/ami/provision.sh`](../scripts/ami/provision.sh),
 is both baked by Packer ([`packer/blog-gen.pkr.hcl`](../packer/blog-gen.pkr.hcl),
@@ -450,7 +455,7 @@ compute stack gained `CustomAmi` (fast path) and `AmiScriptsKey` (fallback)
 parameters; `deploy.yml` uploads `provision.sh` and passes the AMI id read from
 SSM (`/blog-gen/worker-ami`). Result:
 time-to-ready drops from ~10–15 min to well under a minute, with no change to the
-cost model. See README → **Optimizing Spot Instance Startup** and
+cost model. See README → **Optimizing Instance Startup** and
 [docs/ami.md](./ami.md).
 
 **Trigger sources.** Registration subscribes the webhook to `push` and
@@ -471,7 +476,7 @@ render). Detection scans the working copy for Terraform (`aws_*`),
 CloudFormation (`AWS::*`), AWS SDK client packages, dependency hints
 (Postgres → RDS, Redis → ElastiCache, Medium), and docker-compose/K8s manifests;
 it maps LLM usage to **OpenClaw on EC2, never Bedrock**, and defaults compute to
-EC2 (Spot) only as explicit deployment context. Confidence is High / Medium /
+EC2 (On-Demand) only as explicit deployment context. Confidence is High / Medium /
 Low; only High + Medium reach the primary diagram (omission over speculation).
 It emits up to six diagrams — AWS Solution (primary), Component, Data Flow,
 Deployment, CI/CD (if CI/CD), AI Workflow (if AI) — plus a confidence report and

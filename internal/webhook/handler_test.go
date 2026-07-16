@@ -43,6 +43,13 @@ func (f *fakePublisher) Publish(_ context.Context, ev Event) error {
 	return nil
 }
 
+type fakeGate struct {
+	running bool
+	err     error
+}
+
+func (g *fakeGate) Running(_ context.Context) (bool, error) { return g.running, g.err }
+
 func registeredRepo() repo.Repository {
 	return repo.Repository{
 		RepoFullName:   "acme/widget",
@@ -111,6 +118,60 @@ func TestMatchedCommitPublishes(t *testing.T) {
 	_ = json.Unmarshal(resp, &r)
 	if r.Status != "accepted" {
 		t.Errorf("status field = %q", r.Status)
+	}
+}
+
+func TestMatchedCommitDeferredOutsideWindow(t *testing.T) {
+	// Instance stopped (outside the scheduled window): the event is still
+	// published (buffered in SQS) but the delivery is reported "deferred", and
+	// the handler never starts the instance.
+	body := pushBody("acme/widget", "blog: new feature")
+	pub := &fakePublisher{}
+	h := newHandler(pub)
+	h.Gate = &fakeGate{running: false}
+	status, resp := h.Handle(context.Background(), signedHeaders(body), body)
+
+	if status != 200 {
+		t.Fatalf("status = %d, resp = %s", status, resp)
+	}
+	if len(pub.published) != 1 {
+		t.Fatalf("deferred delivery must still buffer the event, published=%d", len(pub.published))
+	}
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "deferred" {
+		t.Errorf("status field = %q, want deferred", r.Status)
+	}
+}
+
+func TestMatchedCommitAcceptedWhenRunning(t *testing.T) {
+	body := pushBody("acme/widget", "blog: new feature")
+	pub := &fakePublisher{}
+	h := newHandler(pub)
+	h.Gate = &fakeGate{running: true}
+	_, resp := h.Handle(context.Background(), signedHeaders(body), body)
+
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "accepted" {
+		t.Errorf("running instance: status = %q, want accepted", r.Status)
+	}
+}
+
+func TestMatchedCommitFailsOpenOnGateError(t *testing.T) {
+	body := pushBody("acme/widget", "blog: new feature")
+	pub := &fakePublisher{}
+	h := newHandler(pub)
+	h.Gate = &fakeGate{err: context.DeadlineExceeded}
+	_, resp := h.Handle(context.Background(), signedHeaders(body), body)
+
+	if len(pub.published) != 1 {
+		t.Fatalf("gate error must not drop the event, published=%d", len(pub.published))
+	}
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "accepted" {
+		t.Errorf("gate error should fail open: status = %q, want accepted", r.Status)
 	}
 }
 

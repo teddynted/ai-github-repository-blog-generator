@@ -1,6 +1,6 @@
 # GitHub AI Blog Generator - instance runtime.
 #
-# Runs on the EC2 Spot host (and locally for development). n8n orchestrates the
+# Runs on the On-Demand EC2 host (and locally for development). n8n orchestrates the
 # pipeline, Ollama serves the local model, and OpenClaw performs repository
 # analysis. State and models live under /data, which on the instance is the
 # persistent gp3 EBS volume so they survive start/stop cycles.

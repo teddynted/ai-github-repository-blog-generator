@@ -139,7 +139,7 @@ func summarize(snap processing.Snapshot, d Detection) string {
 		repo = "the repository"
 	}
 	return fmt.Sprintf(
-		"This architecture is derived directly from %s (%s). It maps the repository onto %d AWS service(s) supported by concrete evidence, using an Amazon EC2 (Spot) compute substrate and self-hosted OpenClaw for any LLM inference. Services that could not be confirmed from the repository were deliberately omitted.",
+		"This architecture is derived directly from %s (%s). It maps the repository onto %d AWS service(s) supported by concrete evidence, using an Amazon EC2 (On-Demand) compute substrate and self-hosted OpenClaw for any LLM inference. Services that could not be confirmed from the repository were deliberately omitted.",
 		repo, langs, n)
 }
 

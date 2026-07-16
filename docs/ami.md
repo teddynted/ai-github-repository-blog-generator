@@ -1,8 +1,9 @@
 # Custom AMI — Build & Update
 
-The worker instance boots from a **pre-baked AMI** so a Spot launch is ready to
-process jobs in well under a minute instead of the ~10–15 min a stock image
-needs to install NVIDIA drivers, Docker, the Ollama image, and pull the model.
+The worker instance boots from a **pre-baked AMI** so a scheduled start is ready
+to process jobs in well under a minute instead of the ~10–15 min a stock image
+needs to install NVIDIA drivers, Docker, the Ollama image, and pull the model —
+maximising the usable share of the daily window.
 
 ## What's baked vs. what happens at boot
 
@@ -46,7 +47,7 @@ Packer prints the new **AMI id** at the end. Wire it in:
 - **Pin a specific image:** write the id to SSM yourself — `aws ssm put-parameter --name /blog-gen/worker-ami --type String --value <ami-id> --overwrite` — or pass `CustomAmi=<ami-id>` on a manual `aws cloudformation deploy`.
 - **Manual deploy:** add `CustomAmi=<ami-id>` to the compute stack's `--parameter-overrides`.
 
-Then redeploy `blog-gen-compute`. New Spot instances launch from the baked AMI; the launch template picks up the new image on the next instance replacement.
+Then redeploy `blog-gen-compute`. New instances launch from the baked AMI; the launch template picks up the new image on the next instance replacement.
 
 ## When to rebuild
 
@@ -71,4 +72,4 @@ The AMI is defined entirely in code: [`packer/blog-gen.pkr.hcl`](../packer/blog-
 - **Region-scoped.** AMIs are per-region; rebuild (or copy) per region you deploy to.
 - **Health.** `/opt/blog-gen/health.sh` reports readiness (Docker + Ollama + model + worker). The worker's `ExecStartPre` waits for the model before it pulls any job.
 
-See the README → **Optimizing Spot Instance Startup** for the end-to-end workflow and expected timings.
+See the README → **Optimizing Instance Startup** for the end-to-end workflow and expected timings.
