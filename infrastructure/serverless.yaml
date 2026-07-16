@@ -45,6 +45,21 @@ Parameters:
     Type: Number
     Default: 14
     Description: Retention for the Lambda CloudWatch log groups.
+  RegistrationReservedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: >
+      Reserved concurrency for the registration Lambda — set to 1 to make it a
+      single writer for the shared credentials secret (strongest lost-update
+      protection). Left 0 (unset) by default because reserving concurrency
+      requires the account's Lambda concurrency limit to be high enough to keep
+      >= 10 unreserved; on low-limit accounts a value of 1 fails to deploy.
+      When 0, the store's read-modify-write retry provides best-effort safety
+      (registration is a rare, typically-serial admin operation).
+
+Conditions:
+  SetRegistrationConcurrency: !Not [!Equals [!Ref RegistrationReservedConcurrency, 0]]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -277,9 +292,11 @@ Resources:
       Architectures: [arm64]
       MemorySize: 256
       Timeout: 30
-      # Single writer for the shared credentials secret: reserved concurrency 1
-      # serializes registrations so read-modify-write updates cannot be lost.
-      ReservedConcurrentExecutions: 1
+      # Optional single-writer serialization for the shared credentials secret.
+      # Set RegistrationReservedConcurrency=1 to enable (needs account concurrency
+      # headroom, see the parameter); otherwise unset and the store's
+      # read-modify-write retry provides best-effort protection.
+      ReservedConcurrentExecutions: !If [SetRegistrationConcurrency, !Ref RegistrationReservedConcurrency, !Ref "AWS::NoValue"]
       Role: !GetAtt RegistrationRole.Arn
       Code:
         S3Bucket: !Ref ArtifactsBucket
