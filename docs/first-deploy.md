@@ -58,6 +58,17 @@ credentials that can create IAM roles, an OIDC provider, and an S3 bucket.
 > Already bootstrapped before the SMTP work landed? Re-run this — the deploy role
 > gained `secretsmanager` permissions it now needs.
 
+> **Bootstrap fails with `… artifacts bucket … already exists`?** A previously
+> deleted `blog-gen-bootstrap` stack left the (retained, versioned) bucket
+> behind, so a fresh create collides — often leaving the stack in
+> `REVIEW_IN_PROGRESS`. Re-run with `IMPORT_EXISTING=1` to **adopt** the existing
+> bucket instead of recreating it; it clears any stuck stack automatically
+> (AWS CLI ≥ 2.22):
+> ```bash
+> IMPORT_EXISTING=1 bash scripts/bootstrap.sh --region <your-region> \
+>   --owner teddynted --repo ai-github-repository-blog-generator
+> ```
+
 ## 2. Set GitHub repository values
 
 **Settings → Secrets and variables → Actions.** Use the values bootstrap printed:

@@ -54,6 +54,12 @@ This deploys [`infrastructure/bootstrap.yaml`](../infrastructure/bootstrap.yaml)
 
 With those set, merging to `main` runs [`deploy.yml`](./ci-cd.md#enabling-deployyml), which packages the Lambdas and deploys **network → serverless → compute → scheduler → observability**. For a manual deploy instead, set `ARTIFACTS_BUCKET` locally and follow Sections 3–4.
 
+> **`… bucket … already exists`** — the artifacts bucket has `DeletionPolicy: Retain`, so a previously deleted `blog-gen-bootstrap` stack leaves the physical bucket behind. Re-creating then collides with it (often leaving the stack in `REVIEW_IN_PROGRESS`). Re-run with `IMPORT_EXISTING=1`, which **adopts** the existing bucket (keeping its contents — it is versioned) via a change set with `--import-existing-resources`, and first clears any leftover `REVIEW_IN_PROGRESS`/failed stack automatically. Requires AWS CLI ≥ 2.22.
+>
+> ```bash
+> IMPORT_EXISTING=1 scripts/bootstrap.sh --region us-east-1 --owner <you> --repo <repo>
+> ```
+
 ---
 
 ## 2. Configuration
