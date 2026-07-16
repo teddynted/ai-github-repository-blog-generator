@@ -1,6 +1,6 @@
 # Workflows
 
-Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the EC2 Spot Instance, which run the full generation pipeline. Matched events are buffered in **Amazon SQS** (via EventBridge) and **invoke the n8n workflow** once the instance is healthy; n8n then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
+Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the On-Demand EC2 instance, which run the full generation pipeline. Matched events are buffered in **Amazon SQS** (via EventBridge); the instance runs on a fixed **weekday schedule (18:00–20:00, Mon–Fri)** owned by EventBridge Scheduler, and n8n **drains the SQS backlog** while it is up — then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
 
 > **Registration is not an n8n workflow.** Onboarding a repository (URL + PAT → validate → create webhook → store metadata + PAT) is handled by the **Registration Lambda** ([Architecture §2](./architecture.md#2-repository-registration-mvp)). These workflows cover only the per-event generation pipeline.
 
@@ -26,8 +26,59 @@ flowchart TB
 ```
 
 - The handler is **not** an n8n workflow — it is a Lambda ([Architecture §3](./architecture.md#3-commit-message-trigger-gate)).
-- It performs **only**: resolve repo record → verify signature (per-repo secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
-- EventBridge routes matched events to **SQS** (buffer) and the **Instance Starter Lambda** (start the Spot host).
+- It performs **only**: resolve repo record → verify signature (webhook secret from the **shared** secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
+- EventBridge routes matched events to **SQS** (buffer). The webhook never starts the host — instance power is owned by **EventBridge Scheduler** (weekday window). A manual `POST /process` is the one path that starts the host on demand ([Manual Trigger](./manual-trigger.md)).
+
+### 1a. Delivery sequence (end to end)
+
+What happens when GitHub calls `POST /webhook`. GitHub always gets an immediate
+`HTTP 200` (`accepted` / `deferred` / `ignored`) or an error; the actual AI work
+happens later, on the instance, once it is running.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant GH as GitHub
+    participant API as API Gateway
+    participant LH as webhook-handler
+    participant DDB as DynamoDB
+    participant SEC as Secrets Manager<br/>(shared secret)
+    participant EB as EventBridge
+    participant SQS as SQS
+    participant W as Worker (on EC2)
+
+    GH->>API: POST /webhook (payload + X-Hub-Signature-256)
+    API->>LH: invoke
+    LH->>DDB: Get repo by owner/name
+    alt not registered
+        LH-->>GH: 404 not registered
+    else registered
+        LH->>SEC: read shared secret → webhook_secret[owner/name]
+        LH->>LH: verify HMAC over raw body
+        alt bad signature
+            LH-->>GH: 401 rejected
+        else valid
+            LH->>LH: trigger gate (push: commit matches 'blog:'? / release: published?)
+            alt no match / disabled / unsupported
+                LH-->>GH: 200 ignored
+            else matched
+                LH->>EB: PutEvents blog.publish.requested
+                EB->>SQS: buffer event (retained ≤ 14 days)
+                alt instance running (in window)
+                    LH-->>GH: 200 accepted
+                else instance stopped (outside window)
+                    LH-->>GH: 200 deferred (not started)
+                end
+            end
+        end
+    end
+
+    Note over SQS,W: later — only while the host is running<br/>(scheduled-start at 18:00, or a manual /process)
+    W->>SQS: long-poll / receive
+    W->>SEC: read shared secret → pat[owner/name]
+    W->>W: clone → analyze → generate → review → publish → memory → notify
+    W->>SQS: delete message on success
+```
 
 ---
 
@@ -45,7 +96,7 @@ flowchart TB
 
 Each workflow can also be executed independently for testing ([WF-8](./requirements.md#4-workflow-requirements)).
 
-> **Trigger note:** every event in SQS has already passed the commit-message trigger gate in the handler. n8n never sees ignored events. Instance start/stop is handled by Lambda (starter + idle-shutdown), **not** by n8n.
+> **Trigger note:** every event in SQS has already passed the commit-message trigger gate in the handler. n8n never sees ignored events. Instance start/stop is handled by EventBridge Scheduler (scheduled-start + scheduled-stop Lambdas), **not** by n8n.
 
 ---
 

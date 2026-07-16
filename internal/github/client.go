@@ -146,6 +146,36 @@ func (c *Client) CreateRelease(ctx context.Context, owner, name, token string, r
 	return body.HTMLURL, nil
 }
 
+// UpdateWebhook updates an existing webhook's config (used when a repository's
+// webhook secret is rotated on re-registration, so GitHub keeps signing with
+// the current secret).
+func (c *Client) UpdateWebhook(ctx context.Context, owner, name, pat string, hookID int64, cfg WebhookConfig) error {
+	payload := map[string]any{
+		"active": true,
+		"events": cfg.Events,
+		"config": map[string]any{
+			"url":          cfg.URL,
+			"content_type": "json",
+			"secret":       cfg.Secret,
+			"insecure_ssl": "0",
+		},
+	}
+	raw, _ := json.Marshal(payload)
+	path := fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, name, hookID)
+	return c.exec(ctx, http.MethodPatch, path, pat, raw, http.StatusOK, nil)
+}
+
+// DeleteWebhook removes a repository's webhook. A 404 (already gone) is treated
+// as success so deletion is idempotent.
+func (c *Client) DeleteWebhook(ctx context.Context, owner, name, pat string, hookID int64) error {
+	path := fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, name, hookID)
+	err := c.exec(ctx, http.MethodDelete, path, pat, nil, http.StatusNoContent, nil)
+	if apperror.CodeOf(err) == apperror.CodeNotFound {
+		return nil
+	}
+	return err
+}
+
 // exec builds and executes a request, retrying transient failures. The request
 // is rebuilt each attempt so the body reader is fresh.
 func (c *Client) exec(ctx context.Context, method, path, pat string, reqBody []byte, wantStatus int, out any) error {

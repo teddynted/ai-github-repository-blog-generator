@@ -7,8 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
-
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/lifecycle"
 )
 
 type fakeAPI struct {
@@ -84,6 +82,3 @@ func TestDelete(t *testing.T) {
 		t.Errorf("deleted handle = %q", f.deletedHandle)
 	}
 }
-
-// Guard: *Client satisfies the lifecycle.Queue port.
-var _ lifecycle.Queue = (*Client)(nil)

@@ -1,11 +1,17 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   GitHub AI Blog Generator - Serverless stack. The always-available front door:
-  REST API Gateway (webhook + registration routes), four Lambdas (registration,
-  webhook-handler, instance-starter, idle-shutdown), the EventBridge bus and
-  rules, the SQS events queue + dead-letter queue, and the DynamoDB metadata
-  table. GitHub PATs and per-repo webhook secrets live in Secrets Manager under
-  a fixed prefix (created at registration time, not by this stack).
+  REST API Gateway (webhook, registration + manual /process routes), three
+  Lambdas (registration, webhook-handler, manual-trigger), the EventBridge bus
+  and rule, the SQS events queue +
+  dead-letter queue, the DynamoDB metadata table, and one shared Secrets Manager
+  secret holding every repository's credentials (keyed by owner/name). Instance
+  power is owned by
+  the scheduler stack (fixed weekday window), so this stack never starts or
+  stops the compute host: a matched webhook is published to EventBridge and
+  buffered in SQS, then drained by the worker while the instance is up. GitHub
+  PATs and per-repo webhook secrets live in Secrets Manager under a fixed prefix
+  (created at registration time, not by this stack).
 
 Parameters:
   ProjectName:
@@ -23,14 +29,10 @@ Parameters:
     Type: String
     Default: webhook-handler.zip
     Description: S3 key of the webhook-handler Lambda package.
-  InstanceStarterCodeKey:
+  ManualTriggerCodeKey:
     Type: String
-    Default: instance-starter.zip
-    Description: S3 key of the instance-starter Lambda package.
-  IdleShutdownCodeKey:
-    Type: String
-    Default: idle-shutdown.zip
-    Description: S3 key of the idle-shutdown Lambda package.
+    Default: manual-trigger.zip
+    Description: S3 key of the manual-trigger Lambda package (POST /process).
   PublishTrigger:
     Type: String
     Default: "blog:"
@@ -39,15 +41,25 @@ Parameters:
     Type: String
     Default: prod
     Description: API Gateway stage name.
-  IdleTimeoutMinutes:
-    Type: Number
-    Default: 15
-    MinValue: 1
-    Description: Inactivity window before the idle-shutdown Lambda stops the instance.
   LogRetentionDays:
     Type: Number
     Default: 14
     Description: Retention for the Lambda CloudWatch log groups.
+  RegistrationReservedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: >
+      Reserved concurrency for the registration Lambda — set to 1 to make it a
+      single writer for the shared credentials secret (strongest lost-update
+      protection). Left 0 (unset) by default because reserving concurrency
+      requires the account's Lambda concurrency limit to be high enough to keep
+      >= 10 unreserved; on low-limit accounts a value of 1 fails to deploy.
+      When 0, the store's read-modify-write retry provides best-effort safety
+      (registration is a rare, typically-serial admin operation).
+
+Conditions:
+  SetRegistrationConcurrency: !Not [!Equals [!Ref RegistrationReservedConcurrency, 0]]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -68,6 +80,21 @@ Resources:
         SSEEnabled: true
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # One shared secret holds every repository's credentials as a JSON object
+  # keyed by "<owner>/<name>": {"octocat/widget": {"pat":…,"webhook_secret":…}}.
+  # Registration read-modify-writes this secret; the webhook handler and worker
+  # read it. Created with an empty document; CloudFormation never rewrites the
+  # value on later updates (the template value stays "{}"), so entries persist.
+  RepoCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/github/repositories"
+      Description: Shared GitHub credentials for all registered repositories (JSON, keyed by owner/name).
+      SecretString: "{}"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -140,17 +167,19 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Read + write ONLY the single shared credentials secret. No
+              # create/delete of per-repo secrets any more.
               - Effect: Allow
                 Action:
-                  - secretsmanager:CreateSecret
+                  - secretsmanager:GetSecretValue
                   - secretsmanager:PutSecretValue
-                  - secretsmanager:TagResource
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                Resource: !Ref RepoCredentialsSecret
               - Effect: Allow
                 Action:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:GetItem
+                  - dynamodb:DeleteItem
                 Resource: !GetAtt RepositoriesTable.Arn
 
   WebhookHandlerRole:
@@ -175,12 +204,23 @@ Resources:
                 Resource: !GetAtt RepositoriesTable.Arn
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                Resource: !Ref RepoCredentialsSecret
               - Effect: Allow
                 Action: events:PutEvents
                 Resource: !GetAtt EventBus.Arn
+              # Read-only: the handler checks whether the compute host is
+              # currently running so it can report a matched delivery as
+              # processed-now ("accepted") vs deferred to the next scheduled
+              # window. It never starts or stops the instance. DescribeInstances
+              # cannot be resource-scoped, so it is granted on "*" (read-only).
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
 
-  InstanceStarterRole:
+  # The manual-trigger Lambda (POST /process) needs the same downstream rights
+  # as the webhook handler minus the GitHub-specific metadata/secret reads:
+  # publish to the bus and read-only describe for the operational-window gate.
+  ManualTriggerRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -193,49 +233,26 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: instance-starter
+        - PolicyName: manual-trigger
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !GetAtt EventBus.Arn
+              # Window gate (read-only). DescribeInstances cannot be scoped.
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+              # A manual run overrides the schedule: start the host on demand if
+              # it is stopped. Scoped to this project's tagged instance. It never
+              # stops the instance (that stays with the scheduler stack).
               - Effect: Allow
                 Action: ec2:StartInstances
                 Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
                 Condition:
                   StringEquals:
                     aws:ResourceTag/Project: !Ref ProjectName
-              - Effect: Allow
-                Action: ec2:DescribeInstances
-                Resource: "*"
-
-  IdleShutdownRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: idle-shutdown
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ec2:StopInstances
-                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/Project: !Ref ProjectName
-              - Effect: Allow
-                Action: ec2:DescribeInstances
-                Resource: "*"
-              - Effect: Allow
-                Action: sqs:GetQueueAttributes
-                Resource: !GetAtt EventsQueue.Arn
 
   # ---------------------------------------------------------------------------
   # Lambda functions
@@ -257,19 +274,12 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-webhook-handler"
       RetentionInDays: !Ref LogRetentionDays
-  InstanceStarterLogGroup:
+  ManualTriggerLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-instance-starter"
-      RetentionInDays: !Ref LogRetentionDays
-  IdleShutdownLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-idle-shutdown"
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-manual-trigger"
       RetentionInDays: !Ref LogRetentionDays
 
   RegistrationFunction:
@@ -282,6 +292,11 @@ Resources:
       Architectures: [arm64]
       MemorySize: 256
       Timeout: 30
+      # Optional single-writer serialization for the shared credentials secret.
+      # Set RegistrationReservedConcurrency=1 to enable (needs account concurrency
+      # headroom, see the parameter); otherwise unset and the store's
+      # read-modify-write retry provides best-effort protection.
+      ReservedConcurrentExecutions: !If [SetRegistrationConcurrency, !Ref RegistrationReservedConcurrency, !Ref "AWS::NoValue"]
       Role: !GetAtt RegistrationRole.Arn
       Code:
         S3Bucket: !Ref ArtifactsBucket
@@ -289,7 +304,7 @@ Resources:
       Environment:
         Variables:
           REPOSITORIES_TABLE: !Ref RepositoriesTable
-          SECRETS_PREFIX: !Sub "${ProjectName}/repos"
+          REPO_SECRET_ID: !Ref RepoCredentialsSecret
           PUBLISH_TRIGGER: !Ref PublishTrigger
           WEBHOOK_URL: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/webhook"
       Tags:
@@ -313,60 +328,49 @@ Resources:
       Environment:
         Variables:
           REPOSITORIES_TABLE: !Ref RepositoriesTable
-          SECRETS_PREFIX: !Sub "${ProjectName}/repos"
+          REPO_SECRET_ID: !Ref RepoCredentialsSecret
           EVENT_BUS_NAME: !Ref EventBus
           EVENT_SOURCE: !Sub "${ProjectName}.webhook"
           PUBLISH_TRIGGER: !Ref PublishTrigger
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  InstanceStarterFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: InstanceStarterLogGroup
-    Properties:
-      FunctionName: !Sub "${ProjectName}-instance-starter"
-      Runtime: provided.al2023
-      Handler: bootstrap
-      Architectures: [arm64]
-      MemorySize: 128
-      Timeout: 30
-      Role: !GetAtt InstanceStarterRole.Arn
-      Code:
-        S3Bucket: !Ref ArtifactsBucket
-        S3Key: !Ref InstanceStarterCodeKey
-      Environment:
-        Variables:
+          # Lets the handler locate the compute host by its Project tag to
+          # report processed-now vs deferred (the window gate). Optional: unset
+          # it and every matched delivery is reported "accepted".
           PROJECT_NAME: !Ref ProjectName
       Tags:
         - Key: Project
           Value: !Ref ProjectName
 
-  IdleShutdownFunction:
+  ManualTriggerFunction:
     Type: AWS::Lambda::Function
-    DependsOn: IdleShutdownLogGroup
+    DependsOn: ManualTriggerLogGroup
     Properties:
-      FunctionName: !Sub "${ProjectName}-idle-shutdown"
+      FunctionName: !Sub "${ProjectName}-manual-trigger"
       Runtime: provided.al2023
       Handler: bootstrap
       Architectures: [arm64]
       MemorySize: 128
-      Timeout: 30
-      Role: !GetAtt IdleShutdownRole.Arn
+      Timeout: 10
+      Role: !GetAtt ManualTriggerRole.Arn
       Code:
         S3Bucket: !Ref ArtifactsBucket
-        S3Key: !Ref IdleShutdownCodeKey
+        S3Key: !Ref ManualTriggerCodeKey
       Environment:
         Variables:
+          EVENT_BUS_NAME: !Ref EventBus
+          # A distinct source so logs/routing can tell manual runs apart; the
+          # PublishRequestedRule matches every "${ProjectName}." source.
+          EVENT_SOURCE: !Sub "${ProjectName}.manual"
+          # Required: the manual trigger rejects requests outside the operating
+          # window (compute host stopped) rather than starting the instance.
           PROJECT_NAME: !Ref ProjectName
-          QUEUE_URL: !Ref EventsQueue
-          IDLE_TIMEOUT_MINUTES: !Ref IdleTimeoutMinutes
       Tags:
         - Key: Project
           Value: !Ref ProjectName
 
   # ---------------------------------------------------------------------------
-  # EventBridge rules
+  # EventBridge rule: matched events are buffered in SQS and drained by the
+  # worker while the instance is up (started/stopped by the scheduler stack).
+  # There is no start-on-event target — the scheduled window owns instance power.
   # ---------------------------------------------------------------------------
   PublishRequestedRule:
     Type: AWS::Events::Rule
@@ -374,41 +378,16 @@ Resources:
       Name: !Sub "${ProjectName}-publish-requested"
       EventBusName: !Ref EventBus
       EventPattern:
+        # Match every trigger source for this project (webhook, manual, and any
+        # future CLI/Slack/cron source) by prefix, so new sources need no rule
+        # change. The bus is project-dedicated, so this stays tightly scoped.
         source:
-          - !Sub "${ProjectName}.webhook"
+          - prefix: !Sub "${ProjectName}."
         detail-type:
           - blog.publish.requested
       Targets:
         - Id: events-queue
           Arn: !GetAtt EventsQueue.Arn
-        - Id: instance-starter
-          Arn: !GetAtt InstanceStarterFunction.Arn
-
-  PublishRequestedRuleStarterPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref InstanceStarterFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt PublishRequestedRule.Arn
-
-  IdleTimerRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: !Sub "${ProjectName}-idle-timer"
-      ScheduleExpression: rate(5 minutes)
-      State: ENABLED
-      Targets:
-        - Id: idle-shutdown
-          Arn: !GetAtt IdleShutdownFunction.Arn
-
-  IdleTimerRulePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref IdleShutdownFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt IdleTimerRule.Arn
 
   # ---------------------------------------------------------------------------
   # REST API Gateway: /webhook (open, HMAC-verified) and /repositories (API key)
@@ -435,6 +414,13 @@ Resources:
       ParentId: !GetAtt RestApi.RootResourceId
       PathPart: repositories
 
+  ProcessResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: process
+
   WebhookMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -460,6 +446,45 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RegistrationFunction.Arn}/invocations"
 
+  # DELETE /repositories deregisters a repo (removes its shared-secret entry,
+  # webhook, and metadata). Same Lambda; it routes on the HTTP method.
+  RepositoriesDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref RepositoriesResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RegistrationFunction.Arn}/invocations"
+
+  # POST /process — the manual trigger. Secured with an API key (x-api-key),
+  # the same simple scheme as the registration route, and covered by the shared
+  # usage plan on this stage. Not publicly accessible without the key.
+  ProcessMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProcessResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ManualTriggerFunction.Arn}/invocations"
+
+  ProcessInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ManualTriggerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/process"
+
   WebhookInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -474,22 +499,29 @@ Resources:
       FunctionName: !Ref RegistrationFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/repositories"
+      # POST (register/update) and DELETE (deregister) both invoke the function.
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/repositories"
 
-  ApiDeployment:
+  # A Deployment is an immutable snapshot of the API. Changing methods does NOT
+  # redeploy an existing Deployment (same logical id = no-op), so the stage would
+  # keep serving the old set. Bump the logical id (…V2, V3, …) whenever methods
+  # change to force a fresh snapshot — V3 adds DELETE /repositories.
+  ApiDeploymentV3:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - WebhookMethod
       - RepositoriesMethod
+      - RepositoriesDeleteMethod
+      - ProcessMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "Deployment for ${StageName}"
+      Description: !Sub "Deployment for ${StageName} (webhook, repositories POST+DELETE, process)"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       RestApiId: !Ref RestApi
-      DeploymentId: !Ref ApiDeployment
+      DeploymentId: !Ref ApiDeploymentV3
       StageName: !Ref StageName
 
   RegistrationApiKey:
@@ -524,14 +556,24 @@ Outputs:
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/repositories"
     Export:
       Name: !Sub "${ProjectName}-RegistrationUrl"
+  ProcessUrl:
+    Description: Manual processing trigger endpoint (POST, requires x-api-key).
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/process"
+    Export:
+      Name: !Sub "${ProjectName}-ProcessUrl"
   RegistrationApiKeyId:
-    Description: API key ID for the registration endpoint (retrieve value via API Gateway).
+    Description: API key ID for the registration + process endpoints (retrieve value via API Gateway).
     Value: !Ref RegistrationApiKey
   RepositoriesTableName:
     Description: DynamoDB metadata table.
     Value: !Ref RepositoriesTable
     Export:
       Name: !Sub "${ProjectName}-RepositoriesTableName"
+  RepoCredentialsSecretArn:
+    Description: ARN of the shared repository-credentials secret (worker reads it via the instance role).
+    Value: !Ref RepoCredentialsSecret
+    Export:
+      Name: !Sub "${ProjectName}-RepoCredentialsSecretArn"
   EventBusName:
     Description: EventBridge bus for matched events.
     Value: !Ref EventBus

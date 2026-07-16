@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/githubsig"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/repo"
 )
 
@@ -31,17 +32,24 @@ func (f *fakeSecrets) WebhookSecret(_ context.Context, _ string) (string, error)
 }
 
 type fakePublisher struct {
-	published []Event
+	published []intake.Event
 	err       error
 }
 
-func (f *fakePublisher) Publish(_ context.Context, ev Event) error {
+func (f *fakePublisher) Publish(_ context.Context, ev intake.Event) error {
 	if f.err != nil {
 		return f.err
 	}
 	f.published = append(f.published, ev)
 	return nil
 }
+
+type fakeGate struct {
+	open bool
+	err  error
+}
+
+func (g *fakeGate) Open(_ context.Context) (bool, error) { return g.open, g.err }
 
 func registeredRepo() repo.Repository {
 	return repo.Repository{
@@ -79,7 +87,7 @@ func newHandler(pub *fakePublisher) *Handler {
 	return &Handler{
 		Repos:          &fakeRepos{r: registeredRepo(), ok: true},
 		Secrets:        &fakeSecrets{secret: secret},
-		Publisher:      pub,
+		Intake:         &intake.Service{Publisher: pub},
 		DefaultTrigger: "blog:",
 	}
 }
@@ -111,6 +119,60 @@ func TestMatchedCommitPublishes(t *testing.T) {
 	_ = json.Unmarshal(resp, &r)
 	if r.Status != "accepted" {
 		t.Errorf("status field = %q", r.Status)
+	}
+}
+
+func TestMatchedCommitDeferredOutsideWindow(t *testing.T) {
+	// Instance stopped (outside the scheduled window): the event is still
+	// published (buffered in SQS) but the delivery is reported "deferred", and
+	// the handler never starts the instance.
+	body := pushBody("acme/widget", "blog: new feature")
+	pub := &fakePublisher{}
+	h := newHandler(pub)
+	h.Intake.Window = &fakeGate{open: false}
+	status, resp := h.Handle(context.Background(), signedHeaders(body), body)
+
+	if status != 200 {
+		t.Fatalf("status = %d, resp = %s", status, resp)
+	}
+	if len(pub.published) != 1 {
+		t.Fatalf("deferred delivery must still buffer the event, published=%d", len(pub.published))
+	}
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "deferred" {
+		t.Errorf("status field = %q, want deferred", r.Status)
+	}
+}
+
+func TestMatchedCommitAcceptedWhenRunning(t *testing.T) {
+	body := pushBody("acme/widget", "blog: new feature")
+	pub := &fakePublisher{}
+	h := newHandler(pub)
+	h.Intake.Window = &fakeGate{open: true}
+	_, resp := h.Handle(context.Background(), signedHeaders(body), body)
+
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "accepted" {
+		t.Errorf("running instance: status = %q, want accepted", r.Status)
+	}
+}
+
+func TestMatchedCommitFailsOpenOnGateError(t *testing.T) {
+	body := pushBody("acme/widget", "blog: new feature")
+	pub := &fakePublisher{}
+	h := newHandler(pub)
+	h.Intake.Window = &fakeGate{err: context.DeadlineExceeded}
+	_, resp := h.Handle(context.Background(), signedHeaders(body), body)
+
+	if len(pub.published) != 1 {
+		t.Fatalf("gate error must not drop the event, published=%d", len(pub.published))
+	}
+	var r result
+	_ = json.Unmarshal(resp, &r)
+	if r.Status != "accepted" {
+		t.Errorf("gate error should fail open: status = %q, want accepted", r.Status)
 	}
 }
 
@@ -194,7 +256,7 @@ func TestPerRepoTriggerPatternHonoured(t *testing.T) {
 	cr.TriggerPattern = "[blog]"
 	h.Repos = &fakeRepos{r: cr, ok: true}
 	pub := &fakePublisher{}
-	h.Publisher = pub
+	h.Intake = &intake.Service{Publisher: pub}
 	status, _ := h.Handle(context.Background(), signedHeaders(body), body)
 	if status != 200 || len(pub.published) != 1 {
 		t.Errorf("custom pattern should match: status=%d published=%d", status, len(pub.published))

@@ -1,7 +1,8 @@
 // Command scheduled-start is the AWS Lambda invoked by the EventBridge
-// Scheduler "start" schedule (default 18:00 in the configured timezone). It
-// starts the EC2 instance named by INSTANCE_ID, and is idempotent: if the
-// instance is already running the invocation succeeds without action.
+// Scheduler "start" schedule (default 18:00 Mon-Fri in the configured
+// timezone). It starts the EC2 instance named by INSTANCE_ID, and is
+// idempotent: if the instance is already running the invocation succeeds
+// without action.
 package main
 
 import (

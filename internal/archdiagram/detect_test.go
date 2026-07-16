@@ -112,8 +112,8 @@ func TestDetectNoInvention(t *testing.T) {
 			t.Errorf("invented service with no evidence: %s (%s)", s.Name, s.Confidence)
 		}
 	}
-	if det.Compute.Name != "Amazon EC2 (Spot)" {
-		t.Errorf("compute default = %q, want Amazon EC2 (Spot)", det.Compute.Name)
+	if det.Compute.Name != "Amazon EC2 (On-Demand)" {
+		t.Errorf("compute default = %q, want Amazon EC2 (On-Demand)", det.Compute.Name)
 	}
 }
 

@@ -1,10 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Scheduled power management for an existing EC2 Spot instance. Two EventBridge
-  Schedules (start + stop) invoke two Go Lambdas that start/stop a specific
-  instance by ID on a daily, timezone-aware cron. Defaults run the instance in
-  the evening: start 18:00, stop 20:00. Idempotent, least-privilege, and
-  independent of the blog-gen application stacks (it targets any instance ID).
+  Scheduled power management for an existing On-Demand EC2 instance. Two
+  EventBridge Schedules (start + stop) invoke two Go Lambdas that start/stop a
+  specific instance by ID on a weekday, timezone-aware cron. Defaults run the
+  instance on weekday evenings only: start 18:00, stop 20:00, Monday-Friday.
+  This schedule is the authority for instance availability. Idempotent,
+  least-privilege, and independent of the blog-gen application stacks (it
+  targets any instance ID).
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -41,12 +43,12 @@ Parameters:
       18:00/20:00 window is local wall-clock time, not hardcoded UTC.
   StartExpression:
     Type: String
-    Default: cron(0 18 * * ? *)
-    Description: EventBridge Scheduler expression for the daily START (default 18:00).
+    Default: cron(0 18 ? * MON-FRI *)
+    Description: EventBridge Scheduler expression for the weekday START (default 18:00 Mon-Fri).
   StopExpression:
     Type: String
-    Default: cron(0 20 * * ? *)
-    Description: EventBridge Scheduler expression for the daily STOP (default 20:00).
+    Default: cron(0 20 ? * MON-FRI *)
+    Description: EventBridge Scheduler expression for the weekday STOP (default 20:00 Mon-Fri).
   ScheduleState:
     Type: String
     Default: ENABLED
@@ -271,7 +273,7 @@ Resources:
     Condition: CreateSchedules
     Properties:
       Name: !Sub "${ProjectName}-scheduled-start"
-      Description: Daily start of the target EC2 instance.
+      Description: Weekday start of the target EC2 instance (default 18:00 Mon-Fri).
       State: !Ref ScheduleState
       FlexibleTimeWindow:
         Mode: "OFF"
@@ -289,7 +291,7 @@ Resources:
     Condition: CreateSchedules
     Properties:
       Name: !Sub "${ProjectName}-scheduled-stop"
-      Description: Daily stop of the target EC2 instance.
+      Description: Weekday stop of the target EC2 instance (default 20:00 Mon-Fri).
       State: !Ref ScheduleState
       FlexibleTimeWindow:
         Mode: "OFF"

@@ -1,5 +1,6 @@
-// Package awsec2 adapts the EC2 API to the lifecycle.EC2 port, locating the
-// platform's instance by its Project tag and starting it.
+// Package awsec2 adapts the EC2 API to the lifecycle.EC2 and power.Instances
+// ports: it locates the platform's instance by its Project tag (for the webhook
+// window gate) and starts/stops a specific instance by ID (for the scheduler).
 package awsec2
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/lifecycle"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/power"
 )
@@ -95,9 +97,67 @@ func (c *Client) StopInstance(ctx context.Context, id string) error {
 	return nil
 }
 
+// InstanceWindow reports whether the platform is inside its operating window by
+// treating "the compute host (located by Project tag) is running" as the
+// authority — the scheduler stack starts/stops the host on its weekday window.
+// It is read-only and satisfies intake.Window, so any trigger source can apply
+// the same window policy without duplicating the check.
+type InstanceWindow struct {
+	client  *Client
+	project string
+}
+
+// NewInstanceWindow builds an InstanceWindow for the given project tag.
+func NewInstanceWindow(client *Client, project string) InstanceWindow {
+	return InstanceWindow{client: client, project: project}
+}
+
+// Open reports whether the project's instance is currently running.
+func (w InstanceWindow) Open(ctx context.Context) (bool, error) {
+	inst, err := w.client.FindInstance(ctx, w.project)
+	if err != nil {
+		return false, err
+	}
+	return inst.State == "running", nil
+}
+
+// InstanceStarter starts the platform's instance (located by Project tag) if it
+// is stopped — an on-demand override of the schedule used by the manual
+// trigger. Idempotent: a running/pending instance is a no-op. Satisfies
+// intake.Starter.
+type InstanceStarter struct {
+	client  *Client
+	project string
+}
+
+// NewInstanceStarter builds an InstanceStarter for the given project tag.
+func NewInstanceStarter(client *Client, project string) InstanceStarter {
+	return InstanceStarter{client: client, project: project}
+}
+
+// Start starts the project's instance unless it is already running/pending.
+func (s InstanceStarter) Start(ctx context.Context) error {
+	inst, err := s.client.FindInstance(ctx, s.project)
+	if err != nil {
+		return err
+	}
+	if inst.ID == "" {
+		return fmt.Errorf("no instance tagged Project=%s", s.project)
+	}
+	switch inst.State {
+	case "running", "pending":
+		return nil
+	default:
+		return s.client.StartInstance(ctx, inst.ID)
+	}
+}
+
 // Guards: *Client satisfies both the tag-based lifecycle.EC2 port and the
-// ID-based power.Instances port (scheduled start/stop).
+// ID-based power.Instances port (scheduled start/stop); InstanceWindow and
+// InstanceStarter satisfy the intake.Window / intake.Starter ports.
 var (
 	_ lifecycle.EC2   = (*Client)(nil)
 	_ power.Instances = (*Client)(nil)
+	_ intake.Window   = InstanceWindow{}
+	_ intake.Starter  = InstanceStarter{}
 )

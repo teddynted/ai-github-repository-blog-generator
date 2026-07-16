@@ -11,13 +11,14 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 | Service | Purpose | CloudFormation stack |
 | --- | --- | --- |
 | Amazon VPC | Network isolation (public subnet, IGW, route tables, SGs) | `network.yaml` |
-| Amazon API Gateway | HTTPS ingress for webhooks **and registration** | `serverless.yaml` |
-| AWS Lambda | Registration, webhook handler, instance starter, idle-shutdown | `serverless.yaml` |
-| AWS Secrets Manager | GitHub PATs + per-repo webhook secrets | `serverless.yaml` |
+| Amazon API Gateway | HTTPS ingress: webhook, registration, and manual `POST /process` | `serverless.yaml` |
+| AWS Lambda | Registration, webhook handler, manual-trigger (`serverless.yaml`); scheduled-start, scheduled-stop (`scheduler.yaml`) | `serverless.yaml` / `scheduler.yaml` |
+| AWS Secrets Manager | One shared secret holding all repos' PAT + webhook secret (JSON keyed by owner/name) | `serverless.yaml` |
 | Amazon DynamoDB | Repository metadata store | `serverless.yaml` |
-| Amazon EventBridge | Event bus for matched events + idle-shutdown timer | `serverless.yaml` |
+| Amazon EventBridge | Event bus for matched events | `serverless.yaml` |
+| Amazon EventBridge Scheduler | Weekday start/stop schedules (owns instance power) | `scheduler.yaml` |
 | Amazon SQS | Durable event buffer + dead-letter queue | `serverless.yaml` |
-| Amazon EC2 (Spot) | Ubuntu host running n8n + OpenClaw + Ollama | `compute.yaml` |
+| Amazon EC2 (On-Demand) | Ubuntu host running n8n + OpenClaw + Ollama | `compute.yaml` |
 | Amazon EBS (gp3) | Persistent volume for models, n8n state, Repository Memory | `compute.yaml` |
 | AWS IAM | Least-privilege roles and policies | each stack |
 | Amazon CloudWatch | Logs, metrics, dashboards, alarms | `observability.yaml` |
@@ -34,20 +35,20 @@ flowchart TB
     APIGW --> LH[Webhook Handler Lambda]
     LH -->|trigger match → PutEvents| EB[EventBridge]
     EB --> SQS[(SQS)]
-    EB --> ST[Instance Starter Lambda]
+    SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda]
     subgraph VPC["VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph PUB["Public subnet 10.0.0.0/24"]
-            EC2[(EC2 Spot Instance)]
+            EC2[(EC2 On-Demand Instance)]
         end
         RT[Route table → IGW]
     end
-    ST -->|StartInstances| EC2
+    PWR -->|Start/StopInstances| EC2
     EC2 --- IGW
     EC2 -->|poll| SQS
 ```
 
-- **Public subnet** hosts the EC2 Spot Instance so it can clone repositories, pull container images, and download model weights.
+- **Public subnet** hosts the EC2 instance so it can clone repositories, pull container images, and download model weights.
 - **Internet Gateway** provides ingress for operator SSH and egress for outbound traffic.
 - The webhook front door (API Gateway → Lambda → EventBridge → SQS) is serverless and reaches the instance only indirectly, by the instance **polling SQS**. No inbound webhook traffic hits the instance.
 
@@ -67,30 +68,33 @@ flowchart TB
 
 ## 4. Amazon API Gateway
 
-- Exposes **HTTPS** endpoints (managed TLS): a **webhook** route (GitHub deliveries) and a **registration** route (onboarding).
-- The webhook route integrates with the **Webhook Handler Lambda**; the registration route with the **Registration Lambda**.
-- Returns **HTTP 200** to GitHub immediately for both matched and ignored events.
-- Stack outputs include `WebhookUrl` (for the GitHub webhook) and `RegistrationUrl`.
+- Exposes **HTTPS** endpoints (managed TLS): a **webhook** route (GitHub deliveries), a **registration** route (onboarding), and a **`POST /process`** route (the manual trigger).
+- The webhook route integrates with the **Webhook Handler Lambda**; the registration route with the **Registration Lambda**; `POST /process` with the **Manual Trigger Lambda**.
+- The webhook route is public (HMAC-verified); the **registration** and **`/process`** routes require an **API key** (`x-api-key`) via the shared usage plan. See [Manual Trigger](./manual-trigger.md).
+- Returns **HTTP 200** to GitHub immediately for both matched and ignored events; `POST /process` returns **202** (published; instance running or started on demand).
+- Stack outputs include `WebhookUrl`, `RegistrationUrl`, and `ProcessUrl`.
 
 ---
 
 ## 5. AWS Lambda
 
-Four small functions form the serverless control plane. They are packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton).
+Five small functions form the serverless control plane (three in `serverless.yaml`, two in `scheduler.yaml`). They are packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton). The webhook and manual triggers share the trigger-agnostic `internal/intake` core (publish + window policy), so neither duplicates orchestration.
 
 | Function | Trigger | Responsibility |
 | --- | --- | --- |
 | `registration` | API Gateway (registration route) | Validate repo access + token permissions → create GitHub webhook → store metadata (DynamoDB) → store PAT + webhook secret (Secrets Manager) |
-| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (per-repo secret) → **validate trigger** → publish matched events to EventBridge → return 200. **No analysis, inference, or PAT access.** |
-| `instance-starter` | EventBridge (matched event) | Start the EC2 Spot Instance if stopped |
-| `idle-shutdown` | EventBridge (idle timer) | Stop the EC2 Spot Instance after the configured idle timeout |
+| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (webhook secret from the shared secret) → **validate trigger** → hand to `intake.Service` (buffer policy) → report `accepted`/`deferred` → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
+| `manual-trigger` | API Gateway (`POST /process`, API key) | Validate JSON request → hand to `intake.Service` (start policy) → **202**; starts the On-Demand host on demand if it is stopped (schedule override), then publishes. See [Manual Trigger](./manual-trigger.md). |
+| `scheduled-start` | EventBridge Scheduler (18:00 Mon–Fri) | Start the On-Demand instance if stopped (idempotent) |
+| `scheduled-stop` | EventBridge Scheduler (20:00 Mon–Fri) | Stop the On-Demand instance if running (idempotent) |
 
 Least-privilege roles:
 
-- `registration` — `secretsmanager:CreateSecret`/`PutSecretValue` (scoped to `blog-gen/repos/*`), `dynamodb:PutItem`/`UpdateItem` on the metadata table, CloudWatch Logs.
-- `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, CloudWatch Logs. **No PAT access.**
-- `instance-starter` — `ec2:StartInstances`/`DescribeInstances` on the specific instance, CloudWatch Logs.
-- `idle-shutdown` — `ec2:StopInstances`/`DescribeInstances` on the specific instance, CloudWatch Logs.
+- `registration` — `secretsmanager:GetSecretValue`/`PutSecretValue` on the **single** shared secret, `dynamodb:PutItem`/`UpdateItem`/`GetItem`/`DeleteItem` on the metadata table, CloudWatch Logs. Optional single-writer serialization via the `RegistrationReservedConcurrency` parameter (default off; store retry is the default safeguard).
+- `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, CloudWatch Logs. **No PAT access; no start/stop.**
+- `manual-trigger` — `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, tag-scoped `ec2:StartInstances` (on-demand override), CloudWatch Logs. **No stop.**
+- `scheduled-start` — `ec2:StartInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
+- `scheduled-stop` — `ec2:StopInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
 
 No Lambda performs content generation — that runs inside n8n/Ollama on EC2, which reads the PAT from Secrets Manager only when cloning.
 
@@ -100,7 +104,7 @@ No Lambda performs content generation — that runs inside n8n/Ollama on EC2, wh
 
 Onboarding introduces two managed stores.
 
-**AWS Secrets Manager** holds each repository's **GitHub PAT** and **webhook signing secret** under a stable prefix (e.g. `blog-gen/repos/<owner>/<name>/pat` and `.../webhook-secret`). Secrets are KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs ([Security §2](./security.md#2-github-pat--secret-storage)).
+**AWS Secrets Manager** holds **one shared secret** — `blog-gen/github/repositories` — whose value is a JSON object keyed by `"<owner>/<name>"`, each entry `{"pat":…,"webhook_secret":…}`. Registration read-modify-writes it (store retry, plus optional single-writer reserved concurrency); the webhook handler and worker read it and index by key. One secret regardless of repo count. It is KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs. Full detail: [Registration](./registration.md) · [Security §2](./security.md#2-github-pat--secret-storage).
 
 **Amazon DynamoDB** (`repositories` table, on-demand capacity, encrypted at rest) stores per-repository metadata: Repository ID, owner, name, URL, default branch, webhook ID, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, and registration timestamp. It stores only the **reference** to the PAT secret — never the value ([Requirements §13](./requirements.md#13-repository-metadata-requirements)).
 
@@ -110,11 +114,9 @@ Onboarding introduces two managed stores.
 
 EventBridge is the central **event bus** and the extension point for future trigger sources.
 
-- A **custom bus** receives `blog.publish.requested` events from the webhook handler on a trigger match.
-- A **rule** routes those events to two targets:
-  1. the **SQS `events` queue** (durable buffer for the run), and
-  2. the **`instance-starter` Lambda** (start the Spot host if stopped).
-- A separate **idle-timer rule** drives the **`idle-shutdown` Lambda** after `IDLE_TIMEOUT_MINUTES` of inactivity.
+- A **custom bus** receives `blog.publish.requested` events from any trigger source (the webhook handler and the manual `/process` trigger today).
+- A **rule** routes those events to a single target: the **SQS `events` queue** (durable buffer for the run). Its pattern matches the `${ProjectName}.` **source prefix**, so new trigger sources route with no rule change. There is **no** start-on-event target — instance power is owned by the scheduler stack.
+- Instance start/stop is handled separately by **EventBridge Scheduler** (in `scheduler.yaml`): two weekday schedules invoke the `scheduled-start`/`scheduled-stop` Lambdas. See [Scheduling](./scheduling.md).
 - Future trigger sources (releases, tags, PR labels, manual, scheduled) publish to the **same bus**, so the downstream pipeline is unchanged ([Roadmap](./roadmap.md), [TRG-7](./requirements.md#2-publishing-trigger-requirements)).
 
 ---
@@ -126,28 +128,29 @@ EventBridge is the central **event bus** and the extension point for future trig
 | `events` | Durable buffer of matched events (delivered by EventBridge) |
 | `events-dlq` | Dead-letter queue for messages that repeatedly fail |
 
-- **Durability:** messages survive while the instance is stopped or booting, so **no matched event is lost during cold start** ([COST-8](./requirements.md#10-cost-optimisation-requirements)).
-- **Visibility timeout** hides an in-flight message while n8n processes it; if the run fails or the Spot Instance is interrupted, the message reappears and is retried.
+- **Durability:** messages survive while the instance is stopped (outside its window) or booting, so **no matched event is lost** — the backlog is drained at the next scheduled start ([COST-8](./requirements.md#10-cost-optimisation-requirements)).
+- **Visibility timeout** hides an in-flight message while n8n processes it; if the run fails or the instance stops at 20:00 mid-run, the message reappears and is retried.
 - **Redrive policy** routes messages exceeding the maximum receive count to the dead-letter queue.
 - Encryption at rest (SSE) is enabled.
 
 ---
 
-## 8. Amazon EC2 (Spot Instance)
+## 8. Amazon EC2 (On-Demand Instance)
 
-- A **Spot Instance** running **Ubuntu**, chosen for its ~70–90% cost saving over On-Demand for this interruptible, batch-style workload.
+- An **On-Demand Instance** running **Ubuntu**. On-Demand (not Spot) is used so a scheduled start always succeeds and the host stays up for the whole window — the fixed weekday window already caps compute cost, so Spot's discount buys little. See [Cost Optimisation §5](./cost-optimization.md#5-on-demand-on-a-schedule-not-spot).
 - Runs **n8n**, **OpenClaw**, and **Ollama** (serving a local **Qwen** model) via **Docker Compose**.
 - Bootstrapped by **user data** (`instance/user-data.sh`) that installs Docker + Docker Compose, mounts the persistent EBS volume, pulls the model into Ollama (first boot only), and starts the Compose stack.
-- **Started on a matched event** (via EventBridge → instance-starter) and **stopped on idle** (via EventBridge → idle-shutdown).
+- **Started/stopped on the weekday schedule** by EventBridge Scheduler (scheduled-start 18:00 / scheduled-stop 20:00, Mon–Fri) — see `scheduler.yaml`.
 - Attached instance profile grants only what the host needs: `sqs:ReceiveMessage`/`DeleteMessage`/`GetQueueAttributes` on the events queue and CloudWatch Logs.
-- Key parameters: `InstanceType`, `SpotMaxPrice`, `KeyPairName`, `OllamaModel`, `IdleTimeoutMinutes`.
+- Key parameters: `InstanceType`, `KeyPairName`, `OllamaModel`, `EbsVolumeSizeGb`; the schedule window is set on the scheduler stack (`StartExpression`, `StopExpression`, `ScheduleTimezone`).
 
 ---
 
 ## 9. Amazon EBS (Persistent gp3 Volume)
 
 - A **persistent gp3 volume** holds **Ollama model weights**, **n8n state and credentials**, **Repository Memory**, and **exported workflows**.
-- The volume is **retained across start/stop cycles** (and independent of the Spot Instance lifecycle), so a restarted or replaced instance re-attaches it and is ready to infer **without re-downloading models** — and with its Repository Memory intact.
+- The volume is **retained across the daily start/stop cycles** (and independent of the instance lifecycle), so a restarted or replaced instance re-attaches it and is ready to infer **without re-downloading models** — and with its Repository Memory intact.
+- **Attached at boot, not by CloudFormation.** The instance locates the volume by its `Project`/`Name` tags and attaches it in user data (granted `ec2:AttachVolume`), retrying until it is free. This deliberately avoids an `AWS::EC2::VolumeAttachment` resource: a single retained volume managed that way makes **every instance-replacing update fail** with `volume already exists / already attached` (CloudFormation creates the new attachment before deleting the old, but a volume attaches to only one instance). Boot-time attach lets the old instance terminate first, then the new one claims the volume — so replacements are seamless.
 - Sized via `EbsVolumeSizeGb` (default 100 GB).
 - Encrypted at rest.
 
@@ -157,7 +160,7 @@ EventBridge is the central **event bus** and the extension point for future trig
 
 ## 10. Amazon CloudWatch
 
-- **Log groups** for `webhook-handler`, `instance-starter`, `idle-shutdown`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
+- **Log groups** for `webhook-handler`, `scheduled-start`, `scheduled-stop`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
 - **Metrics** — a custom `BlogGenerator` namespace for triggered vs. ignored events, runs, successes, failures, latency, and queue depth, plus native AWS metrics.
 - **Dashboard** — a single operational dashboard.
 - **Alarms** — failure and error alarms. See [Monitoring](./monitoring.md).
@@ -177,8 +180,9 @@ Templates are **modular and reusable** so each layer can be deployed and updated
 ```text
 infrastructure/
 ├── network.yaml         # VPC, public subnet, IGW, route tables, security groups
-├── serverless.yaml      # API Gateway (webhook + registration), Lambdas (registration + handler + starter + idle-shutdown), Secrets Manager, DynamoDB, EventBridge bus + rules, SQS + DLQ, IAM
-├── compute.yaml         # EC2 Spot request, gp3 EBS volume, instance profile, user data
+├── serverless.yaml      # API Gateway (webhook + registration + /process), Lambdas (registration + handler + manual-trigger), Secrets Manager, DynamoDB, EventBridge bus + rule, SQS + DLQ, IAM
+├── compute.yaml         # On-Demand EC2 instance, gp3 EBS volume, instance profile, user data
+├── scheduler.yaml       # EventBridge Scheduler (weekday start/stop) + scheduled-start/scheduled-stop Lambdas + roles
 └── observability.yaml   # CloudWatch log groups, metrics, alarms, dashboard
 ```
 
@@ -186,10 +190,11 @@ infrastructure/
 | --- | --- | --- |
 | `network.yaml` | Networking and security groups | `VpcId`, `PublicSubnetId`, `InstanceSecurityGroupId` |
 | `serverless.yaml` | Registration + webhook front door, secrets, metadata, event bus, queue | `WebhookUrl`, `RegistrationUrl`, `RepositoriesTableName`, `EventBusName`, `QueueUrl`, `DeadLetterQueueUrl` |
-| `compute.yaml` | Spot host and persistent volume | `InstanceId`, `PersistentVolumeId` |
+| `compute.yaml` | On-Demand host and persistent volume | `InstanceId`, `PersistentVolumeId` |
+| `scheduler.yaml` | Weekday power schedules + start/stop Lambdas (owns instance power) | `StartFunctionArn`, `StopFunctionArn`, `ScheduleWindow` |
 | `observability.yaml` | Logs, metrics, alarms | `DashboardName`, `LogGroupNames` |
 
-Deploy order is **network → serverless → compute → observability**; the compute stack imports the queue and instance security group from earlier stacks.
+Deploy order is **network → serverless → compute → scheduler → observability**; the compute stack imports the queue and instance security group from earlier stacks, and the scheduler stack takes the compute stack's `InstanceId`.
 
 ---
 

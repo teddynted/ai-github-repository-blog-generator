@@ -14,11 +14,14 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/awsec2"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/eventbus"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
@@ -30,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "SecretsPrefix", "EventBusName", "EventSource"); err != nil {
+	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID", "EventBusName", "EventSource"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -40,10 +43,22 @@ func main() {
 		log.Fatalf("aws config: %v", err)
 	}
 
+	// Shared intake service: publishes to EventBridge and applies the window
+	// policy. With PROJECT_NAME set, it reports processed-now vs deferred based
+	// on whether the compute host is up (the fixed weekday window); absent, every
+	// matched delivery is reported "accepted". Webhooks buffer (never reject).
+	svc := &intake.Service{
+		Publisher: eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
+		Logger:    a.Logger,
+	}
+	if a.Config.ProjectName != "" {
+		svc.Window = awsec2.NewInstanceWindow(awsec2.New(ec2.NewFromConfig(awsCfg)), a.Config.ProjectName)
+	}
+
 	handler := &webhook.Handler{
 		Repos:          metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable),
-		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix),
-		Publisher:      eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
+		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.RepoSecretID),
+		Intake:         svc,
 		Metrics:        metrics.New(metrics.Namespace, os.Stdout),
 		DefaultTrigger: a.Config.PublishTrigger,
 		Logger:         a.Logger,

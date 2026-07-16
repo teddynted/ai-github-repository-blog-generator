@@ -74,16 +74,16 @@ Resources:
       AlarmActions:
         - !Ref AlarmTopic
 
-  InstanceStarterErrorsAlarm:
+  ManualTriggerErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "${ProjectName}-instance-starter-errors"
-      AlarmDescription: Instance starter is failing - triggered runs may never start.
+      AlarmName: !Sub "${ProjectName}-manual-trigger-errors"
+      AlarmDescription: Manual trigger (POST /process) is failing.
       Namespace: AWS/Lambda
       MetricName: Errors
       Dimensions:
         - Name: FunctionName
-          Value: !Sub "${ProjectName}-instance-starter"
+          Value: !Sub "${ProjectName}-manual-trigger"
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
@@ -93,16 +93,39 @@ Resources:
       AlarmActions:
         - !Ref AlarmTopic
 
-  IdleShutdownErrorsAlarm:
+  # Power is owned by the scheduler stack (weekday window). These alarms watch
+  # the two functions that start/stop the instance. Their functions live in the
+  # scheduler stack; CloudWatch alarms key off the metric dimension (function
+  # name) so they work across stacks.
+  ScheduledStartErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "${ProjectName}-idle-shutdown-errors"
-      AlarmDescription: Idle-shutdown is failing - the instance may not stop (cost risk).
+      AlarmName: !Sub "${ProjectName}-scheduled-start-errors"
+      AlarmDescription: Scheduled-start is failing - the instance may not come up for its window.
       Namespace: AWS/Lambda
       MetricName: Errors
       Dimensions:
         - Name: FunctionName
-          Value: !Sub "${ProjectName}-idle-shutdown"
+          Value: !Sub "${ProjectName}-scheduled-start"
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  ScheduledStopErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-scheduled-stop-errors"
+      AlarmDescription: Scheduled-stop is failing - the instance may not stop at 20:00 (cost risk).
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub "${ProjectName}-scheduled-stop"
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
@@ -203,8 +226,9 @@ Resources:
                 "metrics": [
                   [ "AWS/Lambda", "Errors", "FunctionName", "${ProjectName}-registration" ],
                   [ "...", "${ProjectName}-webhook-handler" ],
-                  [ "...", "${ProjectName}-instance-starter" ],
-                  [ "...", "${ProjectName}-idle-shutdown" ]
+                  [ "...", "${ProjectName}-manual-trigger" ],
+                  [ "...", "${ProjectName}-scheduled-start" ],
+                  [ "...", "${ProjectName}-scheduled-stop" ]
                 ]
               }
             },

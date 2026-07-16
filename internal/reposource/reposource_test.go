@@ -216,14 +216,15 @@ func (f *fakePAT) PAT(_ context.Context, ref string) (string, error) {
 func TestMetaTokenSource(t *testing.T) {
 	pg := &fakePAT{}
 	ts := &MetaTokenSource{
-		Meta:    fakeMeta{r: repo.Repository{SecretRef: "blog-gen/repos/acme/widget"}, ok: true},
+		Meta:    fakeMeta{r: repo.Repository{RepoFullName: "acme/widget"}, ok: true},
 		Secrets: pg,
 	}
 	tok, err := ts.Token(context.Background(), "acme/widget")
 	if err != nil {
 		t.Fatalf("Token: %v", err)
 	}
-	if tok != "github_pat_secret" || pg.ref != "blog-gen/repos/acme/widget" {
+	// The PAT is looked up by the repo full name (the shared-secret key).
+	if tok != "github_pat_secret" || pg.ref != "acme/widget" {
 		t.Errorf("token=%q ref=%q", tok, pg.ref)
 	}
 }

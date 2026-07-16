@@ -2,7 +2,8 @@
 #
 # Build, package, and deploy the scheduled EC2 start/stop stack
 # (infrastructure/scheduler.yaml) — two Go Lambdas + two EventBridge Schedules
-# that power a specific instance on at 18:00 and off at 20:00 (configurable).
+# that power a specific instance on at 18:00 and off at 20:00, Mon-Fri
+# (configurable).
 #
 # Usage:
 #   INSTANCE_ID=i-0123456789abcdef0 scripts/deploy-scheduler.sh
@@ -13,8 +14,8 @@
 #   PROJECT_NAME  resource prefix + tag         (default: blog-gen)
 #   STACK_NAME    CloudFormation stack name     (default: <project>-scheduler)
 #   TIMEZONE      IANA timezone for the cron    (default: Etc/UTC)
-#   START_EXPR    start cron                    (default: cron(0 18 * * ? *))
-#   STOP_EXPR     stop cron                     (default: cron(0 20 * * ? *))
+#   START_EXPR    start cron                    (default: cron(0 18 ? * MON-FRI *))
+#   STOP_EXPR     stop cron                     (default: cron(0 20 ? * MON-FRI *))
 #   ENVIRONMENT   environment tag (dev|staging|prod, default: dev)
 #   BUCKET        artifacts S3 bucket           (default: blog-gen-artifacts-<account>-<region>)
 set -euo pipefail
@@ -25,8 +26,8 @@ REGION="${REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}"
 PROJECT_NAME="${PROJECT_NAME:-blog-gen}"
 STACK_NAME="${STACK_NAME:-${PROJECT_NAME}-scheduler}"
 TIMEZONE="${TIMEZONE:-Etc/UTC}"
-START_EXPR="${START_EXPR:-cron(0 18 * * ? *)}"
-STOP_EXPR="${STOP_EXPR:-cron(0 20 * * ? *)}"
+START_EXPR="${START_EXPR:-cron(0 18 ? * MON-FRI *)}"
+STOP_EXPR="${STOP_EXPR:-cron(0 20 ? * MON-FRI *)}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

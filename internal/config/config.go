@@ -23,7 +23,6 @@ const (
 	DefaultWorkDir             = "/data/work"
 	DefaultMemoryDir           = "/data/memory"
 	DefaultPendingDir          = "/data/pending"
-	DefaultIdleTimeoutMinutes  = 15
 	DefaultLogLevel            = "info"
 	DefaultRequireHumanApprove = false
 	// Turbo SMTP defaults for email notifications. Port 587 uses STARTTLS.
@@ -50,13 +49,17 @@ type Config struct {
 	// RepositoriesTable is the DynamoDB metadata table (REPOSITORIES_TABLE).
 	RepositoriesTable string
 	// SecretsPrefix is the Secrets Manager path prefix for per-repo secrets
-	// (SECRETS_PREFIX).
+	// (SECRETS_PREFIX). Retained for compatibility; superseded by RepoSecretID.
 	SecretsPrefix string
+	// RepoSecretID is the name/ARN of the single shared secret holding every
+	// repository's credentials, keyed by "<owner>/<name>" (REPO_SECRET_ID).
+	RepoSecretID string
 	// EventBusName is the EventBridge bus for matched events (EVENT_BUS_NAME).
 	EventBusName string
 	// QueueURL is the SQS events queue URL (QUEUE_URL).
 	QueueURL string
-	// InstanceID is the EC2 Spot instance managed by the platform (INSTANCE_ID).
+	// InstanceID is the On-Demand EC2 instance the scheduler powers on/off
+	// (INSTANCE_ID).
 	InstanceID string
 	// N8NWebhookURL is the n8n workflow entry point invoked once the instance
 	// is healthy (N8N_WEBHOOK_URL).
@@ -64,9 +67,6 @@ type Config struct {
 	// WebhookURL is this platform's public webhook endpoint, used by the
 	// registration Lambda when creating the GitHub webhook (WEBHOOK_URL).
 	WebhookURL string
-	// IdleTimeoutMinutes is the inactivity window before auto-shutdown
-	// (IDLE_TIMEOUT_MINUTES).
-	IdleTimeoutMinutes int
 	// OllamaModel is the local model served by Ollama (OLLAMA_MODEL).
 	OllamaModel string
 	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
@@ -128,6 +128,7 @@ func Load(getenv Getenv) (Config, error) {
 		PublishTrigger:       firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
 		RepositoriesTable:    getenv("REPOSITORIES_TABLE"),
 		SecretsPrefix:        firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
+		RepoSecretID:         getenv("REPO_SECRET_ID"),
 		EventBusName:         getenv("EVENT_BUS_NAME"),
 		QueueURL:             getenv("QUEUE_URL"),
 		InstanceID:           getenv("INSTANCE_ID"),
@@ -150,19 +151,7 @@ func Load(getenv Getenv) (Config, error) {
 		SMTPPassword:         getenv("SMTP_PASSWORD"),
 		SMTPPasswordSecret:   getenv("SMTP_PASSWORD_SECRET"),
 		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
-		IdleTimeoutMinutes:   DefaultIdleTimeoutMinutes,
 		RequireHumanApproval: DefaultRequireHumanApprove,
-	}
-
-	if raw := getenv("IDLE_TIMEOUT_MINUTES"); raw != "" {
-		v, err := strconv.Atoi(raw)
-		if err != nil {
-			return Config{}, fmt.Errorf("config: IDLE_TIMEOUT_MINUTES %q is not an integer: %w", raw, err)
-		}
-		if v <= 0 {
-			return Config{}, fmt.Errorf("config: IDLE_TIMEOUT_MINUTES must be positive, got %d", v)
-		}
-		cfg.IdleTimeoutMinutes = v
 	}
 
 	if raw := getenv("SMTP_PORT"); raw != "" {
@@ -222,6 +211,8 @@ func (c Config) field(name string) (string, bool) {
 		return c.RepositoriesTable, true
 	case "SecretsPrefix":
 		return c.SecretsPrefix, true
+	case "RepoSecretID":
+		return c.RepoSecretID, true
 	case "EventBusName":
 		return c.EventBusName, true
 	case "QueueURL":

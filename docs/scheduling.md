@@ -1,13 +1,15 @@
 # Scheduled EC2 Power Management
 
 Automatically **start** an EC2 instance in the evening and **stop** it later the
-same night, so a development environment is available during a chosen window
-(default 18:00 → 20:00) but not billed for compute the rest of the day.
+same night, on weekdays only, so the environment is available during a chosen
+window (default 18:00 → 20:00, Mon–Fri) but not billed for compute the rest of
+the week.
 
-This is a self-contained stack (`infrastructure/scheduler.yaml` + two Go
-Lambdas). It targets **any** instance by ID and is independent of the blog-gen
-application stacks — deploy it against the blog-gen Spot host or any other
-instance.
+For the blog-gen platform this stack **owns instance power**: it is the
+authority for when the On-Demand compute host is available, and the webhook path
+never starts the instance itself. The stack is otherwise self-contained
+(`infrastructure/scheduler.yaml` + two Go Lambdas), targets an instance by ID,
+and can schedule any instance independently of the application stacks.
 
 ---
 
@@ -16,8 +18,8 @@ instance.
 ```mermaid
 flowchart LR
   subgraph EB[Amazon EventBridge Scheduler]
-    S1["Start schedule<br/>cron(0 18 * * ? *)<br/>timezone-aware"]
-    S2["Stop schedule<br/>cron(0 20 * * ? *)<br/>timezone-aware"]
+    S1["Start schedule<br/>cron(0 18 ? * MON-FRI *)<br/>timezone-aware"]
+    S2["Stop schedule<br/>cron(0 20 ? * MON-FRI *)<br/>timezone-aware"]
   end
 
   R["Scheduler invoke role<br/>(lambda:InvokeFunction)"]
@@ -141,8 +143,8 @@ Scheduler can assume the created roles.
 | `ProjectName` | `blog-gen` | Resource name prefix + `Project` tag |
 | `Environment` | `dev` | `Environment` tag (`dev`/`staging`/`prod`) |
 | `ScheduleTimezone` | `Etc/UTC` | IANA timezone for the cron expressions |
-| `StartExpression` | `cron(0 18 * * ? *)` | Daily start time |
-| `StopExpression` | `cron(0 20 * * ? *)` | Daily stop time |
+| `StartExpression` | `cron(0 18 ? * MON-FRI *)` | Weekday start time |
+| `StopExpression` | `cron(0 20 ? * MON-FRI *)` | Weekday stop time |
 | `ScheduleState` | `ENABLED` | `DISABLED` pauses both schedules without deleting the stack |
 | `ManageSchedules` | `true` | `false` deploys only the Lambdas/roles (manual driving) |
 | `ArtifactsBucket` | *(required)* | S3 bucket holding the two Lambda zips |
@@ -162,12 +164,14 @@ EventBridge Scheduler cron format is `cron(Minutes Hours Day-of-month Month Day-
 
 | Expression | Meaning |
 | --- | --- |
-| `cron(0 18 * * ? *)` | 18:00 every day |
-| `cron(0 20 * * ? *)` | 20:00 every day |
+| `cron(0 18 ? * MON-FRI *)` | 18:00 Monday–Friday |
+| `cron(0 20 ? * MON-FRI *)` | 20:00 Monday–Friday |
+| `cron(0 18 * * ? *)` | 18:00 every day (7-day variant) |
 
-`?` in the day-of-week field means "no specific value" (required when
-day-of-month is `*`). The instance therefore runs **18:00 → 20:00 (2 h/day)**
-and is stopped **20:00 → 18:00 (22 h/day)**.
+`?` marks "no specific value" in whichever of the day-of-month / day-of-week
+fields is not being constrained. With the `MON-FRI` default the instance runs
+**18:00 → 20:00 on weekdays only** and is stopped the rest of the time
+(evenings, nights, and all weekend).
 
 ### Example EventBridge Scheduler configuration
 
@@ -178,7 +182,7 @@ What the deploy creates (start schedule), viewable with
 {
   "Name": "blog-gen-scheduled-start",
   "State": "ENABLED",
-  "ScheduleExpression": "cron(0 18 * * ? *)",
+  "ScheduleExpression": "cron(0 18 ? * MON-FRI *)",
   "ScheduleExpressionTimezone": "Africa/Johannesburg",
   "FlexibleTimeWindow": { "Mode": "OFF" },
   "Target": {
@@ -270,47 +274,35 @@ For this scheduler specifically:
 
 ### Why scheduling reduces EC2 cost
 
-You pay for an EC2 instance only while it is **running**. Stopping it 22 h/day
-removes that compute charge for those hours. Running 18:00 → 20:00 is **2 h/day
-≈ 8%** of the day, so you pay roughly **8% of an always-on instance** for
-compute — a **~92% saving**.
+You pay for an EC2 instance only while it is **running**. Running 18:00 → 20:00
+on weekdays is **~40 h/month** versus ~730 h for always-on — roughly **5.5%** of
+the month, a **~94% compute saving**.
 
 ### Estimated monthly savings
 
-For a `t3.xlarge` at the observed Spot rate of **$0.0608/h** (us-east-1):
+For a `g4dn.xlarge` at the On-Demand rate of **$0.526/h** (us-east-1):
 
 | Mode | Hours/month | Compute cost/month |
 | --- | --- | --- |
-| Always-on (24 h) | ~730 | **~$44.38** |
-| Scheduled (2 h) | ~61 | **~$3.70** |
-| **Saving** | | **~$40.68/mo (~92%)** |
+| Always-on (24×7) | ~730 | **~$384** |
+| Scheduled (2 h × weekdays) | ~40 | **~$21** |
+| **Saving** | | **~$363/mo (~94%)** |
 
-On-demand `t3.xlarge` ($0.1664/h) always-on is ~$121/mo, so **Spot + scheduling
-together** cut it to ~$3.70/mo — a ~97% reduction. (EBS storage is billed
-separately and is **not** affected by stopping — see below.)
+Because the window is fixed and weekday-only, the monthly compute cost is
+**known in advance** — it does not scale with webhook volume. (EBS storage is
+billed separately and is **not** affected by stopping — see below.)
 
-### Spot instance considerations
+### Why On-Demand rather than Spot
 
-- The scheduler starts/stops a **Spot** instance the same way as on-demand, but a
-  start only succeeds if there is **Spot capacity** at your max price at 18:00. If
-  capacity is unavailable, `StartInstances` errors and the Scheduler
-  `RetryPolicy` retries for up to an hour.
-- Use a `persistent` Spot request if you want the instance to auto-recover from
-  interruptions between scheduled windows; a `one-time` request will not restart
-  itself after an interruption until the next scheduled start (which will fail if
-  the instance was terminated — see below).
-
-### What happens if AWS interrupts the Spot instance
-
-Depends on the request's interruption behavior:
-
-- **stop** (persistent requests): the instance is stopped and its EBS volumes
-  persist; the next 18:00 start (or a manual start) brings it back with data
-  intact.
-- **terminate** (one-time requests): the instance is destroyed. `INSTANCE_ID`
-  then points at a dead instance — the Lambda logs `instance ... is terminated`
-  (start) or `not found` and returns an error. Re-point the stack at the
-  replacement instance ID (redeploy with the new `InstanceId`).
+The compute host is **On-Demand**. Spot would be ~70–90% cheaper per hour, but a
+Spot `StartInstances` only succeeds if there is capacity at your max price at
+18:00 — for scarce GPU types that regularly fails (`InsufficientInstanceCapacity`),
+and Spot instances can be reclaimed mid-window with a 2-minute warning. Since the
+fixed weekday window already caps compute cost, On-Demand's guarantee that the
+**scheduled start always succeeds and the host stays up for the whole window** is
+worth more than the marginal Spot discount. A one-off maintenance run outside the
+window is a manual `start-instances` (or a manual invoke of the scheduled-start
+Lambda).
 
 ### Stopping vs terminating
 
@@ -332,11 +324,11 @@ root ≈ $2.40/mo) — that is the price of keeping state between windows.
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| Instance didn't start at 18:00 | Check the start Lambda's log group. Common: **no Spot capacity** (`InsufficientInstanceCapacity`) — Scheduler retries for 1 h; or wrong `ScheduleTimezone`. |
+| Instance didn't start at 18:00 | Check the start Lambda's log group. Common: wrong `ScheduleTimezone`, or the day is a weekend (the cron is `MON-FRI`). Transient EC2 errors are retried by the Scheduler `RetryPolicy` for 1 h. |
 | Schedule never fires | `ScheduleState=DISABLED`, or `ManageSchedules=false` (no schedules created). Check `aws scheduler get-schedule --name <name>`. |
 | `AccessDenied` invoking Lambda | Scheduler invoke role misconfigured — confirm the stack created `<project>-scheduler-invoke-role` and it lists both function ARNs. |
 | `UnauthorizedOperation` on Start/Stop | The `InstanceId` doesn't match the ARN the role is scoped to (redeployed against a different instance). Redeploy with the correct `InstanceId`. |
-| `instance ... not found` / `terminated` | The Spot instance was terminated/replaced; redeploy the stack with the new `InstanceId`. |
+| `instance ... not found` / `terminated` | The instance was terminated/replaced (e.g. a compute-stack redeploy); redeploy the scheduler with the new `InstanceId`. |
 | Wrong local time | `ScheduleTimezone` is UTC (default). Set it to your IANA zone and redeploy. |
 | Logs missing | The log group is created by the stack; if you deleted it, redeploy. Retention is `LogRetentionDays`. |
 

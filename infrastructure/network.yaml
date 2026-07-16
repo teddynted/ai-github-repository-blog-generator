@@ -33,7 +33,7 @@ Parameters:
     Default: ""
     Description: >
       AZ for the public subnet (e.g. us-east-1b). Leave blank to use the first AZ
-      in the region. Set this to move the Spot host to an AZ that has capacity
+      in the region. Set this to move the On-Demand host to an AZ that has capacity
       for the chosen instance type.
 
 Conditions:
@@ -110,7 +110,7 @@ Resources:
       # Note: >- (not >) so there is no trailing newline — EC2 rejects a
       # security-group description containing characters outside its allowed set.
       GroupDescription: >-
-        EC2 Spot host - inbound SSH from the operator CIDR only; n8n (5678) and
+        EC2 On-Demand host - inbound SSH from the operator CIDR only; n8n (5678) and
         Ollama (11434) are never exposed. Egress open for cloning, image pulls,
         and AWS API access.
       VpcId: !Ref Vpc
@@ -137,12 +137,12 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-VpcId"
   PublicSubnetId:
-    Description: Public subnet ID for the EC2 Spot host.
+    Description: Public subnet ID for the EC2 On-Demand host.
     Value: !Ref PublicSubnet
     Export:
       Name: !Sub "${ProjectName}-PublicSubnetId"
   InstanceSecurityGroupId:
-    Description: Security group for the EC2 Spot host.
+    Description: Security group for the EC2 On-Demand host.
     Value: !Ref InstanceSecurityGroup
     Export:
       Name: !Sub "${ProjectName}-InstanceSecurityGroupId"

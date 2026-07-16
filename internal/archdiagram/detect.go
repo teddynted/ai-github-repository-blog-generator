@@ -248,7 +248,7 @@ func (a *accumulator) finish() Detection {
 		Confidence: High, Evidence: []string{"repository is hosted on GitHub"}}
 
 	// Compute substrate: strongest container/serverless evidence wins, else the
-	// deployment-context default of an EC2 (Spot) instance.
+	// deployment-context default of an EC2 (On-Demand) instance.
 	switch {
 	case a.services[serviceID("AWS Lambda")] != nil:
 		d.Compute = *a.services[serviceID("AWS Lambda")]
@@ -260,15 +260,15 @@ func (a *accumulator) finish() Detection {
 		// A directly-detected EC2 instance (High) — keep its evidence.
 		d.Compute = *a.services["ec2"]
 	default:
-		d.Compute = Service{ID: "ec2", Name: "Amazon EC2 (Spot)", Logical: "Application compute",
-			Confidence: Medium, Evidence: []string{"deployment context: EC2 Spot instance"}}
+		d.Compute = Service{ID: "ec2", Name: "Amazon EC2 (On-Demand)", Logical: "Application compute",
+			Confidence: Medium, Evidence: []string{"deployment context: EC2 On-Demand instance"}}
 		a.services[d.Compute.ID] = &d.Compute
 	}
 
 	// If the repository uses AI, the LLM maps to OpenClaw on EC2 (never Bedrock).
 	if a.HasAI {
 		llm := Service{ID: "openclaw", Name: "OpenClaw on Amazon EC2", Logical: "LLM inference",
-			Confidence: Medium, Evidence: []string{"repository references LLM/AI usage; deployment context: OpenClaw on EC2 Spot"}}
+			Confidence: Medium, Evidence: []string{"repository references LLM/AI usage; deployment context: OpenClaw on EC2 On-Demand"}}
 		a.services[llm.ID] = &llm
 	}
 
@@ -382,7 +382,7 @@ func applyRules(rel, name, content string, acc *accumulator) {
 
 func serviceID(name string) string {
 	s := strings.ToLower(name)
-	s = strings.NewReplacer("amazon ", "", "aws ", "", " (spot)", "", " on amazon ec2", "").Replace(s)
+	s = strings.NewReplacer("amazon ", "", "aws ", "", " (spot)", "", " (on-demand)", "", " on amazon ec2", "").Replace(s)
 	s = idSanitizer.ReplaceAllString(s, "_")
 	return strings.Trim(s, "_")
 }

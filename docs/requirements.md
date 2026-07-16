@@ -4,7 +4,7 @@ This document defines the requirements for the **GitHub AI Blog Generator** — 
 
 For the **MVP**, users onboard a repository by providing a **GitHub Repository URL** and a **GitHub Personal Access Token (PAT)**. The platform validates access, creates a GitHub webhook, stores repository metadata, and stores the PAT securely in **AWS Secrets Manager**. GitHub App authentication is a **future enhancement** ([§15](#15-future-enhancements)).
 
-When a matched event arrives, it is published to **Amazon EventBridge**, which starts a cost-optimized **EC2 Spot Instance** where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
+When a matched event arrives, it is published to **Amazon EventBridge** and buffered in **Amazon SQS**. Compute runs on an **On-Demand EC2 Instance** powered on a fixed weekday window (18:00–20:00, Mon–Fri) by **EventBridge Scheduler**, where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
 
 Requirements use the following convention:
 
@@ -235,11 +235,11 @@ All infrastructure MUST be provisioned with **AWS CloudFormation**. **Terraform 
 | INF-1 | Provision an **Amazon VPC** with a **public subnet**, **Internet Gateway**, and **route tables**. | MUST |
 | INF-2 | Provision **security groups** restricting inbound access to the minimum required. | MUST |
 | INF-3 | Provision **IAM roles** and policies following least privilege. | MUST |
-| INF-4 | Provision an **EC2 Spot Instance** running Ubuntu with Docker and Docker Compose. | MUST |
+| INF-4 | Provision an **On-Demand EC2 Instance** running Ubuntu with Docker and Docker Compose. | MUST |
 | INF-5 | Provision a **persistent gp3 EBS volume** for models, n8n state, and Repository Memory. | MUST |
 | INF-6 | Provision **Amazon API Gateway** for the webhook ingress and the **registration** endpoint. | MUST |
-| INF-7 | Provision **AWS Lambda** functions: registration, webhook handler, instance starter, idle shutdown. | MUST |
-| INF-8 | Provision **Amazon EventBridge** (event bus + rules) for matched events and the idle timer. | MUST |
+| INF-7 | Provision **AWS Lambda** functions: registration, webhook handler, scheduled start, scheduled stop. | MUST |
+| INF-8 | Provision **Amazon EventBridge** (event bus + rule) for matched events, and **EventBridge Scheduler** for the weekday power window. | MUST |
 | INF-9 | Provision **Amazon SQS** (with a dead-letter queue) as the durable event buffer. | MUST |
 | INF-10 | Provision **AWS Secrets Manager** for GitHub PATs and per-repository webhook secrets. | MUST |
 | INF-11 | Provision a **metadata store** (Amazon DynamoDB) for repository metadata. | MUST |
@@ -277,11 +277,11 @@ See [Cost Optimisation](./cost-optimization.md).
 | --- | --- | --- |
 | COST-1 | **Repository access and token permissions MUST be validated at registration**, before any AI execution. | MUST |
 | COST-2 | **Trigger pre-filtering** MUST occur before any compute or AI is invoked. | MUST |
-| COST-3 | Compute MUST be **event-driven**: the EC2 instance MUST NOT run continuously. | MUST |
-| COST-4 | The compute host MUST be an **EC2 Spot Instance**, started only on a matched event. | MUST |
-| COST-5 | The instance MUST be **stopped automatically** after a configurable idle timeout / workflow completion. | MUST |
+| COST-3 | Compute MUST be **scheduled**: the EC2 instance MUST NOT run continuously — it runs only during a fixed weekday window. | MUST |
+| COST-4 | The compute host MUST be an **On-Demand EC2 Instance** whose power is owned by **EventBridge Scheduler** (default 18:00–20:00, Mon–Fri); the webhook path MUST NOT start it. | MUST |
+| COST-5 | The instance MUST be **stopped automatically** at the scheduled stop time (default 20:00, Mon–Fri). | MUST |
 | COST-6 | Models, state, and Repository Memory MUST persist on **EBS** to avoid re-downloading models. | MUST |
-| COST-7 | **Amazon SQS** MUST buffer matched events during cold start so none is lost. | MUST |
+| COST-7 | **Amazon SQS** MUST buffer matched events that arrive outside the window so none is lost (processed at the next scheduled start). | MUST |
 | COST-8 | GitHub secrets MUST be retrieved **only when necessary**. | MUST |
 | COST-9 | Because inference is **local via Ollama**, the system MUST incur **no per-token inference charges**. | MUST |
 | COST-10 | Lightweight processing MUST use **serverless** AWS services (API Gateway, Lambda, EventBridge, SQS). | MUST |
@@ -295,7 +295,7 @@ See [Cost Optimisation](./cost-optimization.md).
 | --- | --- | --- |
 | NFR-1 | **Scalability** — the platform MUST process many matched events, buffered through SQS, across many registered repositories. | MUST |
 | NFR-2 | **Availability** — the front door (API Gateway + Lambda + EventBridge + SQS) MUST remain available even when the EC2 instance is stopped. | MUST |
-| NFR-3 | **Reliability** — runs MUST be idempotent and resumable after a Spot interruption. | MUST |
+| NFR-3 | **Reliability** — runs MUST be idempotent and resumable across the scheduled stop/start (and instance replacement). | MUST |
 | NFR-4 | **Performance** — a typical repository SHOULD complete a run within a bounded time once the instance is warm. | SHOULD |
 | NFR-5 | **Cost efficiency** — an idle system MUST cost only persistent storage (EBS) and cheap managed services. | MUST |
 | NFR-6 | **Maintainability** — all infrastructure MUST be defined as code; services MUST run reproducibly via Docker Compose. | MUST |
@@ -381,5 +381,5 @@ Planned capabilities (see [Roadmap](./roadmap.md)). These are **future work**, c
 - Repository groups and organisations
 - Multi-user workspaces
 - Web-based repository management dashboard
-- On-Demand fallback when Spot capacity is unavailable
+- Configurable per-repository schedule windows
 - Multi-model support and fine-tuned local models

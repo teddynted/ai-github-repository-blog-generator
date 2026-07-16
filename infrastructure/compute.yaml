@@ -1,10 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  GitHub AI Blog Generator - Compute stack. A cost-optimized EC2 Spot instance
-  (Ubuntu) that runs n8n + OpenClaw + Ollama via Docker Compose, plus a
-  persistent gp3 EBS volume that survives start/stop cycles (models, n8n state,
-  Repository Memory). Imports the subnet and security group from the network
-  stack and the SQS queue from the serverless stack.
+  GitHub AI Blog Generator - Compute stack. An On-Demand EC2 instance (Ubuntu)
+  that runs n8n + OpenClaw + Ollama via Docker Compose, plus a persistent gp3
+  EBS volume that survives start/stop cycles (models, n8n state, Repository
+  Memory). The instance is powered on/off on a fixed weekday schedule by the
+  scheduler stack (default 18:00-20:00 Mon-Fri); On-Demand is used so a start
+  always succeeds within that window (no Spot-capacity dependency). Imports the
+  subnet and security group from the network stack and the SQS queue from the
+  serverless stack.
 
 Parameters:
   ProjectName:
@@ -14,11 +17,7 @@ Parameters:
   InstanceType:
     Type: String
     Default: g4dn.xlarge
-    Description: EC2 instance type for the Spot request (GPU recommended for Ollama).
-  SpotMaxPrice:
-    Type: String
-    Default: "0.20"
-    Description: Maximum hourly Spot price (USD).
+    Description: EC2 instance type for the On-Demand instance (GPU recommended for Ollama).
   KeyPairName:
     Type: String
     Default: ""
@@ -164,11 +163,12 @@ Resources:
                   - sqs:GetQueueAttributes
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueArn"
-              # Read the PAT (when cloning) and the SMTP password (for email).
+              # Read the shared repository-credentials secret (PAT, when cloning)
+              # and the SMTP password (for email).
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/repos/*"
+                  - Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
                   - !Ref NotificationsSecret
               # Update last-processed commit SHA after a run.
               - Effect: Allow
@@ -186,6 +186,23 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+              # Attach the persistent data volume at boot (see UserData). The
+              # volume is managed by CloudFormation but attached by the instance
+              # itself, so a stack update that replaces the instance never hits
+              # the CloudFormation "volume already attached" failure. Scoped to
+              # this project's tagged volume + instances; DescribeVolumes cannot
+              # be resource-scoped.
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: !Ref ProjectName
+              - Effect: Allow
+                Action: ec2:DescribeVolumes
+                Resource: "*"
               # Publish generated content to S3 (only when an output bucket is set).
               - !If
                 - HasOutputBucket
@@ -211,7 +228,12 @@ Resources:
       Roles:
         - !Ref InstanceRole
 
-  # Spot options in CloudFormation must be declared via a launch template.
+  # A launch template centralizes the instance configuration (type, AMI, key,
+  # profile, security group, root volume, user data) so the AWS::EC2::Instance
+  # below stays a thin reference. This is an On-Demand instance: there are no
+  # InstanceMarketOptions, so a start (from the scheduler stack at 18:00 on a
+  # weekday, or a manual maintenance start) always succeeds without depending on
+  # Spot capacity at a max price.
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -224,20 +246,6 @@ Resources:
           Arn: !GetAtt InstanceProfile.Arn
         SecurityGroupIds:
           - Fn::ImportValue: !Sub "${ProjectName}-InstanceSecurityGroupId"
-        InstanceMarketOptions:
-          MarketType: spot
-          SpotOptions:
-            MaxPrice: !Ref SpotMaxPrice
-            # one-time (not persistent): the Spot request closes once fulfilled
-            # and is NOT relaunched after an interruption. This avoids the
-            # orphaned-request leak a persistent request causes on stack
-            # delete/replacement. Trade-off: no auto-recovery — a Spot
-            # interruption terminates the host and it stays down until the next
-            # deploy. Ollama models + agent memory survive on the Retain'd /data
-            # volume, so recovery is a redeploy, not a data-loss event.
-            # (one-time requires terminate; AWS rejects stop/hibernate here.)
-            SpotInstanceType: one-time
-            InstanceInterruptionBehavior: terminate
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs:
@@ -257,7 +265,36 @@ Resources:
                 export DEBIAN_FRONTEND=noninteractive
                 mkdir -p /opt/blog-gen /etc/blog-gen
 
-                # Mount the persistent data volume (formatted once) at /data.
+                # --- Attach the persistent data volume, then mount it at /data.
+                # The volume is created by CloudFormation (Retain) but attached
+                # HERE at boot — NOT via an AWS::EC2::VolumeAttachment — so a
+                # stack update that REPLACES this instance never fails with
+                # "volume already attached": CloudFormation terminates the old
+                # instance and the volume is then free to (re)attach here. The
+                # loop also covers first boot (waits for the volume to exist).
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                command -v aws >/dev/null 2>&1 || { apt-get update -y && apt-get install -y awscli; }
+                TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300" || true)
+                imds() { curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1" || true; }
+                INSTANCE_ID=$(imds instance-id)
+                AZ=$(imds placement/availability-zone)
+                for i in $(seq 1 90); do
+                  VOL_ID=$(aws ec2 describe-volumes \
+                    --filters "Name=tag:Project,Values=${ProjectName}" "Name=tag:Name,Values=${ProjectName}-data" "Name=availability-zone,Values=$AZ" \
+                    --query 'Volumes[0].VolumeId' --output text 2>/dev/null || echo None)
+                  if [ "$VOL_ID" = "None" ] || [ -z "$VOL_ID" ]; then echo "waiting for data volume to exist [$i]"; sleep 10; continue; fi
+                  HOLDER=$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].Attachments[0].InstanceId' --output text 2>/dev/null || echo None)
+                  VST=$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].State' --output text 2>/dev/null || echo unknown)
+                  if [ "$HOLDER" = "$INSTANCE_ID" ]; then echo "data volume $VOL_ID already attached here"; break; fi
+                  if [ "$VST" = "available" ]; then
+                    if aws ec2 attach-volume --volume-id "$VOL_ID" --instance-id "$INSTANCE_ID" --device /dev/sdf >/dev/null 2>&1; then
+                      echo "attached data volume $VOL_ID"; break
+                    fi
+                  fi
+                  echo "waiting for data volume $VOL_ID (state=$VST holder=$HOLDER) [$i]"; sleep 10
+                done
+
+                # Wait for the block device, format once, and mount at /data.
                 DEV=/dev/xvdf
                 for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
                 if [ -b "$DEV" ]; then
@@ -296,7 +333,7 @@ Resources:
                 AWS_REGION=${AWS::Region}
                 QUEUE_URL=${QueueUrl}
                 REPOSITORIES_TABLE=${RepositoriesTable}
-                SECRETS_PREFIX=${ProjectName}/repos
+                REPO_SECRET_ID=${RepoSecretId}
                 OLLAMA_MODEL=${OllamaModel}
                 OLLAMA_BASE_URL=http://127.0.0.1:11434
                 OUTPUT_DIR=/data/generated-content
@@ -336,6 +373,8 @@ Resources:
                   Fn::ImportValue: !Sub "${ProjectName}-QueueUrl"
                 RepositoriesTable:
                   Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
+                RepoSecretId:
+                  Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
 
   Instance:
     Type: AWS::EC2::Instance
@@ -351,6 +390,14 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  # The data volume is deliberately NOT attached with an AWS::EC2::VolumeAttachment.
+  # A single retained volume plus that resource makes every instance-replacing
+  # update fail with "volume already attached" (CloudFormation creates the new
+  # attachment before deleting the old one, but a volume attaches to only one
+  # instance). Instead the instance attaches this volume itself at boot, by tag
+  # (see UserData + the ec2:AttachVolume grant on InstanceRole). The Name/Project
+  # tags below are how the instance locates it. AZ is pinned to the instance's AZ
+  # (same subnet), so a replacement keeps the volume in place.
   PersistentVolume:
     Type: AWS::EC2::Volume
     DeletionPolicy: Retain
@@ -366,16 +413,9 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  VolumeAttachment:
-    Type: AWS::EC2::VolumeAttachment
-    Properties:
-      InstanceId: !Ref Instance
-      VolumeId: !Ref PersistentVolume
-      Device: /dev/sdf
-
 Outputs:
   InstanceId:
-    Description: EC2 Spot instance ID.
+    Description: EC2 On-Demand instance ID (pass to the scheduler stack as InstanceId).
     Value: !Ref Instance
     Export:
       Name: !Sub "${ProjectName}-InstanceId"

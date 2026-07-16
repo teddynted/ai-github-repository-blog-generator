@@ -1,6 +1,6 @@
 # Cost Optimisation
 
-Cost controls for the **GitHub AI Blog Generator**. The design keeps the idle footprint tiny and spends nothing on repositories or commits that should not be processed. Validation happens as early and as cheaply as possible; compute is event-driven Spot; inference is local.
+Cost controls for the **GitHub AI Blog Generator**. The design keeps the idle footprint tiny and spends nothing on repositories or commits that should not be processed. Validation happens as early and as cheaply as possible; compute is an **On-Demand instance on a fixed weekday schedule** (18:00–20:00, Mon–Fri); inference is local.
 
 Related: [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md) · [Cost Requirements](./requirements.md#10-cost-optimisation-requirements).
 
@@ -21,7 +21,7 @@ The **Webhook Handler Lambda** checks every push against the repository's trigge
 | Cost avoided | Because |
 | --- | --- |
 | **AI inference cost** | The local model is never invoked |
-| **Compute cost** | The Spot Instance is never started |
+| **Compute cost** | No event is buffered, so nothing is processed when the instance next runs |
 | **Storage cost** | No unwanted content is generated |
 | **Unnecessary executions** | No pipeline, no queue churn, no orchestration |
 
@@ -29,48 +29,48 @@ The handler simply returns `HTTP 200` and stops. You pay for processing only on 
 
 ---
 
-## 3. Event-Driven Compute & Automatic Startup
+## 3. Scheduled Compute (Fixed Weekday Window)
 
-Nothing runs until a **matched** event arrives. On a match, the handler publishes to **EventBridge**, which starts the EC2 Spot Instance via the **Instance Starter Lambda**.
+A matched event is published to **EventBridge** and durably **buffered in SQS** — the webhook never starts compute. Instance power is owned by **EventBridge Scheduler**, which starts the On-Demand host at **18:00** and stops it at **20:00**, **Monday–Friday**. The worker drains the buffered backlog while the host is up.
 
 ```mermaid
 flowchart LR
     WH[Matched event] --> EB[EventBridge]
-    EB -->|start if stopped| EC2[(EC2 Spot running)]
-    EB -->|buffer| SQS[(SQS)]
-    EC2 -->|process| SQS
+    EB -->|buffer| SQS[(SQS, retained until the window)]
+    SCH[EventBridge Scheduler<br/>18:00 Mon–Fri] -->|start| EC2[(EC2 On-Demand running)]
+    EC2 -->|drain| SQS
 ```
 
-There is **no always-on server**; compute charges accrue only during active generation ([COST-3, COST-4](./requirements.md#10-cost-optimisation-requirements)).
+There is **no always-on server**; compute charges accrue only during the ~2 h weekday window ([COST-3, COST-4](./requirements.md#10-cost-optimisation-requirements)).
 
 ---
 
-## 4. Automatic Shutdown
+## 4. Scheduled Shutdown
 
-An **EventBridge** idle timer drives the **Idle Shutdown Lambda**, which stops the instance after workflow completion / `IDLE_TIMEOUT_MINUTES` of inactivity ([COST-5](./requirements.md#10-cost-optimisation-requirements)).
+**EventBridge Scheduler** stops the instance at **20:00 (Mon–Fri)** via the **scheduled-stop Lambda** — a fixed off-time rather than an idle heuristic, so the maximum daily runtime is known in advance ([COST-5](./requirements.md#10-cost-optimisation-requirements)).
 
 ```mermaid
 flowchart LR
-    T[EventBridge idle timer] --> LS[Idle Shutdown Lambda]
-    LS -->|StopInstances| EC2[(EC2 Spot stopped)]
+    SCH[EventBridge Scheduler<br/>20:00 Mon–Fri] --> LS[scheduled-stop Lambda]
+    LS -->|StopInstances| EC2[(EC2 On-Demand stopped)]
 ```
 
 While stopped, only the **persistent EBS volume** incurs cost.
 
 ---
 
-## 5. EC2 Spot Instances
+## 5. On-Demand on a Schedule (not Spot)
 
-Spot Instances are the right default for this **interruptible, batch-style** workload.
+The compute host is **On-Demand**, powered on/off by the schedule, rather than a per-event **Spot** instance.
 
 | Aspect | Detail |
 | --- | --- |
-| **Saving** | Typically **70–90% cheaper** than On-Demand |
-| **Why suitable** | Runs are asynchronous and resumable; latency is not critical |
-| **Interruption risk** | AWS may reclaim the instance with a 2-minute warning |
-| **Mitigation** | Work is buffered in SQS; an interrupted run reappears and is retried; models, state, and memory persist on EBS |
+| **Why not Spot** | Spot is ~70–90% cheaper but interruptible and capacity-gated — a scheduled/GPU start can fail with `InsufficientInstanceCapacity` |
+| **Why On-Demand** | A scheduled start must always succeed and stay up for the whole window; availability outweighs the marginal Spot saving |
+| **Cost is bounded anyway** | The fixed ~40 h/month window already caps compute cost, so Spot's discount buys little here |
+| **Durability** | Matched events are buffered in SQS; models, state, and memory persist on EBS across the daily stop/start |
 
-Trade-offs in full: [README → Spot Instance Trade-offs](../README.md#spot-instance-trade-offs).
+Rationale in full: [README → Why On-Demand](../README.md#why-on-demand-scheduled-runtime).
 
 ---
 
@@ -86,9 +86,9 @@ Model weights, n8n state, and **Repository Memory** live on a persistent **gp3 E
 
 ---
 
-## 8. SQS Prevents Event Loss During Cold Start
+## 8. SQS Defers Events to the Next Window
 
-Starting a Spot Instance is not instantaneous. **Amazon SQS** buffers matched events (retention up to 14 days) so none is lost during the **cold start**; the n8n workflow processes the backlog once the instance is healthy, with a visibility timeout and dead-letter queue for retries ([COST-7](./requirements.md#10-cost-optimisation-requirements)).
+The instance runs only 18:00–20:00 on weekdays, so a matched event can arrive while it is stopped. **Amazon SQS** buffers matched events (retention up to 14 days) so none is lost; the worker processes the backlog once the scheduled start brings the instance up, with a visibility timeout and dead-letter queue for retries ([COST-7](./requirements.md#10-cost-optimisation-requirements)). A webhook inside the window is processed within seconds; one outside it is reported `deferred` and picked up at the next start.
 
 ---
 
@@ -103,7 +103,7 @@ Starting a Spot Instance is not instantaneous. **Amazon SQS** buffers matched ev
 
 - **CloudWatch retention** defaults to **14 days** ([COST-11](./requirements.md#10-cost-optimisation-requirements)).
 - **DynamoDB on-demand** metadata table — no idle throughput cost.
-- **Right-size the instance and model**; **tune the idle timeout**.
+- **Right-size the instance and model**; **narrow or widen the schedule window** (`StartExpression`/`StopExpression`) to trade availability for cost.
 - **Repository Memory** avoids regenerating duplicate content, saving compute on repeat topics.
 - **Tag everything** for cost allocation; consider an **AWS Budget**.
 
@@ -111,22 +111,24 @@ Starting a Spot Instance is not instantaneous. **Amazon SQS** buffers matched ev
 
 ## 11. Estimated Monthly AWS Cost
 
-> Illustrative estimate for **light usage** (a handful of *triggered* runs per week) in `us-east-1`. The dominant variable is **EC2 Spot compute time**.
+> Illustrative estimate for the **scheduled weekday window** (18:00–20:00, Mon–Fri ≈ 40 h/month) in `us-east-1`. The dominant variable is **EC2 On-Demand compute time**, now bounded by the schedule.
 
 | Service | Assumption | Est. monthly (USD) |
 | --- | --- | --- |
-| EC2 Spot (`g4dn.xlarge`, a few triggered hours/week) | On-demand start/stop | ~$3–10 |
+| EC2 On-Demand (`g4dn.xlarge`, ~40 h/month) | Scheduled start/stop, ~$0.526/h | ~$21 |
 | EBS gp3 (100 GB, persistent) | Retained while stopped | ~$8 |
-| Lambda (registration + handler + starter + idle-shutdown) | Low volume | ~$0 |
+| Lambda (registration + handler + scheduled-start + scheduled-stop) | Low volume | ~$0 |
 | API Gateway | Low request volume | ~$0–1 |
 | EventBridge + SQS | Low event volume | ~$0 |
-| Secrets Manager | ~2 secrets per repo | ~$0.80+/repo |
+| Secrets Manager | 1 shared secret for ALL repos | ~$0.40 flat |
 | DynamoDB (on-demand) | Low read/write | ~$0–1 |
 | CloudWatch (logs + metrics) | 14-day retention | ~$1–3 |
 | **Inference (Ollama, local)** | No per-token fee | **$0** |
-| **Baseline (single repo)** | | **~$13–24** |
+| **Baseline (single repo)** | | **~$31–34** |
 
 **Notes & levers:**
-- **Trigger pre-filtering** means routine commits add **$0** — only triggered runs consume EC2 time.
-- **EBS** is the largest *fixed* line item; **Secrets Manager** adds a small per-repo cost.
+- **The schedule caps EC2 cost.** ~40 h/month at On-Demand rates is the largest line item and is fixed regardless of webhook volume; narrow the window to cut it further.
+- **Trigger pre-filtering** still means routine commits add **$0** — they never buffer work for a run to process.
+- **EBS** is the largest *fixed storage* item; **Secrets Manager** is a single shared secret (~$0.40 flat, not per repo).
 - There is **no NAT gateway** and **no inference API bill**.
+- For comparison, an always-on (24×7) On-Demand `g4dn.xlarge` is ~$380/month — the weekday window is a **~94% compute saving**.

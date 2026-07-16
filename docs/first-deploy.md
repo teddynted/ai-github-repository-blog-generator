@@ -10,7 +10,7 @@ live, triggered blog generation. Each step links to deeper docs. Deploy is
 ## 0. Prerequisites
 
 - [ ] AWS account + AWS CLI configured (`aws sts get-caller-identity` works).
-- [ ] **GPU Spot quota** for the instance family (default `g4dn.xlarge`). Request an increase for *All G and VT Spot Instance Requests* if needed, or set `EnableGpu=false` to smoke-test CPU-only first.
+- [ ] **GPU On-Demand quota** for the instance family (default `g4dn.xlarge`). Request an increase for *Running On-Demand G and VT Instances* if needed, or set `EnableGpu=false` to smoke-test CPU-only first.
 - [ ] No EC2 key pair needed — the compute stack **creates and manages** one (`blog-gen-key`); its private key is in SSM at `/ec2/keypair/<id>` if you ever want SSH.
 - [ ] A **GitHub PAT** for the repo you'll onboard (fine-grained: Contents read, Webhooks read/write).
 - [ ] Local tools: `go`, `git`, `gh` (optional), and the repo cloned.
@@ -58,6 +58,17 @@ credentials that can create IAM roles, an OIDC provider, and an S3 bucket.
 > Already bootstrapped before the SMTP work landed? Re-run this — the deploy role
 > gained `secretsmanager` permissions it now needs.
 
+> **Bootstrap fails with `… artifacts bucket … already exists`?** A previously
+> deleted `blog-gen-bootstrap` stack left the (retained, versioned) bucket
+> behind, so a fresh create collides — often leaving the stack in
+> `REVIEW_IN_PROGRESS`. Re-run with `IMPORT_EXISTING=1` to **adopt** the existing
+> bucket instead of recreating it; it clears any stuck stack automatically
+> (AWS CLI ≥ 2.22):
+> ```bash
+> IMPORT_EXISTING=1 bash scripts/bootstrap.sh --region <your-region> \
+>   --owner teddynted --repo ai-github-repository-blog-generator
+> ```
+
 ## 2. Set GitHub repository values
 
 **Settings → Secrets and variables → Actions.** Use the values bootstrap printed:
@@ -89,12 +100,13 @@ Optional — email notifications ([Turbo SMTP](./local-workflow.md)):
 
 Merge to `main` (or **Actions → deploy → Run workflow**). `deploy.yml` builds and
 uploads the Lambdas + worker, then deploys **network → serverless → compute →
-observability**.
+scheduler → observability** (the scheduler stack is wired automatically to the
+compute stack's InstanceId).
 
 Before the stacks, a **preflight** step ([`scripts/deploy/preflight.sh`](../scripts/deploy/preflight.sh))
-runs automatically under the deploy role: it creates the EC2 Spot service-linked
-role if missing and deletes any project stack stuck in a non-updatable failed
-state — so you don't run those setup/cleanup commands by hand.
+runs automatically under the deploy role: it deletes any project stack stuck in a
+non-updatable failed state — so you don't run those cleanup commands by hand.
+(The On-Demand host needs no Spot service-linked role.)
 
 ```bash
 gh run watch    # or watch it in the Actions tab
@@ -102,13 +114,12 @@ gh run watch    # or watch it in the Actions tab
 
 ### CPU smoke test (recommended first run)
 
-GPU Spot capacity is scarce and the GPU host is pricey — so **prove the whole
-pipeline on cheap CPU capacity first**, then switch to GPU. Set two variables and
-deploy normally:
+The GPU host is pricey — so **prove the whole pipeline on cheap CPU capacity
+first**, then switch to GPU. Set two variables and deploy normally:
 
 | Variable | Value | Why |
 | --- | --- | --- |
-| `INSTANCE_TYPE` | `t3.xlarge` | 4 vCPU / 16 GB, widely available, ~cents/hour on Spot |
+| `INSTANCE_TYPE` | `t3.xlarge` | 4 vCPU / 16 GB, widely available, ~$0.17/hour On-Demand |
 | `ENABLE_GPU` | `false` | Ollama runs CPU-only; the AMI skips the NVIDIA install |
 
 The full path (webhook → SQS → worker → Ollama → review → publish) runs exactly
@@ -191,12 +202,12 @@ opt-in gate working.
 | --- | --- |
 | GitHub → Webhooks | Delivery shows ✓ (HTTP 200) |
 | CloudWatch (handler) | verify → trigger match → PutEvents |
-| EC2 | instance transitions `stopped` → `running` |
+| EC2 | instance is `running` during the window (18:00–20:00 Mon–Fri); force a start now with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` |
 | Instance (SSH) | `docker ps` shows `ollama`; `curl -s localhost:11434/api/tags` lists the model; `nvidia-smi` (GPU); `systemctl status blog-gen-worker` active |
 | Instance (SSH) | `journalctl -u blog-gen-worker -f` — process → generate → review → publish |
 | Output | new Markdown at the destination (S3 `OUTPUT_S3_BUCKET`, else `/data/generated-content`) |
 | Email | notification arrives (if configured) |
-| EC2 | returns to `stopped` after the idle timeout |
+| EC2 | returns to `stopped` at the scheduled stop (20:00 Mon–Fri) |
 
 The generated package includes the blog, README/docs suggestions, an
 architecture summary, release notes, and the evidence-grounded **AWS
@@ -223,11 +234,12 @@ architecture diagrams**.
 - **`nvidia-smi` fails / no GPU in container** — the most likely first-launch
   fix; Ollama auto-falls back to CPU so the pipeline still runs. See the Ollama
   notes in [development-plan.md](./development-plan.md).
-- **Spot interruption** — the instance stops; the gp3 volume (models, memory)
-  persists, and the next matched event starts it again.
+- **Scheduled stop/start** — at 20:00 the instance stops; the gp3 volume (models,
+  memory) persists, and the next weekday 18:00 start brings it back with data
+  intact. Buffered events wait in SQS until then.
 - **`InsufficientInstanceCapacity` / "do not have sufficient g4dn.xlarge capacity
-  in <az>"** — that AZ is momentarily out of GPU Spot capacity. Set the
-  `SUBNET_AZ` variable to an AZ the error lists as available (e.g. `us-east-1b`)
+  in <az>"** — that AZ is momentarily out of On-Demand capacity for the type. Set
+  the `SUBNET_AZ` variable to an AZ the error lists as available (e.g. `us-east-1b`)
   and redeploy the network + compute stacks. (Changing a subnet's AZ replaces it,
   so delete `blog-gen-compute` and `blog-gen-network` first, then re-run deploy.)
 - **`not eligible for Free Tier`** — the account is on the new AWS Free Plan,

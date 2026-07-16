@@ -1,8 +1,8 @@
 // Package webhook implements the lightweight GitHub webhook receiver: resolve
 // the repository's metadata, verify the HMAC signature with that repo's secret,
-// and evaluate the commit-message trigger. On a match it publishes an event via
-// the Publisher port; it performs no cloning, analysis, or AI work, and never
-// reads the repository PAT.
+// and evaluate the commit-message trigger. On a match it hands the event to the
+// shared intake.Service (which applies the window policy and publishes); it
+// performs no cloning, analysis, or AI work, and never reads the repository PAT.
 package webhook
 
 import (
@@ -14,6 +14,7 @@ import (
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/githubsig"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/repo"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/trigger"
 )
@@ -28,32 +29,20 @@ type SecretGetter interface {
 	WebhookSecret(ctx context.Context, ref string) (string, error)
 }
 
-// Publisher publishes a matched event downstream (EventBridge in production).
-type Publisher interface {
-	Publish(ctx context.Context, ev Event) error
-}
-
 // Counter emits a named count metric. *metrics.Emitter satisfies it. Optional.
 type Counter interface {
 	Count(name string)
 }
 
-// Event is the payload published when a commit matches the trigger.
-type Event struct {
-	RepoFullName   string `json:"repo_full_name"`
-	Owner          string `json:"owner"`
-	Name           string `json:"name"`
-	Ref            string `json:"ref"`
-	CommitSHA      string `json:"commit_sha"`
-	CommitMessage  string `json:"commit_message"`
-	TriggerPattern string `json:"trigger_pattern"`
-}
-
-// Handler processes webhook deliveries.
+// Handler processes webhook deliveries. It delegates publishing and the
+// operational-window decision to the shared intake.Service, so it never
+// duplicates that orchestration and never starts the instance. Webhooks use the
+// buffer policy: a match that arrives outside the window is still published
+// (retained in SQS) and reported "deferred".
 type Handler struct {
 	Repos          RepoLookup
 	Secrets        SecretGetter
-	Publisher      Publisher
+	Intake         *intake.Service
 	Metrics        Counter // optional
 	DefaultTrigger string
 	Logger         *slog.Logger
@@ -116,7 +105,9 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return jsonResp(apperror.New(apperror.CodeNotFound, "repository is not registered"))
 	}
 
-	secret, err := h.Secrets.WebhookSecret(ctx, r.SecretRef)
+	// Look up the webhook secret in the shared secret by the repo's full name,
+	// which is the shared-secret key ("<owner>/<name>").
+	secret, err := h.Secrets.WebhookSecret(ctx, full)
 	if err != nil {
 		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "secret lookup failed"))
 	}
@@ -134,7 +125,7 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return h.ignore(deliveryID, full, "repository disabled")
 	}
 
-	var ev Event
+	var ev intake.Event
 	var skip string
 	switch eventType {
 	case "push":
@@ -148,28 +139,35 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return h.ignore(deliveryID, full, skip)
 	}
 
-	if err := h.Publisher.Publish(ctx, ev); err != nil {
+	// Delegate the window decision + publish to the shared intake service.
+	// Webhooks buffer outside the window (never rejected), so the event is
+	// retained in SQS and drained at the next scheduled start.
+	decision, err := h.Intake.Submit(ctx, ev, intake.BufferOutsideWindow)
+	if err != nil {
 		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "publish failed"))
 	}
-	h.log("published", deliveryID, full, "triggered by "+eventType)
 	h.count("TriggerMatched")
-	return okResp("accepted", full)
+	if decision == intake.Deferred {
+		h.count("WebhookDeferred")
+	}
+	h.log(string(decision), deliveryID, full, "triggered by "+eventType)
+	return okResp(string(decision), full)
 }
 
 // pushEvent builds a trigger event for a push, gated on the commit-message
 // trigger. A non-empty second return value is the reason to ignore.
-func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (Event, string) {
+func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (intake.Event, string) {
 	if p.HeadCommit == nil {
-		return Event{}, "no head commit"
+		return intake.Event{}, "no head commit"
 	}
 	pattern := r.TriggerPattern
 	if strings.TrimSpace(pattern) == "" {
 		pattern = h.DefaultTrigger
 	}
 	if !trigger.Matches(p.HeadCommit.Message, pattern) {
-		return Event{}, "commit does not match trigger"
+		return intake.Event{}, "commit does not match trigger"
 	}
-	return Event{
+	return intake.Event{
 		RepoFullName:   full,
 		Owner:          r.Owner,
 		Name:           r.Name,
@@ -177,24 +175,25 @@ func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (Even
 		CommitSHA:      p.HeadCommit.ID,
 		CommitMessage:  p.HeadCommit.Message,
 		TriggerPattern: pattern,
+		Source:         "push",
 	}, ""
 }
 
 // releaseEvent builds a trigger event for a published release. A release is
 // itself an intentional event, so it always triggers (no commit-message gate).
-func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (Event, string) {
+func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (intake.Event, string) {
 	var rp releasePayload
 	if err := json.Unmarshal(body, &rp); err != nil {
-		return Event{}, "unparseable release payload"
+		return intake.Event{}, "unparseable release payload"
 	}
 	if rp.Action != "published" {
-		return Event{}, "release action not published: " + rp.Action
+		return intake.Event{}, "release action not published: " + rp.Action
 	}
 	name := rp.Release.Name
 	if name == "" {
 		name = rp.Release.TagName
 	}
-	return Event{
+	return intake.Event{
 		RepoFullName:   full,
 		Owner:          r.Owner,
 		Name:           r.Name,
@@ -202,6 +201,7 @@ func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (Eve
 		CommitSHA:      rp.Release.TagName, // memory dedup key for releases
 		CommitMessage:  "Release " + name,
 		TriggerPattern: "release",
+		Source:         "release",
 	}, ""
 }
 

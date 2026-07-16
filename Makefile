@@ -5,7 +5,7 @@
 # Lambda binaries target Linux/arm64 (provided.al2023).
 
 GO       ?= go
-LAMBDAS  := registration webhook-handler instance-starter idle-shutdown scheduled-start scheduled-stop
+LAMBDAS  := registration webhook-handler manual-trigger scheduled-start scheduled-stop
 DIST     := dist
 
 HOOKS    := scripts/hooks

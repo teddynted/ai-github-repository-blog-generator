@@ -1,13 +1,12 @@
-// Package registration implements the MVP repository onboarding use case:
-// validate repository access with a GitHub PAT, create the push webhook, store
-// the PAT securely, and persist repository metadata. It depends only on small
-// ports (interfaces) so it is fully unit-testable and free of AWS/GitHub SDKs.
+// Package registration implements repository onboarding: validate repository
+// access with a GitHub PAT, create (or update) the push/release webhook, store
+// the credentials in the shared repositories secret, and persist repository
+// metadata. It depends only on small ports (interfaces) so it is fully
+// unit-testable and free of AWS/GitHub SDKs.
 package registration
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
@@ -16,137 +15,184 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/trigger"
 )
 
-// GitHub is the port for the GitHub operations onboarding needs. The concrete
-// *github.Client satisfies it structurally.
+// GitHub is the port for the GitHub operations onboarding needs.
 type GitHub interface {
 	GetRepository(ctx context.Context, owner, name, pat string) (github.RepoInfo, error)
 	CreateWebhook(ctx context.Context, owner, name, pat string, cfg github.WebhookConfig) (int64, error)
+	UpdateWebhook(ctx context.Context, owner, name, pat string, hookID int64, cfg github.WebhookConfig) error
+	DeleteWebhook(ctx context.Context, owner, name, pat string, hookID int64) error
 }
 
-// SecretStore persists a repository's credentials (PAT + webhook secret) and
-// returns an opaque reference (never the secret values).
-type SecretStore interface {
-	PutRepoCredentials(ctx context.Context, owner, name, pat, webhookSecret string) (secretRef string, err error)
+// CredentialStore persists repository credentials in the shared secret, keyed
+// by "<owner>/<name>". PutRepoCredentials reports whether the key already
+// existed and rejects a duplicate when allowUpdate is false.
+type CredentialStore interface {
+	PutRepoCredentials(ctx context.Context, key, pat, webhookSecret string, allowUpdate bool) (existed bool, err error)
+	DeleteRepoCredentials(ctx context.Context, key string) (existed bool, err error)
+	PAT(ctx context.Context, key string) (string, error)
 }
 
 // MetadataStore persists repository metadata.
 type MetadataStore interface {
 	Put(ctx context.Context, r repo.Repository) error
+	Get(ctx context.Context, fullName string) (repo.Repository, bool, error)
+	Delete(ctx context.Context, fullName string) error
 }
 
-// Input is the registration request payload.
+// Input is the /repositories registration payload.
 type Input struct {
-	RepositoryURL string `json:"repository_url"`
+	Owner         string `json:"owner"`
+	Repository    string `json:"repository"`
 	PAT           string `json:"pat"`
-	// TriggerPattern optionally overrides the default publishing trigger for
-	// this repository (e.g. "[blog]" or "regex:^(blog|post):"). Blank uses the
-	// platform default.
+	WebhookSecret string `json:"webhook_secret"`
+	// TriggerPattern optionally overrides the default publishing trigger.
 	TriggerPattern string `json:"trigger_pattern,omitempty"`
+	// Update must be true to overwrite an already-registered repository;
+	// otherwise a duplicate is rejected.
+	Update bool `json:"update,omitempty"`
 }
 
-// Output is returned on successful registration (no secret material).
-type Output struct {
-	RepoFullName   string `json:"repo_full_name"`
-	Owner          string `json:"owner"`
-	Name           string `json:"name"`
-	DefaultBranch  string `json:"default_branch"`
-	WebhookID      int64  `json:"webhook_id"`
-	TriggerPattern string `json:"trigger_pattern"`
-	Status         string `json:"status"`
+// DeleteInput identifies a repository to deregister.
+type DeleteInput struct {
+	Owner      string `json:"owner"`
+	Repository string `json:"repository"`
 }
 
-// Service orchestrates onboarding. Collaborators are injected; the two funcs
-// are overridable in tests for deterministic behaviour.
+// Outcome reports what a Register call did.
+type Outcome struct {
+	RepoFullName string
+	Updated      bool // false = newly registered, true = credentials updated
+}
+
+// Service orchestrates onboarding against the shared repositories secret.
 type Service struct {
 	GitHub         GitHub
-	Secrets        SecretStore
+	Secrets        CredentialStore
 	Metadata       MetadataStore
 	WebhookURL     string
 	DefaultTrigger string
 	Now            func() time.Time
-	NewSecret      func() (string, error)
 }
 
-// Register runs the onboarding flow. Steps are ordered so that a failure never
-// leaves a half-registered repository visible in the metadata store: the
-// webhook and secret are created before metadata is written.
-func (s *Service) Register(ctx context.Context, in Input) (Output, error) {
-	if in.RepositoryURL == "" {
-		return Output{}, apperror.New(apperror.CodeInvalidInput, "repository_url is required")
+// Register onboards a repository or updates an existing one. It validates
+// access, creates/updates the webhook with the supplied secret, upserts the
+// credentials into the shared secret, and writes metadata. A duplicate (already
+// registered, Update not set) is rejected.
+func (s *Service) Register(ctx context.Context, in Input) (Outcome, error) {
+	if err := validate(in); err != nil {
+		return Outcome{}, err
 	}
-	if in.PAT == "" {
-		return Output{}, apperror.New(apperror.CodeInvalidInput, "pat is required")
-	}
+	owner, name := in.Owner, in.Repository
+	key := repo.FullName(owner, name)
 
-	owner, name, err := repo.ParseRepositoryURL(in.RepositoryURL)
+	existing, alreadyRegistered, err := s.Metadata.Get(ctx, key)
 	if err != nil {
-		return Output{}, apperror.Wrap(err, apperror.CodeInvalidInput, "invalid repository_url")
+		return Outcome{}, apperror.Wrap(err, apperror.CodeInternal, "metadata lookup failed")
 	}
-	if in.TriggerPattern != "" {
-		if err := trigger.Validate(in.TriggerPattern); err != nil {
-			return Output{}, apperror.Wrap(err, apperror.CodeInvalidInput, "invalid trigger_pattern")
-		}
+	if alreadyRegistered && !in.Update {
+		return Outcome{}, apperror.New(apperror.CodeConflict, "Repository is already registered.")
 	}
 
 	// Validate access + token read permission.
 	info, err := s.GitHub.GetRepository(ctx, owner, name, in.PAT)
 	if err != nil {
-		return Output{}, err
+		return Outcome{}, err
 	}
 
-	// Create the webhook (also validates webhook permission).
-	webhookSecret, err := s.newSecret()
-	if err != nil {
-		return Output{}, apperror.Wrap(err, apperror.CodeInternal, "generate webhook secret")
-	}
-	hookID, err := s.GitHub.CreateWebhook(ctx, owner, name, in.PAT, github.WebhookConfig{
-		URL:    s.WebhookURL,
-		Secret: webhookSecret,
-		Events: []string{"push", "release"},
-	})
-	if err != nil {
-		return Output{}, err
-	}
-
-	// Store credentials in Secrets Manager; keep only the reference.
-	secretRef, err := s.Secrets.PutRepoCredentials(ctx, owner, name, in.PAT, webhookSecret)
-	if err != nil {
-		return Output{}, apperror.Wrap(err, apperror.CodeInternal, "store credentials")
+	cfg := github.WebhookConfig{URL: s.WebhookURL, Secret: in.WebhookSecret, Events: []string{"push", "release"}}
+	hookID := existing.WebhookID
+	if alreadyRegistered {
+		// Keep GitHub signing with the (possibly rotated) secret.
+		if err := s.GitHub.UpdateWebhook(ctx, owner, name, in.PAT, hookID, cfg); err != nil {
+			return Outcome{}, err
+		}
+	} else {
+		if hookID, err = s.GitHub.CreateWebhook(ctx, owner, name, in.PAT, cfg); err != nil {
+			return Outcome{}, err
+		}
 	}
 
-	triggerPattern := in.TriggerPattern
-	if triggerPattern == "" {
-		triggerPattern = s.DefaultTrigger
+	// Upsert into the shared secret (idempotent; concurrency handled by the store).
+	if _, err := s.Secrets.PutRepoCredentials(ctx, key, in.PAT, in.WebhookSecret, in.Update); err != nil {
+		return Outcome{}, err
 	}
-	if triggerPattern == "" {
-		triggerPattern = trigger.DefaultPattern
-	}
+
+	triggerPattern := firstNonEmpty(in.TriggerPattern, existing.TriggerPattern, s.DefaultTrigger, trigger.DefaultPattern)
 	r := repo.Repository{
-		RepoFullName:   repo.FullName(owner, name),
+		RepoFullName:   key,
 		RepositoryID:   info.ID,
 		Owner:          owner,
 		Name:           name,
-		URL:            in.RepositoryURL,
+		URL:            "https://github.com/" + key,
 		DefaultBranch:  info.DefaultBranch,
 		WebhookID:      hookID,
 		TriggerPattern: triggerPattern,
 		Enabled:        true,
-		SecretRef:      secretRef,
+		SecretRef:      key, // the shared-secret key; readers look up by it
 		RegisteredAt:   s.now().UTC().Format(time.RFC3339),
 	}
 	if err := s.Metadata.Put(ctx, r); err != nil {
-		return Output{}, apperror.Wrap(err, apperror.CodeInternal, "store metadata")
+		return Outcome{}, apperror.Wrap(err, apperror.CodeInternal, "store metadata")
+	}
+	return Outcome{RepoFullName: key, Updated: alreadyRegistered}, nil
+}
+
+// Delete deregisters a repository: remove the GitHub webhook, its entry in the
+// shared secret, and its metadata. Missing pieces are tolerated so deletion is
+// idempotent, but an unregistered repository is reported as not found.
+func (s *Service) Delete(ctx context.Context, in DeleteInput) (string, error) {
+	if in.Owner == "" || in.Repository == "" {
+		return "", apperror.New(apperror.CodeInvalidInput, "owner and repository are required")
+	}
+	key := repo.FullName(in.Owner, in.Repository)
+
+	r, ok, err := s.Metadata.Get(ctx, key)
+	if err != nil {
+		return "", apperror.Wrap(err, apperror.CodeInternal, "metadata lookup failed")
+	}
+	if !ok {
+		return "", apperror.New(apperror.CodeNotFound, "repository is not registered")
 	}
 
-	return Output{
-		RepoFullName:   r.RepoFullName,
-		Owner:          owner,
-		Name:           name,
-		DefaultBranch:  info.DefaultBranch,
-		WebhookID:      hookID,
-		TriggerPattern: triggerPattern,
-		Status:         "registered",
-	}, nil
+	// Best-effort webhook removal (needs the PAT from the shared secret).
+	if r.WebhookID != 0 {
+		if pat, perr := s.Secrets.PAT(ctx, key); perr == nil {
+			_ = s.GitHub.DeleteWebhook(ctx, in.Owner, in.Repository, pat, r.WebhookID)
+		}
+	}
+	if _, err := s.Secrets.DeleteRepoCredentials(ctx, key); err != nil {
+		return "", err
+	}
+	if err := s.Metadata.Delete(ctx, key); err != nil {
+		return "", apperror.Wrap(err, apperror.CodeInternal, "delete metadata")
+	}
+	return key, nil
+}
+
+// validate enforces the required fields and an optional trigger pattern.
+func validate(in Input) error {
+	var missing []string
+	if in.Owner == "" {
+		missing = append(missing, "owner")
+	}
+	if in.Repository == "" {
+		missing = append(missing, "repository")
+	}
+	if in.PAT == "" {
+		missing = append(missing, "pat")
+	}
+	if in.WebhookSecret == "" {
+		missing = append(missing, "webhook_secret")
+	}
+	if len(missing) > 0 {
+		return apperror.New(apperror.CodeInvalidInput, "missing required field(s): "+joinComma(missing))
+	}
+	if in.TriggerPattern != "" {
+		if err := trigger.Validate(in.TriggerPattern); err != nil {
+			return apperror.Wrap(err, apperror.CodeInvalidInput, "invalid trigger_pattern")
+		}
+	}
+	return nil
 }
 
 func (s *Service) now() time.Time {
@@ -156,18 +202,22 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-func (s *Service) newSecret() (string, error) {
-	if s.NewSecret != nil {
-		return s.NewSecret()
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
 	}
-	return randomHex(32)
+	return ""
 }
 
-// randomHex returns n cryptographically-random bytes hex-encoded.
-func randomHex(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
+func joinComma(v []string) string {
+	out := ""
+	for i, s := range v {
+		if i > 0 {
+			out += ", "
+		}
+		out += s
 	}
-	return hex.EncodeToString(b), nil
+	return out
 }
