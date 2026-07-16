@@ -35,13 +35,19 @@ how many repositories are registered.
 ### Concurrency
 
 Writes are **read-modify-write**, so concurrent registrations could otherwise
-lose updates. Two safeguards prevent that:
+lose updates. Safeguards:
 
-1. The registration Lambda runs with **reserved concurrency 1** — a single
-   writer, so updates are serialized.
-2. The store retries the read-modify-write on transient Secrets Manager errors.
+1. The store **retries** the read-modify-write on transient Secrets Manager
+   errors (always on).
+2. **Optional single-writer serialization** via reserved concurrency: set the
+   `RegistrationReservedConcurrency` parameter to `1` to make the registration
+   Lambda a single writer. It is **0 (off) by default** because reserving
+   concurrency requires the account's Lambda concurrency limit to leave ≥ 10
+   unreserved — on low-limit accounts a value of 1 fails to deploy. Enable it
+   once your account has headroom for the strongest guarantee.
 
-Readers are unaffected (concurrent reads are safe).
+Registration is a rare, typically-serial admin operation, so the retry alone is
+adequate in practice. Readers are unaffected (concurrent reads are safe).
 
 ---
 
@@ -174,8 +180,9 @@ secret, or request body.
   (The old per-repo `CreateSecret`/`…/repos/*` grants are gone.)
 - **Webhook handler / worker roles**: `secretsmanager:GetSecretValue` on the
   **one** shared secret only.
-- **Registration function**: `ReservedConcurrentExecutions: 1`;
-  env `REPO_SECRET_ID`.
+- **Registration function**: env `REPO_SECRET_ID`; optional
+  `ReservedConcurrentExecutions` via the `RegistrationReservedConcurrency`
+  parameter (default 0 = off; set 1 for single-writer, needs quota headroom).
 - **API**: `POST` and `DELETE` on `/repositories` (both API-key-required) →
   the registration Lambda, which routes on HTTP method. Output
   `RepoCredentialsSecretArn` is exported for the compute stack.
@@ -186,8 +193,8 @@ secret, or request body.
   read-only; per-ARN scoping (no wildcards) — see [Security](./security.md).
 - The PAT and webhook secret are never returned by the API, logged, or stored in
   DynamoDB (only the `"<owner>/<name>"` reference is).
-- Reserved concurrency 1 guarantees a single writer, preventing lost updates
-  from concurrent registrations.
+- Optional reserved concurrency (parameter) gives a single-writer guarantee
+  when enabled; the store's retry is the default best-effort safeguard.
 
 ## 11. Migration from per-repo secrets
 

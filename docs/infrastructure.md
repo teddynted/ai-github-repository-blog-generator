@@ -90,7 +90,7 @@ Five small functions form the serverless control plane (three in `serverless.yam
 
 Least-privilege roles:
 
-- `registration` — `secretsmanager:GetSecretValue`/`PutSecretValue` on the **single** shared secret, `dynamodb:PutItem`/`UpdateItem`/`GetItem`/`DeleteItem` on the metadata table, CloudWatch Logs. Runs with **reserved concurrency 1** (single writer for the shared secret).
+- `registration` — `secretsmanager:GetSecretValue`/`PutSecretValue` on the **single** shared secret, `dynamodb:PutItem`/`UpdateItem`/`GetItem`/`DeleteItem` on the metadata table, CloudWatch Logs. Optional single-writer serialization via the `RegistrationReservedConcurrency` parameter (default off; store retry is the default safeguard).
 - `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, CloudWatch Logs. **No PAT access; no start/stop.**
 - `manual-trigger` — `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, tag-scoped `ec2:StartInstances` (on-demand override), CloudWatch Logs. **No stop.**
 - `scheduled-start` — `ec2:StartInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
@@ -104,7 +104,7 @@ No Lambda performs content generation — that runs inside n8n/Ollama on EC2, wh
 
 Onboarding introduces two managed stores.
 
-**AWS Secrets Manager** holds **one shared secret** — `blog-gen/github/repositories` — whose value is a JSON object keyed by `"<owner>/<name>"`, each entry `{"pat":…,"webhook_secret":…}`. Registration read-modify-writes it (single writer via reserved concurrency 1); the webhook handler and worker read it and index by key. One secret regardless of repo count. It is KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs. Full detail: [Registration](./registration.md) · [Security §2](./security.md#2-github-pat--secret-storage).
+**AWS Secrets Manager** holds **one shared secret** — `blog-gen/github/repositories` — whose value is a JSON object keyed by `"<owner>/<name>"`, each entry `{"pat":…,"webhook_secret":…}`. Registration read-modify-writes it (store retry, plus optional single-writer reserved concurrency); the webhook handler and worker read it and index by key. One secret regardless of repo count. It is KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs. Full detail: [Registration](./registration.md) · [Security §2](./security.md#2-github-pat--secret-storage).
 
 **Amazon DynamoDB** (`repositories` table, on-demand capacity, encrypted at rest) stores per-repository metadata: Repository ID, owner, name, URL, default branch, webhook ID, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, and registration timestamp. It stores only the **reference** to the PAT secret — never the value ([Requirements §13](./requirements.md#13-repository-metadata-requirements)).
 
