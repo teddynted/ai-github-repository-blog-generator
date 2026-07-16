@@ -11,8 +11,8 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 | Service | Purpose | CloudFormation stack |
 | --- | --- | --- |
 | Amazon VPC | Network isolation (public subnet, IGW, route tables, SGs) | `network.yaml` |
-| Amazon API Gateway | HTTPS ingress for webhooks **and registration** | `serverless.yaml` |
-| AWS Lambda | Registration, webhook handler (`serverless.yaml`); scheduled-start, scheduled-stop (`scheduler.yaml`) | `serverless.yaml` / `scheduler.yaml` |
+| Amazon API Gateway | HTTPS ingress: webhook, registration, and manual `POST /process` | `serverless.yaml` |
+| AWS Lambda | Registration, webhook handler, manual-trigger (`serverless.yaml`); scheduled-start, scheduled-stop (`scheduler.yaml`) | `serverless.yaml` / `scheduler.yaml` |
 | AWS Secrets Manager | GitHub PATs + per-repo webhook secrets | `serverless.yaml` |
 | Amazon DynamoDB | Repository metadata store | `serverless.yaml` |
 | Amazon EventBridge | Event bus for matched events | `serverless.yaml` |
@@ -68,21 +68,23 @@ flowchart TB
 
 ## 4. Amazon API Gateway
 
-- Exposes **HTTPS** endpoints (managed TLS): a **webhook** route (GitHub deliveries) and a **registration** route (onboarding).
-- The webhook route integrates with the **Webhook Handler Lambda**; the registration route with the **Registration Lambda**.
-- Returns **HTTP 200** to GitHub immediately for both matched and ignored events.
-- Stack outputs include `WebhookUrl` (for the GitHub webhook) and `RegistrationUrl`.
+- Exposes **HTTPS** endpoints (managed TLS): a **webhook** route (GitHub deliveries), a **registration** route (onboarding), and a **`POST /process`** route (the manual trigger).
+- The webhook route integrates with the **Webhook Handler Lambda**; the registration route with the **Registration Lambda**; `POST /process` with the **Manual Trigger Lambda**.
+- The webhook route is public (HMAC-verified); the **registration** and **`/process`** routes require an **API key** (`x-api-key`) via the shared usage plan. See [Manual Trigger](./manual-trigger.md).
+- Returns **HTTP 200** to GitHub immediately for both matched and ignored events; `POST /process` returns **202** (accepted) or **503** (outside the operating window).
+- Stack outputs include `WebhookUrl`, `RegistrationUrl`, and `ProcessUrl`.
 
 ---
 
 ## 5. AWS Lambda
 
-Four small functions form the serverless control plane (two in `serverless.yaml`, two in `scheduler.yaml`). They are packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton).
+Five small functions form the serverless control plane (three in `serverless.yaml`, two in `scheduler.yaml`). They are packaged as `provided.al2023` (custom runtime, `bootstrap` binary), preferably on **arm64** (Graviton). The webhook and manual triggers share the trigger-agnostic `internal/intake` core (publish + window policy), so neither duplicates orchestration.
 
 | Function | Trigger | Responsibility |
 | --- | --- | --- |
 | `registration` | API Gateway (registration route) | Validate repo access + token permissions → create GitHub webhook → store metadata (DynamoDB) → store PAT + webhook secret (Secrets Manager) |
-| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (per-repo secret) → **validate trigger** → publish matched events to EventBridge → report `accepted`/`deferred` via the read-only window gate → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
+| `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (per-repo secret) → **validate trigger** → hand to `intake.Service` (buffer policy) → report `accepted`/`deferred` → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
+| `manual-trigger` | API Gateway (`POST /process`, API key) | Validate JSON request → hand to `intake.Service` (reject policy) → **202 accepted** in-window, **503 rejected** outside it. Never starts the instance. See [Manual Trigger](./manual-trigger.md). |
 | `scheduled-start` | EventBridge Scheduler (18:00 Mon–Fri) | Start the On-Demand instance if stopped (idempotent) |
 | `scheduled-stop` | EventBridge Scheduler (20:00 Mon–Fri) | Stop the On-Demand instance if running (idempotent) |
 
@@ -90,6 +92,7 @@ Least-privilege roles:
 
 - `registration` — `secretsmanager:CreateSecret`/`PutSecretValue` (scoped to `blog-gen/repos/*`), `dynamodb:PutItem`/`UpdateItem` on the metadata table, CloudWatch Logs.
 - `webhook-handler` — `dynamodb:GetItem` on the metadata table, `secretsmanager:GetSecretValue` on the per-repo **webhook secret**, `events:PutEvents` on the bus, read-only `ec2:DescribeInstances`, CloudWatch Logs. **No PAT access; no start/stop.**
+- `manual-trigger` — `events:PutEvents` on the bus, read-only `ec2:DescribeInstances` (window gate), CloudWatch Logs. **No start/stop.**
 - `scheduled-start` — `ec2:StartInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
 - `scheduled-stop` — `ec2:StopInstances` on the specific instance ARN + `ec2:DescribeInstances`, CloudWatch Logs.
 
@@ -111,8 +114,8 @@ Onboarding introduces two managed stores.
 
 EventBridge is the central **event bus** and the extension point for future trigger sources.
 
-- A **custom bus** receives `blog.publish.requested` events from the webhook handler on a trigger match.
-- A **rule** routes those events to a single target: the **SQS `events` queue** (durable buffer for the run). There is **no** start-on-event target — instance power is owned by the scheduler stack.
+- A **custom bus** receives `blog.publish.requested` events from any trigger source (the webhook handler and the manual `/process` trigger today).
+- A **rule** routes those events to a single target: the **SQS `events` queue** (durable buffer for the run). Its pattern matches the `${ProjectName}.` **source prefix**, so new trigger sources route with no rule change. There is **no** start-on-event target — instance power is owned by the scheduler stack.
 - Instance start/stop is handled separately by **EventBridge Scheduler** (in `scheduler.yaml`): two weekday schedules invoke the `scheduled-start`/`scheduled-stop` Lambdas. See [Scheduling](./scheduling.md).
 - Future trigger sources (releases, tags, PR labels, manual, scheduled) publish to the **same bus**, so the downstream pipeline is unchanged ([Roadmap](./roadmap.md), [TRG-7](./requirements.md#2-publishing-trigger-requirements)).
 
@@ -176,7 +179,7 @@ Templates are **modular and reusable** so each layer can be deployed and updated
 ```text
 infrastructure/
 ├── network.yaml         # VPC, public subnet, IGW, route tables, security groups
-├── serverless.yaml      # API Gateway (webhook + registration), Lambdas (registration + handler), Secrets Manager, DynamoDB, EventBridge bus + rule, SQS + DLQ, IAM
+├── serverless.yaml      # API Gateway (webhook + registration + /process), Lambdas (registration + handler + manual-trigger), Secrets Manager, DynamoDB, EventBridge bus + rule, SQS + DLQ, IAM
 ├── compute.yaml         # On-Demand EC2 instance, gp3 EBS volume, instance profile, user data
 ├── scheduler.yaml       # EventBridge Scheduler (weekday start/stop) + scheduled-start/scheduled-stop Lambdas + roles
 └── observability.yaml   # CloudWatch log groups, metrics, alarms, dashboard

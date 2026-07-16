@@ -54,7 +54,7 @@ Make the trigger configurable and the compute layer more robust.
 Extend the trigger system and make model choice and publishing configurable — **without changing the core architecture** (all sources publish to the same EventBridge bus).
 
 - **Additional trigger sources:** GitHub Releases, Git Tags, Pull Request labels
-- **Manual blog generation** from the application
+- ✅ **Manual blog generation** via an authenticated REST trigger (`POST /process`) — see [Manual Trigger](./manual-trigger.md)
 - **Scheduled repository summaries**
 - **Multi-model support** — different local models per content type
 - Additional content types (video/short/podcast scripts, auto-generated diagrams)

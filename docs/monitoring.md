@@ -10,7 +10,7 @@ Related: [Infrastructure](./infrastructure.md) · [Security](./security.md) · [
 
 CloudWatch is the single pane of glass:
 
-- **Logs** — log groups for `registration`, `webhook-handler`, `scheduled-start`, `scheduled-stop`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
+- **Logs** — log groups for `registration`, `webhook-handler`, `manual-trigger`, `scheduled-start`, `scheduled-stop`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
 - **Metrics** — a custom `BlogGenerator` namespace, plus native AWS metrics.
 - **Dashboard** — one operational dashboard combining trigger activity, run health, latency, queue depth, and instance state.
 - **Alarms** — threshold and anomaly alarms.
@@ -45,7 +45,7 @@ CloudWatch is the single pane of glass:
 | Source | Key metrics |
 | --- | --- |
 | API Gateway | `Count`, `4XXError`, `5XXError`, `Latency` |
-| Lambda (`registration`, `webhook-handler`, `scheduled-start`, `scheduled-stop`) | `Invocations`, `Errors`, `Throttles`, `Duration` |
+| Lambda (`registration`, `webhook-handler`, `manual-trigger`, `scheduled-start`, `scheduled-stop`) | `Invocations`, `Errors`, `Throttles`, `Duration` |
 | DynamoDB (`repositories`) | `ThrottledRequests`, `System/UserErrors` |
 | Secrets Manager | `GetSecretValue` call volume (audit spikes) |
 | EventBridge | `Invocations`, `FailedInvocations`, `ThrottledRules` |
@@ -84,6 +84,7 @@ Alarms publish to an SNS topic subscribed by the operator (and optionally Slack)
 | Queue backlog growing | `ApproximateAgeOfOldestMessage` > threshold | High |
 | Run failure rate | `RunsFailed` ≥ 1 in 5 min (or failure ratio > 20%) | High |
 | Handler Lambda errors | `webhook-handler` `Errors` > 0 | High |
+| Manual trigger errors | `manual-trigger` `Errors` > 0 (POST /process failing) | Medium |
 | Scheduled-start errors | `scheduled-start` `Errors` > 0 (host may not come up for its window) | High |
 | Scheduled-stop errors | `scheduled-stop` `Errors` > 0 (instance may not stop at 20:00 → cost) | High |
 | EventBridge failures | `FailedInvocations` > 0 | High |

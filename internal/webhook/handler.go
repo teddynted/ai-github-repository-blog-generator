@@ -1,8 +1,8 @@
 // Package webhook implements the lightweight GitHub webhook receiver: resolve
 // the repository's metadata, verify the HMAC signature with that repo's secret,
-// and evaluate the commit-message trigger. On a match it publishes an event via
-// the Publisher port; it performs no cloning, analysis, or AI work, and never
-// reads the repository PAT.
+// and evaluate the commit-message trigger. On a match it hands the event to the
+// shared intake.Service (which applies the window policy and publishes); it
+// performs no cloning, analysis, or AI work, and never reads the repository PAT.
 package webhook
 
 import (
@@ -14,6 +14,7 @@ import (
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/githubsig"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/repo"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/trigger"
 )
@@ -28,46 +29,21 @@ type SecretGetter interface {
 	WebhookSecret(ctx context.Context, ref string) (string, error)
 }
 
-// Publisher publishes a matched event downstream (EventBridge in production).
-type Publisher interface {
-	Publish(ctx context.Context, ev Event) error
-}
-
 // Counter emits a named count metric. *metrics.Emitter satisfies it. Optional.
 type Counter interface {
 	Count(name string)
 }
 
-// InstanceGate reports whether the platform's compute host is currently
-// running. It is optional and read-only: the handler never starts or stops the
-// instance — the scheduler stack owns instance power on its fixed weekday
-// window. When the gate is nil, every matched delivery is reported "accepted"
-// (legacy behaviour). When it is set and the instance is stopped (i.e. the
-// delivery arrived outside the operational window), the event is still
-// published so it buffers in SQS for the next scheduled runtime, but the
-// delivery is reported "deferred".
-type InstanceGate interface {
-	Running(ctx context.Context) (bool, error)
-}
-
-// Event is the payload published when a commit matches the trigger.
-type Event struct {
-	RepoFullName   string `json:"repo_full_name"`
-	Owner          string `json:"owner"`
-	Name           string `json:"name"`
-	Ref            string `json:"ref"`
-	CommitSHA      string `json:"commit_sha"`
-	CommitMessage  string `json:"commit_message"`
-	TriggerPattern string `json:"trigger_pattern"`
-}
-
-// Handler processes webhook deliveries.
+// Handler processes webhook deliveries. It delegates publishing and the
+// operational-window decision to the shared intake.Service, so it never
+// duplicates that orchestration and never starts the instance. Webhooks use the
+// buffer policy: a match that arrives outside the window is still published
+// (retained in SQS) and reported "deferred".
 type Handler struct {
 	Repos          RepoLookup
 	Secrets        SecretGetter
-	Publisher      Publisher
-	Metrics        Counter      // optional
-	Gate           InstanceGate // optional; see InstanceGate
+	Intake         *intake.Service
+	Metrics        Counter // optional
 	DefaultTrigger string
 	Logger         *slog.Logger
 }
@@ -147,7 +123,7 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return h.ignore(deliveryID, full, "repository disabled")
 	}
 
-	var ev Event
+	var ev intake.Event
 	var skip string
 	switch eventType {
 	case "push":
@@ -161,56 +137,35 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return h.ignore(deliveryID, full, skip)
 	}
 
-	if err := h.Publisher.Publish(ctx, ev); err != nil {
+	// Delegate the window decision + publish to the shared intake service.
+	// Webhooks buffer outside the window (never rejected), so the event is
+	// retained in SQS and drained at the next scheduled start.
+	decision, err := h.Intake.Submit(ctx, ev, intake.BufferOutsideWindow)
+	if err != nil {
 		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "publish failed"))
 	}
 	h.count("TriggerMatched")
-	return okResp(h.deliveryStatus(ctx, deliveryID, full, eventType), full)
-}
-
-// deliveryStatus records a published match and reports whether it will be
-// processed now or deferred. The scheduled runtime — not the webhook — owns
-// instance power, so the handler never starts the host; it only reports. With
-// no gate configured, or when the host is running (inside the operational
-// window), the delivery is "accepted" and the worker drains it promptly. When
-// the host is stopped (outside the window) the event is already buffered in SQS
-// and will be processed at the next scheduled start, so the delivery is
-// "deferred". A gate error fails open (report "accepted"): the event is safely
-// buffered regardless, and SQS retention covers the delay.
-func (h *Handler) deliveryStatus(ctx context.Context, deliveryID, full, eventType string) string {
-	if h.Gate == nil {
-		h.log("published", deliveryID, full, "triggered by "+eventType)
-		return "accepted"
-	}
-	running, err := h.Gate.Running(ctx)
-	switch {
-	case err != nil:
-		h.log("published", deliveryID, full, "triggered by "+eventType+"; instance-state check failed, buffered: "+err.Error())
-		return "accepted"
-	case running:
-		h.log("published", deliveryID, full, "triggered by "+eventType+"; instance running, processing in this window")
-		return "accepted"
-	default:
+	if decision == intake.Deferred {
 		h.count("WebhookDeferred")
-		h.log("deferred", deliveryID, full, "triggered by "+eventType+"; outside operational window, buffered for next scheduled runtime")
-		return "deferred"
 	}
+	h.log(string(decision), deliveryID, full, "triggered by "+eventType)
+	return okResp(string(decision), full)
 }
 
 // pushEvent builds a trigger event for a push, gated on the commit-message
 // trigger. A non-empty second return value is the reason to ignore.
-func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (Event, string) {
+func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (intake.Event, string) {
 	if p.HeadCommit == nil {
-		return Event{}, "no head commit"
+		return intake.Event{}, "no head commit"
 	}
 	pattern := r.TriggerPattern
 	if strings.TrimSpace(pattern) == "" {
 		pattern = h.DefaultTrigger
 	}
 	if !trigger.Matches(p.HeadCommit.Message, pattern) {
-		return Event{}, "commit does not match trigger"
+		return intake.Event{}, "commit does not match trigger"
 	}
-	return Event{
+	return intake.Event{
 		RepoFullName:   full,
 		Owner:          r.Owner,
 		Name:           r.Name,
@@ -218,24 +173,25 @@ func (h *Handler) pushEvent(full string, p pushPayload, r repo.Repository) (Even
 		CommitSHA:      p.HeadCommit.ID,
 		CommitMessage:  p.HeadCommit.Message,
 		TriggerPattern: pattern,
+		Source:         "push",
 	}, ""
 }
 
 // releaseEvent builds a trigger event for a published release. A release is
 // itself an intentional event, so it always triggers (no commit-message gate).
-func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (Event, string) {
+func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (intake.Event, string) {
 	var rp releasePayload
 	if err := json.Unmarshal(body, &rp); err != nil {
-		return Event{}, "unparseable release payload"
+		return intake.Event{}, "unparseable release payload"
 	}
 	if rp.Action != "published" {
-		return Event{}, "release action not published: " + rp.Action
+		return intake.Event{}, "release action not published: " + rp.Action
 	}
 	name := rp.Release.Name
 	if name == "" {
 		name = rp.Release.TagName
 	}
-	return Event{
+	return intake.Event{
 		RepoFullName:   full,
 		Owner:          r.Owner,
 		Name:           r.Name,
@@ -243,6 +199,7 @@ func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (Eve
 		CommitSHA:      rp.Release.TagName, // memory dedup key for releases
 		CommitMessage:  "Release " + name,
 		TriggerPattern: "release",
+		Source:         "release",
 	}, ""
 }
 

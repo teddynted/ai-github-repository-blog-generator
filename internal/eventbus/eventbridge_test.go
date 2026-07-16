@@ -8,7 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 )
 
 type fakeEB struct {
@@ -25,8 +25,8 @@ func (f *fakeEB) PutEvents(_ context.Context, in *eventbridge.PutEventsInput, _ 
 	return &eventbridge.PutEventsOutput{FailedEntryCount: f.failed}, nil
 }
 
-func sampleEvent() webhook.Event {
-	return webhook.Event{
+func sampleEvent() intake.Event {
+	return intake.Event{
 		RepoFullName: "acme/widget", Owner: "acme", Name: "widget",
 		Ref: "refs/heads/main", CommitSHA: "abc", CommitMessage: "blog: x", TriggerPattern: "blog:",
 	}
@@ -46,7 +46,7 @@ func TestPublishSendsCorrectEntry(t *testing.T) {
 	if *e.EventBusName != "blog-gen-bus" || *e.Source != "blog-gen.webhook" || *e.DetailType != DetailType {
 		t.Errorf("entry = bus:%s source:%s type:%s", *e.EventBusName, *e.Source, *e.DetailType)
 	}
-	var got webhook.Event
+	var got intake.Event
 	if err := json.Unmarshal([]byte(*e.Detail), &got); err != nil {
 		t.Fatalf("detail not valid json: %v", err)
 	}
@@ -69,5 +69,5 @@ func TestPublishPropagatesAPIError(t *testing.T) {
 	}
 }
 
-// Guard: EventBridgePublisher satisfies the webhook.Publisher port.
-var _ webhook.Publisher = (*EventBridgePublisher)(nil)
+// Guard: EventBridgePublisher satisfies the intake.Publisher port.
+var _ intake.Publisher = (*EventBridgePublisher)(nil)
