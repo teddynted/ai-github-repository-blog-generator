@@ -69,10 +69,19 @@ You can always **override** with an explicit `release major|minor|patch`.
 3. Determine the next version (auto or forced).
 4. Generate release notes.
 5. Update `CHANGELOG.md`.
-6. Create an annotated Git tag.
-7. Push the tag.
-8. Create the GitHub Release.
-9. Print a summary.
+6. **Commit `CHANGELOG.md`** with `chore(release): <tag>` and **push it to the
+   release branch** (`main`). The changelog reaches the remote **first**, so
+   other clones just `git pull` to pick it up.
+7. Create an annotated Git tag **on the changelog commit**.
+8. Push the tag.
+9. Create the GitHub Release.
+10. Print a summary.
+
+Because the changelog is committed and pushed **before** the tag is created, the
+tag — and the GitHub Release built from it — always points at a commit that
+already contains the CHANGELOG entry. The changelog commit is made with
+`--no-verify` (the CLI has already validated everything, so the pre-commit hooks
+are not re-run for a generated changelog-only commit).
 
 The workflow is **idempotent** where practical: an existing tag or release is
 detected and not recreated; re-adding a version to the CHANGELOG is a no-op.
@@ -104,6 +113,12 @@ detected and not recreated; re-adding a version to the CHANGELOG is a no-op.
 Sections are grouped by category (Features, Bug Fixes, Performance, Refactoring,
 Documentation, plus Breaking Changes) and inserted newest-first below the header.
 **Existing entries are never duplicated.**
+
+On a real release the CLI **writes, commits, and pushes** `CHANGELOG.md` to the
+release branch itself (message `chore(release): <tag>`). You do **not** commit it
+by hand — after the release, other clones sync it with a plain `git pull`. The
+commit message template is configurable via `release_commit_message` in
+`.release.json` (see [§8](#8-configuration)).
 
 ## 6. GitHub Releases
 
@@ -252,11 +267,10 @@ Validation
 Planned Actions  (simulated — not executed)
 ────────────────────────────────────
 ✓ Update CHANGELOG.md
-✓ Generate release notes
-✓ Create Git tag
+✓ Commit + push CHANGELOG.md to main
+✓ Create Git tag (on the changelog commit)
 ✓ Push tag
 ✓ Create GitHub Release
-✓ Publish release assets
 
 Dry run completed successfully.
 
@@ -281,7 +295,8 @@ Optional `.release.json` at the repo root (defaults apply when absent):
 | --- | --- | --- |
 | `initial_version` | `0.1.0` | version used when no tags exist yet |
 | `tag_prefix` | `v` | prepended to versions to form tags |
-| `release_branch` | `main` | the only branch a release may be cut from |
+| `release_branch` | `main` | the only branch a release may be cut from; also where the CHANGELOG commit is pushed |
+| `release_commit_message` | `chore(release): %s` | commit message for the CHANGELOG update (`%s` → tag); must stay a valid Conventional Commit |
 | `prerelease_id` | `rc` | default identifier for `--prerelease` |
 | `ignored_types` | docs, style, test, chore, ci, build | types that don't trigger a release on their own |
 | `commit.types` | the 10 standard types | allowed commit types |
@@ -312,7 +327,7 @@ logged.
 | `on branch "x"; releases must be cut from "main"` | switch to the release branch |
 | `local branch is not in sync with the remote` | `git pull` / `git push` first |
 | `no GitHub authentication available` | export `GITHUB_TOKEN` or `GH_TOKEN` |
-| release published but CHANGELOG not committed | commit the updated `CHANGELOG.md` (the CLI writes it locally) |
+| `commit changelog` / `push main` failed | the CLI stages, commits, and pushes `CHANGELOG.md` for you — check write access to the release branch (branch protection can block a direct push) |
 
 Use `go run ./cmd/release validate` (or any `--dry-run` command) to diagnose
 without making changes — it prints the full severity report. Warnings (e.g. a
@@ -338,7 +353,9 @@ Adopting this on an existing repository:
 4. **Dry-run first**: `go run ./cmd/release --dry-run --no-verify` to preview the
    version, CHANGELOG, and notes before publishing.
 5. **Cut the release**: on `main` with a clean tree and `GITHUB_TOKEN` set, run
-   `go run ./cmd/release <bump>` and commit the updated `CHANGELOG.md`.
+   `go run ./cmd/release <bump>`. The CLI commits and pushes the updated
+   `CHANGELOG.md` to `main` for you, then tags and publishes — no manual commit
+   needed. Other clones sync with `git pull`.
 
 No existing functionality changes — the release tooling is additive and lives
 entirely in `cmd/release` + `internal/{semver,conventional,changelog,release}`.

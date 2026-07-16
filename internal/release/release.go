@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/changelog"
@@ -28,6 +30,12 @@ type Git interface {
 	TagExists(ctx context.Context, tag string) (bool, error)
 	CreateAnnotatedTag(ctx context.Context, tag, message string) error
 	PushTag(ctx context.Context, tag string) error
+	// CommitFile stages a single file and commits it with message. Used to
+	// record the CHANGELOG update on the release branch before tagging.
+	CommitFile(ctx context.Context, path, message string) error
+	// PushBranch pushes the current HEAD to origin's branch, so the changelog
+	// commit lands on the remote before the tag and release reference it.
+	PushBranch(ctx context.Context, branch string) error
 	// UpstreamInSync reports whether the local branch is in sync with its remote
 	// tracking branch (no ahead/behind divergence).
 	UpstreamInSync(ctx context.Context) (bool, error)
@@ -180,19 +188,23 @@ func (s *Service) DeterminePlan(ctx context.Context, forceBump *conventional.Bum
 
 // Summary is returned after a successful (or dry-run) release.
 type Summary struct {
-	Tag        string
-	Version    string
-	Bump       string
-	ReleaseURL string
-	DryRun     bool
-	Changelog  string // the updated CHANGELOG.md content
+	Tag             string
+	Version         string
+	Bump            string
+	ReleaseURL      string
+	DryRun          bool
+	Changelog       string // the updated CHANGELOG.md content
+	ChangelogPushed bool   // the changelog commit was pushed to the release branch
 }
 
-// Apply performs the mutating steps: update the changelog content (returned to
-// the caller to persist), create + push the annotated tag, and create the
-// GitHub Release. In dryRun nothing is executed — only the computed content is
-// returned. It is idempotent: an existing tag or release is treated as done.
-func (s *Service) Apply(ctx context.Context, plan Plan, changelogOld string, dryRun bool) (Summary, error) {
+// Apply performs the mutating steps in release order: write the updated
+// CHANGELOG, commit it and push it to the release branch (so the update is on
+// the remote first), then create + push the annotated tag — which therefore
+// points at the changelog commit — and create the GitHub Release. When
+// changelogPath is "" the changelog is not written/committed (only the content
+// is returned in the Summary). In dryRun nothing is executed. It is idempotent:
+// an existing tag or release is treated as done.
+func (s *Service) Apply(ctx context.Context, plan Plan, changelogOld, changelogPath string, dryRun bool) (Summary, error) {
 	sum := Summary{
 		Tag:       plan.Tag,
 		Version:   plan.NextVersion.String(),
@@ -205,7 +217,26 @@ func (s *Service) Apply(ctx context.Context, plan Plan, changelogOld string, dry
 		return sum, nil
 	}
 
-	// Tag (idempotent).
+	// Record the CHANGELOG on the release branch first, so the tag (and the
+	// GitHub Release built from it) references a commit that already contains
+	// the changelog, and the update reaches the remote before anyone pulls.
+	if changelogPath != "" {
+		if err := os.WriteFile(changelogPath, []byte(sum.Changelog), 0o644); err != nil {
+			return sum, fmt.Errorf("write %s: %w", changelogPath, err)
+		}
+		msg := releaseCommitMessage(s.Config.ReleaseCommitMessage, plan.Tag)
+		if err := s.Git.CommitFile(ctx, changelogPath, msg); err != nil {
+			return sum, fmt.Errorf("commit changelog: %w", err)
+		}
+		s.log("committed changelog", slog.String("path", changelogPath), slog.String("message", msg))
+		if err := s.Git.PushBranch(ctx, s.Config.ReleaseBranch); err != nil {
+			return sum, fmt.Errorf("push %s: %w", s.Config.ReleaseBranch, err)
+		}
+		sum.ChangelogPushed = true
+		s.log("pushed changelog to remote", slog.String("branch", s.Config.ReleaseBranch))
+	}
+
+	// Tag (idempotent) — now points at the changelog commit.
 	if exists, err := s.Git.TagExists(ctx, plan.Tag); err != nil {
 		return sum, fmt.Errorf("check tag: %w", err)
 	} else if !exists {
@@ -232,6 +263,15 @@ func (s *Service) Apply(ctx context.Context, plan Plan, changelogOld string, dry
 	sum.ReleaseURL = url
 	s.log("github release created", slog.String("tag", plan.Tag), slog.String("url", url))
 	return sum, nil
+}
+
+// releaseCommitMessage renders the changelog commit message. A single "%s" in
+// the template is replaced with the tag; a template without it is used verbatim.
+func releaseCommitMessage(tmpl, tag string) string {
+	if strings.Contains(tmpl, "%s") {
+		return fmt.Sprintf(tmpl, tag)
+	}
+	return tmpl
 }
 
 // anchor renders a Keep-a-Changelog heading anchor for a version.
