@@ -21,6 +21,10 @@ type Git interface {
 	// CommitSubjectsSince returns commit subjects (first lines) since tag,
 	// newest first; tag "" means the entire history.
 	CommitSubjectsSince(ctx context.Context, tag string) ([]string, error)
+	// InitialCommit returns the SHA of the repository's root commit, used to
+	// exclude a non-conventional initial commit ("first commit") from
+	// validation. Returns "" when it cannot be determined.
+	InitialCommit(ctx context.Context) (string, error)
 	TagExists(ctx context.Context, tag string) (bool, error)
 	CreateAnnotatedTag(ctx context.Context, tag, message string) error
 	PushTag(ctx context.Context, tag string) error
@@ -63,6 +67,9 @@ type Plan struct {
 	Notes            string
 	ChangelogSection string
 	Contributors     []string
+	// Analysed is the number of commits considered (excludes the root commit
+	// when there is no prior tag).
+	Analysed int
 }
 
 func (s *Service) now() time.Time {
@@ -99,7 +106,16 @@ func (s *Service) DeterminePlan(ctx context.Context, forceBump *conventional.Bum
 		}
 	}
 
-	subjects, err := s.Git.CommitSubjectsSince(ctx, prevTag)
+	// The range to analyse. With no prior tag, exclude the repository's root
+	// commit so a non-conventional initial commit ("first commit") never fails
+	// validation and history need not be rewritten.
+	since := prevTag
+	if since == "" {
+		if root, rerr := s.Git.InitialCommit(ctx); rerr == nil && root != "" {
+			since = root
+		}
+	}
+	subjects, err := s.Git.CommitSubjectsSince(ctx, since)
 	if err != nil {
 		return Plan{}, fmt.Errorf("read commits: %w", err)
 	}
@@ -139,7 +155,7 @@ func (s *Service) DeterminePlan(ctx context.Context, forceBump *conventional.Bum
 	}
 
 	date := s.now().UTC().Format("2006-01-02")
-	contributors, _ := s.Git.ContributorsSince(ctx, prevTag)
+	contributors, _ := s.Git.ContributorsSince(ctx, since)
 	tag := s.Config.TagPrefix + next.String()
 
 	plan := Plan{
@@ -151,6 +167,7 @@ func (s *Service) DeterminePlan(ctx context.Context, forceBump *conventional.Bum
 		Date:             date,
 		Commits:          commits,
 		NonConventional:  bad,
+		Analysed:         len(subjects),
 		Contributors:     contributors,
 		ChangelogSection: changelog.Render(next.String(), date, commits, s.Config.ChangelogCategories),
 		Notes:            Notes(next.String(), date, "./CHANGELOG.md#"+anchor(next.String()), commits, contributors),

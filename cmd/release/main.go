@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/changelog"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/conventional"
@@ -116,44 +117,54 @@ func run(args []string) int {
 		fmt.Print(changelog.Update(string(old), plan.NextVersion.String(), plan.ChangelogSection))
 		return 0
 	case "validate":
-		return reportValidation(svc, ctx, plan, *changelogPath)
-	}
-
-	// A release (major/minor/patch/auto).
-	fmt.Printf("→ %s release: %s → %s\n", plan.Bump, tagOrNone(plan.PrevTag), plan.Tag)
-	if len(plan.Commits) == 0 && *dryRun {
-		fmt.Println("  (no conventional commits since the last tag)")
-	}
-
-	if !*noVerify {
+		// `validate` is a dry check: warnings (e.g. missing token) don't fail it.
+		printPlan(plan)
 		old, _ := os.ReadFile(*changelogPath)
-		if errs := svc.Validate(ctx, plan, string(old)); len(errs) > 0 {
-			fmt.Fprintln(os.Stderr, "✗ validation failed:")
-			for _, e := range errs {
-				fmt.Fprintf(os.Stderr, "  - %v\n", e)
-			}
+		rep := svc.Validate(ctx, plan, string(old), true)
+		printReport(rep)
+		if rep.HasError() {
+			fmt.Println("\nRelease aborted.")
 			return 1
 		}
-		fmt.Println("✓ validation passed")
+		fmt.Printf("\n✓ ready to release %s\n", plan.Tag)
+		return 0
 	}
 
+	// A release (major/minor/patch/auto), dry-run or real.
+	start := time.Now()
+	printPlan(plan)
+
 	old, _ := os.ReadFile(*changelogPath)
+	var rep release.Report
+	if !*noVerify {
+		rep = svc.Validate(ctx, plan, string(old), *dryRun)
+		printReport(rep)
+		if rep.HasError() {
+			fmt.Println("\nRelease aborted.")
+			return 1
+		}
+	}
+	printActions(*dryRun)
+	logger.Info("validation complete",
+		slog.Bool("dry_run", *dryRun), slog.String("version", plan.Tag),
+		slog.String("bump", plan.Bump.String()), slog.Int("analysed", plan.Analysed),
+		slog.Int("conventional", len(plan.Commits)),
+		slog.Duration("duration", time.Since(start)))
+
 	sum, err := svc.Apply(ctx, plan, string(old), *dryRun)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ release failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "\n✗ release failed: %v\n", err)
 		return 1
 	}
 
 	if *dryRun {
-		fmt.Printf("✓ dry run complete — would release %s\n\n--- CHANGELOG (preview) ---\n%s\n--- release notes (preview) ---\n%s",
-			sum.Tag, plan.ChangelogSection, plan.Notes)
+		fmt.Printf("\nDry run completed successfully.\n\nNo release actions were executed.\n")
 		return 0
 	}
-
 	if err := os.WriteFile(*changelogPath, []byte(sum.Changelog), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: release published but writing %s failed: %v\n", *changelogPath, err)
 	}
-	fmt.Printf("✓ released %s\n", sum.Tag)
+	fmt.Printf("\n✓ released %s\n", sum.Tag)
 	if sum.ReleaseURL != "" {
 		fmt.Printf("  %s\n", sum.ReleaseURL)
 	}
@@ -161,18 +172,43 @@ func run(args []string) int {
 	return 0
 }
 
-func reportValidation(svc *release.Service, ctx context.Context, plan release.Plan, changelogPath string) int {
-	old, _ := os.ReadFile(changelogPath)
-	errs := svc.Validate(ctx, plan, string(old))
-	if len(errs) == 0 {
-		fmt.Printf("✓ ready to release %s\n", plan.Tag)
-		return 0
+const rule = "────────────────────────────────────"
+
+func printPlan(p release.Plan) {
+	fmt.Printf("Release Plan\n%s\n\n", rule)
+	fmt.Printf("Current Version  : %s\n", tagOrNone(p.PrevTag))
+	fmt.Printf("Next Version     : %s\n", p.Tag)
+	fmt.Printf("Increment        : %s\n\n", title(p.Bump.String()))
+	fmt.Printf("Commits Analysed : %d\n", p.Analysed)
+	fmt.Printf("Conventional     : %d\n", len(p.Commits))
+}
+
+func printReport(r release.Report) {
+	fmt.Printf("\nValidation\n%s\n", rule)
+	for _, res := range r.Results {
+		fmt.Printf("\n%s %s", res.Severity.Symbol(), res.Name)
+		if res.Message != "" {
+			fmt.Printf(" — %s", res.Message)
+		}
+		fmt.Println()
+		for _, d := range res.Detail {
+			fmt.Printf("  %s\n", d)
+		}
 	}
-	fmt.Fprintf(os.Stderr, "✗ %d validation error(s):\n", len(errs))
-	for _, e := range errs {
-		fmt.Fprintf(os.Stderr, "  - %v\n", e)
+}
+
+func printActions(dryRun bool) {
+	suffix := ""
+	if dryRun {
+		suffix = "  (simulated — not executed)"
 	}
-	return 1
+	fmt.Printf("\nPlanned Actions%s\n%s\n", suffix, rule)
+	for _, a := range []string{
+		"Update CHANGELOG.md", "Generate release notes", "Create Git tag",
+		"Push tag", "Create GitHub Release", "Publish release assets",
+	} {
+		fmt.Printf("\n✓ %s\n", a)
+	}
 }
 
 var originRE = regexp.MustCompile(`github\.com[:/]([^/]+)/([^/.]+)`)
@@ -215,6 +251,13 @@ func tagOrNone(tag string) string {
 		return "(none)"
 	}
 	return tag
+}
+
+func title(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 const usage = `release — semantic-versioning release management

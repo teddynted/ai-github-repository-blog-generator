@@ -89,6 +89,24 @@ func (g *ExecGit) CommitSubjectsSince(ctx context.Context, tag string) ([]string
 	return g.logField(ctx, "%s", tag)
 }
 
+// InitialCommit returns the SHA of the repository's root commit (the first
+// commit with no parents). If the history has multiple roots, the first is
+// returned. Errors (e.g. an empty repo) yield "".
+func (g *ExecGit) InitialCommit(ctx context.Context) (string, error) {
+	out, err := g.run(ctx, "rev-list", "--max-parents=0", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return "", nil
+	}
+	if i := strings.IndexByte(out, '\n'); i >= 0 {
+		return out[:i], nil
+	}
+	return out, nil
+}
+
 // ContributorsSince returns author names for commits since tag.
 func (g *ExecGit) ContributorsSince(ctx context.Context, tag string) ([]string, error) {
 	return g.logField(ctx, "%an", tag)

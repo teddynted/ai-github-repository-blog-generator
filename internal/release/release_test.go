@@ -16,10 +16,13 @@ type fakeGit struct {
 	subjects  []string
 	tagExists bool
 	synced    bool
+	initial   string
 	created   string
 	pushed    string
 	contribs  []string
 }
+
+func (f *fakeGit) InitialCommit(context.Context) (string, error) { return f.initial, nil }
 
 func (f *fakeGit) CurrentBranch(context.Context) (string, error)           { return f.branch, nil }
 func (f *fakeGit) IsClean(context.Context) (bool, error)                   { return f.clean, nil }
@@ -94,12 +97,24 @@ func TestDeterminePlanOverrideAndPrerelease(t *testing.T) {
 	}
 }
 
+// reportText flattens a report to searchable text.
+func reportText(r Report) string {
+	var b strings.Builder
+	for _, res := range r.Results {
+		b.WriteString(res.Severity.Symbol() + " " + res.Name + " " + res.Message + "\n")
+		for _, d := range res.Detail {
+			b.WriteString(d + "\n")
+		}
+	}
+	return b.String()
+}
+
 func TestValidatePasses(t *testing.T) {
 	g := &fakeGit{branch: "main", clean: true, latestTag: "v1.0.0", subjects: []string{"feat: a"}, synced: true}
 	svc := newSvc(g, &fakeGH{authed: true})
 	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
-	if errs := svc.Validate(context.Background(), plan, ""); len(errs) != 0 {
-		t.Errorf("expected clean validation, got %v", errs)
+	if rep := svc.Validate(context.Background(), plan, "", false); rep.HasError() {
+		t.Errorf("expected clean validation, got:\n%s", reportText(rep))
 	}
 }
 
@@ -108,15 +123,50 @@ func TestValidateCatchesProblems(t *testing.T) {
 		subjects: []string{"feat: a", "not conventional"}, tagExists: true, synced: false}
 	svc := newSvc(g, &fakeGH{authed: false})
 	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
-	errs := svc.Validate(context.Background(), plan, "")
-	joined := ""
-	for _, e := range errs {
-		joined += e.Error() + "\n"
+	rep := svc.Validate(context.Background(), plan, "", false)
+	if !rep.HasError() {
+		t.Fatal("expected errors")
 	}
-	for _, want := range []string{"working tree is not clean", "branch", "not in sync", "non-conventional", "already exists", "no GitHub authentication"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("missing validation %q in:\n%s", want, joined)
+	txt := reportText(rep)
+	for _, want := range []string{"not clean", "Current branch", "not in sync", "non-conventional", "already exists", "authentication"} {
+		if !strings.Contains(txt, want) {
+			t.Errorf("missing validation %q in:\n%s", want, txt)
 		}
+	}
+}
+
+func TestDryRunDowngradesAuthToWarning(t *testing.T) {
+	g := &fakeGit{branch: "main", clean: true, latestTag: "v1.0.0", subjects: []string{"feat: a"}, synced: true}
+	svc := newSvc(g, &fakeGH{authed: false}) // no token
+	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
+
+	// Dry-run: missing auth is a warning, so no blocking error.
+	dry := svc.Validate(context.Background(), plan, "", true)
+	if dry.HasError() {
+		t.Errorf("dry-run should not fail on missing auth:\n%s", reportText(dry))
+	}
+	if _, warn, _ := dry.Counts(); warn < 2 { // auth + connectivity
+		t.Errorf("expected auth + connectivity warnings, got %d", warn)
+	}
+	// Real release: missing auth is a blocking error.
+	real := svc.Validate(context.Background(), plan, "", false)
+	if !real.HasError() {
+		t.Error("real release must fail without auth")
+	}
+}
+
+func TestInitialCommitExcluded(t *testing.T) {
+	// No prior tag; the root ("first commit") is excluded, so only "feat: a"
+	// remains — conventional validation passes.
+	g := &fakeGit{branch: "main", clean: true, latestTag: "", initial: "root-sha",
+		subjects: []string{"feat: a"}, synced: true}
+	svc := newSvc(g, &fakeGH{authed: true})
+	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
+	if len(plan.NonConventional) != 0 {
+		t.Errorf("root commit not excluded: %v", plan.NonConventional)
+	}
+	if rep := svc.Validate(context.Background(), plan, "", false); rep.HasError() {
+		t.Errorf("expected pass, got:\n%s", reportText(rep))
 	}
 }
 
@@ -124,10 +174,8 @@ func TestValidateRejectsDowngrade(t *testing.T) {
 	g := &fakeGit{branch: "main", clean: true, latestTag: "v2.0.0", subjects: []string{"fix: b"}, synced: true}
 	svc := newSvc(g, &fakeGH{authed: true})
 	patch := conventional.BumpPatch
-	// Force a patch but pretend latest is higher by overriding next below prev is
-	// impossible here; instead verify the "no downgrade" guard via changelog dup.
 	plan, _ := svc.DeterminePlan(context.Background(), &patch, "")
-	if errs := svc.Validate(context.Background(), plan, "## [2.0.1] - x"); len(errs) == 0 {
+	if rep := svc.Validate(context.Background(), plan, "## [2.0.1] - x", false); !rep.HasError() {
 		t.Error("expected CHANGELOG-duplicate validation to fail")
 	}
 }

@@ -8,53 +8,100 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/conventional"
 )
 
-// Validate runs every pre-release check and returns all failures (empty slice =
-// OK). It never returns after the first failure so the caller can report the
-// full picture. changelogContent is the current CHANGELOG.md (may be "").
-func (s *Service) Validate(ctx context.Context, plan Plan, changelogContent string) []error {
-	var errs []error
-	fail := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
+// Validate runs every pre-release check and returns a severity Report. In
+// dryRun the GitHub authentication/connectivity checks are non-blocking
+// warnings (a plan can be validated locally without credentials); for a real
+// release they are errors. Repository/version/tag/commit checks are always
+// release-blocking errors. Adding a rule is a new `add` call — existing flows
+// are untouched.
+func (s *Service) Validate(ctx context.Context, plan Plan, changelogContent string, dryRun bool) Report {
+	var r Report
 
-	// --- Version / tag / commit checks (from the plan) ---
+	// --- Semantic Version (always required) ---
 	if plan.PrevTag != "" && !plan.PrevVersion.LessThan(plan.NextVersion) {
-		fail("version %s does not increase over %s (downgrades and repeats are not allowed)",
-			plan.NextVersion, plan.PrevVersion)
-	}
-	if plan.PrevTag != "" && plan.Bump == conventional.BumpNone {
-		fail("no release-worthy commits since %s (need feat/fix/breaking); pass an explicit bump to override", plan.PrevTag)
-	}
-	if n := len(plan.NonConventional); n > 0 {
-		fail("%d non-conventional commit(s) since %s, e.g. %q", n, tagOrStart(plan.PrevTag), plan.NonConventional[0])
-	}
-	if exists, err := s.Git.TagExists(ctx, plan.Tag); err != nil {
-		fail("check tag %s: %v", plan.Tag, err)
-	} else if exists {
-		fail("tag %s already exists", plan.Tag)
-	}
-	if changelog.Contains(changelogContent, plan.NextVersion.String()) {
-		fail("CHANGELOG already documents %s", plan.NextVersion)
+		r.add("Semantic Version valid", SeverityError,
+			fmt.Sprintf("%s does not increase over %s (no downgrade or repeat)", plan.NextVersion, plan.PrevVersion))
+	} else if plan.PrevTag != "" && plan.Bump == conventional.BumpNone {
+		r.add("Semantic Version valid", SeverityError,
+			fmt.Sprintf("no release-worthy commits since %s; pass an explicit bump to override", plan.PrevTag))
+	} else {
+		r.add("Semantic Version valid", SeverityOK, plan.NextVersion.String())
 	}
 
-	// --- Repository-state checks ---
+	// --- Conventional Commits (always required; root commit already excluded) ---
+	if n := len(plan.NonConventional); n > 0 {
+		r.add("Conventional Commits validated", SeverityError,
+			fmt.Sprintf("%d non-conventional commit(s) since %s", n, tagOrStart(plan.PrevTag)),
+			"e.g. "+quote(plan.NonConventional[0]))
+	} else {
+		r.add("Conventional Commits validated", SeverityOK, fmt.Sprintf("%d commit(s)", len(plan.Commits)))
+	}
+
+	// --- Working tree (always required) ---
 	if clean, err := s.Git.IsClean(ctx); err != nil {
-		fail("check working tree: %v", err)
+		r.add("Repository clean", SeverityError, "could not check working tree: "+err.Error())
 	} else if !clean {
-		fail("working tree is not clean (commit or stash changes first)")
+		r.add("Repository clean", SeverityError, "working tree is not clean (commit or stash changes first)")
+	} else {
+		r.add("Repository clean", SeverityOK, "")
 	}
+
+	// --- Release branch (always required) ---
 	if br, err := s.Git.CurrentBranch(ctx); err != nil {
-		fail("check branch: %v", err)
+		r.add("Release branch verified", SeverityError, "could not read branch: "+err.Error())
 	} else if br != s.Config.ReleaseBranch {
-		fail("on branch %q; releases must be cut from %q", br, s.Config.ReleaseBranch)
+		r.add("Current branch", SeverityError, "", "Current : "+br, "Expected: "+s.Config.ReleaseBranch)
+	} else {
+		r.add("Release branch verified", SeverityOK, br)
 	}
+
+	// --- Tag does not exist (always required) ---
+	if exists, err := s.Git.TagExists(ctx, plan.Tag); err != nil {
+		r.add("Tag does not exist", SeverityError, "could not check tag "+plan.Tag+": "+err.Error())
+	} else if exists {
+		r.add("Tag does not exist", SeverityError, "tag "+plan.Tag+" already exists")
+	} else {
+		r.add("Tag does not exist", SeverityOK, plan.Tag)
+	}
+
+	// --- CHANGELOG not already documenting this version (guard against repeats) ---
+	if changelog.Contains(changelogContent, plan.NextVersion.String()) {
+		r.add("CHANGELOG updated", SeverityError, "CHANGELOG already documents "+plan.NextVersion.String())
+	}
+
+	// --- Remote sync (always required) ---
 	if ok, err := s.Git.UpstreamInSync(ctx); err != nil {
-		fail("check remote sync: %v", err)
+		r.add("Synchronized with remote", SeverityError, "could not check remote: "+err.Error())
 	} else if !ok {
-		fail("local branch is not in sync with the remote (pull/push first)")
+		r.add("Synchronized with remote", SeverityError, "local branch is not in sync with the remote (pull/push first)")
+	} else {
+		r.add("Synchronized with remote", SeverityOK, "")
 	}
-	if !s.GitHub.Authenticated(ctx) {
-		fail("no GitHub authentication available (set GITHUB_TOKEN or GH_TOKEN)")
+
+	// --- GitHub authentication (warning in dry-run, error for a real release) ---
+	if s.GitHub.Authenticated(ctx) {
+		r.add("GitHub authentication", SeverityOK, "")
+	} else if dryRun {
+		r.add("GitHub authentication not configured", SeverityWarning, "GITHUB_TOKEN or GH_TOKEN not found.")
+	} else {
+		r.add("GitHub authentication", SeverityError, "no GitHub authentication available (set GITHUB_TOKEN or GH_TOKEN)")
 	}
-	return errs
+
+	// --- GitHub connectivity + duplicate-release (skipped/warned in dry-run) ---
+	if dryRun {
+		r.add("GitHub connectivity skipped (dry-run)", SeverityWarning, "")
+	} else if !s.GitHub.Authenticated(ctx) {
+		// Auth already failed above; don't attempt a call.
+		r.add("GitHub connectivity", SeverityError, "cannot reach GitHub without authentication")
+	} else if exists, err := s.GitHub.ReleaseExists(ctx, plan.Tag); err != nil {
+		r.add("GitHub connectivity", SeverityError, "GitHub request failed: "+err.Error())
+	} else if exists {
+		r.add("GitHub release does not exist", SeverityError, "a release for "+plan.Tag+" already exists")
+	} else {
+		r.add("GitHub connectivity", SeverityOK, "")
+	}
+
+	return r
 }
 
 func tagOrStart(tag string) string {
@@ -63,3 +110,5 @@ func tagOrStart(tag string) string {
 	}
 	return tag
 }
+
+func quote(s string) string { return "\"" + s + "\"" }

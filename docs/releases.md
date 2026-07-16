@@ -183,11 +183,94 @@ A real release (on the release branch, clean tree, token set):
 git checkout main
 export GITHUB_TOKEN=ghp_xxx
 go run ./cmd/release minor
-#   → minor release: v1.4.2 → v1.5.0
-#   ✓ validation passed
-#   ✓ released v1.5.0
-#     https://github.com/<owner>/<repo>/releases/tag/v1.5.0
-#     remember to commit the updated CHANGELOG.md
+```
+
+### Validation model & severity
+
+Every check reports one of three severities, so `--dry-run` works as a local
+**planning tool without GitHub credentials** while a real release still enforces
+everything:
+
+| Severity | Meaning | Dry-run | Real release |
+| --- | --- | --- | --- |
+| **✓ success** | passed | — | — |
+| **⚠ warning** | noted, non-blocking | does **not** fail | (see below) |
+| **✗ error** | release-blocking | fails | fails |
+
+| Check | Dry-run | Real release |
+| --- | --- | --- |
+| Semantic Version valid | error | error |
+| Conventional Commits (root commit excluded) | error | error |
+| Clean working tree | error | error |
+| Release branch | error | error |
+| Tag does not exist | error | error |
+| Synchronized with remote | error | error |
+| **GitHub authentication** | **warning** | **error** |
+| **GitHub connectivity** | **warning (skipped)** | **error** |
+| GitHub Release creation | skipped | performed |
+
+So a dry-run on `main` with a clean, synced tree and **no token** exits `0` with
+two warnings; the same state for a real release exits non-zero (auth required).
+
+**The repository's initial (root) commit is excluded** from Conventional Commit
+validation — a non-conventional `first commit` never fails validation, and you
+never need to rewrite history to satisfy the validator.
+
+### Exit codes
+
+| | Only warnings | Any error |
+| --- | --- | --- |
+| `--dry-run` | **0** | non-zero |
+| real release | non-zero (auth is required) | non-zero |
+| usage error (bad flag/command) | — | **2** |
+
+### Example output
+
+```text
+Release Plan
+────────────────────────────────────
+
+Current Version  : (none)
+Next Version     : v0.1.0
+Increment        : Minor
+
+Commits Analysed : 101
+Conventional     : 101
+
+Validation
+────────────────────────────────────
+
+✓ Semantic Version valid — 0.1.0
+✓ Conventional Commits validated — 101 commit(s)
+✓ Repository clean
+✓ Release branch verified — main
+✓ Tag does not exist — v0.1.0
+✓ Synchronized with remote
+⚠ GitHub authentication not configured — GITHUB_TOKEN or GH_TOKEN not found.
+⚠ GitHub connectivity skipped (dry-run)
+
+Planned Actions  (simulated — not executed)
+────────────────────────────────────
+✓ Update CHANGELOG.md
+✓ Generate release notes
+✓ Create Git tag
+✓ Push tag
+✓ Create GitHub Release
+✓ Publish release assets
+
+Dry run completed successfully.
+
+No release actions were executed.
+```
+
+On a blocking failure the run aborts and prints the offending check(s):
+
+```text
+✗ Current branch
+  Current : feat/release-management
+  Expected: main
+
+Release aborted.
 ```
 
 ## 8. Configuration
@@ -210,9 +293,12 @@ See [`.release.json`](../.release.json) for the shipped example.
 
 ## 9. Logging
 
-The CLI logs structured events (version calculation, validation, changelog
-generation, tag creation, GitHub API operations, errors) to stderr; human-
-readable progress goes to stdout. Tokens and other secrets are never logged.
+The CLI logs a structured line (`msg="validation complete"`) with the
+**validation duration**, the **planned release version**, the **bump**, the
+number of commits **analysed** and **conventional**, and the **dry-run status**,
+plus version-calculation and GitHub-API events. Human-readable progress (the plan
++ report) goes to stdout; logs go to stderr. Tokens and other secrets are never
+logged.
 
 ## 10. Troubleshooting
 
@@ -228,12 +314,14 @@ readable progress goes to stdout. Tokens and other secrets are never logged.
 | `no GitHub authentication available` | export `GITHUB_TOKEN` or `GH_TOKEN` |
 | release published but CHANGELOG not committed | commit the updated `CHANGELOG.md` (the CLI writes it locally) |
 
-Use `go run ./cmd/release validate` (or any command with `--dry-run`
-`--no-verify`) to diagnose without making changes.
+Use `go run ./cmd/release validate` (or any `--dry-run` command) to diagnose
+without making changes — it prints the full severity report. Warnings (e.g. a
+missing token) don't fail a dry-run; only ✗ errors do.
 
-> **Note:** with **no baseline tag**, validation scans *all* history, so an old
-> non-conventional commit (e.g. an initial "first commit") is reported. Create a
-> baseline tag (see the migration guide) and only commits *after* it are checked.
+> **Initial commit:** the repository's root commit is **excluded** from
+> Conventional Commit validation, so a non-conventional `first commit` never
+> fails — no history rewrite needed. Only commits after the root (and after the
+> latest tag, once one exists) are validated.
 
 ## 11. Migration guide
 
