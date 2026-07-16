@@ -91,7 +91,7 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
     { "Effect": "Allow", "Action": ["dynamodb:GetItem"],
       "Resource": "arn:aws:dynamodb:us-east-1:<acct>:table/blog-gen-repositories" },
     { "Effect": "Allow", "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/repos/*/webhook-secret*" },
+      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/repos/*" },
     { "Effect": "Allow", "Action": ["events:PutEvents"],
       "Resource": "arn:aws:events:us-east-1:<acct>:event-bus/blog-gen-bus" }
   ]

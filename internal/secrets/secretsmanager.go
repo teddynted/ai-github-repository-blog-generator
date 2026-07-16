@@ -1,10 +1,13 @@
 // Package secrets adapts AWS Secrets Manager to the platform's SecretStore
-// port. Each repository's GitHub PAT and webhook secret are stored under a
-// stable prefix; only the base reference is ever returned to callers.
+// port. Each repository's GitHub PAT and webhook secret are stored together in
+// a single JSON secret at "<prefix>/<owner>/<name>"; only that reference is
+// ever returned to callers. One secret per repo (rather than one per field)
+// halves the Secrets Manager entry count and cost.
 package secrets
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -12,6 +15,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
+
+// repoCredentials is the JSON shape stored in a repository's secret.
+type repoCredentials struct {
+	PAT           string `json:"pat"`
+	WebhookSecret string `json:"webhook_secret"`
+}
 
 // API is the subset of the Secrets Manager client this adapter uses. The real
 // *secretsmanager.Client satisfies it; tests supply a fake.
@@ -33,30 +42,51 @@ func New(api API, prefix string) *Store {
 	return &Store{api: api, prefix: prefix}
 }
 
-// PutRepoCredentials stores the PAT and webhook secret for a repository and
-// returns the base reference ("<prefix>/<owner>/<name>"). The individual
-// secrets live at "<ref>/pat" and "<ref>/webhook-secret".
+// PutRepoCredentials stores the PAT and webhook secret for a repository as one
+// JSON secret and returns its reference ("<prefix>/<owner>/<name>").
 func (s *Store) PutRepoCredentials(ctx context.Context, owner, name, pat, webhookSecret string) (string, error) {
-	base := fmt.Sprintf("%s/%s/%s", s.prefix, owner, name)
-	if err := s.upsert(ctx, base+"/pat", pat); err != nil {
-		return "", fmt.Errorf("store pat: %w", err)
+	ref := fmt.Sprintf("%s/%s/%s", s.prefix, owner, name)
+	value, err := json.Marshal(repoCredentials{PAT: pat, WebhookSecret: webhookSecret})
+	if err != nil {
+		return "", fmt.Errorf("marshal credentials: %w", err)
 	}
-	if err := s.upsert(ctx, base+"/webhook-secret", webhookSecret); err != nil {
-		return "", fmt.Errorf("store webhook secret: %w", err)
+	if err := s.upsert(ctx, ref, string(value)); err != nil {
+		return "", fmt.Errorf("store credentials: %w", err)
 	}
-	return base, nil
+	return ref, nil
 }
 
 // WebhookSecret retrieves a repository's webhook signing secret, given the
-// base reference returned by PutRepoCredentials.
+// reference returned by PutRepoCredentials.
 func (s *Store) WebhookSecret(ctx context.Context, ref string) (string, error) {
-	return s.get(ctx, ref+"/webhook-secret", "webhook secret")
+	c, err := s.repoCredentials(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	return c.WebhookSecret, nil
 }
 
-// PAT retrieves a repository's GitHub Personal Access Token, given the base
+// PAT retrieves a repository's GitHub Personal Access Token, given the
 // reference. Callers must treat the result as secret and never log it.
 func (s *Store) PAT(ctx context.Context, ref string) (string, error) {
-	return s.get(ctx, ref+"/pat", "pat")
+	c, err := s.repoCredentials(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	return c.PAT, nil
+}
+
+// repoCredentials fetches and parses the repository's JSON credential secret.
+func (s *Store) repoCredentials(ctx context.Context, ref string) (repoCredentials, error) {
+	raw, err := s.get(ctx, ref, "credentials")
+	if err != nil {
+		return repoCredentials{}, err
+	}
+	var c repoCredentials
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return repoCredentials{}, fmt.Errorf("parse credentials: %w", err)
+	}
+	return c, nil
 }
 
 // Value resolves an arbitrary secret by its id or ARN (not prefix-scoped). Used

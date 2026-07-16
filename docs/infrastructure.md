@@ -104,7 +104,7 @@ No Lambda performs content generation — that runs inside n8n/Ollama on EC2, wh
 
 Onboarding introduces two managed stores.
 
-**AWS Secrets Manager** holds each repository's **GitHub PAT** and **webhook signing secret** under a stable prefix (e.g. `blog-gen/repos/<owner>/<name>/pat` and `.../webhook-secret`). Secrets are KMS-encrypted; access is least-privilege and per-ARN. The PAT is **never** stored in DynamoDB, config, or logs ([Security §2](./security.md#2-github-pat--secret-storage)).
+**AWS Secrets Manager** holds each repository's **GitHub PAT** and **webhook signing secret** together in a **single JSON secret** at `blog-gen/repos/<owner>/<name>` (`{"pat":…,"webhook_secret":…}`) — one secret per repo. Secrets are KMS-encrypted; access is least-privilege and per-ARN (scoped to `blog-gen/repos/*`). The PAT is **never** stored in DynamoDB, config, or logs ([Security §2](./security.md#2-github-pat--secret-storage)).
 
 **Amazon DynamoDB** (`repositories` table, on-demand capacity, encrypted at rest) stores per-repository metadata: Repository ID, owner, name, URL, default branch, webhook ID, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, and registration timestamp. It stores only the **reference** to the PAT secret — never the value ([Requirements §13](./requirements.md#13-repository-metadata-requirements)).
 

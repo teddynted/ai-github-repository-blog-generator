@@ -125,8 +125,9 @@ Deliveries**. To create the webhook by hand instead, see
 3. Generate a webhook signing secret and `CreateWebhook` for **push** and
    **release** events, pointing at `WebhookUrl` (this also proves webhook
    permission).
-4. Store the PAT + webhook secret in **Secrets Manager**; keep only an opaque
-   reference.
+4. Store the PAT + webhook secret in **Secrets Manager** as a **single JSON
+   secret** at `blog-gen/repos/<owner>/<name>` (`{"pat":…,"webhook_secret":…}`);
+   keep only that reference.
 5. Write metadata to **DynamoDB**: full name, repo id, owner, name, URL, default
    branch, webhook id, trigger pattern, `enabled=true`, the secret reference, and
    the registration timestamp — **never the PAT**.
