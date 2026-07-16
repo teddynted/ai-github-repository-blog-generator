@@ -31,14 +31,15 @@ type MetaTokenSource struct {
 	Secrets PATGetter
 }
 
-// Token looks up the repository record and returns its PAT.
+// Token confirms the repository is registered, then returns its PAT from the
+// shared secret, keyed by the repository full name ("<owner>/<name>").
 func (m *MetaTokenSource) Token(ctx context.Context, repoFullName string) (string, error) {
-	r, ok, err := m.Meta.Get(ctx, repoFullName)
+	_, ok, err := m.Meta.Get(ctx, repoFullName)
 	if err != nil {
 		return "", err
 	}
 	if !ok {
 		return "", apperror.New(apperror.CodeNotFound, "repository is not registered")
 	}
-	return m.Secrets.PAT(ctx, r.SecretRef)
+	return m.Secrets.PAT(ctx, repoFullName)
 }

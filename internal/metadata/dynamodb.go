@@ -19,6 +19,7 @@ import (
 type API interface {
 	PutItem(ctx context.Context, in *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	GetItem(ctx context.Context, in *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	DeleteItem(ctx context.Context, in *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 }
 
 // Store persists repository metadata in a DynamoDB table.
@@ -68,4 +69,19 @@ func (s *Store) Get(ctx context.Context, fullName string) (repo.Repository, bool
 		return repo.Repository{}, false, fmt.Errorf("unmarshal repository: %w", err)
 	}
 	return r, true, nil
+}
+
+// Delete removes a repository's metadata item by its "owner/name" key. Deleting
+// a missing item is a no-op success.
+func (s *Store) Delete(ctx context.Context, fullName string) error {
+	_, err := s.api.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(s.table),
+		Key: map[string]ddbtypes.AttributeValue{
+			"repo_full_name": &ddbtypes.AttributeValueMemberS{Value: fullName},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb delete item: %w", err)
+	}
+	return nil
 }

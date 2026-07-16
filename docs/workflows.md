@@ -26,8 +26,59 @@ flowchart TB
 ```
 
 - The handler is **not** an n8n workflow — it is a Lambda ([Architecture §3](./architecture.md#3-commit-message-trigger-gate)).
-- It performs **only**: resolve repo record → verify signature (per-repo secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
-- EventBridge routes matched events to **SQS** (buffer). The webhook never starts the host — instance power is owned by **EventBridge Scheduler** (weekday window).
+- It performs **only**: resolve repo record → verify signature (webhook secret from the **shared** secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
+- EventBridge routes matched events to **SQS** (buffer). The webhook never starts the host — instance power is owned by **EventBridge Scheduler** (weekday window). A manual `POST /process` is the one path that starts the host on demand ([Manual Trigger](./manual-trigger.md)).
+
+### 1a. Delivery sequence (end to end)
+
+What happens when GitHub calls `POST /webhook`. GitHub always gets an immediate
+`HTTP 200` (`accepted` / `deferred` / `ignored`) or an error; the actual AI work
+happens later, on the instance, once it is running.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant GH as GitHub
+    participant API as API Gateway
+    participant LH as webhook-handler
+    participant DDB as DynamoDB
+    participant SEC as Secrets Manager<br/>(shared secret)
+    participant EB as EventBridge
+    participant SQS as SQS
+    participant W as Worker (on EC2)
+
+    GH->>API: POST /webhook (payload + X-Hub-Signature-256)
+    API->>LH: invoke
+    LH->>DDB: Get repo by owner/name
+    alt not registered
+        LH-->>GH: 404 not registered
+    else registered
+        LH->>SEC: read shared secret → webhook_secret[owner/name]
+        LH->>LH: verify HMAC over raw body
+        alt bad signature
+            LH-->>GH: 401 rejected
+        else valid
+            LH->>LH: trigger gate (push: commit matches 'blog:'? / release: published?)
+            alt no match / disabled / unsupported
+                LH-->>GH: 200 ignored
+            else matched
+                LH->>EB: PutEvents blog.publish.requested
+                EB->>SQS: buffer event (retained ≤ 14 days)
+                alt instance running (in window)
+                    LH-->>GH: 200 accepted
+                else instance stopped (outside window)
+                    LH-->>GH: 200 deferred (not started)
+                end
+            end
+        end
+    end
+
+    Note over SQS,W: later — only while the host is running<br/>(scheduled-start at 18:00, or a manual /process)
+    W->>SQS: long-poll / receive
+    W->>SEC: read shared secret → pat[owner/name]
+    W->>W: clone → analyze → generate → review → publish → memory → notify
+    W->>SQS: delete message on success
+```
 
 ---
 

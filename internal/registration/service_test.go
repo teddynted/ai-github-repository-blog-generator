@@ -3,7 +3,6 @@ package registration
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -18,7 +17,12 @@ type fakeGitHub struct {
 	info       github.RepoInfo
 	getErr     error
 	hookID     int64
-	hookErr    error
+	createErr  error
+	updateErr  error
+	deleteErr  error
+	created    bool
+	updated    bool
+	deleted    bool
 	gotHookCfg github.WebhookConfig
 }
 
@@ -26,33 +30,56 @@ func (f *fakeGitHub) GetRepository(_ context.Context, _, _, _ string) (github.Re
 	return f.info, f.getErr
 }
 func (f *fakeGitHub) CreateWebhook(_ context.Context, _, _, _ string, cfg github.WebhookConfig) (int64, error) {
-	f.gotHookCfg = cfg
-	return f.hookID, f.hookErr
+	f.created, f.gotHookCfg = true, cfg
+	return f.hookID, f.createErr
+}
+func (f *fakeGitHub) UpdateWebhook(_ context.Context, _, _, _ string, _ int64, cfg github.WebhookConfig) error {
+	f.updated, f.gotHookCfg = true, cfg
+	return f.updateErr
+}
+func (f *fakeGitHub) DeleteWebhook(_ context.Context, _, _, _ string, _ int64) error {
+	f.deleted = true
+	return f.deleteErr
 }
 
 type fakeSecrets struct {
-	ref    string
-	err    error
-	gotPAT string
-	gotWH  string
-	called bool
+	existed   bool
+	putErr    error
+	pat       string
+	putCalled bool
+	delCalled bool
+	gotPAT    string
+	gotWH     string
+	allowUpd  bool
 }
 
-func (f *fakeSecrets) PutRepoCredentials(_ context.Context, _, _, pat, wh string) (string, error) {
-	f.called, f.gotPAT, f.gotWH = true, pat, wh
-	return f.ref, f.err
+func (f *fakeSecrets) PutRepoCredentials(_ context.Context, _, pat, wh string, allowUpdate bool) (bool, error) {
+	f.putCalled, f.gotPAT, f.gotWH, f.allowUpd = true, pat, wh, allowUpdate
+	return f.existed, f.putErr
 }
+func (f *fakeSecrets) DeleteRepoCredentials(_ context.Context, _ string) (bool, error) {
+	f.delCalled = true
+	return true, nil
+}
+func (f *fakeSecrets) PAT(_ context.Context, _ string) (string, error) { return f.pat, nil }
 
 type fakeMeta struct {
-	stored repo.Repository
-	err    error
-	called bool
+	existing  repo.Repository
+	found     bool
+	getErr    error
+	putCalled bool
+	delCalled bool
+	stored    repo.Repository
 }
 
 func (f *fakeMeta) Put(_ context.Context, r repo.Repository) error {
-	f.called, f.stored = true, r
-	return f.err
+	f.putCalled, f.stored = true, r
+	return nil
 }
+func (f *fakeMeta) Get(_ context.Context, _ string) (repo.Repository, bool, error) {
+	return f.existing, f.found, f.getErr
+}
+func (f *fakeMeta) Delete(_ context.Context, _ string) error { f.delCalled = true; return nil }
 
 func newService(gh *fakeGitHub, sec *fakeSecrets, meta *fakeMeta) *Service {
 	return &Service{
@@ -62,83 +89,80 @@ func newService(gh *fakeGitHub, sec *fakeSecrets, meta *fakeMeta) *Service {
 		WebhookURL:     "https://api.example/webhook",
 		DefaultTrigger: "blog:",
 		Now:            func() time.Time { return time.Unix(1700000000, 0) },
-		NewSecret:      func() (string, error) { return "whsecret", nil },
 	}
 }
 
-func TestRegisterHappyPath(t *testing.T) {
-	gh := &fakeGitHub{info: github.RepoInfo{ID: 7, FullName: "acme/widget", DefaultBranch: "main"}, hookID: 555}
-	sec := &fakeSecrets{ref: "blog-gen/repos/acme/widget"}
-	meta := &fakeMeta{}
-	svc := newService(gh, sec, meta)
+func validInput() Input {
+	return Input{Owner: "acme", Repository: "widget", PAT: "tok", WebhookSecret: "whsec"}
+}
 
-	out, err := svc.Register(context.Background(), Input{RepositoryURL: "https://github.com/acme/widget", PAT: "tok"})
+func TestRegisterInsert(t *testing.T) {
+	gh := &fakeGitHub{info: github.RepoInfo{ID: 7, DefaultBranch: "main"}, hookID: 555}
+	sec := &fakeSecrets{}
+	meta := &fakeMeta{found: false}
+	out, err := newService(gh, sec, meta).Register(context.Background(), validInput())
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	if out.WebhookID != 555 || out.DefaultBranch != "main" || out.Status != "registered" {
+	if out.RepoFullName != "acme/widget" || out.Updated {
 		t.Errorf("out = %+v", out)
 	}
-	if gh.gotHookCfg.URL != "https://api.example/webhook" || gh.gotHookCfg.Secret != "whsecret" {
-		t.Errorf("webhook cfg = %+v", gh.gotHookCfg)
+	if !gh.created || gh.updated {
+		t.Error("insert must create (not update) the webhook")
 	}
-	if !sec.called || sec.gotPAT != "tok" || sec.gotWH != "whsecret" {
-		t.Errorf("secrets not stored correctly: %+v", sec)
+	if gh.gotHookCfg.Secret != "whsec" {
+		t.Errorf("webhook secret = %q, want the supplied one", gh.gotHookCfg.Secret)
 	}
-	if !meta.called {
-		t.Fatal("metadata not stored")
+	if !sec.putCalled || sec.gotPAT != "tok" || sec.gotWH != "whsec" {
+		t.Errorf("credentials not stored: %+v", sec)
 	}
-	if meta.stored.SecretRef != "blog-gen/repos/acme/widget" || meta.stored.RepositoryID != 7 ||
-		meta.stored.TriggerPattern != "blog:" || !meta.stored.Enabled {
+	if meta.stored.SecretRef != "acme/widget" || meta.stored.WebhookID != 555 || !meta.stored.Enabled {
 		t.Errorf("stored repo = %+v", meta.stored)
 	}
-	if meta.stored.RegisteredAt == "" {
-		t.Error("RegisteredAt not set")
+}
+
+func TestRegisterDuplicateRejected(t *testing.T) {
+	gh := &fakeGitHub{}
+	sec := &fakeSecrets{}
+	meta := &fakeMeta{found: true, existing: repo.Repository{WebhookID: 9}}
+	_, err := newService(gh, sec, meta).Register(context.Background(), validInput())
+	if apperror.CodeOf(err) != apperror.CodeConflict {
+		t.Fatalf("code = %s, want conflict", apperror.CodeOf(err))
+	}
+	if gh.created || gh.updated || sec.putCalled || meta.putCalled {
+		t.Error("a duplicate must not touch GitHub, secrets, or metadata")
 	}
 }
 
-func TestRegisterUsesCustomTriggerPattern(t *testing.T) {
-	gh := &fakeGitHub{info: github.RepoInfo{ID: 1, DefaultBranch: "main"}, hookID: 5}
-	meta := &fakeMeta{}
-	svc := newService(gh, &fakeSecrets{ref: "ref"}, meta)
-
-	out, err := svc.Register(context.Background(), Input{
-		RepositoryURL:  "https://github.com/acme/widget",
-		PAT:            "tok",
-		TriggerPattern: "regex:^(blog|post):",
-	})
+func TestRegisterUpdate(t *testing.T) {
+	gh := &fakeGitHub{info: github.RepoInfo{ID: 7, DefaultBranch: "main"}}
+	sec := &fakeSecrets{existed: true}
+	meta := &fakeMeta{found: true, existing: repo.Repository{WebhookID: 42}}
+	in := validInput()
+	in.Update = true
+	in.WebhookSecret = "rotated"
+	out, err := newService(gh, sec, meta).Register(context.Background(), in)
 	if err != nil {
-		t.Fatalf("Register: %v", err)
+		t.Fatalf("Register(update): %v", err)
 	}
-	if out.TriggerPattern != "regex:^(blog|post):" || meta.stored.TriggerPattern != "regex:^(blog|post):" {
-		t.Errorf("custom pattern not applied: out=%q stored=%q", out.TriggerPattern, meta.stored.TriggerPattern)
+	if !out.Updated {
+		t.Error("expected Updated=true")
 	}
-}
-
-func TestRegisterRejectsInvalidTriggerPattern(t *testing.T) {
-	gh := &fakeGitHub{info: github.RepoInfo{ID: 1}}
-	meta := &fakeMeta{}
-	svc := newService(gh, &fakeSecrets{}, meta)
-
-	_, err := svc.Register(context.Background(), Input{
-		RepositoryURL:  "https://github.com/acme/widget",
-		PAT:            "tok",
-		TriggerPattern: "regex:[unclosed",
-	})
-	if apperror.CodeOf(err) != apperror.CodeInvalidInput {
-		t.Fatalf("code = %s, want invalid_input", apperror.CodeOf(err))
+	if !gh.updated || gh.created {
+		t.Error("update must PATCH (not create) the webhook")
 	}
-	if meta.called {
-		t.Error("nothing should be stored when the trigger pattern is invalid")
+	if gh.gotHookCfg.Secret != "rotated" || !sec.allowUpd {
+		t.Errorf("rotated secret not propagated: cfg=%q allowUpd=%v", gh.gotHookCfg.Secret, sec.allowUpd)
 	}
 }
 
-func TestRegisterValidatesInput(t *testing.T) {
+func TestRegisterValidatesRequiredFields(t *testing.T) {
 	svc := newService(&fakeGitHub{}, &fakeSecrets{}, &fakeMeta{})
 	for _, in := range []Input{
-		{RepositoryURL: "", PAT: "t"},
-		{RepositoryURL: "https://github.com/acme/widget", PAT: ""},
-		{RepositoryURL: "https://gitlab.com/a/b", PAT: "t"},
+		{Repository: "w", PAT: "t", WebhookSecret: "s"},   // no owner
+		{Owner: "o", PAT: "t", WebhookSecret: "s"},        // no repository
+		{Owner: "o", Repository: "w", WebhookSecret: "s"}, // no pat
+		{Owner: "o", Repository: "w", PAT: "t"},           // no webhook_secret
 	} {
 		if _, err := svc.Register(context.Background(), in); apperror.CodeOf(err) != apperror.CodeInvalidInput {
 			t.Errorf("input %+v: code = %s, want invalid_input", in, apperror.CodeOf(err))
@@ -148,78 +172,106 @@ func TestRegisterValidatesInput(t *testing.T) {
 
 func TestRegisterStopsOnGitHubError(t *testing.T) {
 	gh := &fakeGitHub{getErr: apperror.New(apperror.CodeUnauthorized, "bad token")}
-	sec := &fakeSecrets{}
-	meta := &fakeMeta{}
-	svc := newService(gh, sec, meta)
-
-	_, err := svc.Register(context.Background(), Input{RepositoryURL: "https://github.com/acme/widget", PAT: "tok"})
+	sec, meta := &fakeSecrets{}, &fakeMeta{}
+	_, err := newService(gh, sec, meta).Register(context.Background(), validInput())
 	if apperror.CodeOf(err) != apperror.CodeUnauthorized {
 		t.Fatalf("code = %s", apperror.CodeOf(err))
 	}
-	if sec.called || meta.called {
-		t.Error("no credentials or metadata should be written when access validation fails")
+	if sec.putCalled || meta.putCalled {
+		t.Error("nothing should be written when access validation fails")
 	}
 }
 
-func TestRegisterDoesNotWriteMetadataWhenWebhookFails(t *testing.T) {
-	gh := &fakeGitHub{info: github.RepoInfo{ID: 1}, hookErr: apperror.New(apperror.CodeUnauthorized, "no hook perm")}
-	meta := &fakeMeta{}
-	svc := newService(gh, &fakeSecrets{}, meta)
-
-	_, err := svc.Register(context.Background(), Input{RepositoryURL: "https://github.com/acme/widget", PAT: "tok"})
-	if err == nil {
+func TestRegisterNoMetadataWhenWebhookFails(t *testing.T) {
+	gh := &fakeGitHub{info: github.RepoInfo{ID: 1}, createErr: apperror.New(apperror.CodeUnauthorized, "no hook perm")}
+	sec, meta := &fakeSecrets{}, &fakeMeta{}
+	if _, err := newService(gh, sec, meta).Register(context.Background(), validInput()); err == nil {
 		t.Fatal("expected error")
 	}
-	if meta.called {
-		t.Error("metadata must not be written when webhook creation fails")
+	if sec.putCalled || meta.putCalled {
+		t.Error("no credentials or metadata when webhook creation fails")
 	}
 }
 
-func TestHandleJSONSuccess(t *testing.T) {
-	gh := &fakeGitHub{info: github.RepoInfo{ID: 7, DefaultBranch: "main"}, hookID: 5}
-	h := &Handler{Service: newService(gh, &fakeSecrets{ref: "ref"}, &fakeMeta{})}
+func TestDeleteRemovesEverything(t *testing.T) {
+	gh := &fakeGitHub{}
+	sec := &fakeSecrets{pat: "tok"}
+	meta := &fakeMeta{found: true, existing: repo.Repository{WebhookID: 77}}
+	full, err := newService(gh, sec, meta).Delete(context.Background(), DeleteInput{Owner: "acme", Repository: "widget"})
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if full != "acme/widget" {
+		t.Errorf("full = %q", full)
+	}
+	if !gh.deleted || !sec.delCalled || !meta.delCalled {
+		t.Errorf("delete must remove webhook, secret, metadata: gh=%v sec=%v meta=%v", gh.deleted, sec.delCalled, meta.delCalled)
+	}
+}
 
-	status, body := h.HandleJSON(context.Background(), []byte(`{"repository_url":"https://github.com/acme/widget","pat":"tok"}`))
+func TestDeleteUnregisteredIsNotFound(t *testing.T) {
+	meta := &fakeMeta{found: false}
+	_, err := newService(&fakeGitHub{}, &fakeSecrets{}, meta).Delete(context.Background(), DeleteInput{Owner: "a", Repository: "b"})
+	if apperror.CodeOf(err) != apperror.CodeNotFound {
+		t.Errorf("code = %s, want not_found", apperror.CodeOf(err))
+	}
+}
+
+// --- handler ---
+
+func TestHandlerRegisterSuccess(t *testing.T) {
+	gh := &fakeGitHub{info: github.RepoInfo{ID: 7, DefaultBranch: "main"}, hookID: 5}
+	h := &Handler{Service: newService(gh, &fakeSecrets{}, &fakeMeta{})}
+	status, body := h.Register(context.Background(), []byte(`{"owner":"acme","repository":"widget","pat":"tok","webhook_secret":"ws"}`))
 	if status != 200 {
 		t.Fatalf("status = %d, body = %s", status, body)
 	}
-	var out Output
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("bad response json: %v", err)
-	}
-	if out.RepoFullName != "acme/widget" {
-		t.Errorf("out = %+v", out)
+	var r response
+	_ = json.Unmarshal(body, &r)
+	if r.Status != "success" || r.Repository != "acme/widget" || r.Message == "" {
+		t.Errorf("response = %+v", r)
 	}
 }
 
-func TestHandleJSONBadBody(t *testing.T) {
+func TestHandlerRegisterDuplicateIs409(t *testing.T) {
+	meta := &fakeMeta{found: true, existing: repo.Repository{WebhookID: 1}}
+	h := &Handler{Service: newService(&fakeGitHub{}, &fakeSecrets{}, meta)}
+	status, body := h.Register(context.Background(), []byte(`{"owner":"acme","repository":"widget","pat":"t","webhook_secret":"s"}`))
+	if status != 409 {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	var r response
+	_ = json.Unmarshal(body, &r)
+	if r.Status != "error" || r.Message != "Repository is already registered." {
+		t.Errorf("response = %+v", r)
+	}
+}
+
+func TestHandlerValidationIs400(t *testing.T) {
 	h := &Handler{Service: newService(&fakeGitHub{}, &fakeSecrets{}, &fakeMeta{})}
-	status, body := h.HandleJSON(context.Background(), []byte(`not json`))
+	status, _ := h.Register(context.Background(), []byte(`{"owner":"acme"}`)) // missing fields
 	if status != 400 {
-		t.Fatalf("status = %d", status)
+		t.Errorf("status = %d, want 400", status)
 	}
-	var e errorBody
-	if err := json.Unmarshal(body, &e); err != nil || e.Error != string(apperror.CodeInvalidInput) {
-		t.Errorf("error body = %s (%v)", body, err)
+	status, _ = h.Register(context.Background(), []byte(`not json`))
+	if status != 400 {
+		t.Errorf("bad json status = %d, want 400", status)
 	}
 }
 
-func TestHandleJSONMapsErrorStatus(t *testing.T) {
-	gh := &fakeGitHub{getErr: apperror.New(apperror.CodeNotFound, "nope")}
-	h := &Handler{Service: newService(gh, &fakeSecrets{}, &fakeMeta{})}
-	status, _ := h.HandleJSON(context.Background(), []byte(`{"repository_url":"https://github.com/a/b","pat":"t"}`))
-	if status != 404 {
-		t.Errorf("status = %d, want 404", status)
+func TestHandlerDelete(t *testing.T) {
+	meta := &fakeMeta{found: true, existing: repo.Repository{WebhookID: 3}}
+	h := &Handler{Service: newService(&fakeGitHub{}, &fakeSecrets{pat: "t"}, meta)}
+	status, body := h.Delete(context.Background(), []byte(`{"owner":"acme","repository":"widget"}`))
+	if status != 200 {
+		t.Fatalf("status = %d, body = %s", status, body)
+	}
+	var r response
+	_ = json.Unmarshal(body, &r)
+	if r.Status != "success" || r.Repository != "acme/widget" {
+		t.Errorf("response = %+v", r)
 	}
 }
 
 // Guard: the concrete github.Client satisfies the GitHub port.
 var _ GitHub = (*github.Client)(nil)
-
-// Guard: apperror composes through wrapping for the handler's status mapping.
-func TestWrappedErrorStatus(t *testing.T) {
-	err := apperror.Wrap(errors.New("x"), apperror.CodeConflict, "dup")
-	if apperror.HTTPStatusOf(err) != 409 {
-		t.Errorf("status = %d", apperror.HTTPStatusOf(err))
-	}
-}

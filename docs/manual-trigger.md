@@ -36,10 +36,14 @@ The only difference between sources is the **window policy**:
 | Trigger | Policy | Outside the operating window |
 | --- | --- | --- |
 | webhook (push/release) | `BufferOutsideWindow` | published, retained in SQS, processed at the next scheduled start (`deferred`) |
-| manual (`POST /process`) | `RejectOutsideWindow` | **rejected** — nothing published, instance **not** started |
+| manual (`POST /process`) | `StartOutsideWindow` | **starts the instance on demand** (overriding the schedule), publishes, and returns 202 |
 
-Neither trigger ever starts the EC2 instance — the [scheduler](./scheduling.md)
-owns instance power (default 18:00–20:00, Mon–Fri).
+The webhook never starts the instance — the [scheduler](./scheduling.md) owns
+its normal power window (default 18:00–20:00, Mon–Fri). The **manual** trigger
+is an explicit override: it starts the On-Demand host if it is stopped so a run
+can be forced any time (its role has tag-scoped `ec2:StartInstances`; it never
+stops the instance). If the start call fails, the event is still buffered in SQS
+and runs at the next scheduled start.
 
 ---
 
@@ -102,29 +106,23 @@ and produce a meaningful error.
 
 | Status | When | Body |
 | --- | --- | --- |
-| **202 Accepted** | in the operating window; published | success (below) |
-| **503 Service Unavailable** | outside the operating window | rejection (below) |
+| **202 Accepted** | published; instance running, or started on demand | success (below) |
 | **400 Bad Request** | missing required field / invalid JSON | `{"status":"error","reason":"…"}` |
 | **403 Forbidden** | missing/invalid API key | API Gateway default |
 | **500 Internal Server Error** | publish failed | `{"status":"error","reason":"internal error"}` |
 
-**Success (202):**
+**Success (202)** — `message` reflects what happened:
+
+- in the window (host already running): `"AI processing has been initiated."`
+- host stopped, started on demand: `"AI platform is starting; processing will begin shortly."`
+- host stopped and the start call failed (event still buffered): `"AI platform could not be started now; processing will begin at the next scheduled runtime."`
 
 ```json
 {
   "status": "accepted",
   "trigger": "manual",
   "requestId": "8280b22c-36a5-4f12-80b6-fd98ad7b4a91",
-  "message": "AI processing has been initiated."
-}
-```
-
-**Rejected — outside operational hours (503):**
-
-```json
-{
-  "status": "rejected",
-  "reason": "AI platform is currently outside operational hours."
+  "message": "AI platform is starting; processing will begin shortly."
 }
 ```
 
@@ -140,15 +138,15 @@ and produce a meaningful error.
 ## 6. Examples
 
 ```bash
-# Accepted (during the window)
+# In window (host running) → processed now
 curl -sS -X POST "$API" \
   -H "Content-Type: application/json" \
   -H "x-api-key: $API_KEY" \
   -d '{"repository":"widget","owner":"acme","branch":"main"}'
-# → 202 {"status":"accepted","trigger":"manual","requestId":"…","message":"AI processing has been initiated."}
+# → 202 {"status":"accepted",...,"message":"AI processing has been initiated."}
 
-# Rejected (outside the window)
-# → 503 {"status":"rejected","reason":"AI platform is currently outside operational hours."}
+# Outside window (host stopped) → started on demand, event buffered
+# → 202 {"status":"accepted",...,"message":"AI platform is starting; processing will begin shortly."}
 
 # Missing the API key
 curl -sS -X POST "$API" -H "Content-Type: application/json" -d '{"repository":"widget","owner":"acme"}'
@@ -168,7 +166,7 @@ context — no secrets or request bodies are logged:
 | `repository` | `acme/widget` |
 | `branch` | `refs/heads/main` |
 | `provider` | `bedrock` (empty ⇒ local Ollama) |
-| `decision` | `accepted` / `rejected` |
+| `decision` | `accepted` / `started` / `deferred` |
 | `duration` | processing time |
 | `outcome` | `success` / `failure` |
 
@@ -176,12 +174,12 @@ context — no secrets or request bodies are logged:
 
 | Resource | Purpose |
 | --- | --- |
-| `ManualTriggerRole` | least-privilege role: `events:PutEvents` on the bus + read-only `ec2:DescribeInstances` (window gate) |
+| `ManualTriggerRole` | least-privilege role: `events:PutEvents` on the bus, read-only `ec2:DescribeInstances` (window gate), and **tag-scoped `ec2:StartInstances`** (start on demand). No stop. |
 | `ManualTriggerLogGroup` | `/aws/lambda/${ProjectName}-manual-trigger`, retention-bounded |
 | `ManualTriggerFunction` | Go Lambda (`provided.al2023`, arm64); env `EVENT_BUS_NAME`, `EVENT_SOURCE=${ProjectName}.manual`, `PROJECT_NAME` |
 | `ProcessResource` / `ProcessMethod` | `POST /process`, `ApiKeyRequired: true`, `AWS_PROXY` integration |
 | `ProcessInvokePermission` | lets API Gateway invoke the Lambda |
-| `ApiDeploymentV2` | bumped deployment so the stage serves the new method |
+| `ApiDeploymentV3` | bumped deployment so the stage serves the new methods |
 | `PublishRequestedRule` | source pattern broadened to a `${ProjectName}.` **prefix** so manual (and future) sources route to SQS with no rule change |
 | Output `ProcessUrl` | the endpoint URL |
 

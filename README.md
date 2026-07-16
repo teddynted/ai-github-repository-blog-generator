@@ -119,7 +119,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🗄️ **Repository metadata store** | Per-repo metadata (owner, webhook ID, trigger pattern, secret reference, last commit) in DynamoDB |
 | 🎯 **Commit-message trigger gate** | Generation runs **only** when a commit message matches the configurable trigger (default `blog:`) |
 | 🪝 **GitHub Webhook ingress** | Push events are received, verified, and evaluated — never blindly processed |
-| 🎛️ **Manual API trigger** | Authenticated `POST /process` (API key) starts a run on demand via the same pipeline; rejected (503) outside the operating window ([docs](./docs/manual-trigger.md)) |
+| 🎛️ **Manual API trigger** | Authenticated `POST /process` (API key) forces a run via the same pipeline — **starts the On-Demand host on demand** if it is stopped ([docs](./docs/manual-trigger.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -794,7 +794,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Deployment](./docs/deployment.md) | Step-by-step deployment guide |
 | [Workflows](./docs/workflows.md) | Trigger validation and the n8n pipeline, node by node |
 | [Cost Optimisation](./docs/cost-optimization.md) | Trigger pre-filtering, scheduled runtime, On-Demand rationale, cost math |
-| [Registration](./docs/registration.md) | `POST /repositories` API — onboarding, PAT scopes, payload, responses, errors |
+| [Registration](./docs/registration.md) | `/repositories` API — shared-secret credential storage, register/update/delete, PAT scopes, responses, migration |
 | [Manual Trigger](./docs/manual-trigger.md) | `POST /process` API — auth, payload, responses, errors, CloudFormation |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |

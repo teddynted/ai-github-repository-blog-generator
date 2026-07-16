@@ -29,8 +29,19 @@ type fakeWindow struct {
 
 func (w fakeWindow) Open(_ context.Context) (bool, error) { return w.open, w.err }
 
+type fakeStarter struct {
+	started bool
+	err     error
+}
+
+func (s *fakeStarter) Start(_ context.Context) error { s.started = true; return s.err }
+
 func svc(pub *fakePub, w intake.Window) *intake.Service {
-	return &intake.Service{Publisher: pub, Window: w}
+	return &intake.Service{Publisher: pub, Window: w, Starter: &fakeStarter{}}
+}
+
+func svcWithStarter(pub *fakePub, w intake.Window, st *fakeStarter) *intake.Service {
+	return &intake.Service{Publisher: pub, Window: w, Starter: st}
 }
 
 func TestHandleAcceptedInWindow(t *testing.T) {
@@ -51,20 +62,24 @@ func TestHandleAcceptedInWindow(t *testing.T) {
 	}
 }
 
-func TestHandleRejectedOutsideWindow(t *testing.T) {
+func TestHandleStartsInstanceWhenStopped(t *testing.T) {
 	pub := &fakePub{}
+	st := &fakeStarter{}
 	body := []byte(`{"repository":"widget","owner":"acme"}`)
-	status, resp := handle(context.Background(), svc(pub, fakeWindow{open: false}), nil, "req-2", body)
+	status, resp := handle(context.Background(), svcWithStarter(pub, fakeWindow{open: false}, st), nil, "req-2", body)
 
-	if status != 503 {
-		t.Fatalf("status = %d, want 503", status)
+	if status != 202 {
+		t.Fatalf("status = %d, want 202", status)
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("rejected must not publish or start the instance, got %d", len(pub.published))
+	if !st.started {
+		t.Error("a stopped instance must be started on demand")
 	}
-	var r errorResponse
+	if len(pub.published) != 1 {
+		t.Errorf("the event must still be published, got %d", len(pub.published))
+	}
+	var r acceptedResponse
 	_ = json.Unmarshal(resp, &r)
-	if r.Status != "rejected" || r.Reason == "" {
+	if r.Status != "accepted" || r.Message == "" {
 		t.Errorf("response = %+v", r)
 	}
 }

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -25,7 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "SecretsPrefix", "WebhookURL"); err != nil {
+	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID", "WebhookURL"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -39,7 +40,7 @@ func main() {
 		Logger: a.Logger,
 		Service: &registration.Service{
 			GitHub:         github.New(),
-			Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix),
+			Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.RepoSecretID),
 			Metadata:       metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable),
 			WebhookURL:     a.Config.WebhookURL,
 			DefaultTrigger: a.Config.PublishTrigger,
@@ -47,11 +48,19 @@ func main() {
 	}
 
 	lambda.Start(func(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-		status, body := handler.HandleJSON(ctx, []byte(req.Body))
+		body := []byte(req.Body)
+		var status int
+		var respBody []byte
+		switch req.HTTPMethod {
+		case http.MethodDelete:
+			status, respBody = handler.Delete(ctx, body)
+		default: // POST (register / update)
+			status, respBody = handler.Register(ctx, body)
+		}
 		return events.APIGatewayProxyResponse{
 			StatusCode: status,
 			Headers:    map[string]string{"Content-Type": "application/json"},
-			Body:       string(body),
+			Body:       string(respBody),
 		}, nil
 	})
 }

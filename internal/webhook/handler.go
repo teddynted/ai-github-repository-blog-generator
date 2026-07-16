@@ -105,7 +105,9 @@ func (h *Handler) Handle(ctx context.Context, headers map[string]string, body []
 		return jsonResp(apperror.New(apperror.CodeNotFound, "repository is not registered"))
 	}
 
-	secret, err := h.Secrets.WebhookSecret(ctx, r.SecretRef)
+	// Look up the webhook secret in the shared secret by the repo's full name,
+	// which is the shared-secret key ("<owner>/<name>").
+	secret, err := h.Secrets.WebhookSecret(ctx, full)
 	if err != nil {
 		return jsonResp(apperror.Wrap(err, apperror.CodeInternal, "secret lookup failed"))
 	}
