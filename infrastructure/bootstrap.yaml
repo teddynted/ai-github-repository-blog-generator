@@ -139,6 +139,9 @@ Resources:
                   - lambda:*
                   - apigateway:*
                   - events:*
+                  # EventBridge Scheduler (scheduler.yaml) is a distinct service
+                  # from EventBridge (events:*) — the weekday start/stop schedules.
+                  - scheduler:*
                   - sqs:*
                   - dynamodb:*
                   - logs:*
