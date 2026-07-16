@@ -1,10 +1,10 @@
 # Requirements
 
-This document defines the requirements for the **GitHub AI Blog Generator** — an event-driven, fully self-hosted AI platform that turns GitHub repositories into technical content **only when a commit message matches a configurable publishing trigger**.
+This document defines the requirements for the **GitHub AI Blog Generator** — an event-driven, fully self-hosted AI platform that turns GitHub repositories into technical content, triggered **either** by a GitHub webhook whose commit message matches a configurable publishing trigger (or a published release) **or** by an authenticated manual call to the **`POST /process`** endpoint. Both feed the same processing pipeline.
 
 For the **MVP**, users onboard a repository by providing a **GitHub Repository URL** and a **GitHub Personal Access Token (PAT)**. The platform validates access, creates a GitHub webhook, stores repository metadata, and stores the PAT securely in **AWS Secrets Manager**. GitHub App authentication is a **future enhancement** ([§15](#15-future-enhancements)).
 
-When a matched event arrives, it is published to **Amazon EventBridge** and buffered in **Amazon SQS**. Compute runs on an **On-Demand EC2 Instance** powered on a fixed weekday window (18:00–20:00, Mon–Fri) by **EventBridge Scheduler**, where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
+When a matched webhook event or a manual `POST /process` request arrives, it is published to **Amazon EventBridge** and buffered in **Amazon SQS**. Compute runs on an **On-Demand EC2 Instance** powered on a fixed weekday window (18:00–20:00, Mon–Fri) by **EventBridge Scheduler** (a manual request additionally starts the host on demand), where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
 
 Requirements use the following convention:
 

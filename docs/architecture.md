@@ -9,8 +9,9 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 ## 1. Design Principles
 
 - **Simple MVP onboarding** — users connect a repository with its URL and a **GitHub Personal Access Token (PAT)**; the PAT is stored in **AWS Secrets Manager** and only a reference is kept in the metadata store. GitHub App authentication is a future enhancement.
-- **Opt-in generation** — a webhook is received on every push, but a run happens **only** when the commit message matches the repository's publishing trigger (default `blog:`). All other events are acknowledged and ignored.
-- **Event-driven** — matched events are published to **Amazon EventBridge**, which starts compute and delivers the run. Nothing runs speculatively.
+- **Opt-in generation** — a webhook is received on every push, but a run happens **only** when the commit message matches the repository's publishing trigger (default `blog:`) or a release is published. All other events are acknowledged and ignored.
+- **Two trigger sources, one pipeline** — a run can be initiated **automatically by a GitHub webhook**, or **manually by the authenticated `POST /process` endpoint** ([Manual Trigger](./manual-trigger.md)). Both publish the same `blog.publish.requested` event, so the downstream pipeline is identical regardless of how it was triggered; future sources (CLI, Slack, cron) plug in the same way.
+- **Event-driven** — triggered events are published to **Amazon EventBridge** and buffered in **Amazon SQS**; the worker drains them while the instance is up. Nothing runs speculatively.
 - **Self-hosted inference** — all AI runs locally via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
 - **Pay only during the window** — an **On-Demand EC2 instance** runs on a fixed weekday schedule (18:00–20:00, Mon–Fri) set by EventBridge Scheduler; compute cost is bounded and predictable.
 - **Durable buffering** — every matched event is buffered in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
