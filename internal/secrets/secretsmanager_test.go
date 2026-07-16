@@ -54,39 +54,41 @@ func TestPutRepoCredentialsCreates(t *testing.T) {
 	if ref != "blog-gen/repos/acme/widget" {
 		t.Errorf("ref = %q", ref)
 	}
-	if f.created["blog-gen/repos/acme/widget/pat"] != "github_pat_x" {
-		t.Errorf("pat secret not created: %v", f.created)
+	// One JSON secret at the ref holds both fields.
+	if len(f.created) != 1 {
+		t.Fatalf("expected exactly 1 secret, got %d: %v", len(f.created), f.created)
 	}
-	if f.created["blog-gen/repos/acme/widget/webhook-secret"] != "whsec" {
-		t.Errorf("webhook secret not created: %v", f.created)
+	if f.created["blog-gen/repos/acme/widget"] != `{"pat":"github_pat_x","webhook_secret":"whsec"}` {
+		t.Errorf("credential secret = %q", f.created["blog-gen/repos/acme/widget"])
 	}
 }
 
 func TestPutRepoCredentialsFallsBackToPutValue(t *testing.T) {
 	f := newFake()
-	f.existing["blog-gen/repos/acme/widget/pat"] = true // simulate re-registration
+	f.existing["blog-gen/repos/acme/widget"] = true // simulate re-registration
 	s := New(f, "blog-gen/repos")
 
 	if _, err := s.PutRepoCredentials(context.Background(), "acme", "widget", "newpat", "whsec"); err != nil {
 		t.Fatalf("PutRepoCredentials: %v", err)
 	}
-	if f.putValues["blog-gen/repos/acme/widget/pat"] != "newpat" {
-		t.Errorf("expected PutSecretValue for existing pat, got %v", f.putValues)
+	if f.putValues["blog-gen/repos/acme/widget"] != `{"pat":"newpat","webhook_secret":"whsec"}` {
+		t.Errorf("expected PutSecretValue for existing secret, got %v", f.putValues)
 	}
 }
 
-func TestWebhookSecret(t *testing.T) {
+func TestWebhookSecretAndPAT(t *testing.T) {
 	f := newFake()
 	s := New(f, "blog-gen/repos")
-	if _, err := s.PutRepoCredentials(context.Background(), "acme", "widget", "pat", "whsec"); err != nil {
+	if _, err := s.PutRepoCredentials(context.Background(), "acme", "widget", "github_pat_x", "whsec"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	got, err := s.WebhookSecret(context.Background(), "blog-gen/repos/acme/widget")
-	if err != nil {
-		t.Fatalf("WebhookSecret: %v", err)
+	ws, err := s.WebhookSecret(context.Background(), "blog-gen/repos/acme/widget")
+	if err != nil || ws != "whsec" {
+		t.Fatalf("WebhookSecret = %q, err %v; want whsec", ws, err)
 	}
-	if got != "whsec" {
-		t.Errorf("WebhookSecret = %q, want whsec", got)
+	pat, err := s.PAT(context.Background(), "blog-gen/repos/acme/widget")
+	if err != nil || pat != "github_pat_x" {
+		t.Fatalf("PAT = %q, err %v; want github_pat_x", pat, err)
 	}
 }
 

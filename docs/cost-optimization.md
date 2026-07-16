@@ -120,7 +120,7 @@ The instance runs only 18:00–20:00 on weekdays, so a matched event can arrive 
 | Lambda (registration + handler + scheduled-start + scheduled-stop) | Low volume | ~$0 |
 | API Gateway | Low request volume | ~$0–1 |
 | EventBridge + SQS | Low event volume | ~$0 |
-| Secrets Manager | ~2 secrets per repo | ~$0.80+/repo |
+| Secrets Manager | 1 JSON secret per repo (PAT + webhook secret) | ~$0.40+/repo |
 | DynamoDB (on-demand) | Low read/write | ~$0–1 |
 | CloudWatch (logs + metrics) | 14-day retention | ~$1–3 |
 | **Inference (Ollama, local)** | No per-token fee | **$0** |
