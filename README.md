@@ -57,6 +57,11 @@
 
 You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, creates the webhook, stores metadata, and stores the token securely in **AWS Secrets Manager**. From then on, the platform monitors the repository with **GitHub Webhooks** — but **receiving a webhook does not automatically generate anything**. Every event is first checked against a **configurable commit-message trigger** (default `blog:`). Only when a commit message matches does the platform publish the event to **Amazon EventBridge**, which durably buffers it in **Amazon SQS**. The compute host — an **On-Demand EC2 instance** — runs on a fixed **weekday schedule (18:00–20:00, Mon–Fri)** driven by EventBridge Scheduler, and the worker drains the buffered events while it is up. Every non-matching event is acknowledged with `HTTP 200` and ignored.
 
+AI processing can be initiated in **two ways**, both feeding the *same* pipeline (EventBridge → SQS → worker):
+
+- **Automatically, by a GitHub webhook** — a push whose commit matches the trigger, or a published release.
+- **Manually, by calling the authenticated `POST /process` endpoint** — an on-demand run for a specific repository, which also **starts the compute host** if it is outside the scheduled window. See [Manual Trigger](./docs/manual-trigger.md).
+
 When a run does fire, **n8n** orchestrates a pipeline on the instance where **OpenClaw** analyses the repository, **Repository Memory** provides continuity across runs, and **Ollama** runs a **local LLM (Qwen by default)** to generate content — with **zero paid inference APIs**. The instance is started and stopped by the schedule, so compute cost is bounded by that window rather than by webhook volume.
 
 Supported outputs include technical blog posts, README improvements, documentation, architecture summaries, API documentation, project overviews, release notes, changelogs, and technical tutorials — all emitted as clean, portable Markdown.
@@ -71,7 +76,7 @@ Supported outputs include technical blog posts, README improvements, documentati
 
 **What works end to end today:**
 
-register repo → webhook (HMAC + commit-trigger gate) → EventBridge → SQS → (scheduled 18:00 On-Demand start) → **worker**: skip-if-already-published → clone repo (go-git) → read README/docs/commits → generate 5 content types via local Ollama → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → scheduled 20:00 stop.
+register repo → **trigger** (webhook HMAC + commit-trigger gate, _or_ authenticated `POST /process`) → EventBridge → SQS → (scheduled 18:00 On-Demand start, or manual on-demand start) → **worker**: skip-if-already-published → clone repo (go-git) → read README/docs/commits → generate 5 content types via local Ollama → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → scheduled 20:00 stop.
 
 | Area | Status |
 | --- | --- |
@@ -92,9 +97,9 @@ register repo → webhook (HMAC + commit-trigger gate) → EventBridge → SQS �
 
 ## Core Principle
 
-> **AI-generated blog content is created only when a GitHub webhook event contains a commit message that matches a configurable publishing trigger. All other webhook events are acknowledged and ignored.**
+> **AI-generated content is produced only on an explicit signal: a GitHub webhook whose commit message matches a configurable publishing trigger (or a published release), _or_ an authenticated manual call to `POST /process`. All other webhook events are acknowledged and ignored.**
 
-This single rule keeps developers in complete control of when content is produced, prevents unwanted publishing, and eliminates the AI, compute, and storage cost of processing routine commits.
+This keeps developers in complete control of when content is produced, prevents unwanted publishing, and eliminates the AI, compute, and storage cost of processing routine commits. Both paths are deliberate actions — a matched/opted-in commit, or an authenticated API request — never an automatic reaction to every change.
 
 ---
 
