@@ -88,6 +88,55 @@ func TestCreateWebhook(t *testing.T) {
 	}
 }
 
+func TestReleaseExistsForTag(t *testing.T) {
+	// The check must use the releases LIST endpoint (not /releases/tags/{tag}),
+	// scanning pages newest-first, and match on tag_name.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/acme/widget/releases" {
+			t.Errorf("unexpected path %s (must use the list endpoint)", r.URL.Path)
+		}
+		page := r.URL.Query().Get("page")
+		w.WriteHeader(http.StatusOK)
+		switch page {
+		case "1":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"tag_name": "v2.0.0"}, {"tag_name": "v1.9.0"}})
+		default:
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		}
+	}))
+	defer srv.Close()
+
+	c := New(WithBaseURL(srv.URL))
+	if ok, err := c.ReleaseExistsForTag(context.Background(), "acme", "widget", "tok", "v2.0.0"); err != nil || !ok {
+		t.Errorf("existing tag: ok=%v err=%v, want true/nil", ok, err)
+	}
+	if ok, err := c.ReleaseExistsForTag(context.Background(), "acme", "widget", "tok", "v3.0.0"); err != nil || ok {
+		t.Errorf("missing tag: ok=%v err=%v, want false/nil", ok, err)
+	}
+}
+
+func TestReleaseExistsForTagPaginates(t *testing.T) {
+	// A full first page (== per_page) forces a second page fetch.
+	full := make([]map[string]any, releasesPerPage)
+	for i := range full {
+		full[i] = map[string]any{"tag_name": "vx"}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if r.URL.Query().Get("page") == "1" {
+			_ = json.NewEncoder(w).Encode(full)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"tag_name": "v1.2.3"}})
+	}))
+	defer srv.Close()
+
+	ok, err := New(WithBaseURL(srv.URL)).ReleaseExistsForTag(context.Background(), "acme", "widget", "tok", "v1.2.3")
+	if err != nil || !ok {
+		t.Errorf("paginated match: ok=%v err=%v, want true/nil", ok, err)
+	}
+}
+
 func TestCreateWebhookForbidden(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

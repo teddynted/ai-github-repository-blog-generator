@@ -152,11 +152,22 @@ func (g *ExecGit) PushTag(ctx context.Context, tag string) error {
 // hooks are skipped (--no-verify): the release CLI has already run its own
 // validation, and the commit is a machine-generated CHANGELOG update, so
 // re-running the pre-commit test suite here would be redundant.
+//
+// It is idempotent: if staging leaves nothing to commit (e.g. a re-run after a
+// partially failed release wrote identical changelog content), it is a no-op —
+// so recovering from a mid-release failure never dies on "nothing to commit".
 func (g *ExecGit) CommitFile(ctx context.Context, path, message string) error {
 	if _, err := g.run(ctx, "add", "--", path); err != nil {
 		return err
 	}
-	_, err := g.run(ctx, "commit", "--no-verify", "-m", message, "--", path)
+	out, err := g.run(ctx, "status", "--porcelain", "--", path)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil // nothing to commit — already recorded
+	}
+	_, err = g.run(ctx, "commit", "--no-verify", "-m", message, "--", path)
 	return err
 }
 

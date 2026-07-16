@@ -111,18 +111,37 @@ type ReleaseRequest struct {
 	Draft      bool
 }
 
+// releasesPerPage is the page size used when scanning releases for a tag.
+const releasesPerPage = 100
+
 // ReleaseExistsForTag reports whether a published GitHub Release already exists
 // for the given tag (used to prevent duplicate releases).
+//
+// It scans the releases *list* endpoint (GET /releases) rather than the
+// by-tag endpoint (GET /releases/tags/{tag}). The by-tag lookup resolves the
+// repository object server-side and inherits any 503 ("Unicorn") when GitHub
+// cannot serialize it, whereas the list endpoint stays healthy; the list is
+// also where release creation happens, so this keeps the guard on a reliable
+// path. Pages are followed newest-first until the tag is found or exhausted.
 func (c *Client) ReleaseExistsForTag(ctx context.Context, owner, name, token, tag string) (bool, error) {
-	path := fmt.Sprintf("/repos/%s/%s/releases/tags/%s", owner, name, tag)
-	err := c.exec(ctx, http.MethodGet, path, token, nil, http.StatusOK, nil)
-	if err == nil {
-		return true, nil
+	for page := 1; page <= 100; page++ {
+		var rels []struct {
+			TagName string `json:"tag_name"`
+		}
+		path := fmt.Sprintf("/repos/%s/%s/releases?per_page=%d&page=%d", owner, name, releasesPerPage, page)
+		if err := c.exec(ctx, http.MethodGet, path, token, nil, http.StatusOK, &rels); err != nil {
+			return false, err
+		}
+		for _, r := range rels {
+			if r.TagName == tag {
+				return true, nil
+			}
+		}
+		if len(rels) < releasesPerPage {
+			return false, nil // last (or only) page reached
+		}
 	}
-	if apperror.CodeOf(err) == apperror.CodeNotFound {
-		return false, nil
-	}
-	return false, err
+	return false, nil
 }
 
 // CreateRelease creates a GitHub Release from an existing tag and returns its
