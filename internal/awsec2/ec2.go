@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/lifecycle"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/power"
 )
@@ -96,9 +97,35 @@ func (c *Client) StopInstance(ctx context.Context, id string) error {
 	return nil
 }
 
+// InstanceWindow reports whether the platform is inside its operating window by
+// treating "the compute host (located by Project tag) is running" as the
+// authority — the scheduler stack starts/stops the host on its weekday window.
+// It is read-only and satisfies intake.Window, so any trigger source can apply
+// the same window policy without duplicating the check.
+type InstanceWindow struct {
+	client  *Client
+	project string
+}
+
+// NewInstanceWindow builds an InstanceWindow for the given project tag.
+func NewInstanceWindow(client *Client, project string) InstanceWindow {
+	return InstanceWindow{client: client, project: project}
+}
+
+// Open reports whether the project's instance is currently running.
+func (w InstanceWindow) Open(ctx context.Context) (bool, error) {
+	inst, err := w.client.FindInstance(ctx, w.project)
+	if err != nil {
+		return false, err
+	}
+	return inst.State == "running", nil
+}
+
 // Guards: *Client satisfies both the tag-based lifecycle.EC2 port and the
-// ID-based power.Instances port (scheduled start/stop).
+// ID-based power.Instances port (scheduled start/stop); InstanceWindow
+// satisfies the intake.Window port (operational-window gate).
 var (
 	_ lifecycle.EC2   = (*Client)(nil)
 	_ power.Instances = (*Client)(nil)
+	_ intake.Window   = InstanceWindow{}
 )

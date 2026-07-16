@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 	ebtypes "github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 )
 
 // DetailType is the EventBridge detail-type for a matched publishing request.
@@ -22,12 +22,12 @@ type EBAPI interface {
 }
 
 // EventBridgePublisher publishes matched events onto the custom bus. It
-// satisfies webhook.Publisher.
+// satisfies intake.Publisher.
 type EventBridgePublisher struct {
 	api      EBAPI
 	busName  string
 	source   string
-	detailFn func(webhook.Event) (string, error)
+	detailFn func(intake.Event) (string, error)
 }
 
 // NewEventBridge builds a publisher for the given bus and source.
@@ -38,7 +38,7 @@ func NewEventBridge(api EBAPI, busName, source string) *EventBridgePublisher {
 // Publish emits one blog.publish.requested event carrying the matched-event
 // detail. A partial failure (FailedEntryCount > 0) is treated as an error so
 // the delivery is retried.
-func (p *EventBridgePublisher) Publish(ctx context.Context, ev webhook.Event) error {
+func (p *EventBridgePublisher) Publish(ctx context.Context, ev intake.Event) error {
 	detail, err := p.detailFn(ev)
 	if err != nil {
 		return fmt.Errorf("marshal event detail: %w", err)
@@ -60,7 +60,7 @@ func (p *EventBridgePublisher) Publish(ctx context.Context, ev webhook.Event) er
 	return nil
 }
 
-func marshalDetail(ev webhook.Event) (string, error) {
+func marshalDetail(ev intake.Event) (string, error) {
 	b, err := json.Marshal(ev)
 	if err != nil {
 		return "", err

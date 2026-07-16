@@ -98,20 +98,21 @@ cp .env.example .env
 make build
 
 # Package each for Lambda (provided.al2023, arm64)
-for fn in registration webhook-handler scheduled-start scheduled-stop; do
+for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
   [ -f "dist/$fn/bootstrap" ] && ( cd dist/$fn && zip $fn.zip bootstrap )
 done
 ```
 
 - `registration` — validate repo + PAT, create the webhook, store metadata + secrets.
 - `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events, and report processed-now vs deferred (the window gate).
+- `manual-trigger` — the authenticated `POST /process` endpoint; validates the request and submits it through the shared intake service (202 accepted / 503 outside the window). See [Manual Trigger](./manual-trigger.md).
 - `scheduled-start` — start the On-Demand instance at 18:00 Mon–Fri (scheduler stack).
 - `scheduled-stop` — stop the instance at 20:00 Mon–Fri (scheduler stack).
 
 Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless/scheduler templates' default code keys are `<fn>.zip` at the bucket root:
 
 ```bash
-for fn in registration webhook-handler scheduled-start scheduled-stop; do
+for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
   aws s3 cp "dist/$fn/$fn.zip" "s3://$ARTIFACTS_BUCKET/$fn.zip"
 done
 ```

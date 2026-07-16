@@ -21,28 +21,12 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awsec2"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/eventbus"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
 )
-
-// windowGate reports whether the platform's compute host (located by its
-// Project tag) is running, so the handler can distinguish a delivery that is
-// processed in the current scheduled window from one deferred to the next. It
-// is strictly read-only — the scheduler stack owns instance power.
-type windowGate struct {
-	ec2     *awsec2.Client
-	project string
-}
-
-func (g windowGate) Running(ctx context.Context) (bool, error) {
-	inst, err := g.ec2.FindInstance(ctx, g.project)
-	if err != nil {
-		return false, err
-	}
-	return inst.State == "running", nil
-}
 
 func main() {
 	a, err := app.New()
@@ -59,23 +43,25 @@ func main() {
 		log.Fatalf("aws config: %v", err)
 	}
 
+	// Shared intake service: publishes to EventBridge and applies the window
+	// policy. With PROJECT_NAME set, it reports processed-now vs deferred based
+	// on whether the compute host is up (the fixed weekday window); absent, every
+	// matched delivery is reported "accepted". Webhooks buffer (never reject).
+	svc := &intake.Service{
+		Publisher: eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
+		Logger:    a.Logger,
+	}
+	if a.Config.ProjectName != "" {
+		svc.Window = awsec2.NewInstanceWindow(awsec2.New(ec2.NewFromConfig(awsCfg)), a.Config.ProjectName)
+	}
+
 	handler := &webhook.Handler{
 		Repos:          metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable),
 		Secrets:        secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.SecretsPrefix),
-		Publisher:      eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
+		Intake:         svc,
 		Metrics:        metrics.New(metrics.Namespace, os.Stdout),
 		DefaultTrigger: a.Config.PublishTrigger,
 		Logger:         a.Logger,
-	}
-
-	// With PROJECT_NAME set, the handler reports processed-now vs deferred based
-	// on whether the compute host is up (the fixed weekday window). Absent, every
-	// matched delivery is reported "accepted".
-	if a.Config.ProjectName != "" {
-		handler.Gate = windowGate{
-			ec2:     awsec2.New(ec2.NewFromConfig(awsCfg)),
-			project: a.Config.ProjectName,
-		}
 	}
 
 	lambda.Start(func(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {

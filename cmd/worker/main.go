@@ -28,6 +28,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
@@ -39,13 +40,12 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/reposource"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/review"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
 )
 
 // eventEnvelope unwraps the EventBridge event delivered to SQS; the detail is
-// the matched-event payload published by the webhook handler.
+// the intake.Event published by a trigger source (webhook or manual /process).
 type eventEnvelope struct {
-	Detail webhook.Event `json:"detail"`
+	Detail intake.Event `json:"detail"`
 }
 
 // defaultKinds is the content package the worker generates per run.

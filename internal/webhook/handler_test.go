@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/githubsig"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/repo"
 )
 
@@ -31,11 +32,11 @@ func (f *fakeSecrets) WebhookSecret(_ context.Context, _ string) (string, error)
 }
 
 type fakePublisher struct {
-	published []Event
+	published []intake.Event
 	err       error
 }
 
-func (f *fakePublisher) Publish(_ context.Context, ev Event) error {
+func (f *fakePublisher) Publish(_ context.Context, ev intake.Event) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -44,11 +45,11 @@ func (f *fakePublisher) Publish(_ context.Context, ev Event) error {
 }
 
 type fakeGate struct {
-	running bool
-	err     error
+	open bool
+	err  error
 }
 
-func (g *fakeGate) Running(_ context.Context) (bool, error) { return g.running, g.err }
+func (g *fakeGate) Open(_ context.Context) (bool, error) { return g.open, g.err }
 
 func registeredRepo() repo.Repository {
 	return repo.Repository{
@@ -86,7 +87,7 @@ func newHandler(pub *fakePublisher) *Handler {
 	return &Handler{
 		Repos:          &fakeRepos{r: registeredRepo(), ok: true},
 		Secrets:        &fakeSecrets{secret: secret},
-		Publisher:      pub,
+		Intake:         &intake.Service{Publisher: pub},
 		DefaultTrigger: "blog:",
 	}
 }
@@ -128,7 +129,7 @@ func TestMatchedCommitDeferredOutsideWindow(t *testing.T) {
 	body := pushBody("acme/widget", "blog: new feature")
 	pub := &fakePublisher{}
 	h := newHandler(pub)
-	h.Gate = &fakeGate{running: false}
+	h.Intake.Window = &fakeGate{open: false}
 	status, resp := h.Handle(context.Background(), signedHeaders(body), body)
 
 	if status != 200 {
@@ -148,7 +149,7 @@ func TestMatchedCommitAcceptedWhenRunning(t *testing.T) {
 	body := pushBody("acme/widget", "blog: new feature")
 	pub := &fakePublisher{}
 	h := newHandler(pub)
-	h.Gate = &fakeGate{running: true}
+	h.Intake.Window = &fakeGate{open: true}
 	_, resp := h.Handle(context.Background(), signedHeaders(body), body)
 
 	var r result
@@ -162,7 +163,7 @@ func TestMatchedCommitFailsOpenOnGateError(t *testing.T) {
 	body := pushBody("acme/widget", "blog: new feature")
 	pub := &fakePublisher{}
 	h := newHandler(pub)
-	h.Gate = &fakeGate{err: context.DeadlineExceeded}
+	h.Intake.Window = &fakeGate{err: context.DeadlineExceeded}
 	_, resp := h.Handle(context.Background(), signedHeaders(body), body)
 
 	if len(pub.published) != 1 {
@@ -255,7 +256,7 @@ func TestPerRepoTriggerPatternHonoured(t *testing.T) {
 	cr.TriggerPattern = "[blog]"
 	h.Repos = &fakeRepos{r: cr, ok: true}
 	pub := &fakePublisher{}
-	h.Publisher = pub
+	h.Intake = &intake.Service{Publisher: pub}
 	status, _ := h.Handle(context.Background(), signedHeaders(body), body)
 	if status != 200 || len(pub.published) != 1 {
 		t.Errorf("custom pattern should match: status=%d published=%d", status, len(pub.published))

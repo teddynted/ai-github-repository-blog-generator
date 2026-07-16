@@ -65,7 +65,7 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed weekday window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration webhook-handler scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -91,7 +91,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration webhook-handler scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
@@ -120,7 +120,8 @@ jobs:
             --parameter-overrides \
               ArtifactsBucket="$ARTIFACTS_BUCKET" \
               RegistrationCodeKey="$SHA/registration.zip" \
-              WebhookHandlerCodeKey="$SHA/webhook-handler.zip"
+              WebhookHandlerCodeKey="$SHA/webhook-handler.zip" \
+              ManualTriggerCodeKey="$SHA/manual-trigger.zip"
 
       - name: deploy compute stack
         env:

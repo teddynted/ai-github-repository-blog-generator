@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   GitHub AI Blog Generator - Serverless stack. The always-available front door:
-  REST API Gateway (webhook + registration routes), two Lambdas (registration,
-  webhook-handler), the EventBridge bus and rule, the SQS events queue +
+  REST API Gateway (webhook, registration + manual /process routes), three
+  Lambdas (registration, webhook-handler, manual-trigger), the EventBridge bus
+  and rule, the SQS events queue +
   dead-letter queue, and the DynamoDB metadata table. Instance power is owned by
   the scheduler stack (fixed weekday window), so this stack never starts or
   stops the compute host: a matched webhook is published to EventBridge and
@@ -26,6 +27,10 @@ Parameters:
     Type: String
     Default: webhook-handler.zip
     Description: S3 key of the webhook-handler Lambda package.
+  ManualTriggerCodeKey:
+    Type: String
+    Default: manual-trigger.zip
+    Description: S3 key of the manual-trigger Lambda package (POST /process).
   PublishTrigger:
     Type: String
     Default: "blog:"
@@ -178,6 +183,35 @@ Resources:
                 Action: ec2:DescribeInstances
                 Resource: "*"
 
+  # The manual-trigger Lambda (POST /process) needs the same downstream rights
+  # as the webhook handler minus the GitHub-specific metadata/secret reads:
+  # publish to the bus and read-only describe for the operational-window gate.
+  ManualTriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: manual-trigger
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !GetAtt EventBus.Arn
+              # Read-only window gate (reject outside operational hours); never
+              # starts or stops the instance. Cannot be resource-scoped.
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+
   # ---------------------------------------------------------------------------
   # Lambda functions
   # ---------------------------------------------------------------------------
@@ -197,6 +231,13 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-webhook-handler"
+      RetentionInDays: !Ref LogRetentionDays
+  ManualTriggerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-manual-trigger"
       RetentionInDays: !Ref LogRetentionDays
 
   RegistrationFunction:
@@ -252,6 +293,33 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  ManualTriggerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ManualTriggerLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-manual-trigger"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt ManualTriggerRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref ManualTriggerCodeKey
+      Environment:
+        Variables:
+          EVENT_BUS_NAME: !Ref EventBus
+          # A distinct source so logs/routing can tell manual runs apart; the
+          # PublishRequestedRule matches every "${ProjectName}." source.
+          EVENT_SOURCE: !Sub "${ProjectName}.manual"
+          # Required: the manual trigger rejects requests outside the operating
+          # window (compute host stopped) rather than starting the instance.
+          PROJECT_NAME: !Ref ProjectName
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
   # ---------------------------------------------------------------------------
   # EventBridge rule: matched events are buffered in SQS and drained by the
   # worker while the instance is up (started/stopped by the scheduler stack).
@@ -263,8 +331,11 @@ Resources:
       Name: !Sub "${ProjectName}-publish-requested"
       EventBusName: !Ref EventBus
       EventPattern:
+        # Match every trigger source for this project (webhook, manual, and any
+        # future CLI/Slack/cron source) by prefix, so new sources need no rule
+        # change. The bus is project-dedicated, so this stays tightly scoped.
         source:
-          - !Sub "${ProjectName}.webhook"
+          - prefix: !Sub "${ProjectName}."
         detail-type:
           - blog.publish.requested
       Targets:
@@ -296,6 +367,13 @@ Resources:
       ParentId: !GetAtt RestApi.RootResourceId
       PathPart: repositories
 
+  ProcessResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: process
+
   WebhookMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -321,6 +399,30 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RegistrationFunction.Arn}/invocations"
 
+  # POST /process — the manual trigger. Secured with an API key (x-api-key),
+  # the same simple scheme as the registration route, and covered by the shared
+  # usage plan on this stage. Not publicly accessible without the key.
+  ProcessMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProcessResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ManualTriggerFunction.Arn}/invocations"
+
+  ProcessInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ManualTriggerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/process"
+
   WebhookInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -337,20 +439,25 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/repositories"
 
-  ApiDeployment:
+  # A Deployment is an immutable snapshot of the API. Changing methods does NOT
+  # redeploy an existing Deployment (same logical id = no-op), so the stage would
+  # keep serving the old set. Bump the logical id (…V2, V3, …) whenever methods
+  # change to force a fresh snapshot — this V2 adds POST /process.
+  ApiDeploymentV2:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - WebhookMethod
       - RepositoriesMethod
+      - ProcessMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "Deployment for ${StageName}"
+      Description: !Sub "Deployment for ${StageName} (webhook, repositories, process)"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       RestApiId: !Ref RestApi
-      DeploymentId: !Ref ApiDeployment
+      DeploymentId: !Ref ApiDeploymentV2
       StageName: !Ref StageName
 
   RegistrationApiKey:
@@ -385,8 +492,13 @@ Outputs:
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/repositories"
     Export:
       Name: !Sub "${ProjectName}-RegistrationUrl"
+  ProcessUrl:
+    Description: Manual processing trigger endpoint (POST, requires x-api-key).
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/process"
+    Export:
+      Name: !Sub "${ProjectName}-ProcessUrl"
   RegistrationApiKeyId:
-    Description: API key ID for the registration endpoint (retrieve value via API Gateway).
+    Description: API key ID for the registration + process endpoints (retrieve value via API Gateway).
     Value: !Ref RegistrationApiKey
   RepositoriesTableName:
     Description: DynamoDB metadata table.

@@ -8,7 +8,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/webhook"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 )
 
 // LogPublisher is a placeholder Publisher that logs matched events instead of
@@ -19,7 +19,7 @@ type LogPublisher struct {
 }
 
 // Publish logs the matched event. It never fails.
-func (p *LogPublisher) Publish(_ context.Context, ev webhook.Event) error {
+func (p *LogPublisher) Publish(_ context.Context, ev intake.Event) error {
 	if p.Logger != nil {
 		p.Logger.Info("matched event (EventBridge publish pending Milestone 5)",
 			slog.String("repo", ev.RepoFullName),
