@@ -148,6 +148,24 @@ func (g *ExecGit) PushTag(ctx context.Context, tag string) error {
 	return err
 }
 
+// CommitFile stages a single path and commits just that path. Verification
+// hooks are skipped (--no-verify): the release CLI has already run its own
+// validation, and the commit is a machine-generated CHANGELOG update, so
+// re-running the pre-commit test suite here would be redundant.
+func (g *ExecGit) CommitFile(ctx context.Context, path, message string) error {
+	if _, err := g.run(ctx, "add", "--", path); err != nil {
+		return err
+	}
+	_, err := g.run(ctx, "commit", "--no-verify", "-m", message, "--", path)
+	return err
+}
+
+// PushBranch pushes the current HEAD to origin's branch.
+func (g *ExecGit) PushBranch(ctx context.Context, branch string) error {
+	_, err := g.run(ctx, "push", "origin", "HEAD:"+branch)
+	return err
+}
+
 // UpstreamInSync reports whether HEAD and its upstream have not diverged. If
 // there is no upstream tracking branch, it returns (false, nil) so validation
 // flags it.

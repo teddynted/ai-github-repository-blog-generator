@@ -2,6 +2,8 @@ package release
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,10 @@ type fakeGit struct {
 	created   string
 	pushed    string
 	contribs  []string
+
+	committedPath string
+	committedMsg  string
+	pushedBranch  string
 }
 
 func (f *fakeGit) InitialCommit(context.Context) (string, error) { return f.initial, nil }
@@ -35,7 +41,15 @@ func (f *fakeGit) CreateAnnotatedTag(_ context.Context, tag, _ string) error {
 	f.created = tag
 	return nil
 }
-func (f *fakeGit) PushTag(_ context.Context, tag string) error  { f.pushed = tag; return nil }
+func (f *fakeGit) PushTag(_ context.Context, tag string) error { f.pushed = tag; return nil }
+func (f *fakeGit) CommitFile(_ context.Context, path, message string) error {
+	f.committedPath, f.committedMsg = path, message
+	return nil
+}
+func (f *fakeGit) PushBranch(_ context.Context, branch string) error {
+	f.pushedBranch = branch
+	return nil
+}
 func (f *fakeGit) UpstreamInSync(context.Context) (bool, error) { return f.synced, nil }
 func (f *fakeGit) ContributorsSince(context.Context, string) ([]string, error) {
 	return f.contribs, nil
@@ -185,12 +199,12 @@ func TestApplyDryRunMakesNoChanges(t *testing.T) {
 	gh := &fakeGH{authed: true}
 	svc := newSvc(g, gh)
 	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
-	sum, err := svc.Apply(context.Background(), plan, "", true)
+	sum, err := svc.Apply(context.Background(), plan, "", "CHANGELOG.md", true)
 	if err != nil {
 		t.Fatalf("Apply dry-run: %v", err)
 	}
-	if g.created != "" || g.pushed != "" || gh.created {
-		t.Error("dry-run must not tag, push, or create a release")
+	if g.created != "" || g.pushed != "" || gh.created || g.committedPath != "" || g.pushedBranch != "" {
+		t.Error("dry-run must not tag, push, commit, or create a release")
 	}
 	if !strings.Contains(sum.Changelog, "## [1.1.0]") {
 		t.Error("dry-run should still compute the changelog")
@@ -202,11 +216,44 @@ func TestApplyRealCreatesTagAndRelease(t *testing.T) {
 	gh := &fakeGH{authed: true}
 	svc := newSvc(g, gh)
 	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
-	sum, err := svc.Apply(context.Background(), plan, "", false)
+	sum, err := svc.Apply(context.Background(), plan, "", "", false)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	if g.created != "v1.1.0" || g.pushed != "v1.1.0" || !gh.created || sum.ReleaseURL == "" {
 		t.Errorf("release not created: git=%+v gh=%+v sum=%+v", g, gh, sum)
+	}
+}
+
+func TestApplyCommitsAndPushesChangelogBeforeTagging(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	g := &fakeGit{latestTag: "v1.0.0", subjects: []string{"feat: a"}}
+	gh := &fakeGH{authed: true}
+	svc := newSvc(g, gh)
+	plan, _ := svc.DeterminePlan(context.Background(), nil, "")
+	sum, err := svc.Apply(context.Background(), plan, "", path, false)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if g.committedPath != path {
+		t.Errorf("committed path = %q, want %q", g.committedPath, path)
+	}
+	if g.committedMsg != "chore(release): v1.1.0" {
+		t.Errorf("commit message = %q", g.committedMsg)
+	}
+	if g.pushedBranch != "main" {
+		t.Errorf("pushed branch = %q, want main", g.pushedBranch)
+	}
+	if !sum.ChangelogPushed {
+		t.Error("ChangelogPushed should be true")
+	}
+	// The changelog must be written to disk (the commit records that file).
+	b, rerr := os.ReadFile(path)
+	if rerr != nil || !strings.Contains(string(b), "## [1.1.0]") {
+		t.Errorf("changelog not written: err=%v content=%q", rerr, string(b))
+	}
+	// Tag + release still happen, on top of the changelog commit.
+	if g.created != "v1.1.0" || g.pushed != "v1.1.0" || !gh.created {
+		t.Errorf("tag/release not created: git=%+v gh=%+v", g, gh)
 	}
 }

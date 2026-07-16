@@ -22,6 +22,11 @@ type Config struct {
 	TagPrefix string `json:"tag_prefix"`
 	// ReleaseBranch is the only branch a release may be cut from (e.g. "main").
 	ReleaseBranch string `json:"release_branch"`
+	// ReleaseCommitMessage is the commit message used when the CHANGELOG update
+	// is committed to the release branch. A single "%s" is substituted with the
+	// tag (e.g. "chore(release): v1.2.0"); it must remain a valid Conventional
+	// Commit so the project's commit hooks accept it.
+	ReleaseCommitMessage string `json:"release_commit_message"`
 	// PreReleaseID is the default pre-release identifier for `--pre` (e.g. "rc").
 	PreReleaseID string `json:"prerelease_id"`
 	// ChangelogCategories overrides the default changelog grouping.
@@ -36,13 +41,14 @@ type Config struct {
 // Default returns the built-in configuration.
 func Default() Config {
 	return Config{
-		InitialVersion:      "0.1.0",
-		TagPrefix:           "v",
-		ReleaseBranch:       "main",
-		PreReleaseID:        "rc",
-		ChangelogCategories: changelog.DefaultCategories,
-		Commit:              conventional.Config{},
-		IgnoredTypes:        []string{"docs", "style", "test", "chore", "ci", "build"},
+		InitialVersion:       "0.1.0",
+		TagPrefix:            "v",
+		ReleaseBranch:        "main",
+		ReleaseCommitMessage: "chore(release): %s",
+		PreReleaseID:         "rc",
+		ChangelogCategories:  changelog.DefaultCategories,
+		Commit:               conventional.Config{},
+		IgnoredTypes:         []string{"docs", "style", "test", "chore", "ci", "build"},
 	}
 }
 
@@ -70,6 +76,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.ReleaseBranch == "" {
 		cfg.ReleaseBranch = d.ReleaseBranch
+	}
+	if cfg.ReleaseCommitMessage == "" {
+		cfg.ReleaseCommitMessage = d.ReleaseCommitMessage
 	}
 	if len(cfg.ChangelogCategories) == 0 {
 		cfg.ChangelogCategories = d.ChangelogCategories

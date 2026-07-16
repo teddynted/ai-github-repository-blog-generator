@@ -144,14 +144,14 @@ func run(args []string) int {
 			return 1
 		}
 	}
-	printActions(*dryRun)
+	printActions(*dryRun, cfg.ReleaseBranch)
 	logger.Info("validation complete",
 		slog.Bool("dry_run", *dryRun), slog.String("version", plan.Tag),
 		slog.String("bump", plan.Bump.String()), slog.Int("analysed", plan.Analysed),
 		slog.Int("conventional", len(plan.Commits)),
 		slog.Duration("duration", time.Since(start)))
 
-	sum, err := svc.Apply(ctx, plan, string(old), *dryRun)
+	sum, err := svc.Apply(ctx, plan, string(old), *changelogPath, *dryRun)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\n✗ release failed: %v\n", err)
 		return 1
@@ -161,14 +161,13 @@ func run(args []string) int {
 		fmt.Printf("\nDry run completed successfully.\n\nNo release actions were executed.\n")
 		return 0
 	}
-	if err := os.WriteFile(*changelogPath, []byte(sum.Changelog), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: release published but writing %s failed: %v\n", *changelogPath, err)
-	}
 	fmt.Printf("\n✓ released %s\n", sum.Tag)
 	if sum.ReleaseURL != "" {
 		fmt.Printf("  %s\n", sum.ReleaseURL)
 	}
-	fmt.Printf("  remember to commit the updated %s\n", *changelogPath)
+	if sum.ChangelogPushed {
+		fmt.Printf("  %s committed and pushed to %s — run `git pull` to sync other clones\n", *changelogPath, cfg.ReleaseBranch)
+	}
 	return 0
 }
 
@@ -197,15 +196,18 @@ func printReport(r release.Report) {
 	}
 }
 
-func printActions(dryRun bool) {
+func printActions(dryRun bool, branch string) {
 	suffix := ""
 	if dryRun {
 		suffix = "  (simulated — not executed)"
 	}
 	fmt.Printf("\nPlanned Actions%s\n%s\n", suffix, rule)
 	for _, a := range []string{
-		"Update CHANGELOG.md", "Generate release notes", "Create Git tag",
-		"Push tag", "Create GitHub Release", "Publish release assets",
+		"Update CHANGELOG.md",
+		fmt.Sprintf("Commit + push CHANGELOG.md to %s", branch),
+		"Create Git tag (on the changelog commit)",
+		"Push tag",
+		"Create GitHub Release",
 	} {
 		fmt.Printf("\n✓ %s\n", a)
 	}
