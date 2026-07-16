@@ -1,0 +1,227 @@
+# Semantic Versioning & Release Management
+
+This project uses **[Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)**,
+**[Conventional Commits](https://www.conventionalcommits.org/)**, annotated Git
+tags, a maintained `CHANGELOG.md`, and **GitHub Releases**. A single `release`
+CLI ([`cmd/release`](../cmd/release)) drives the whole workflow deterministically.
+
+Every **GitHub Release** is the authoritative record of a versioned software
+release — and, on the deployed platform, a **trigger for AI content generation**
+(the webhook handler treats a published release as an intentional event). The
+release tooling and the content platform stay decoupled: the CLI just creates
+the release; the platform reacts to it.
+
+Related: [Workflows](./workflows.md) · [CI/CD](./ci-cd.md) · [Contributing](./contributing.md).
+
+---
+
+## 1. Semantic Versioning strategy
+
+Versions are `MAJOR.MINOR.PATCH[-prerelease][+build]`:
+
+| Increment | When | Example |
+| --- | --- | --- |
+| **MAJOR** | breaking change | `1.4.2 → 2.0.0` |
+| **MINOR** | backward-compatible feature | `1.4.2 → 1.5.0` |
+| **PATCH** | backward-compatible fix | `1.4.2 → 1.4.3` |
+| **pre-release** | unstable preview | `2.0.0-rc.1` |
+| **build metadata** | ignored for precedence | `2.0.0+exp.sha.5114f85` |
+
+All versions are validated against the SemVer 2.0.0 grammar; invalid formats are
+rejected. Precedence follows §11 of the spec (a pre-release has lower precedence
+than the associated normal version; build metadata never affects ordering).
+
+## 2. Conventional Commit guidelines
+
+Commit subjects must be `type(scope)!: description`:
+
+```text
+feat(api): add POST /process endpoint
+fix: handle nil head commit
+refactor(worker)!: change SQS envelope shape
+
+BREAKING CHANGE: the envelope field was renamed
+```
+
+Recognised **types**: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`,
+`build`, `ci`, `chore`, `revert`. A `!` after the type/scope **or** a
+`BREAKING CHANGE:` footer marks a breaking change. Scope is optional.
+
+The release workflow **rejects** non-conforming commits made since the last tag.
+
+### Version determination
+
+| Commit(s) since last tag | Next version |
+| --- | --- |
+| any breaking change | **major** |
+| at least one `feat` | **minor** |
+| at least one `fix`/`perf`/`revert` | **patch** |
+| only `docs`/`chore`/`test`/`ci`/`build`/`style` | **no release** |
+
+You can always **override** with an explicit `release major|minor|patch`.
+
+## 3. Release workflow
+
+`release <bump>` runs, in order:
+
+1. Validate repository state (clean tree, release branch, in sync with remote, GitHub auth).
+2. Validate Conventional Commits since the last tag.
+3. Determine the next version (auto or forced).
+4. Generate release notes.
+5. Update `CHANGELOG.md`.
+6. Create an annotated Git tag.
+7. Push the tag.
+8. Create the GitHub Release.
+9. Print a summary.
+
+The workflow is **idempotent** where practical: an existing tag or release is
+detected and not recreated; re-adding a version to the CHANGELOG is a no-op.
+
+## 4. Git tagging strategy
+
+- Tags are **annotated** and prefixed (`v` by default): `v1.0.0`, `v1.1.0`, `v2.0.0`.
+- The tag format is validated; **duplicate tags are refused**; a version that
+  does not increase over the latest tag (**downgrade or repeat**) is refused.
+- The tag is pushed to `origin` only after validation passes.
+
+## 5. CHANGELOG management
+
+`CHANGELOG.md` follows Keep-a-Changelog style. Each release adds a section:
+
+```markdown
+## [1.5.0] - 2026-07-16
+
+### Breaking Changes
+- ...
+
+### Features
+- **api:** add POST /process endpoint
+
+### Bug Fixes
+- handle nil head commit
+```
+
+Sections are grouped by category (Features, Bug Fixes, Performance, Refactoring,
+Documentation, plus Breaking Changes) and inserted newest-first below the header.
+**Existing entries are never duplicated.**
+
+## 6. GitHub Releases
+
+Each release publishes generated notes (version, date, summary, features, fixes,
+breaking changes, contributors) against the pushed tag, with a link to the
+CHANGELOG section. **Duplicate releases are prevented** (the CLI checks for an
+existing release for the tag first). Release assets are supported by the API for
+future use.
+
+Authentication: set `GITHUB_TOKEN` or `GH_TOKEN` (a token with `contents:write`).
+The CLI validates auth before attempting to create a release.
+
+## 7. CLI usage
+
+```bash
+make build-release            # compiles dist/release
+# or run directly:
+go run ./cmd/release <command> [flags]
+
+release major                 # force a major release
+release minor
+release patch
+release                       # auto-derive the bump from commits
+
+release validate              # run all pre-release checks; no changes
+release version               # print current + next version
+release notes                 # print the release notes for the next version
+release changelog             # print CHANGELOG with the next release added
+```
+
+Flags: `--dry-run`, `--pre <id>` / `--prerelease`, `--config <path>`,
+`--repo <owner/name>`, `--changelog <path>`, `--no-verify`. Exit codes: `0`
+success, `1` runtime/validation failure, `2` usage error.
+
+### Dry-run examples
+
+```bash
+# Preview the next minor release (version, CHANGELOG, notes) — no changes:
+release --dry-run minor
+
+# What version would auto-derivation choose?
+release version
+#   current: v1.4.2
+#   next:    v1.5.0 (minor)
+
+# Pre-release candidate:
+release --dry-run --pre rc.1 major     # → v2.0.0-rc.1
+```
+
+A real release:
+
+```bash
+export GITHUB_TOKEN=ghp_xxx
+release minor
+#   → minor release: v1.4.2 → v1.5.0
+#   ✓ validation passed
+#   ✓ released v1.5.0
+#     https://github.com/<owner>/<repo>/releases/tag/v1.5.0
+#     remember to commit the updated CHANGELOG.md
+```
+
+## 8. Configuration
+
+Optional `.release.json` at the repo root (defaults apply when absent):
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `initial_version` | `0.1.0` | version used when no tags exist yet |
+| `tag_prefix` | `v` | prepended to versions to form tags |
+| `release_branch` | `main` | the only branch a release may be cut from |
+| `prerelease_id` | `rc` | default identifier for `--prerelease` |
+| `ignored_types` | docs, style, test, chore, ci, build | types that don't trigger a release on their own |
+| `commit.types` | the 10 standard types | allowed commit types |
+| `commit.minor_types` | `feat` | types that bump minor |
+| `commit.patch_types` | `fix`, `perf`, `revert` | types that bump patch |
+| `changelog_categories` | Features, Bug Fixes, Performance, Refactoring, Documentation | changelog grouping/order |
+
+See [`.release.json`](../.release.json) for the shipped example.
+
+## 9. Logging
+
+The CLI logs structured events (version calculation, validation, changelog
+generation, tag creation, GitHub API operations, errors) to stderr; human-
+readable progress goes to stdout. Tokens and other secrets are never logged.
+
+## 10. Troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| `tag vX already exists` | that version is already released; choose a higher bump |
+| `version … does not increase` | the forced bump would repeat/lower the version |
+| `N non-conventional commit(s)` | fix the offending commit messages (rebase) or they can't be released |
+| `no release-worthy commits` | only docs/chore since last tag; use an explicit bump to force |
+| `working tree is not clean` | commit or stash changes first |
+| `on branch "x"; releases must be cut from "main"` | switch to the release branch |
+| `local branch is not in sync with the remote` | `git pull` / `git push` first |
+| `no GitHub authentication available` | export `GITHUB_TOKEN` or `GH_TOKEN` |
+| release published but CHANGELOG not committed | commit the updated `CHANGELOG.md` (the CLI writes it locally) |
+
+Use `release validate` or any command with `--dry-run` to diagnose without
+making changes.
+
+## 11. Migration guide
+
+Adopting this on an existing repository:
+
+1. **Start committing** with Conventional Commits (a `commit-msg` git hook
+   already validates messages — see [`scripts/hooks/validate-commit.sh`](../scripts/hooks/validate-commit.sh)).
+2. **Seed the changelog**: `CHANGELOG.md` ships with just the header; the first
+   `release` populates it.
+3. **Establish a baseline tag** if the repo already has releases: create the
+   current version as an annotated tag so the CLI computes the *next* version
+   from it, e.g. `git tag -a v1.4.2 -m "v1.4.2" && git push origin v1.4.2`.
+   Without any tag, the first `release` uses `initial_version` (`0.1.0`).
+4. **Dry-run first**: `release --dry-run` to preview the version, CHANGELOG, and
+   notes before publishing.
+5. **Cut the release**: with `GITHUB_TOKEN` set, run `release <bump>` and commit
+   the updated `CHANGELOG.md`.
+
+No existing functionality changes — the release tooling is additive and lives
+entirely in `cmd/release` + `internal/{semver,conventional,changelog,release}`.

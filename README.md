@@ -652,9 +652,12 @@ ai-github-repository-blog-generator/
 │   ├── instance-starter/      # start the Spot Instance on a matched event
 │   └── idle-shutdown/         # stop the instance when idle
 ├── cmd/
-│   └── worker/                # instance worker: drain SQS → run the content pipeline
+│   ├── worker/                # instance worker: drain SQS → run the content pipeline
+│   └── release/               # semantic-versioning release CLI (tag, changelog, GitHub Release)
+├── CHANGELOG.md · .release.json                    # release management (see docs/releases.md)
 ├── internal/                  # shared library code (Clean Architecture, ports + adapters)
 │   ├── config · logging · apperror · app          # foundation
+│   ├── semver · conventional · changelog · release  # release management
 │   ├── github · repo · registration · secrets · metadata   # onboarding
 │   ├── trigger · githubsig · webhook · eventbus            # trigger + events
 │   ├── awsec2 · awssqs · lifecycle                         # instance lifecycle
@@ -783,6 +786,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |
 | [Local Workflow](./docs/local-workflow.md) | Git hooks, Conventional Commits, and the `act` CI mirror |
 | [CI/CD](./docs/ci-cd.md) | Continuous integration and delivery |
+| [Releases](./docs/releases.md) | Semantic Versioning, Conventional Commits, tags, CHANGELOG, GitHub Releases, the `release` CLI |
 | [Contributing](./docs/contributing.md) | How to contribute |
 | [Roadmap](./docs/roadmap.md) | Planned features |
 

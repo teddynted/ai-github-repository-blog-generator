@@ -10,7 +10,7 @@ DIST     := dist
 
 HOOKS    := scripts/hooks
 
-.PHONY: all fmt fmt-check vet lint test tidy build build-worker clean check lint-cfn hooks act deploy-scheduler
+.PHONY: all fmt fmt-check vet lint test tidy build build-worker build-release release clean check lint-cfn hooks act deploy-scheduler
 
 all: check
 
@@ -69,6 +69,14 @@ build:
 build-worker:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/worker ./cmd/worker
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(DIST)/worker/approve ./cmd/approve
+
+## build-release: compile the release management CLI for the host platform
+build-release:
+	$(GO) build -o $(DIST)/release ./cmd/release
+
+## release: run the release CLI (e.g. make release ARGS="--dry-run minor")
+release: build-release
+	$(DIST)/release $(ARGS)
 
 ## deploy-scheduler: build, package, and deploy the scheduled start/stop stack
 ## Usage: make deploy-scheduler INSTANCE_ID=i-0123... [REGION=us-east-1] [TIMEZONE=Africa/Johannesburg]
