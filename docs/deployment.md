@@ -228,7 +228,7 @@ In the n8n editor: **Workflows → Import from File**, select each JSON under `w
 
 ## 6. Register a Repository
 
-Registration is the primary way to onboard a repo — it validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, and **creates the GitHub webhook automatically**. It's a two-part step.
+Registration is the primary way to onboard a repo — it validates access, stores the PAT in Secrets Manager, writes metadata to DynamoDB, and **creates the GitHub webhook automatically**. It's a two-part step. Full endpoint spec (payload, responses, error codes): [Registration](./registration.md).
 
 **1. Create the GitHub PAT** (in GitHub, not via the endpoint): **Settings → Developer settings → Personal access tokens → Fine-grained tokens**, scoped to the target repo with **Contents: Read**, **Webhooks: Read and write**, **Metadata: Read**. Copy the `github_pat_…` value.
 
