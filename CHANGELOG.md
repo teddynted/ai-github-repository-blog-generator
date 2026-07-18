@@ -10,6 +10,19 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.2.0] - 2026-07-18
+
+### Features
+
+- **release-context:** /release-context endpoint, GitHub adapter, infra
+- **releasecontext:** Content Intelligence engine for release analysis
+- **releasegen:** content generation engine from Release Context
+
+### Documentation
+
+- **readme:** document the /release-context endpoint
+
+
 ## [0.1.7] - 2026-07-18
 
 ### Documentation
