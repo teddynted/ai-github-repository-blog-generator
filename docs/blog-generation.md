@@ -119,5 +119,14 @@ Each stage is a small port satisfied by an existing type, so the whole flow is
 unit-tested end to end. A single format failing review is dropped, not fatal, so
 the rest still publish.
 
-**Next:** run the pipeline on the instance after a published-release webhook;
-add the Amazon Bedrock `Model` adapter.
+### Triggered automatically on a published release
+
+The instance **worker** ([`cmd/worker`](../cmd/worker)) dispatches on the event
+source: a **published-release** event (`source: "release"`, `ref:
+refs/tags/<tag>`) runs the release-content pipeline above, while push events keep
+using the existing snapshot pipeline. So publishing a GitHub Release now flows
+end to end — webhook → EventBridge → SQS → worker → Release Context → content →
+review → publish — with no manual call. Set `GITHUB_TOKEN` on the instance for
+private repositories (public repos work without one, rate-limited).
+
+**Next:** deploy and run end to end against a real release.

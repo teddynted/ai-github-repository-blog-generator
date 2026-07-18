@@ -28,6 +28,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/github"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
@@ -37,6 +38,10 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/publish"
+	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasepipeline"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasesource"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/reposource"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/review"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/secrets"
@@ -126,6 +131,24 @@ func main() {
 		Logger:     a.Logger,
 	}
 
+	// Release-content path (Milestone 3): a published-release event builds a
+	// Release Context and generates release-focused content from it, reusing the
+	// same reviewer + publisher. GITHUB_TOKEN is optional (public repos work
+	// rate-limited); it reads the repo over the GitHub API, not by cloning.
+	releasePipe := &releasepipeline.Pipeline{
+		Builder: &rc.Builder{
+			Sources: releasesource.New(github.New(), os.Getenv("GITHUB_TOKEN")),
+			Logger:  a.Logger,
+		},
+		Generator: &releasegen.Generator{
+			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
+			Logger: a.Logger,
+		},
+		Reviewer:  review.Reviewer{},
+		Publisher: publisher,
+		Logger:    a.Logger,
+	}
+
 	notifiers := notify.Multi{&notify.LogNotifier{Logger: a.Logger}}
 	if a.Config.NotifyWebhookURL != "" {
 		notifiers = append(notifiers, notify.NewWebhook(a.Config.NotifyWebhookURL, a.Logger))
@@ -155,7 +178,7 @@ func main() {
 	meter := metrics.New(metrics.Namespace, os.Stdout)
 
 	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "model", a.Config.OllamaModel)
-	run(ctx, a.Logger, queue, pipe, notifier, meter)
+	run(ctx, a.Logger, queue, pipe, releasePipe, notifier, meter)
 	a.Logger.Info("worker stopped")
 }
 
@@ -165,9 +188,16 @@ type consumer interface {
 	Delete(ctx context.Context, receiptHandle string) error
 }
 
-// runner runs one request (satisfied by *pipeline.Pipeline).
+// runner runs one snapshot request (satisfied by *pipeline.Pipeline).
 type runner interface {
 	Run(ctx context.Context, req pipeline.Request) (pipeline.Result, error)
+}
+
+// releaseRunner builds and publishes content for a release (satisfied by
+// *releasepipeline.Pipeline). Optional — nil disables the release path and
+// release events fall through to the snapshot pipeline.
+type releaseRunner interface {
+	Run(ctx context.Context, req rc.Request) (releasepipeline.Result, error)
 }
 
 // meter emits metrics (satisfied by *metrics.Emitter).
@@ -176,7 +206,7 @@ type meter interface {
 	CountN(name string, n float64)
 }
 
-func run(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, n notify.Notifier, mt meter) {
+func run(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, rr releaseRunner, n notify.Notifier, mt meter) {
 	for ctx.Err() == nil {
 		msgs, err := q.Receive(ctx, 10, 20)
 		if err != nil {
@@ -187,17 +217,24 @@ func run(ctx context.Context, logger interface{ Error(string, ...any) }, q consu
 			continue
 		}
 		for _, m := range msgs {
-			handleMessage(ctx, logger, q, p, n, mt, m)
+			handleMessage(ctx, logger, q, p, rr, n, mt, m)
 		}
 	}
 }
 
-func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, n notify.Notifier, mt meter, m awssqs.Message) {
+func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, p runner, rr releaseRunner, n notify.Notifier, mt meter, m awssqs.Message) {
 	var env eventEnvelope
 	if err := json.Unmarshal([]byte(m.Body), &env); err != nil || env.Detail.RepoFullName == "" {
 		// Unparseable/irrelevant message: drop it so it does not loop forever.
 		logger.Error("unparseable message; dropping", "error", errString(err))
 		_ = q.Delete(ctx, m.ReceiptHandle)
+		return
+	}
+
+	// A published-release event takes the release-content path (build a Release
+	// Context, then generate release-focused content) when it is configured.
+	if env.Detail.Source == "release" && rr != nil {
+		handleReleaseMessage(ctx, logger, q, rr, n, mt, env, m)
 		return
 	}
 
@@ -227,6 +264,33 @@ func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) 
 		mt.CountN("AssetsGenerated", float64(res.Published))
 		_ = n.Notify(ctx, notify.Event{Repo: repo, Status: notify.StatusPublished, Assets: res.Published})
 	}
+	_ = q.Delete(ctx, m.ReceiptHandle)
+}
+
+// handleReleaseMessage runs the release-content pipeline for a published-release
+// event: build the Release Context for the tag, generate and publish content,
+// then ack the message. Failures leave the message for SQS to redeliver.
+func handleReleaseMessage(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, rr releaseRunner, n notify.Notifier, mt meter, env eventEnvelope, m awssqs.Message) {
+	repo := env.Detail.RepoFullName
+	owner, name := env.Detail.Owner, env.Detail.Name
+	tag := strings.TrimPrefix(env.Detail.Ref, "refs/tags/")
+	if owner == "" || name == "" || tag == "" {
+		logger.Error("release event missing owner/repo/tag; dropping", "repo", repo, "ref", env.Detail.Ref)
+		_ = q.Delete(ctx, m.ReceiptHandle)
+		return
+	}
+
+	mt.Count("ReleaseRunsStarted")
+	res, err := rr.Run(ctx, rc.Request{Owner: owner, Repository: name, ReleaseTag: tag})
+	if err != nil {
+		logger.Error("release run failed; leaving message for retry", "repo", repo, "release", tag, "error", err.Error())
+		mt.Count("ReleaseRunsFailed")
+		_ = n.Notify(ctx, notify.Event{Repo: repo, Status: notify.StatusFailed, Err: err.Error()})
+		return
+	}
+	mt.Count("ReleaseRunsSucceeded")
+	mt.CountN("AssetsGenerated", float64(res.Published))
+	_ = n.Notify(ctx, notify.Event{Repo: repo, Status: notify.StatusPublished, Assets: res.Published})
 	_ = q.Delete(ctx, m.ReceiptHandle)
 }
 
