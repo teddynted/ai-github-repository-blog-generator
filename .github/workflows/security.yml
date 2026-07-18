@@ -1,11 +1,33 @@
 name: security
 
+# On push/PR the scans only run when code, dependencies, infrastructure, or
+# security config change — docs-only changes skip the suite. The weekly
+# scheduled run scans the whole repo (and full git history for secrets)
+# regardless, so nothing goes permanently unscanned.
 on:
   push:
     branches: [main]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "infrastructure/**"
+      - ".gitleaks.toml"
+      - ".github/workflows/security.yml"
   pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "infrastructure/**"
+      - ".gitleaks.toml"
+      - ".github/workflows/security.yml"
   schedule:
-    - cron: "0 6 * * 1" # weekly
+    - cron: "0 6 * * 1" # weekly full-repo scan
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -24,11 +24,20 @@ Workflows live in `.github/workflows/`:
 
 | File | Trigger | Purpose | Status |
 | --- | --- | --- | --- |
-| `go.yml` | PR, push | gofmt + vet + `go test -race` + cross-compile all Lambdas | ✅ Implemented |
-| `cloudformation.yml` | PR, push | `cfn-lint` all templates | ✅ Implemented (lint) |
+| `go.yml` | PR, push — **skips docs-only** | gofmt + vet + `go test -race` + cross-compile all Lambdas | ✅ Implemented |
+| `cloudformation.yml` | PR, push — **`infrastructure/**` only** | `cfn-lint` all templates | ✅ Implemented (lint) |
 | `deploy.yml` | main, dispatch | Package Lambdas → upload → deploy the four stacks (OIDC) | ✅ Implemented (opt-in) |
 | `build-ami.yml` | dispatch | Build the pre-baked worker AMI with Packer; writes the AMI id to SSM (`/blog-gen/worker-ami`) for `deploy.yml` | ✅ Implemented (manual) |
-| `security.yml` | PR, push, weekly | `govulncheck` + `gosec` (SAST) + `gitleaks` (gate); `checkov` IaC (informational) | ✅ Implemented |
+| `security.yml` | PR, push — **code/infra only** — + weekly | `govulncheck` + `gosec` (SAST) + `gitleaks` (gate); `checkov` IaC (informational) | ✅ Implemented |
+
+> **Actions cost controls.** All PR-triggered workflows use `concurrency` with
+> `cancel-in-progress` on pull requests, so a follow-up push or force-push
+> cancels the superseded run (only the latest commit is built; pushes to `main`
+> are never cancelled). `go.yml` skips docs-only changes (`**/*.md`, `docs/**`),
+> `cloudformation.yml` runs only when `infrastructure/**`
+> changes, and `security.yml`'s push/PR runs are scoped to code/infra/config —
+> the weekly scheduled run still scans the whole repo (and full git history for
+> secrets), so nothing goes permanently unscanned.
 
 > The lint/test/security workflows run green without any repository secrets.
 > `gosec` gates on high-severity/high-confidence findings; `gitleaks` uses
