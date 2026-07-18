@@ -256,6 +256,14 @@ curl -sS -X POST "$REGISTRATION_URL" \
 #     -H "Content-Type: application/json" -d '{"owner":"acme","repository":"widget"}'
 ```
 
+> **Convenience wrapper:** [`scripts/register-repository.sh`](../scripts/register-repository.sh) runs exactly this request for you — it resolves `RegistrationUrl` + the API key from the stack, reads the PAT/webhook secret from the environment (or prompts, so they stay out of your shell history), and builds the JSON safely:
+>
+> ```bash
+> GITHUB_PAT=github_pat_xxx WEBHOOK_SECRET=myWebhookSecret \
+>   scripts/register-repository.sh --owner acme --repository widget
+> # rotate: add --update   ·   deregister: --delete (no credentials needed)
+> ```
+
 On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with your `webhook_secret`, adds the credentials to the shared secret keyed by `acme/widget`, and writes metadata to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
 
 > The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push and only publishes an event when the commit message matches the repository's trigger pattern (default `blog:`). It never starts the instance — that is owned by the scheduler's weekday window; a matched event that arrives outside the window is buffered in SQS and processed at the next 18:00 start.
