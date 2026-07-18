@@ -10,6 +10,14 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.4.0] - 2026-07-18
+
+### Features
+
+- **storyboard:** scene-by-scene video storyboard generator (Milestone 4)
+- **voiceover:** synchronized voice-over script generator (Milestone 5)
+
+
 ## [0.3.0] - 2026-07-18
 
 ### Features
