@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
@@ -162,29 +163,102 @@ func blogTitle(rctx *rc.ReleaseContext) string {
 	return fmt.Sprintf("Inside %s %s: What Changed and Why It Matters", name, rctx.Release.Tag)
 }
 
-// metaDescription returns a single-line SEO meta description clamped to 160
-// characters, grounded in the content-intelligence summary.
+// SEO meta-description length window (in characters/runes).
+const (
+	metaMin = 150
+	metaMax = 160
+)
+
+// metaDescription returns a single-line SEO meta description whose length is
+// always within [metaMin, metaMax]. It starts from the content-intelligence
+// summary and, when that is too short, enriches it with grounded clauses (AWS
+// services, technologies, and factual descriptions of what the article covers)
+// until it clears the floor — never with invented facts.
 func metaDescription(rctx *rc.ReleaseContext) string {
-	s := strings.TrimSpace(rctx.ContentIntelligence.Summary)
-	if s == "" {
-		s = strings.TrimSpace(rctx.Release.Summary)
+	s := collapseWhitespace(firstNonEmptyStr(rctx.ContentIntelligence.Summary, rctx.Release.Summary))
+	for _, clause := range metaEnrichments(rctx) {
+		if runeLen(s) >= metaMin {
+			break
+		}
+		s = collapseWhitespace(joinSentence(s, clause))
 	}
-	if s == "" {
-		s = fmt.Sprintf("A technical deep dive into %s release %s.", rctx.Repository.Name, rctx.Release.Tag)
-	}
-	s = strings.Join(strings.Fields(s), " ") // collapse whitespace/newlines
-	return clampMeta(s, 160)
+	return fitMeta(s)
 }
 
-func clampMeta(s string, max int) string {
-	if len(s) <= max {
+// metaEnrichments returns grounded clauses (most specific first) used to pad a
+// short meta description up to the floor.
+func metaEnrichments(rctx *rc.ReleaseContext) []string {
+	var cs []string
+	if svcs := firstNStr(rctx.Architecture.AWSServices, 3); len(svcs) > 0 {
+		cs = append(cs, "It builds on "+strings.Join(svcs, ", ")+".")
+	}
+	if names := firstNStr(technologyNames(rctx), 3); len(names) > 0 {
+		cs = append(cs, "Built with "+strings.Join(names, ", ")+".")
+	}
+	// Factual descriptions of what the blog article itself covers — true framing,
+	// not fabricated release details — and enough in aggregate to clear the floor
+	// even for a near-empty context.
+	cs = append(cs,
+		"This article explains what changed and why it matters.",
+		"It covers the architecture and key design decisions.",
+		"It walks through the implementation details.",
+		"It shows how to use and extend the feature.",
+	)
+	return cs
+}
+
+// fitMeta clamps s to at most metaMax runes while keeping it at least metaMin
+// (callers build s to already meet the floor). It trims on a word boundary when
+// one exists above the floor, else hard-cuts, appending an ellipsis.
+func fitMeta(s string) string {
+	s = collapseWhitespace(s)
+	r := []rune(s)
+	if len(r) <= metaMax {
 		return s
 	}
-	cut := s[:max-1]
-	if i := strings.LastIndexByte(cut, ' '); i > max/2 {
-		cut = cut[:i]
+	end := metaMax - 1 // leave one rune for the ellipsis
+	for i := end; i >= metaMin; i-- {
+		if r[i] == ' ' {
+			end = i
+			break
+		}
 	}
-	return strings.TrimRight(cut, " ,.;:") + "…"
+	out := strings.TrimRight(string(r[:end]), " ,;:") + "…"
+	if runeLen(out) < metaMin {
+		out = string(r[:metaMax-1]) + "…"
+	}
+	return out
+}
+
+func joinSentence(a, b string) string {
+	a = strings.TrimSpace(a)
+	if a == "" {
+		return b
+	}
+	if !strings.HasSuffix(a, ".") && !strings.HasSuffix(a, "!") && !strings.HasSuffix(a, "?") {
+		a += "."
+	}
+	return a + " " + b
+}
+
+func collapseWhitespace(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func runeLen(s string) int { return utf8.RuneCountInString(s) }
+
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+func firstNStr(list []string, n int) []string {
+	if len(list) > n {
+		return list[:n]
+	}
+	return list
 }
 
 var tagSanitizeRe = regexp.MustCompile(`[^a-z0-9]+`)

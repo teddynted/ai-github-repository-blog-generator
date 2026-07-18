@@ -101,15 +101,34 @@ func TestBlogPromptStructureAndGrounding(t *testing.T) {
 	}
 }
 
-func TestMetaDescriptionClamped(t *testing.T) {
-	c := sampleContext()
-	c.ContentIntelligence.Summary = strings.Repeat("word ", 60) // ~300 chars
-	m := metaDescription(c)
-	if len(m) > 160 {
-		t.Errorf("meta length = %d, want <= 160", len(m))
+func TestMetaDescriptionWithinWindow(t *testing.T) {
+	cases := map[string]string{
+		"long":    strings.Repeat("word ", 60), // ~300 chars -> must trim
+		"short":   "Small release.",            // must pad up to the floor
+		"empty":   "",                          // nothing -> still within window
+		"midlow":  strings.Repeat("word ", 28), // ~140 chars -> just under the floor
+		"inrange": strings.Repeat("a", 155),    // already in [150,160]
 	}
+	for name, summary := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := sampleContext()
+			c.ContentIntelligence.Summary = summary
+			c.Release.Summary = ""
+			m := metaDescription(c)
+			n := len([]rune(m))
+			if n < 150 || n > 160 {
+				t.Errorf("meta length = %d, want 150–160: %q", n, m)
+			}
+		})
+	}
+}
+
+func TestMetaDescriptionLongIsTruncated(t *testing.T) {
+	c := sampleContext()
+	c.ContentIntelligence.Summary = strings.Repeat("word ", 60)
+	m := metaDescription(c)
 	if !strings.HasSuffix(m, "…") {
-		t.Error("long meta should be truncated with an ellipsis")
+		t.Errorf("long meta should end with an ellipsis: %q", m)
 	}
 }
 
