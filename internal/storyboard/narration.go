@@ -1,0 +1,101 @@
+package storyboard
+
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+// narration returns spoken voice-over for a scene. It builds a deterministic
+// draft from the section prose (grounded, never invented) and, when a Model is
+// configured, asks it to polish the draft into natural spoken narration — never
+// to add facts. On any model error it falls back to the draft.
+func (g *Generator) narration(ctx context.Context, sec section, typ string) string {
+	draft := narrationDraft(sec.Body, typ, sec.Title)
+	if g.Model == nil || strings.TrimSpace(draft) == "" {
+		return draft
+	}
+	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, draft))
+	if err != nil {
+		return draft
+	}
+	if r := collapse(strings.TrimSpace(out)); r != "" {
+		return r
+	}
+	return draft
+}
+
+// narrationDraft produces grounded narration from the section prose, with a
+// sensible fallback line when the section has no prose (e.g. a diagram-only
+// section).
+func narrationDraft(body, typ, title string) string {
+	p := prose(body)
+	if d := firstSentences(p, 3, 60); d != "" {
+		return d
+	}
+	switch typ {
+	case "diagram", "architecture":
+		return fmt.Sprintf("Here's the architecture at a glance: %s.", strings.ToLower(title))
+	default:
+		return "Let's look at " + strings.ToLower(cleanInline(title)) + "."
+	}
+}
+
+func narrationPrompt(title, typ, draft string) string {
+	return fmt.Sprintf(
+		"You are writing spoken voice-over narration for one scene of a technical video.\n"+
+			"Scene: %q (type: %s).\n\n"+
+			"Rewrite the DRAFT below into 2–3 clear, natural spoken sentences (max ~60 words), "+
+			"professional and educational, suitable for a voice-over. Use ONLY the facts in the "+
+			"draft — do not invent features, numbers, or architecture. Output only the narration text.\n\n"+
+			"DRAFT:\n%s",
+		title, typ, draft,
+	)
+}
+
+// planVisuals describes what fills the frame for a scene (deterministic, tied to
+// the chosen assets and diagrams).
+func planVisuals(typ, title string, assets []string, diagrams []DiagramRef) Visuals {
+	v := Visuals{Style: "clean, modern, developer-focused", Background: backgroundFor(typ)}
+	switch typ {
+	case "introduction":
+		v.Description = "Animated title card with the repository logo and release tag; brief motion-graphic intro."
+	case "problem":
+		v.Description = "Text-forward slide framing the problem, with a supporting timeline or before/after graphic."
+	case "architecture", "diagram":
+		if len(diagrams) > 0 {
+			v.Description = fmt.Sprintf("The architecture diagram (%s) centred on canvas, building and highlighting nodes as narration proceeds.", diagrams[0].Source)
+		} else {
+			v.Description = "An architecture canvas illustrating the components and how they connect."
+		}
+	case "cloudformation":
+		v.Description = "A code editor showing the CloudFormation template, scrolling and highlighting each resource."
+	case "repository":
+		v.Description = "A screen recording of the GitHub repository: the file tree and the changed files."
+	case "implementation":
+		v.Description = "A code editor focused on the key implementation, with the relevant lines highlighted."
+	case "results":
+		v.Description = "Outcome-focused graphics: metrics, a flow diagram, and before/after framing."
+	case "lessons":
+		v.Description = "Clean slides listing practical guidance and how to use or extend the feature."
+	case "conclusion":
+		v.Description = "Closing title card recapping key takeaways with a subtle call to action."
+	default:
+		v.Description = "A supporting visual for: " + title + "."
+	}
+	if len(assets) > 0 {
+		v.Description += " Assets: " + strings.Join(assets, ", ") + "."
+	}
+	return v
+}
+
+func backgroundFor(typ string) string {
+	switch typ {
+	case "cloudformation", "repository", "implementation":
+		return "dark code-editor theme"
+	case "architecture", "diagram":
+		return "light diagram canvas"
+	default:
+		return "brand gradient"
+	}
+}

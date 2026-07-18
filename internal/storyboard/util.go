@@ -1,0 +1,126 @@
+package storyboard
+
+import "strings"
+
+// codeBlock is a fenced code block extracted from Markdown.
+type codeBlock struct {
+	Lang string
+	Code string
+}
+
+// fencedBlocks returns the fenced code blocks in body, tagged with their info
+// string (language). Mermaid blocks are excluded — those are diagrams, handled
+// by the diagram planner.
+func fencedBlocks(body string) []codeBlock {
+	var blocks []codeBlock
+	lines := strings.Split(body, "\n")
+	in := false
+	lang := ""
+	var buf []string
+	for _, ln := range lines {
+		t := strings.TrimSpace(ln)
+		if !in && strings.HasPrefix(t, "```") {
+			in = true
+			lang = strings.TrimSpace(strings.TrimPrefix(t, "```"))
+			buf = nil
+			continue
+		}
+		if in && t == "```" {
+			in = false
+			if strings.ToLower(lang) != "mermaid" {
+				blocks = append(blocks, codeBlock{Lang: strings.ToLower(lang), Code: strings.Join(buf, "\n")})
+			}
+			continue
+		}
+		if in {
+			buf = append(buf, ln)
+		}
+	}
+	return blocks
+}
+
+// prose returns the body with fenced code blocks and inline markdown removed,
+// so narration is drawn only from spoken-word content.
+func prose(body string) string {
+	lines := strings.Split(body, "\n")
+	in := false
+	var out []string
+	for _, ln := range lines {
+		t := strings.TrimSpace(ln)
+		if strings.HasPrefix(t, "```") {
+			in = !in
+			continue
+		}
+		if in {
+			continue
+		}
+		if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "|") || strings.HasPrefix(t, ">") {
+			continue
+		}
+		out = append(out, t)
+	}
+	return cleanInline(strings.Join(out, " "))
+}
+
+// firstSentences returns up to n sentences of s, also capped at maxWords.
+func firstSentences(s string, n, maxWords int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	var out []string
+	count := 0
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' || s[i] == '!' || s[i] == '?' {
+			out = append(out, strings.TrimSpace(s[start:i+1]))
+			start = i + 1
+			count++
+			if count >= n {
+				break
+			}
+		}
+	}
+	if count == 0 {
+		out = []string{s}
+	}
+	joined := strings.TrimSpace(strings.Join(out, " "))
+	return capWords(joined, maxWords)
+}
+
+func capWords(s string, max int) string {
+	f := strings.Fields(s)
+	if len(f) <= max {
+		return s
+	}
+	return strings.Join(f[:max], " ") + "…"
+}
+
+func wordCount(s string) int { return len(strings.Fields(s)) }
+
+func truncate(s string, max int) string {
+	s = strings.TrimRight(s, "\n")
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "\n…"
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func topStrings(list []string, n int) []string {
+	if len(list) > n {
+		return list[:n]
+	}
+	return list
+}
