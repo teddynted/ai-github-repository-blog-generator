@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel superseded runs on the same PR/branch (e.g. rapid follow-up pushes or
+# force-pushes) so only the latest commit is built. Pushes to main are never
+# cancelled, so every merged commit is still fully validated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-test:
     runs-on: ubuntu-latest

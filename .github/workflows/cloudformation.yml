@@ -1,9 +1,21 @@
 name: cloudformation
 
+# cfn-lint only needs to run when the templates (or this workflow) change, so
+# Go-only and docs-only changes no longer spend a runner here.
 on:
   push:
     branches: [main]
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/cloudformation.yml"
   pull_request:
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/cloudformation.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
