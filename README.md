@@ -839,6 +839,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Registration](./docs/registration.md) | `/repositories` API — shared-secret credential storage, register/update/delete, PAT scopes, responses, migration |
 | [Manual Trigger](./docs/manual-trigger.md) | `POST /process` API — auth, payload, responses, errors, CloudFormation |
 | [Release Context](./docs/release-context.md) | `POST /release-context` API + the Content Intelligence schema, analyzers, and design |
+| [Blog Generation](./docs/blog-generation.md) | Long-form technical blog + social/SEO generation from a Release Context (the `blog` CLI) |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |

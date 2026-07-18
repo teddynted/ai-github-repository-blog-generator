@@ -1,0 +1,106 @@
+# Technical Blog Generation (Milestone 3)
+
+Milestone 3 turns the structured **Release Context** ([Milestone 2](./release-context.md))
+into a polished, long-form **technical blog post** — plus release summaries,
+documentation, and social/SEO variants — via local inference.
+
+Related: [Release Context](./release-context.md) · [Architecture](./architecture.md) · [Workflows](./workflows.md).
+
+---
+
+## 1. Design
+
+The engine lives in [`internal/releasegen`](../internal/releasegen) and depends
+only on a **`Model` port** (`Generate(ctx, prompt) (string, error)`), satisfied
+by the platform's local **Ollama** client today and by an **Amazon Bedrock**
+adapter later — so generation is decoupled from any specific LLM.
+
+Blog generation is a **hybrid** of deterministic assembly and LLM prose, so the
+result is both accurate and reliable:
+
+| Part | Produced by | Why |
+| --- | --- | --- |
+| Title, meta description, tags (SEO front matter) | Deterministic, from `contentIntelligence` | Never hallucinated; meta clamped to ≤160 chars |
+| Long-form article body | LLM, from a section-structured prompt | High-quality narrative |
+| Mermaid architecture diagrams | Deterministic, from the context's parsed diagrams | Accurate — reconstructed from real edges, not invented |
+
+The prompt is **strictly grounded**: it embeds a compact block rendered from the
+context (repository, release, changelog, implementation, architecture,
+technologies, content intelligence) and instructs the model to *"ground every
+statement in the Release Context; if a detail is missing, say it was not
+available rather than guessing."*
+
+## 2. Article structure
+
+The body follows a fixed long-form structure (1,500–2,500 words), including only
+sections the context supports:
+
+Introduction · Background and Context · What Was Implemented · Architecture and
+Design · Implementation Details · Repository and Code Changes · Benefits and
+Outcomes · How to Use or Extend the Feature · Conclusion.
+
+## 3. Output
+
+A complete, publication-ready Markdown document with YAML front matter for
+Dev.to / Medium / a personal blog:
+
+```markdown
+---
+title: "Inside widget v0.2.0: What Changed and Why It Matters"
+description: "widget v0.2.0 delivers 4 analyzed changes (2 features, 1 fix) …"
+tags: [go, aws-lambda, amazon-sqs, serverless, event-driven-architecture, release-notes]
+---
+
+# Inside widget v0.2.0: What Changed and Why It Matters
+
+## Introduction
+…
+
+## Architecture and Design
+…
+
+## Architecture Diagrams
+
+_flowchart diagram with 3 nodes and 2 relationships. (docs/architecture.md)_
+
+```mermaid
+flowchart TD
+    A --> B
+    B -->|match| C
+```
+```
+
+Other formats (`release-summary`, `documentation`, `linkedin`, `youtube-shorts`,
+`tiktok`, `seo-metadata`) are produced by `Generator.Generate` /
+`Generator.GenerateAll`.
+
+## 4. Running it
+
+The `blog` CLI reads a Release Context JSON (from the `/release-context`
+endpoint or S3) and generates content against a local Ollama server — the same
+model that runs on the instance:
+
+```bash
+# Blog post to stdout
+go run ./cmd/blog --context ctx.json
+
+# To a file, choosing the model
+go run ./cmd/blog --context ctx.json --out post.md --model qwen2.5:7b
+
+# A LinkedIn post from a piped context
+cat ctx.json | go run ./cmd/blog --format linkedin
+```
+
+Flags: `--context` (`-` = stdin), `--format`, `--model` (`OLLAMA_MODEL`),
+`--ollama` (`OLLAMA_URL`, default `http://127.0.0.1:11434`), `--out`, `--timeout`.
+
+## 5. Status
+
+**Implemented:** the `releasegen` engine (`Model` port, seven formats, grounded
+prompts, `GenerateAll` error aggregation) and the dedicated long-form `Blog`
+generator (SEO front matter, fixed section structure, accurate Mermaid
+embedding). Unit-tested at 90%+ coverage with a fake model; the `blog` CLI runs
+it against local Ollama.
+
+**Next:** wire generation into the publish/review/approval pipeline so posts are
+produced automatically after a release; add the Amazon Bedrock `Model` adapter.
