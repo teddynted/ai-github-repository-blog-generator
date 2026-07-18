@@ -56,17 +56,30 @@ func (s *Service) Validate(ctx context.Context, plan Plan, changelogContent stri
 	}
 
 	// --- Tag does not exist (always required) ---
+	tagExists := false
 	if exists, err := s.Git.TagExists(ctx, plan.Tag); err != nil {
 		r.add("Tag does not exist", SeverityError, "could not check tag "+plan.Tag+": "+err.Error())
 	} else if exists {
+		tagExists = true
 		r.add("Tag does not exist", SeverityError, "tag "+plan.Tag+" already exists")
 	} else {
 		r.add("Tag does not exist", SeverityOK, plan.Tag)
 	}
 
-	// --- CHANGELOG not already documenting this version (guard against repeats) ---
-	if changelog.Contains(changelogContent, plan.NextVersion.String()) {
-		r.add("CHANGELOG updated", SeverityError, "CHANGELOG already documents "+plan.NextVersion.String())
+	// --- CHANGELOG state, reconciled with the tag ---
+	// The CLI commits the CHANGELOG as its first mutating step, so finding the
+	// version already documented while the tag does NOT yet exist is a
+	// recoverable, partially-completed release — a warning, not a block: an
+	// idempotent re-run finishes the tag + GitHub Release. Only when the tag
+	// also exists is it a true repeat (already errored by the tag check above).
+	version := plan.NextVersion.String()
+	if !changelog.Contains(changelogContent, version) {
+		r.add("CHANGELOG updated", SeverityOK, "")
+	} else if tagExists {
+		r.add("CHANGELOG updated", SeverityError, "CHANGELOG already documents "+version)
+	} else {
+		r.add("CHANGELOG already documents "+version, SeverityWarning,
+			"resuming a partially completed release (changelog committed, tag pending)")
 	}
 
 	// --- Remote sync (always required) ---

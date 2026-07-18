@@ -184,13 +184,34 @@ func TestInitialCommitExcluded(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsDowngrade(t *testing.T) {
-	g := &fakeGit{branch: "main", clean: true, latestTag: "v2.0.0", subjects: []string{"fix: b"}, synced: true}
+func TestValidateRejectsFullRepeat(t *testing.T) {
+	// Changelog already documents the version AND the tag exists => a true
+	// repeat, which must block.
+	g := &fakeGit{branch: "main", clean: true, latestTag: "v2.0.0",
+		subjects: []string{"fix: b"}, synced: true, tagExists: true}
 	svc := newSvc(g, &fakeGH{authed: true})
 	patch := conventional.BumpPatch
 	plan, _ := svc.DeterminePlan(context.Background(), &patch, "")
 	if rep := svc.Validate(context.Background(), plan, "## [2.0.1] - x", false); !rep.HasError() {
-		t.Error("expected CHANGELOG-duplicate validation to fail")
+		t.Error("expected a full repeat (changelog + tag) to fail")
+	}
+}
+
+func TestValidateResumesPartialRelease(t *testing.T) {
+	// Changelog documents the version but the tag does NOT exist yet => a
+	// partially completed release. Validation must NOT block (only warn), so an
+	// idempotent re-run can finish the tag + GitHub Release.
+	g := &fakeGit{branch: "main", clean: true, latestTag: "v2.0.0",
+		subjects: []string{"fix: b"}, synced: true, tagExists: false}
+	svc := newSvc(g, &fakeGH{authed: true})
+	patch := conventional.BumpPatch
+	plan, _ := svc.DeterminePlan(context.Background(), &patch, "")
+	rep := svc.Validate(context.Background(), plan, "## [2.0.1] - x", false)
+	if rep.HasError() {
+		t.Errorf("partial-release recovery must not block:\n%s", reportText(rep))
+	}
+	if !strings.Contains(reportText(rep), "resuming a partially completed release") {
+		t.Errorf("expected a resume warning, got:\n%s", reportText(rep))
 	}
 }
 
