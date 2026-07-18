@@ -102,5 +102,22 @@ generator (SEO front matter, fixed section structure, accurate Mermaid
 embedding). Unit-tested at 90%+ coverage with a fake model; the `blog` CLI runs
 it against local Ollama.
 
-**Next:** wire generation into the publish/review/approval pipeline so posts are
-produced automatically after a release; add the Amazon Bedrock `Model` adapter.
+**Closing the loop:** [`internal/releasepipeline`](../internal/releasepipeline)
+composes the Release Context Builder (M2), this generator (M3), and the
+platform's existing **review → publish → notify** stages into one flow:
+
+```
+Request (owner, repo, releaseTag)
+  → Builder.Build      → ReleaseContext        (Milestone 2)
+  → Generator          → assets (blog + …)     (Milestone 3)
+  → Reviewer.Review    → quality gate          (internal/review)
+  → Publisher.Publish  → Markdown to disk/S3   (internal/publish)
+  → Notifier.Notify    → outcome email/webhook (optional)
+```
+
+Each stage is a small port satisfied by an existing type, so the whole flow is
+unit-tested end to end. A single format failing review is dropped, not fatal, so
+the rest still publish.
+
+**Next:** run the pipeline on the instance after a published-release webhook;
+add the Amazon Bedrock `Model` adapter.
