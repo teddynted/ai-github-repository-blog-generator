@@ -10,6 +10,27 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.3.0] - 2026-07-18
+
+### Features
+
+- **process:** let /process trigger release-content generation via releaseTag
+- **releasegen:** long-form technical blog generation (Milestone 3)
+- **releasepipeline:** close the loop from release to published content
+- **releasesource:** read repos with the registered per-repo PAT
+- **worker:** run the release-content pipeline on published-release events
+
+### Bug Fixes
+
+- **releasegen:** enforce a 150-160 char SEO meta description
+
+### Documentation
+
+- **architecture:** document Content Intelligence & Generation (M2-M3)
+- **release-context:** clarify the endpoint is a standalone context API
+- add release-to-content end-to-end validation runbook
+
+
 ## [0.2.0] - 2026-07-18
 
 ### Features
