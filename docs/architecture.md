@@ -148,6 +148,38 @@ flowchart TB
 | OpenClaw | Clone (using the PAT) and analyse the repository |
 | Repository Memory | Per-repo continuity and topic de-duplication |
 | Ollama + Qwen | Local LLM inference |
+| Release Context API (Lambda: `release-context`) | Build and persist the structured Release Context for a repo + release; the Content Intelligence entrypoint (`POST /release-context`) |
+| Release Context Builder (`internal/releasecontext`) | Analyse repository, release, commits, changed files, docs, CloudFormation, and Mermaid into a versioned, AI-ready Release Context |
+| Content Generation (`internal/releasegen`) | Generate a long-form blog post plus release summary, social, and SEO variants from a Release Context via the local model |
+| Release Content Pipeline (worker) | On a published release: build the context, generate content, review, publish, and notify |
+
+---
+
+### Content Intelligence & Generation (Milestones 2–3)
+
+Beyond the trigger gate, the platform turns a repository + release into
+publication-ready content. This is **Content Intelligence** (analysis) feeding
+**Content Generation** (writing):
+
+```mermaid
+flowchart LR
+    SRC[GitHub API + git] --> RCB[Release Context Builder]
+    RCB --> RCX[(Release Context<br/>versioned JSON)]
+    RCX --> GEN[Content Generation<br/>local Ollama]
+    GEN --> REV[Review] --> PUB[Publish] --> OUT[(Output bucket / EBS)]
+```
+
+- The **Release Context** is the single, versioned source of truth
+  (`schemaVersion 2.0.0`) — what changed, how it was implemented, why it
+  matters, and how it fits the architecture. It is built by pure, decoupled
+  analyzers behind a `Sources` port, so it is reusable from a Lambda, the worker,
+  or a CLI.
+- **Generation** is decoupled by a `Model` port (local Ollama today), grounded
+  strictly in the context, and produces a long-form blog post (with SEO front
+  matter and accurate embedded Mermaid) plus other formats.
+- On a **published release**, the worker runs this end to end automatically;
+  reads use the repository's registered PAT. See
+  [Release Context](./release-context.md) and [Blog Generation](./blog-generation.md).
 
 ---
 
