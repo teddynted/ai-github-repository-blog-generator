@@ -219,6 +219,7 @@ everything:
 | Clean working tree | error | error |
 | Release branch | error | error |
 | Tag does not exist | error | error |
+| CHANGELOG documents the version | see below | see below |
 | Synchronized with remote | error | error |
 | **GitHub authentication** | **warning** | **error** |
 | **GitHub connectivity** | **warning (skipped)** | **error** |
@@ -226,6 +227,19 @@ everything:
 
 So a dry-run on `main` with a clean, synced tree and **no token** exits `0` with
 two warnings; the same state for a real release exits non-zero (auth required).
+
+**CHANGELOG-vs-tag reconciliation.** Because the CLI commits the CHANGELOG as
+its first mutating step, the "already documents this version" state is
+interpreted **relative to the tag**:
+
+- CHANGELOG documents the version **and the tag exists** → **error** (a true
+  repeat; already released).
+- CHANGELOG documents the version **but the tag does not exist** → **warning**
+  ("resuming a partially completed release"). This is the recovery path after a
+  run that committed the changelog but stopped before tagging (e.g. interrupted,
+  or GitHub 503'd on release creation). A re-run is **idempotent** — the
+  changelog commit becomes a no-op, and the CLI finishes the tag and Release.
+- CHANGELOG does not document the version → **OK** (it will be added).
 
 **The repository's initial (root) commit is excluded** from Conventional Commit
 validation — a non-conventional `first commit` never fails validation, and you
@@ -328,6 +342,8 @@ logged.
 | `local branch is not in sync with the remote` | `git pull` / `git push` first |
 | `no GitHub authentication available` | export `GITHUB_TOKEN` or `GH_TOKEN` |
 | `commit changelog` / `push main` failed | the CLI stages, commits, and pushes `CHANGELOG.md` for you — check write access to the release branch (branch protection can block a direct push) |
+| `CHANGELOG already documents X` (as an **error**) | the tag `vX` also exists — that version is already released; choose a higher bump |
+| `CHANGELOG already documents X` (as a **warning**) | a prior run committed the changelog but didn't tag; just re-run `go run ./cmd/release <bump>` — it resumes idempotently and finishes the tag + Release |
 
 Use `go run ./cmd/release validate` (or any `--dry-run` command) to diagnose
 without making changes — it prints the full severity report. Warnings (e.g. a
