@@ -131,6 +131,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🪝 **GitHub Webhook ingress** | Push events are received, verified, and evaluated — never blindly processed |
 | 🎛️ **Manual API trigger** | Authenticated `POST /process` (API key) forces a run via the same pipeline — **starts the On-Demand host on demand** if it is stopped ([docs](./docs/manual-trigger.md)) |
 | 🧠 **Release Context Builder** | Authenticated `POST /release-context` analyzes a repo + release into a structured, AI-ready **Release Context** (JSON) — the canonical input for content generation ([docs](./docs/release-context.md)) |
+| 🎬 **Storyboard Generator** | Turns a generated technical blog + Release Context into a scene-by-scene **video storyboard** (JSON + Markdown) — the Video Planning engine, grounded in real Mermaid diagrams ([docs](./docs/storyboard.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -840,6 +841,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Manual Trigger](./docs/manual-trigger.md) | `POST /process` API — auth, payload, responses, errors, CloudFormation |
 | [Release Context](./docs/release-context.md) | `POST /release-context` API + the Content Intelligence schema, analyzers, and design |
 | [Blog Generation](./docs/blog-generation.md) | Long-form technical blog + social/SEO generation from a Release Context (the `blog` CLI) |
+| [Storyboard Generation](./docs/storyboard.md) | Scene-by-scene video storyboard from a blog + Release Context — the Video Planning engine (the `storyboard` CLI) |
 | [Runbook: Release → Content](./docs/runbook-release-to-content.md) | End-to-end live validation — publish a release, verify a blog post is generated and published |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |

@@ -1,0 +1,154 @@
+package storyboard
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
+)
+
+// Generator builds a Storyboard from a technical blog and its Release Context.
+// It reuses the shared releasegen.Model port; when Model is nil, generation is
+// fully deterministic (narration is drawn from the blog prose).
+type Generator struct {
+	Model releasegen.Model
+	// WordsPerSecond sets narration pacing for timing; <= 0 uses the default.
+	WordsPerSecond float64
+	Now            func() time.Time
+	Logger         *slog.Logger
+}
+
+func (g *Generator) now() time.Time {
+	if g.Now != nil {
+		return g.Now()
+	}
+	return time.Now().UTC()
+}
+
+// Storyboard converts a generated blog post (Milestone 3) and its Release
+// Context (Milestone 2) into a structured, scene-by-scene storyboard. Diagram
+// references come only from the parsed Mermaid in rctx — architecture is never
+// invented.
+func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rctx *rc.ReleaseContext) (Storyboard, error) {
+	if rctx == nil {
+		return Storyboard{}, fmt.Errorf("storyboard: release context is required")
+	}
+	sb := Storyboard{
+		SchemaVersion: SchemaVersion,
+		Metadata: Metadata{
+			Repository:      rctx.Repository.FullName,
+			Release:         rctx.Release.Tag,
+			SourceBlogTitle: post.Title,
+			GeneratedAt:     g.now().Format(time.RFC3339),
+		},
+	}
+
+	sections := extractSections(post.Markdown)
+	if len(sections) == 0 {
+		return sb, fmt.Errorf("storyboard: blog has no ## sections to scene")
+	}
+
+	scenes := make([]Scene, 0, len(sections))
+	for i, sec := range sections {
+		typ := sceneType(sec.Title)
+		sc := Scene{
+			SceneNumber: i + 1,
+			Title:       sec.Title,
+			Type:        typ,
+			Objective:   objectiveFor(typ, sec.Title),
+		}
+		sc.Narration = g.narration(ctx, sec, typ)
+		sc.Duration = planDuration(sc.Narration, g.WordsPerSecond)
+		sc.Diagrams = planDiagrams(typ, rctx.Mermaid)
+		sc.Code = planCode(sec.Body)
+		sc.Camera = planCamera(typ)
+		sc.Animations = planAnimations(typ, sc.Diagrams, sc.Code)
+		sc.Overlays = planOverlays(typ, sec.Title, rctx)
+		sc.Assets = planAssets(typ)
+		sc.Visuals = planVisuals(typ, sec.Title, sc.Assets, sc.Diagrams)
+		sc.MusicMood, sc.SoundEffects = planMood(typ)
+		scenes = append(scenes, sc)
+	}
+
+	// Transitions depend on the following scene, so they run once scenes exist.
+	for i := range scenes {
+		nextType := ""
+		isLast := i == len(scenes)-1
+		if !isLast {
+			nextType = scenes[i+1].Type
+		}
+		scenes[i].Transition = planTransition(scenes[i].Type, nextType, isLast)
+	}
+
+	sb.Scenes = scenes
+	sb.Video = planVideo(scenes, g.rate())
+	sb.ContentIntelligence = planIntelligence(scenes, post, rctx, sb.Video)
+	sb.Warnings = collectWarnings(sb, rctx)
+
+	if g.Logger != nil {
+		g.Logger.Info("storyboard generated",
+			slog.String("repository", sb.Metadata.Repository),
+			slog.String("release", sb.Metadata.Release),
+			slog.Int("scenes", len(sb.Scenes)),
+			slog.Int("duration_sec", sb.Video.TotalDurationSec),
+			slog.Int("warnings", len(sb.Warnings)),
+		)
+	}
+	return sb, nil
+}
+
+func (g *Generator) rate() float64 {
+	if g.WordsPerSecond > 0 {
+		return g.WordsPerSecond
+	}
+	return defaultWordsPerSecond
+}
+
+// planVideo aggregates the scene timings into the whole-video spec.
+func planVideo(scenes []Scene, rate float64) VideoSpec {
+	total, words := 0, 0
+	for _, s := range scenes {
+		total += s.Duration.RecommendedSec
+		words += wordCount(s.Narration)
+	}
+	voice := int(float64(words) / rate)
+	format, aspect := "long-form", "16:9"
+	if total <= 180 {
+		format, aspect = "short", "9:16"
+	}
+	return VideoSpec{
+		TargetFormat:         format,
+		AspectRatio:          aspect,
+		SceneCount:           len(scenes),
+		TotalDurationSec:     total,
+		VoiceoverDurationSec: voice,
+		Pacing:               videoPacing(scenes),
+	}
+}
+
+func videoPacing(scenes []Scene) string {
+	if len(scenes) == 0 {
+		return "medium"
+	}
+	sum := 0
+	for _, s := range scenes {
+		sum += s.Duration.RecommendedSec
+	}
+	avg := sum / len(scenes)
+	return pacingFor(avg)
+}
+
+func collectWarnings(sb Storyboard, rctx *rc.ReleaseContext) []string {
+	var w []string
+	if len(rctx.Mermaid) == 0 {
+		w = append(w, "no Mermaid diagrams in the release context; architecture scenes have no diagram references")
+	}
+	// Long-form videos target 8–15 minutes; flag when we fall short.
+	if sb.Video.TargetFormat == "long-form" && sb.Video.TotalDurationSec < 480 {
+		w = append(w, fmt.Sprintf("total runtime %ds is under the 8-minute long-form target; consider a richer blog or the short format", sb.Video.TotalDurationSec))
+	}
+	return w
+}
