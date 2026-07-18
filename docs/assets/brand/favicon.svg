@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none" role="img" aria-label="AI GitHub Repository Blog Generator">
+  <title>AI GitHub Repository Blog Generator</title>
+  <rect width="32" height="32" rx="7" fill="#24292F"/>
+  <g stroke="#F0F6FC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 10V22"/>
+    <path d="M11 16.5C11 13 13 11 16.5 11"/>
+  </g>
+  <circle cx="11" cy="10" r="3" fill="#F0F6FC"/>
+  <circle cx="11" cy="22" r="3" fill="#F0F6FC"/>
+  <path fill="#3B82F6" d="M21 6Q21 11 26 11Q21 11 21 16Q21 11 16 11Q21 11 21 6Z"/>
+</svg>

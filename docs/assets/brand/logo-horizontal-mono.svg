@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 72" width="320" height="72" fill="none" color="#24292F" role="img" aria-label="AI GitHub Repository Blog Generator">
+  <title>AI GitHub Repository Blog Generator</title>
+  <g id="mark" transform="translate(12 12)" fill="currentColor">
+    <g stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 13.5V36.5"/>
+      <path d="M14 25C14 18.5 18.5 15 24 15"/>
+    </g>
+    <circle cx="14" cy="13.5" r="5"/>
+    <circle cx="14" cy="36.5" r="5"/>
+    <path d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+    <path d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+  </g>
+  <g id="wordmark" fill="currentColor" font-family="'Poppins','Montserrat','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif">
+    <text x="76" y="33" font-size="19" font-weight="650" letter-spacing="-0.2">AI GitHub Repository</text>
+    <text x="76" y="57" font-size="19" font-weight="500" letter-spacing="0.2" opacity="0.72">Blog Generator</text>
+  </g>
+</svg>
