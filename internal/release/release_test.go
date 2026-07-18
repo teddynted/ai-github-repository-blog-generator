@@ -197,6 +197,38 @@ func TestValidateRejectsFullRepeat(t *testing.T) {
 	}
 }
 
+func TestValidateBlocksEmptyForcedBump(t *testing.T) {
+	// No commits since the last tag: even a forced patch must not "pump" the
+	// version with an empty release.
+	g := &fakeGit{branch: "main", clean: true, latestTag: "v1.0.0", subjects: nil, synced: true}
+	svc := newSvc(g, &fakeGH{authed: true})
+	patch := conventional.BumpPatch
+	plan, _ := svc.DeterminePlan(context.Background(), &patch, "")
+	if plan.Analysed != 0 {
+		t.Fatalf("expected 0 commits analysed, got %d", plan.Analysed)
+	}
+	rep := svc.Validate(context.Background(), plan, "", false)
+	if !rep.HasError() {
+		t.Errorf("empty forced bump must be blocked:\n%s", reportText(rep))
+	}
+	if !strings.Contains(reportText(rep), "nothing to release") {
+		t.Errorf("expected 'nothing to release', got:\n%s", reportText(rep))
+	}
+}
+
+func TestValidateAllowsForcedBumpWithNonReleaseCommits(t *testing.T) {
+	// Commits exist but only non-release-worthy types (ci/chore); a forced bump
+	// is legitimate here and must NOT be blocked.
+	g := &fakeGit{branch: "main", clean: true, latestTag: "v1.0.0",
+		subjects: []string{"ci: tune pipeline", "chore: tidy"}, synced: true}
+	svc := newSvc(g, &fakeGH{authed: true})
+	patch := conventional.BumpPatch
+	plan, _ := svc.DeterminePlan(context.Background(), &patch, "")
+	if rep := svc.Validate(context.Background(), plan, "", false); rep.HasError() {
+		t.Errorf("forced bump over non-release commits must pass:\n%s", reportText(rep))
+	}
+}
+
 func TestValidateResumesPartialRelease(t *testing.T) {
 	// Changelog documents the version but the tag does NOT exist yet => a
 	// partially completed release. Validation must NOT block (only warn), so an
