@@ -10,6 +10,17 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.1.6] - 2026-07-18
+
+### Bug Fixes
+
+- **release:** honor flags after the subcommand (dry-run safety)
+
+### Documentation
+
+- add register-repository.sh wrapper for the registration curl
+
+
 ## [0.1.5] - 2026-07-18
 
 ### Bug Fixes
