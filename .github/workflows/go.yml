@@ -3,7 +3,13 @@ name: go
 on:
   push:
     branches: [main]
+    paths-ignore: &docs_only
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
   pull_request:
+    paths-ignore: *docs_only
 
 # Cancel superseded runs on the same PR/branch (e.g. rapid follow-up pushes or
 # force-pushes) so only the latest commit is built. Pushes to main are never
