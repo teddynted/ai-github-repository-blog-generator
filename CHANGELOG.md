@@ -10,6 +10,17 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.1.1] - 2026-07-18
+
+### Features
+
+- **release:** commit and push CHANGELOG to the release branch
+
+### Documentation
+
+- clarify AI processing has two trigger sources (webhook or POST /process)
+
+
 ## [0.1.0] - 2026-07-16
 
 ### Features
