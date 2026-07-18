@@ -509,7 +509,34 @@ cp .env.example .env
 
 # 3. Configure your AWS CLI (if not already done)
 aws configure
+
+# 4. Bootstrap the deploy pipeline (one-time, uses your admin credentials)
+#    Creates the artifacts bucket + GitHub OIDC provider + deploy IAM role,
+#    then prints the GitHub Actions secrets/variables to set.
+scripts/bootstrap.sh --owner <your-org> --repo <your-repo>
 ```
+
+### Bootstrapping the deploy pipeline
+
+[`scripts/bootstrap.sh`](./scripts/bootstrap.sh) is a **one-time** step run with your **admin AWS credentials**. It deploys [`infrastructure/bootstrap.yaml`](./infrastructure/bootstrap.yaml) — the artifacts **S3 bucket**, the **GitHub OIDC identity provider**, and the least-privilege **deploy IAM role** — so GitHub Actions can deploy the app **without any long-lived AWS keys**. An account may have only one GitHub OIDC provider, so the script auto-detects and reuses an existing one.
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--region` | `us-east-1` | AWS region to bootstrap in |
+| `--owner` | `teddynted` | GitHub org/user that owns the repo |
+| `--repo` | `ai-github-repository-blog-generator` | Repository name (scopes the OIDC trust) |
+| `--project` | `blog-gen` | Resource name prefix |
+| `--no-oidc-provider` | — | Don't create an OIDC provider (reuse only) |
+| `--existing-oidc-arn <arn>` | — | Reuse a specific OIDC provider ARN |
+
+When it finishes, it prints the values to set on the repository under **Settings → Secrets and variables → Actions**:
+
+- **Secret** `AWS_DEPLOY_ROLE_ARN` — the deploy role the workflow assumes via OIDC
+- **Variables** `ARTIFACTS_BUCKET`, `AWS_REGION`, `KEY_PAIR_NAME`, `OPERATOR_CIDR` *(optional)*, and `DEPLOY_ENABLED=true` to arm the workflow
+
+Then merge to `main` (or run the deploy workflow) to deploy the app stacks — see [Deployment](#deployment).
+
+> **Recovery:** if a resource already exists outside the stack (e.g. an artifacts bucket retained from a previously deleted bootstrap stack), a plain run fails with `... already exists`. Re-run with `IMPORT_EXISTING=1 scripts/bootstrap.sh …` to adopt it instead of recreating it (requires **AWS CLI v2 ≥ 2.22**).
 
 ---
 
