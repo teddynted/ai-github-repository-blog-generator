@@ -130,6 +130,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🎯 **Commit-message trigger gate** | Generation runs **only** when a commit message matches the configurable trigger (default `blog:`) |
 | 🪝 **GitHub Webhook ingress** | Push events are received, verified, and evaluated — never blindly processed |
 | 🎛️ **Manual API trigger** | Authenticated `POST /process` (API key) forces a run via the same pipeline — **starts the On-Demand host on demand** if it is stopped ([docs](./docs/manual-trigger.md)) |
+| 🧠 **Release Context Builder** | Authenticated `POST /release-context` analyzes a repo + release into a structured, AI-ready **Release Context** (JSON) — the canonical input for content generation ([docs](./docs/release-context.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -701,6 +702,7 @@ ai-github-repository-blog-generator/
 │   ├── registration/          # validate repo + PAT → create webhook → store metadata + secret
 │   ├── webhook-handler/       # resolve metadata, verify HMAC, trigger gate, publish, window gate
 │   ├── manual-trigger/        # authenticated POST /process — manual run via the shared intake module
+│   ├── release-context/       # authenticated POST /release-context — builds the structured Release Context
 │   ├── scheduled-start/       # start the On-Demand instance at 18:00 Mon–Fri
 │   └── scheduled-stop/        # stop the instance at 20:00 Mon–Fri
 ├── cmd/
@@ -836,6 +838,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Cost Optimisation](./docs/cost-optimization.md) | Trigger pre-filtering, scheduled runtime, On-Demand rationale, cost math |
 | [Registration](./docs/registration.md) | `/repositories` API — shared-secret credential storage, register/update/delete, PAT scopes, responses, migration |
 | [Manual Trigger](./docs/manual-trigger.md) | `POST /process` API — auth, payload, responses, errors, CloudFormation |
+| [Release Context](./docs/release-context.md) | `POST /release-context` API + the Content Intelligence schema, analyzers, and design |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |
