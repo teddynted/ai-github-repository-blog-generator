@@ -93,6 +93,18 @@ replacement for one.
 
 ## 3. API (`POST /release-context`)
 
+**This endpoint is a standalone, on-demand "context API": it builds the Release
+Context and persists it to S3, and does not generate content.** Nothing in the
+platform calls it automatically — it is invoked by an operator, a script, CI, or
+external tooling that wants the structured context for a repo + release.
+
+> The **automatic** pipeline does **not** go through this endpoint. A published
+> release (or `POST /process` with a `releaseTag`) builds the Release Context
+> **in-process in the worker** — the endpoint and the worker share the same
+> `releasecontext.Builder`, but neither calls the other. Generation runs on the
+> instance where the local model lives, which a Lambda cannot reach; hence the
+> split (endpoint = context only; worker = context + generation + publish).
+
 > **Route naming:** the milestone brief shows `POST /process`, but that route is
 > already the platform's manual pipeline trigger. To keep both entry points, the
 > Content Intelligence endpoint is **`POST /release-context`**. It is API-key
