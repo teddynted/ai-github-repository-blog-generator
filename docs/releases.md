@@ -150,9 +150,11 @@ Throughout this doc, `release <command>` is shorthand for one of the above —
 substitute your preferred form. If you use the binary a lot, alias it:
 `alias release='go run ./cmd/release'` (from the repo root).
 
-> **Flag order matters.** Flags must come **before** the subcommand
-> (`release --dry-run minor` ✓, `release minor --dry-run` ✗) — Go's flag parser
-> stops at the first non-flag argument.
+> **Flags work in any position.** Flags may appear before and/or after the
+> subcommand — `release --dry-run minor` and `release minor --dry-run` are
+> equivalent. An unrecognised extra argument is rejected (exit `2`) rather than
+> ignored, so a misplaced flag can never silently turn a rehearsal into a real
+> release.
 
 ### Commands
 

@@ -37,36 +37,73 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
-func run(args []string) int {
-	fs := flag.NewFlagSet("release", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "compute everything but make no changes")
-	pre := fs.String("pre", "", "pre-release identifier (e.g. rc.1); uses config default if just --pre")
-	usePre := fs.Bool("prerelease", false, "make a pre-release using the configured identifier")
-	cfgPath := fs.String("config", ".release.json", "path to the release config file")
-	repoFlag := fs.String("repo", "", "GitHub repo as owner/name (auto-detected from origin if unset)")
-	changelogPath := fs.String("changelog", "CHANGELOG.md", "path to the CHANGELOG file")
-	noVerify := fs.Bool("no-verify", false, "skip pre-release validation (not recommended)")
-	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
+// options holds the parsed CLI flags plus the resolved subcommand.
+type options struct {
+	sub           string
+	dryRun        bool
+	pre           string
+	usePre        bool
+	cfgPath       string
+	repoFlag      string
+	changelogPath string
+	noVerify      bool
+}
 
-	sub := "release"
-	rest := fs.Args()
-	if len(rest) > 0 {
-		sub = rest[0]
+// parseArgs parses flags that may appear before AND/OR after the subcommand
+// (e.g. both `release --dry-run patch` and `release patch --dry-run`). Go's flag
+// parser stops at the first non-flag token, so parsing only once would silently
+// drop flags placed after the subcommand — which for `--dry-run` meant a real
+// release ran instead of a rehearsal. It returns (opts, 0) on success, or
+// (nil, exitCode) when the caller should exit with that code.
+func parseArgs(args []string) (*options, int) {
+	o := &options{}
+	fs := flag.NewFlagSet("release", flag.ContinueOnError)
+	fs.BoolVar(&o.dryRun, "dry-run", false, "compute everything but make no changes")
+	fs.StringVar(&o.pre, "pre", "", "pre-release identifier (e.g. rc.1); uses config default if just --pre")
+	fs.BoolVar(&o.usePre, "prerelease", false, "make a pre-release using the configured identifier")
+	fs.StringVar(&o.cfgPath, "config", ".release.json", "path to the release config file")
+	fs.StringVar(&o.repoFlag, "repo", "", "GitHub repo as owner/name (auto-detected from origin if unset)")
+	fs.StringVar(&o.changelogPath, "changelog", "CHANGELOG.md", "path to the CHANGELOG file")
+	fs.BoolVar(&o.noVerify, "no-verify", false, "skip pre-release validation (not recommended)")
+	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
+
+	if err := fs.Parse(args); err != nil {
+		return nil, 2
 	}
+	o.sub = "release"
+	if rest := fs.Args(); len(rest) > 0 {
+		o.sub = rest[0]
+		// Pick up any flags that followed the subcommand.
+		if err := fs.Parse(rest[1:]); err != nil {
+			return nil, 2
+		}
+		// Anything still left is an unexpected positional (typo, stray token);
+		// refuse rather than run a mutating command with an unparsed argument.
+		if fs.NArg() > 0 {
+			fmt.Fprintf(os.Stderr, "error: unexpected argument %q\n\n%s", fs.Arg(0), usage)
+			return nil, 2
+		}
+	}
+	return o, 0
+}
+
+func run(args []string) int {
+	o, code := parseArgs(args)
+	if o == nil {
+		return code
+	}
+	sub := o.sub
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	ctx := context.Background()
 
-	cfg, err := release.Load(*cfgPath)
+	cfg, err := release.Load(o.cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: load config: %v\n", err)
 		return 1
 	}
 
-	owner, repo := detectRepo(*repoFlag)
+	owner, repo := detectRepo(o.repoFlag)
 	token := firstNonEmpty(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN"))
 
 	svc := &release.Service{
@@ -94,8 +131,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: unknown command %q\n\n%s", sub, usage)
 		return 2
 	}
-	preID := *pre
-	if *usePre && preID == "" {
+	preID := o.pre
+	if o.usePre && preID == "" {
 		preID = cfg.PreReleaseID
 	}
 
@@ -113,13 +150,13 @@ func run(args []string) int {
 		fmt.Print(plan.Notes)
 		return 0
 	case "changelog":
-		old, _ := os.ReadFile(*changelogPath)
+		old, _ := os.ReadFile(o.changelogPath)
 		fmt.Print(changelog.Update(string(old), plan.NextVersion.String(), plan.ChangelogSection))
 		return 0
 	case "validate":
 		// `validate` is a dry check: warnings (e.g. missing token) don't fail it.
 		printPlan(plan)
-		old, _ := os.ReadFile(*changelogPath)
+		old, _ := os.ReadFile(o.changelogPath)
 		rep := svc.Validate(ctx, plan, string(old), true)
 		printReport(rep)
 		if rep.HasError() {
@@ -134,30 +171,30 @@ func run(args []string) int {
 	start := time.Now()
 	printPlan(plan)
 
-	old, _ := os.ReadFile(*changelogPath)
+	old, _ := os.ReadFile(o.changelogPath)
 	var rep release.Report
-	if !*noVerify {
-		rep = svc.Validate(ctx, plan, string(old), *dryRun)
+	if !o.noVerify {
+		rep = svc.Validate(ctx, plan, string(old), o.dryRun)
 		printReport(rep)
 		if rep.HasError() {
 			fmt.Println("\nRelease aborted.")
 			return 1
 		}
 	}
-	printActions(*dryRun, cfg.ReleaseBranch)
+	printActions(o.dryRun, cfg.ReleaseBranch)
 	logger.Info("validation complete",
-		slog.Bool("dry_run", *dryRun), slog.String("version", plan.Tag),
+		slog.Bool("dry_run", o.dryRun), slog.String("version", plan.Tag),
 		slog.String("bump", plan.Bump.String()), slog.Int("analysed", plan.Analysed),
 		slog.Int("conventional", len(plan.Commits)),
 		slog.Duration("duration", time.Since(start)))
 
-	sum, err := svc.Apply(ctx, plan, string(old), *changelogPath, *dryRun)
+	sum, err := svc.Apply(ctx, plan, string(old), o.changelogPath, o.dryRun)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\n✗ release failed: %v\n", err)
 		return 1
 	}
 
-	if *dryRun {
+	if o.dryRun {
 		fmt.Printf("\nDry run completed successfully.\n\nNo release actions were executed.\n")
 		return 0
 	}
@@ -166,7 +203,7 @@ func run(args []string) int {
 		fmt.Printf("  %s\n", sum.ReleaseURL)
 	}
 	if sum.ChangelogPushed {
-		fmt.Printf("  %s committed and pushed to %s — run `git pull` to sync other clones\n", *changelogPath, cfg.ReleaseBranch)
+		fmt.Printf("  %s committed and pushed to %s — run `git pull` to sync other clones\n", o.changelogPath, cfg.ReleaseBranch)
 	}
 	return 0
 }
