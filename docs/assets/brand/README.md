@@ -7,6 +7,10 @@ meeting automated content generation, in one flat, scalable symbol.
 All assets are pure, hand-editable SVG on a transparent ground: no raster, no
 gradients, no drop shadows. They work in monochrome and in light/dark themes.
 
+The full brand guide — every variant, the palette, construction, and the design
+rationale — is a single self-contained page: [`brand-guide.html`](./brand-guide.html)
+(open it in a browser, or serve `docs/` via GitHub Pages).
+
 ## Files
 
 | File | Use |

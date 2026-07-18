@@ -1,0 +1,485 @@
+<title>Brand Identity — AI GitHub Repository Blog Generator</title>
+<style>
+  :root {
+    --bg: #FBFCFD;
+    --surface: #FFFFFF;
+    --surface-2: #F6F8FA;
+    --ink: #1F2328;
+    --muted: #59636E;
+    --border: #D1D9E0;
+    --border-strong: #BAC3CC;
+    --accent: #2563EB;
+    --accent-2: #06B6D4;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --maxw: 1060px;
+    --r: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0D1117; --surface: #161B22; --surface-2: #10151C;
+      --ink: #E6EDF3; --muted: #9198A1; --border: #2A3139; --border-strong: #3A424C;
+      --accent: #58A6FF; --accent-2: #22D3EE;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #FBFCFD; --surface: #FFFFFF; --surface-2: #F6F8FA;
+    --ink: #1F2328; --muted: #59636E; --border: #D1D9E0; --border-strong: #BAC3CC;
+    --accent: #2563EB; --accent-2: #06B6D4;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0D1117; --surface: #161B22; --surface-2: #10151C;
+    --ink: #E6EDF3; --muted: #9198A1; --border: #2A3139; --border-strong: #3A424C;
+    --accent: #58A6FF; --accent-2: #22D3EE;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before {
+    content: ""; width: 22px; height: 1px; background: var(--border-strong);
+  }
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.022em; font-weight: 700; }
+
+  /* ---- top bar ---- */
+  header.top {
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: saturate(1.4) blur(8px);
+  }
+  .top-in { display: flex; align-items: center; justify-content: space-between; height: 58px; }
+  .top-id { display: flex; align-items: center; gap: 11px; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+  .top-id svg { width: 26px; height: 26px; display: block; }
+  .top-id b { color: var(--ink); font-weight: 600; }
+  .theme-toggle {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+    color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+    padding: 7px 12px; border-radius: 8px; cursor: pointer; text-transform: uppercase;
+  }
+  .theme-toggle:hover { border-color: var(--border-strong); color: var(--ink); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- hero ---- */
+  .hero { padding: 68px 0 44px; border-bottom: 1px solid var(--border); }
+  .hero h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.05; margin: 18px 0 14px; }
+  .hero p.lead { font-size: 18px; color: var(--muted); max-width: 60ch; margin: 0 0 34px; }
+  .hero .accent { color: var(--accent); }
+  .hero-stage {
+    border: 1px solid var(--border); border-radius: var(--r);
+    background:
+      linear-gradient(var(--surface), var(--surface)) padding-box,
+      radial-gradient(120% 140% at 8% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 45%) border-box;
+    background-color: #FFFFFF;
+    padding: 44px; display: flex; align-items: center; justify-content: center;
+    min-height: 190px;
+    background-image:
+      radial-gradient(color-mix(in srgb, #24292F 6%, transparent) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+  }
+  .hero-stage svg { width: min(440px, 90%); height: auto; }
+
+  /* ---- section frame ---- */
+  section { padding: 56px 0; border-bottom: 1px solid var(--border); }
+  .sec-head { margin-bottom: 30px; }
+  .sec-head h2 { font-size: 24px; margin: 10px 0 6px; }
+  .sec-head p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+  .grid { display: grid; gap: 18px; }
+  .g-3 { grid-template-columns: repeat(3, 1fr); }
+  .g-2 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 780px) { .g-3, .g-2 { grid-template-columns: 1fr; } }
+
+  /* logo swatch tiles — each declares its own ground so both themes show truthfully */
+  .tile {
+    border: 1px solid var(--border); border-radius: var(--r);
+    padding: 30px; display: flex; flex-direction: column; gap: 18px;
+    min-height: 150px; justify-content: space-between;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .tile:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--ink) 40%, transparent); }
+  .tile .stagerow { flex: 1; display: flex; align-items: center; justify-content: center; }
+  .tile.light { background: #FFFFFF; border-color: #E4E9EE; }
+  .tile.dark  { background: #0D1117; border-color: #262C34; }
+  .tile .cap { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tile.light .cap { color: #59636E; }
+  .tile.dark  .cap { color: #8B949E; }
+  .tile.light .cap b { color: #1F2328; }
+  .tile.dark  .cap b { color: #E6EDF3; }
+  .tile svg { display: block; }
+
+  .mono-ink   { color: #1F2328; }
+  .mono-white { color: #E6EDF3; }
+
+  /* app-icon row */
+  .icons { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-end; }
+  .icons figure { margin: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .icons figcaption { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.05em; color: var(--muted); text-transform: uppercase; }
+  .chip-shadow { border-radius: 22%; box-shadow: 0 8px 24px -12px rgba(0,0,0,.5); }
+
+  /* palette */
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 780px){ .swatches { grid-template-columns: repeat(2,1fr); } }
+  .swatch { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+  .swatch .cap-color { height: 92px; }
+  .swatch .meta { padding: 12px 13px 14px; }
+  .swatch .name { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .swatch .hex { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.02em; margin: 0; text-transform: uppercase; }
+  .swatch .role { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin: 6px 0 0; letter-spacing: .04em; }
+
+  /* rationale */
+  .prose { max-width: 68ch; }
+  .prose h3 { font-size: 16px; margin: 26px 0 6px; letter-spacing: -0.01em; }
+  .prose h3:first-child { margin-top: 0; }
+  .prose p { margin: 0 0 4px; color: var(--muted); }
+  .prose p strong { color: var(--ink); font-weight: 600; }
+
+  .notes { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 6px; }
+  @media (max-width: 780px){ .notes { grid-template-columns: 1fr; } }
+  .note { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--surface); }
+  .note .k { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 0 0 8px; }
+  .note p { margin: 0; font-size: 14px; color: var(--muted); }
+  .note p b { color: var(--ink); font-weight: 600; }
+
+  /* manifest */
+  .manifest { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .manifest .row { display: flex; justify-content: space-between; gap: 16px; padding: 11px 16px; font-family: var(--font-mono); font-size: 12.5px; border-top: 1px solid var(--border); }
+  .manifest .row:first-child { border-top: 0; background: var(--surface-2); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+  .manifest .row span:first-child { color: var(--ink); }
+  .manifest .row span:last-child { color: var(--muted); }
+
+  footer.pg { padding: 40px 0 64px; color: var(--muted); font-size: 13px; }
+  footer.pg .eyebrow { margin-bottom: 14px; }
+
+  .reveal { opacity: 0; transform: translateY(10px); animation: rise .6s cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { animation: none; opacity: 1; transform: none; }
+    .tile { transition: none; }
+  }
+</style>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="top-id">
+      <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <g stroke="#58A6FF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--ink)">
+          <path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/>
+        </g>
+        <circle cx="14" cy="13.5" r="5" fill="currentColor" style="fill:var(--ink)"/>
+        <circle cx="14" cy="36.5" r="5" fill="currentColor" style="fill:var(--ink)"/>
+        <path fill="#2563EB" style="fill:var(--accent)" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+        <path fill="#06B6D4" style="fill:var(--accent-2)" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+      </svg>
+      <span><b>repo-blog</b> / brand</span>
+    </div>
+    <button class="theme-toggle" id="themeBtn" aria-label="Toggle color theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero reveal">
+    <p class="eyebrow">Identity System · v1.0</p>
+    <h1>The branch that <span class="accent">sparks</span> into content.</h1>
+    <p class="lead">A single mark for <b>AI GitHub Repository Blog Generator</b> — a Git branch peeling off the commit trunk and blooming into an AI spark. Software engineering meeting automated content generation, in one flat, scalable symbol.</p>
+    <div class="hero-stage">
+      <!-- primary horizontal, color, on its intended light ground -->
+      <svg viewBox="0 0 320 72" fill="none" role="img" aria-label="AI GitHub Repository Blog Generator">
+        <g transform="translate(12 12)">
+          <g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/>
+          </g>
+          <circle cx="14" cy="13.5" r="5" fill="#24292F"/>
+          <circle cx="14" cy="36.5" r="5" fill="#24292F"/>
+          <path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+          <path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+        </g>
+        <g font-family="var(--font-sans, system-ui, sans-serif)">
+          <text x="76" y="33" font-size="19" font-weight="700" letter-spacing="-0.2" fill="#24292F" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">AI GitHub Repository</text>
+          <text x="76" y="57" font-size="19" font-weight="500" letter-spacing="0.2" fill="#2563EB" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">Blog Generator</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- THE MARK -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">01 · The Mark</p>
+      <h2>One symbol, three ideas</h2>
+      <p>The icon is symbolic, not literal — it holds a Git graph, a neural node network, and a spark of generated intelligence in the same few strokes.</p>
+    </div>
+    <div class="grid g-2">
+      <div class="tile light">
+        <div class="stagerow">
+          <svg width="118" height="118" viewBox="0 0 48 48" fill="none" aria-label="Icon on light">
+            <g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+            <circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/>
+            <path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+            <path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+          </svg>
+        </div>
+        <p class="cap"><b>Icon</b> · color · transparent</p>
+      </div>
+      <div class="tile dark">
+        <div class="stagerow">
+          <svg width="118" height="118" viewBox="0 0 48 48" fill="none" aria-label="Icon on dark">
+            <g stroke="#E6EDF3" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+            <circle cx="14" cy="13.5" r="5" fill="#E6EDF3"/><circle cx="14" cy="36.5" r="5" fill="#E6EDF3"/>
+            <path fill="#3B82F6" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+            <path fill="#22D3EE" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+          </svg>
+        </div>
+        <p class="cap"><b>Icon</b> · color · dark ground</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><p class="k">Trunk &amp; nodes</p><p><b>Git + neural graph.</b> Two commit nodes on a branch line read equally as connected neurons — repository history and machine intelligence in one shape.</p></div>
+      <div class="note"><p class="k">The branch</p><p><b>Automation.</b> A branch peels off the trunk and flows outward — the pipeline that turns a release into published content.</p></div>
+      <div class="note"><p class="k">The spark</p><p><b>Generation.</b> The branch resolves into a four-point AI spark: the blog post, summary, or script the platform writes.</p></div>
+    </div>
+  </section>
+
+  <!-- LOCKUPS -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">02 · Logo Lockups</p>
+      <h2>Horizontal signature</h2>
+      <p>A geometric two-line wordmark keeps the long name legible. Primary for light surfaces, an inverted build for dark, and a single-color build that inherits its surroundings.</p>
+    </div>
+    <div class="grid">
+      <div class="tile light">
+        <div class="stagerow">
+          <svg width="330" viewBox="0 0 320 72" fill="none" aria-label="Primary logo, light">
+            <g transform="translate(12 12)">
+              <g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+              <circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/>
+              <path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+              <path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+            </g>
+            <text x="76" y="33" font-size="19" font-weight="700" letter-spacing="-0.2" fill="#24292F" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">AI GitHub Repository</text>
+            <text x="76" y="57" font-size="19" font-weight="500" letter-spacing="0.2" fill="#2563EB" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">Blog Generator</text>
+          </svg>
+        </div>
+        <p class="cap"><b>Primary</b> · light theme</p>
+      </div>
+      <div class="tile dark">
+        <div class="stagerow">
+          <svg width="330" viewBox="0 0 320 72" fill="none" aria-label="Primary logo, dark">
+            <g transform="translate(12 12)">
+              <g stroke="#E6EDF3" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+              <circle cx="14" cy="13.5" r="5" fill="#E6EDF3"/><circle cx="14" cy="36.5" r="5" fill="#E6EDF3"/>
+              <path fill="#3B82F6" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+              <path fill="#22D3EE" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+            </g>
+            <text x="76" y="33" font-size="19" font-weight="700" letter-spacing="-0.2" fill="#E6EDF3" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">AI GitHub Repository</text>
+            <text x="76" y="57" font-size="19" font-weight="500" letter-spacing="0.2" fill="#58A6FF" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">Blog Generator</text>
+          </svg>
+        </div>
+        <p class="cap"><b>Inverted</b> · dark theme</p>
+      </div>
+    </div>
+    <div class="grid g-2" style="margin-top:18px">
+      <div class="tile light">
+        <div class="stagerow">
+          <svg width="300" viewBox="0 0 320 72" fill="none" class="mono-ink" aria-label="Monochrome logo, ink">
+            <g transform="translate(12 12)" fill="currentColor">
+              <g stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+              <circle cx="14" cy="13.5" r="5"/><circle cx="14" cy="36.5" r="5"/>
+              <path d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+              <path d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+            </g>
+            <text x="76" y="33" font-size="19" font-weight="700" letter-spacing="-0.2" fill="currentColor" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">AI GitHub Repository</text>
+            <text x="76" y="57" font-size="19" font-weight="500" letter-spacing="0.2" fill="currentColor" opacity="0.72" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">Blog Generator</text>
+          </svg>
+        </div>
+        <p class="cap"><b>Monochrome</b> · currentColor · one ink</p>
+      </div>
+      <div class="tile dark">
+        <div class="stagerow">
+          <svg width="300" viewBox="0 0 320 72" fill="none" class="mono-white" aria-label="Monochrome logo, white">
+            <g transform="translate(12 12)" fill="currentColor">
+              <g stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+              <circle cx="14" cy="13.5" r="5"/><circle cx="14" cy="36.5" r="5"/>
+              <path d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+              <path d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+            </g>
+            <text x="76" y="33" font-size="19" font-weight="700" letter-spacing="-0.2" fill="currentColor" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">AI GitHub Repository</text>
+            <text x="76" y="57" font-size="19" font-weight="500" letter-spacing="0.2" fill="currentColor" opacity="0.72" style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">Blog Generator</text>
+          </svg>
+        </div>
+        <p class="cap"><b>Monochrome</b> · knockout on dark</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- APP ICONS -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">03 · App &amp; Avatar</p>
+      <h2>Contained builds</h2>
+      <p>On a rounded tile the mark becomes an app icon, a social avatar, and a favicon — legible down to 16&nbsp;px, where the accent spark still carries the identity.</p>
+    </div>
+    <div class="icons">
+      <figure>
+        <svg width="132" height="132" viewBox="0 0 512 512" fill="none" class="chip-shadow" aria-label="Social avatar tile">
+          <rect width="512" height="512" rx="112" fill="#24292F"/>
+          <g transform="translate(56 62) scale(8)">
+            <g stroke="#F0F6FC" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+            <circle cx="14" cy="13.5" r="5" fill="#F0F6FC"/><circle cx="14" cy="36.5" r="5" fill="#F0F6FC"/>
+            <path fill="#3B82F6" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+            <path fill="#22D3EE" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+          </g>
+        </svg>
+        <figcaption>512 · social / avatar</figcaption>
+      </figure>
+      <figure>
+        <svg width="72" height="72" viewBox="0 0 32 32" fill="none" class="chip-shadow" aria-label="Favicon at 72px">
+          <rect width="32" height="32" rx="7" fill="#24292F"/>
+          <g stroke="#F0F6FC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 10V22"/><path d="M11 16.5C11 13 13 11 16.5 11"/></g>
+          <circle cx="11" cy="10" r="3" fill="#F0F6FC"/><circle cx="11" cy="22" r="3" fill="#F0F6FC"/>
+          <path fill="#3B82F6" d="M21 6Q21 11 26 11Q21 11 21 16Q21 11 16 11Q21 11 21 6Z"/>
+        </svg>
+        <figcaption>favicon · 72</figcaption>
+      </figure>
+      <figure>
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" class="chip-shadow" aria-label="Favicon at actual 32px">
+          <rect width="32" height="32" rx="7" fill="#24292F"/>
+          <g stroke="#F0F6FC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 10V22"/><path d="M11 16.5C11 13 13 11 16.5 11"/></g>
+          <circle cx="11" cy="10" r="3" fill="#F0F6FC"/><circle cx="11" cy="22" r="3" fill="#F0F6FC"/>
+          <path fill="#3B82F6" d="M21 6Q21 11 26 11Q21 11 21 16Q21 11 16 11Q21 11 21 6Z"/>
+        </svg>
+        <figcaption>favicon · 32 (1×)</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">04 · Color</p>
+      <h2>Palette</h2>
+      <p>GitHub black anchors the engineering half; AI blue carries the intelligence. Cyan and purple are generative accents, used sparingly. The system is built on GitHub's own neutral bias so it sits natively in a developer's tools.</p>
+    </div>
+    <div class="swatches">
+      <div class="swatch"><div class="cap-color" style="background:#24292F"></div><div class="meta"><p class="name">GitHub Black</p><p class="hex">#24292F</p><p class="role">Structure · ink · trunk</p></div></div>
+      <div class="swatch"><div class="cap-color" style="background:#2563EB"></div><div class="meta"><p class="name">AI Blue</p><p class="hex">#2563EB</p><p class="role">Primary · the spark</p></div></div>
+      <div class="swatch"><div class="cap-color" style="background:#7C3AED"></div><div class="meta"><p class="name">Purple</p><p class="hex">#7C3AED</p><p class="role">Accent · alt spark</p></div></div>
+      <div class="swatch"><div class="cap-color" style="background:#06B6D4"></div><div class="meta"><p class="name">Cyan</p><p class="hex">#06B6D4</p><p class="role">Accent · secondary spark</p></div></div>
+    </div>
+  </section>
+
+  <!-- SCALE / CLEARSPACE -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">05 · Construction</p>
+      <h2>Clear space &amp; minimum size</h2>
+      <p>Keep clear space equal to the diameter of a commit node on every side. The icon holds down to 16&nbsp;px; below ~120&nbsp;px, use the icon alone rather than the full lockup.</p>
+    </div>
+    <div class="grid g-2">
+      <div class="tile light">
+        <div class="stagerow">
+          <svg width="150" height="150" viewBox="0 0 48 48" aria-label="Clear space diagram">
+            <defs><pattern id="grid" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M6 0H0V6" fill="none" stroke="#E4E9EE" stroke-width="0.5"/></pattern></defs>
+            <rect x="4" y="4" width="40" height="40" fill="url(#grid)"/>
+            <rect x="4" y="4" width="40" height="40" fill="none" stroke="#C7D0D8" stroke-width="0.6" stroke-dasharray="2 2"/>
+            <g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g>
+            <circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/>
+            <path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/>
+            <path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/>
+          </svg>
+        </div>
+        <p class="cap"><b>Grid</b> · clear space = 1 node</p>
+      </div>
+      <div class="tile light">
+        <div class="stagerow" style="gap:26px; align-items:flex-end;">
+          <svg width="64" height="64" viewBox="0 0 48 48" fill="none" aria-label="64px"><g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g><circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/><path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/><path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/></svg>
+          <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-label="40px"><g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g><circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/><path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/><path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/></svg>
+          <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-label="24px"><g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g><circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/><path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/><path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-label="16px"><g stroke="#24292F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13.5V36.5"/><path d="M14 25C14 18.5 18.5 15 24 15"/></g><circle cx="14" cy="13.5" r="5" fill="#24292F"/><circle cx="14" cy="36.5" r="5" fill="#24292F"/><path fill="#2563EB" d="M31 7Q31 15 39 15Q31 15 31 23Q31 15 23 15Q31 15 31 7Z"/><path fill="#06B6D4" d="M38 24Q38 27 41 27Q38 27 38 30Q38 27 35 27Q38 27 38 24Z"/></svg>
+        </div>
+        <p class="cap"><b>Scale</b> · 64 · 40 · 24 · 16 px</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- RATIONALE -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">06 · Rationale</p>
+      <h2>Why it works</h2>
+    </div>
+    <div class="prose">
+      <h3>Symbolism</h3>
+      <p>The <strong>commit trunk and two nodes</strong> are the universal Git-branch glyph — instant shorthand for a repository and for version history. Read a second way, the connected nodes are a <strong>neural network</strong>: engineering and AI share the same geometry. The <strong>branch</strong> peeling off the trunk is the automated pipeline; where it lands, it resolves into a <strong>four-point spark</strong> — the modern signifier for generated intelligence, and here the blog post, release summary, or script the platform produces.</p>
+      <h3>Why this palette</h3>
+      <p><strong>GitHub black (#24292F)</strong> ties the structure to the developer world the tool lives in; <strong>AI blue (#2563EB)</strong> is reserved exclusively for the spark, so the eye reads &ldquo;code → intelligence&rdquo; in one glance. <strong>Cyan</strong> and <strong>purple</strong> are used only as a small secondary spark, signalling that one input generates <em>many</em> outputs — without resorting to a gradient. The neutrals borrow GitHub&rsquo;s Primer bias so the brand feels native inside a repo, a README, or a CLI.</p>
+      <h3>How it says &ldquo;AI-generated content&rdquo;</h3>
+      <p>Motion is implied in the silhouette: the eye travels <em>up the trunk, along the branch, into the spark</em> — input becoming output, a repository becoming published writing. The spark is deliberately the brightest, highest-contrast element, so &ldquo;generation&rdquo; is the last thing you read and the thing you remember.</p>
+      <h3>How it scales</h3>
+      <p>The whole mark is built from four primitives — two dots, two strokes, two spark polygons — on a tidy 48-unit grid with rounded caps. There is no fine detail to collapse, so it stays crisp from a 512&nbsp;px avatar to a 16&nbsp;px favicon, and it flattens perfectly to a single color for stamps, embroidery, or a terminal glyph.</p>
+      <h3>Open-source fit</h3>
+      <p>Every asset is pure, hand-readable SVG on a transparent ground, themed with <code>currentColor</code> so a README picks up the reader&rsquo;s light or dark mode automatically. It sits comfortably in the company of Docker, Terraform, and the GitHub CLI: one idea, executed simply, and impossible to mistake for anything else.</p>
+    </div>
+  </section>
+
+  <!-- MANIFEST -->
+  <section style="border-bottom:0">
+    <div class="sec-head">
+      <p class="eyebrow">07 · Deliverables</p>
+      <h2>Asset manifest</h2>
+      <p>Production SVGs live in the repository at <code>docs/assets/brand/</code>.</p>
+    </div>
+    <div class="manifest">
+      <div class="row"><span>File</span><span>Use</span></div>
+      <div class="row"><span>logo-horizontal.svg</span><span>Primary lockup · light</span></div>
+      <div class="row"><span>logo-horizontal-dark.svg</span><span>Primary lockup · dark</span></div>
+      <div class="row"><span>logo-horizontal-mono.svg</span><span>Single-color · currentColor</span></div>
+      <div class="row"><span>icon.svg</span><span>Icon · color · transparent</span></div>
+      <div class="row"><span>icon-mono.svg</span><span>Icon · single-color</span></div>
+      <div class="row"><span>favicon.svg</span><span>Favicon · 32 · rounded tile</span></div>
+      <div class="row"><span>social-square.svg</span><span>Avatar / social · 512</span></div>
+    </div>
+  </section>
+
+  <footer class="pg">
+    <p class="eyebrow">AI GitHub Repository Blog Generator</p>
+    <p>Brand identity system · pure SVG · light &amp; dark · monochrome-safe · README-ready. Swap the cyan secondary spark for purple <span style="font-family:var(--font-mono)">#7C3AED</span> when a warmer, more &ldquo;AI-native&rdquo; read is wanted.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('themeBtn');
+    var root = document.documentElement;
+    function current() {
+      var set = root.getAttribute('data-theme');
+      if (set) return set;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    btn.addEventListener('click', function () {
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      btn.textContent = next === 'dark' ? 'Light' : 'Dark';
+    });
+  })();
+</script>
