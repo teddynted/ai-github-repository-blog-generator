@@ -58,7 +58,10 @@ The release workflow **rejects** non-conforming commits made since the last tag.
 | at least one `fix`/`perf`/`revert` | **patch** |
 | only `docs`/`chore`/`test`/`ci`/`build`/`style` | **no release** |
 
-You can always **override** with an explicit `release major|minor|patch`.
+You can **override** with an explicit `release major|minor|patch` when there are
+commits but none auto-bump (e.g. only `ci`/`chore`). An explicit bump is still
+refused when there are **zero** commits since the last tag, so the version can't
+be pumped with an empty release.
 
 ## 3. Release workflow
 
@@ -336,7 +339,8 @@ logged.
 | `tag vX already exists` | that version is already released; choose a higher bump |
 | `version … does not increase` | the forced bump would repeat/lower the version |
 | `N non-conventional commit(s)` | fix the offending commit messages (rebase) or they can't be released |
-| `no release-worthy commits` | only docs/chore since last tag; use an explicit bump to force |
+| `no release-worthy commits` | only docs/chore/ci since last tag; use an explicit bump to force |
+| `no commits since vX — nothing to release` | there are **zero** commits since the last tag; a forced bump is refused so the version can't be pumped with an empty release — commit something first |
 | `working tree is not clean` | commit or stash changes first |
 | `on branch "x"; releases must be cut from "main"` | switch to the release branch |
 | `local branch is not in sync with the remote` | `git pull` / `git push` first |

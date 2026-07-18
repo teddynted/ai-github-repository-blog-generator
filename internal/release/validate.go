@@ -18,13 +18,21 @@ func (s *Service) Validate(ctx context.Context, plan Plan, changelogContent stri
 	var r Report
 
 	// --- Semantic Version (always required) ---
-	if plan.PrevTag != "" && !plan.PrevVersion.LessThan(plan.NextVersion) {
+	switch {
+	case plan.PrevTag != "" && !plan.PrevVersion.LessThan(plan.NextVersion):
 		r.add("Semantic Version valid", SeverityError,
 			fmt.Sprintf("%s does not increase over %s (no downgrade or repeat)", plan.NextVersion, plan.PrevVersion))
-	} else if plan.PrevTag != "" && plan.Bump == conventional.BumpNone {
+	case plan.PrevTag != "" && plan.Analysed == 0:
+		// Nothing has been committed since the last tag. A forced bump would
+		// otherwise "pump" the version with an empty release — block it, and
+		// don't advise an override (there is genuinely nothing to release).
+		r.add("Semantic Version valid", SeverityError,
+			fmt.Sprintf("no commits since %s — nothing to release", plan.PrevTag))
+	case plan.PrevTag != "" && plan.Bump == conventional.BumpNone:
+		// Commits exist but none warrant a release; an explicit bump can override.
 		r.add("Semantic Version valid", SeverityError,
 			fmt.Sprintf("no release-worthy commits since %s; pass an explicit bump to override", plan.PrevTag))
-	} else {
+	default:
 		r.add("Semantic Version valid", SeverityOK, plan.NextVersion.String())
 	}
 
