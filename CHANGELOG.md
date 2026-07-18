@@ -10,6 +10,16 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.1.7] - 2026-07-18
+
+### Documentation
+
+- **brand:** add SVG logo family and brand guide
+- **brand:** add self-contained brand guide page to the repo
+- **readme:** add theme-aware logo mark to the header
+- **readme:** document scripts/bootstrap.sh in Installation
+
+
 ## [0.1.6] - 2026-07-18
 
 ### Bug Fixes
