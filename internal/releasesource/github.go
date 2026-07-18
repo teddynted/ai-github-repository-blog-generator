@@ -38,11 +38,16 @@ type GitHubClient interface {
 // GitHubSource implements releasecontext.Sources against the GitHub REST API.
 type GitHubSource struct {
 	Client GitHubClient
-	// Token authenticates GitHub calls; "" works for public repos (rate-limited).
+	// Token is the fallback credential; "" works for public repos (rate-limited).
 	Token string
+	// TokenFor, when set, resolves a repository's credential per request (e.g.
+	// the registered PAT from the shared secret), so private repos are read with
+	// the same credential used for cloning. It falls back to Token on error.
+	TokenFor func(ctx context.Context, repoFullName string) (string, error)
 
 	mu      sync.Mutex
 	compare map[string]compareResult // memoized compare per "base...head"
+	tokens  map[string]string        // memoized per-repo tokens
 }
 
 type compareResult struct {
@@ -52,13 +57,38 @@ type compareResult struct {
 
 var _ rc.Sources = (*GitHubSource)(nil)
 
-// New builds a GitHubSource.
+// New builds a GitHubSource with a static token. Set TokenFor afterwards for
+// per-repository credential resolution.
 func New(client GitHubClient, token string) *GitHubSource {
-	return &GitHubSource{Client: client, Token: token, compare: map[string]compareResult{}}
+	return &GitHubSource{Client: client, Token: token, compare: map[string]compareResult{}, tokens: map[string]string{}}
+}
+
+// token resolves the credential for req's repository, memoized per repo. With no
+// TokenFor configured (or on resolver error) it returns the static Token.
+func (s *GitHubSource) token(ctx context.Context, req rc.Request) string {
+	if s.TokenFor == nil {
+		return s.Token
+	}
+	key := req.FullName()
+	s.mu.Lock()
+	if t, ok := s.tokens[key]; ok {
+		s.mu.Unlock()
+		return t
+	}
+	s.mu.Unlock()
+
+	t, err := s.TokenFor(ctx, key)
+	if err != nil || t == "" {
+		return s.Token
+	}
+	s.mu.Lock()
+	s.tokens[key] = t
+	s.mu.Unlock()
+	return t
 }
 
 func (s *GitHubSource) RepositoryMeta(ctx context.Context, req rc.Request) (rc.RawRepository, error) {
-	d, err := s.Client.GetRepositoryDetail(ctx, req.Owner, req.Repository, s.Token)
+	d, err := s.Client.GetRepositoryDetail(ctx, req.Owner, req.Repository, s.token(ctx, req))
 	if err != nil {
 		return rc.RawRepository{}, err
 	}
@@ -70,7 +100,7 @@ func (s *GitHubSource) RepositoryMeta(ctx context.Context, req rc.Request) (rc.R
 }
 
 func (s *GitHubSource) ReleaseByTag(ctx context.Context, req rc.Request) (rc.RawRelease, error) {
-	d, err := s.Client.GetReleaseByTag(ctx, req.Owner, req.Repository, s.Token, req.ReleaseTag)
+	d, err := s.Client.GetReleaseByTag(ctx, req.Owner, req.Repository, s.token(ctx, req), req.ReleaseTag)
 	if err != nil {
 		return rc.RawRelease{}, err
 	}
@@ -94,7 +124,7 @@ func (s *GitHubSource) ReleaseByTag(ctx context.Context, req rc.Request) (rc.Raw
 // previousTag returns the tag of the release published immediately before the
 // selected one (by published date, newest-first ordering), or "" if none.
 func (s *GitHubSource) previousTag(ctx context.Context, req rc.Request) (string, error) {
-	releases, err := s.Client.ListReleases(ctx, req.Owner, req.Repository, s.Token)
+	releases, err := s.Client.ListReleases(ctx, req.Owner, req.Repository, s.token(ctx, req))
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +175,7 @@ func (s *GitHubSource) compareRange(ctx context.Context, req rc.Request, previou
 	}
 	s.mu.Unlock()
 
-	commits, files, err := s.Client.CompareCommits(ctx, req.Owner, req.Repository, s.Token, previousTag, req.ReleaseTag)
+	commits, files, err := s.Client.CompareCommits(ctx, req.Owner, req.Repository, s.token(ctx, req), previousTag, req.ReleaseTag)
 	if err != nil {
 		return compareResult{}, err
 	}
@@ -157,7 +187,8 @@ func (s *GitHubSource) compareRange(ctx context.Context, req rc.Request, previou
 }
 
 func (s *GitHubSource) Files(ctx context.Context, req rc.Request) ([]rc.RawFile, error) {
-	tree, err := s.Client.GetTree(ctx, req.Owner, req.Repository, s.Token, req.ReleaseTag)
+	tok := s.token(ctx, req)
+	tree, err := s.Client.GetTree(ctx, req.Owner, req.Repository, tok, req.ReleaseTag)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +200,7 @@ func (s *GitHubSource) Files(ctx context.Context, req rc.Request) ([]rc.RawFile,
 		}
 		f := rc.RawFile{Path: e.Path, Size: e.Size}
 		if wantContent(e.Path) && e.Size <= maxContentBytes && fetched < maxContentFiles {
-			content, cerr := s.Client.GetFileContent(ctx, req.Owner, req.Repository, s.Token, e.Path, req.ReleaseTag)
+			content, cerr := s.Client.GetFileContent(ctx, req.Owner, req.Repository, tok, e.Path, req.ReleaseTag)
 			if cerr != nil && apperror.CodeOf(cerr) != apperror.CodeNotFound {
 				return nil, cerr
 			}

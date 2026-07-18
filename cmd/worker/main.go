@@ -85,9 +85,12 @@ func main() {
 	// secret reference, then clone and read the working copy.
 	meta := metadata.New(dynamodb.NewFromConfig(awsCfg), a.Config.RepositoriesTable)
 	sec := secrets.New(secretsmanager.NewFromConfig(awsCfg), a.Config.RepoSecretID)
+	// Resolves a repository's registered PAT from the shared secret; used both to
+	// clone and to read the repo via the GitHub API for the release pipeline.
+	tokenSource := &reposource.MetaTokenSource{Meta: meta, Secrets: sec}
 	processor := &processing.Processor{
 		Cloner: &reposource.GitCloner{
-			Tokens:  &reposource.MetaTokenSource{Meta: meta, Secrets: sec},
+			Tokens:  tokenSource,
 			WorkDir: a.Config.WorkDir,
 			Logger:  a.Logger,
 		},
@@ -135,9 +138,13 @@ func main() {
 	// Release Context and generates release-focused content from it, reusing the
 	// same reviewer + publisher. GITHUB_TOKEN is optional (public repos work
 	// rate-limited); it reads the repo over the GitHub API, not by cloning.
+	releaseSrc := releasesource.New(github.New(), os.Getenv("GITHUB_TOKEN"))
+	// Read private repos with each repo's registered PAT (same credential as
+	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
+	releaseSrc.TokenFor = tokenSource.Token
 	releasePipe := &releasepipeline.Pipeline{
 		Builder: &rc.Builder{
-			Sources: releasesource.New(github.New(), os.Getenv("GITHUB_TOKEN")),
+			Sources: releaseSrc,
 			Logger:  a.Logger,
 		},
 		Generator: &releasegen.Generator{

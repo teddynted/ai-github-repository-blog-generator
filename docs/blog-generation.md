@@ -126,7 +126,11 @@ source: a **published-release** event (`source: "release"`, `ref:
 refs/tags/<tag>`) runs the release-content pipeline above, while push events keep
 using the existing snapshot pipeline. So publishing a GitHub Release now flows
 end to end — webhook → EventBridge → SQS → worker → Release Context → content →
-review → publish — with no manual call. Set `GITHUB_TOKEN` on the instance for
-private repositories (public repos work without one, rate-limited).
+review → publish — with no manual call.
+
+The worker reads the repository via the GitHub API using **that repo's
+registered PAT** (resolved from the shared secret, the same credential used for
+cloning), so private repos work with no extra configuration. A `GITHUB_TOKEN`
+env var on the instance is the fallback for public or unregistered repos.
 
 **Next:** deploy and run end to end against a real release.

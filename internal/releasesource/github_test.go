@@ -19,9 +19,11 @@ type fakeGH struct {
 	contents     map[string]string
 	compareCalls int
 	contentCalls int
+	lastToken    string
 }
 
-func (f *fakeGH) GetRepositoryDetail(context.Context, string, string, string) (github.RepositoryDetail, error) {
+func (f *fakeGH) GetRepositoryDetail(_ context.Context, _, _, token string) (github.RepositoryDetail, error) {
+	f.lastToken = token
 	return f.detail, nil
 }
 func (f *fakeGH) GetReleaseByTag(context.Context, string, string, string, string) (github.ReleaseDetail, error) {
@@ -124,6 +126,65 @@ func TestGitHubSourceMapping(t *testing.T) {
 	// Content fetched only for README (a .go file is inventory-only).
 	if gh.contentCalls != 1 {
 		t.Errorf("contentCalls = %d, want 1", gh.contentCalls)
+	}
+}
+
+func TestTokenForResolvesPerRepoAndMemoizes(t *testing.T) {
+	gh := sampleGH()
+	src := New(gh, "static-fallback")
+	calls := 0
+	src.TokenFor = func(_ context.Context, repoFullName string) (string, error) {
+		calls++
+		if repoFullName != "acme/widget" {
+			t.Errorf("unexpected repo %q", repoFullName)
+		}
+		return "repo-pat", nil
+	}
+	req := rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v0.2.0"}
+	ctx := context.Background()
+
+	if _, err := src.RepositoryMeta(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if gh.lastToken != "repo-pat" {
+		t.Errorf("token used = %q, want the resolved repo PAT", gh.lastToken)
+	}
+	// A second call for the same repo must reuse the memoized token.
+	if _, err := src.ReleaseByTag(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Errorf("TokenFor called %d times, want 1 (memoized)", calls)
+	}
+}
+
+func TestTokenForFallsBackOnErrorOrEmpty(t *testing.T) {
+	for name, fn := range map[string]func(context.Context, string) (string, error){
+		"error": func(context.Context, string) (string, error) { return "", context.Canceled },
+		"empty": func(context.Context, string) (string, error) { return "", nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			gh := sampleGH()
+			src := New(gh, "static-fallback")
+			src.TokenFor = fn
+			if _, err := src.RepositoryMeta(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v1"}); err != nil {
+				t.Fatal(err)
+			}
+			if gh.lastToken != "static-fallback" {
+				t.Errorf("token = %q, want the static fallback", gh.lastToken)
+			}
+		})
+	}
+}
+
+func TestNoTokenForUsesStatic(t *testing.T) {
+	gh := sampleGH()
+	src := New(gh, "static")
+	if _, err := src.RepositoryMeta(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if gh.lastToken != "static" {
+		t.Errorf("token = %q, want static", gh.lastToken)
 	}
 }
 
