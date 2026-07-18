@@ -65,7 +65,7 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed weekday window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -91,7 +91,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
@@ -112,16 +112,23 @@ jobs:
             ${P:+--parameter-overrides $P}
 
       - name: deploy serverless stack
+        env:
+          # Optional GitHub read token for the Release Context Builder (blank
+          # works for public repos). Stored as a GitHub *secret*, never a var.
+          GITHUB_READ_TOKEN: ${{ secrets.GITHUB_READ_TOKEN }}
         run: |
+          P="ArtifactsBucket=$ARTIFACTS_BUCKET"
+          P="$P RegistrationCodeKey=$SHA/registration.zip"
+          P="$P WebhookHandlerCodeKey=$SHA/webhook-handler.zip"
+          P="$P ManualTriggerCodeKey=$SHA/manual-trigger.zip"
+          P="$P ReleaseContextCodeKey=$SHA/release-context.zip"
+          [ -n "$GITHUB_READ_TOKEN" ] && P="$P GitHubReadToken=$GITHUB_READ_TOKEN"
+          # shellcheck disable=SC2086
           aws cloudformation deploy \
             --template-file infrastructure/serverless.yaml \
             --stack-name blog-gen-serverless \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides \
-              ArtifactsBucket="$ARTIFACTS_BUCKET" \
-              RegistrationCodeKey="$SHA/registration.zip" \
-              WebhookHandlerCodeKey="$SHA/webhook-handler.zip" \
-              ManualTriggerCodeKey="$SHA/manual-trigger.zip"
+            --parameter-overrides $P
 
       - name: deploy compute stack
         env:

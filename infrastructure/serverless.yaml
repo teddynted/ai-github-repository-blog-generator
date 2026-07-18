@@ -33,6 +33,18 @@ Parameters:
     Type: String
     Default: manual-trigger.zip
     Description: S3 key of the manual-trigger Lambda package (POST /process).
+  ReleaseContextCodeKey:
+    Type: String
+    Default: release-context.zip
+    Description: S3 key of the release-context Lambda package (POST /release-context).
+  GitHubReadToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >
+      Optional GitHub token for the Release Context Builder to read repositories
+      and releases. Blank works for public repositories (rate-limited); provide a
+      least-privilege read token for private repos or higher rate limits.
   PublishTrigger:
     Type: String
     Default: "blog:"
@@ -254,6 +266,29 @@ Resources:
                   StringEquals:
                     aws:ResourceTag/Project: !Ref ProjectName
 
+  ReleaseContextRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: release-context
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Persist built Release Contexts under a dedicated prefix in the
+              # artifacts bucket. GitHub is read over the internet (no AWS perms).
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${ArtifactsBucket}/release-contexts/*"
+
   # ---------------------------------------------------------------------------
   # Lambda functions
   # ---------------------------------------------------------------------------
@@ -280,6 +315,13 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-manual-trigger"
+      RetentionInDays: !Ref LogRetentionDays
+  ReleaseContextLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-release-context"
       RetentionInDays: !Ref LogRetentionDays
 
   RegistrationFunction:
@@ -367,6 +409,33 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  ReleaseContextFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ReleaseContextLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-release-context"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      # Building a context makes several GitHub calls and assembles JSON, so it
+      # gets more memory and a longer timeout than the thin trigger Lambdas.
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt ReleaseContextRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref ReleaseContextCodeKey
+      Environment:
+        Variables:
+          # Persisted Release Contexts land in the artifacts bucket under
+          # release-contexts/<date>/<id>.json (see the role's scoped s3:PutObject).
+          CONTEXT_BUCKET: !Ref ArtifactsBucket
+          # Optional GitHub read token; blank works for public repositories.
+          GITHUB_TOKEN: !Ref GitHubReadToken
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
   # ---------------------------------------------------------------------------
   # EventBridge rule: matched events are buffered in SQS and drained by the
   # worker while the instance is up (started/stopped by the scheduler stack).
@@ -420,6 +489,13 @@ Resources:
       RestApiId: !Ref RestApi
       ParentId: !GetAtt RestApi.RootResourceId
       PathPart: process
+
+  ReleaseContextResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: release-context
 
   WebhookMethod:
     Type: AWS::ApiGateway::Method
@@ -485,6 +561,29 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/process"
 
+  # POST /release-context — the Content Intelligence entrypoint (Milestone 2).
+  # API-key protected like /process and /repositories, on the shared usage plan.
+  ReleaseContextMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ReleaseContextResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ReleaseContextFunction.Arn}/invocations"
+
+  ReleaseContextInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReleaseContextFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/release-context"
+
   WebhookInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -506,22 +605,23 @@ Resources:
   # redeploy an existing Deployment (same logical id = no-op), so the stage would
   # keep serving the old set. Bump the logical id (…V2, V3, …) whenever methods
   # change to force a fresh snapshot — V3 adds DELETE /repositories.
-  ApiDeploymentV3:
+  ApiDeploymentV4:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - WebhookMethod
       - RepositoriesMethod
       - RepositoriesDeleteMethod
       - ProcessMethod
+      - ReleaseContextMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "Deployment for ${StageName} (webhook, repositories POST+DELETE, process)"
+      Description: !Sub "Deployment for ${StageName} (webhook, repositories POST+DELETE, process, release-context)"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       RestApiId: !Ref RestApi
-      DeploymentId: !Ref ApiDeploymentV3
+      DeploymentId: !Ref ApiDeploymentV4
       StageName: !Ref StageName
 
   RegistrationApiKey:
@@ -561,6 +661,11 @@ Outputs:
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/process"
     Export:
       Name: !Sub "${ProjectName}-ProcessUrl"
+  ReleaseContextUrl:
+    Description: Release Context Builder endpoint (POST, requires x-api-key).
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/release-context"
+    Export:
+      Name: !Sub "${ProjectName}-ReleaseContextUrl"
   RegistrationApiKeyId:
     Description: API key ID for the registration + process endpoints (retrieve value via API Gateway).
     Value: !Ref RegistrationApiKey

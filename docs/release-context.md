@@ -91,7 +91,13 @@ replacement for one.
 
 ---
 
-## 3. API (`POST /process`)
+## 3. API (`POST /release-context`)
+
+> **Route naming:** the milestone brief shows `POST /process`, but that route is
+> already the platform's manual pipeline trigger. To keep both entry points, the
+> Content Intelligence endpoint is **`POST /release-context`**. It is API-key
+> protected (`x-api-key`) on the same usage plan as `/repositories` and
+> `/process`.
 
 Request:
 
@@ -108,15 +114,30 @@ Accepted response (`202`):
 ```json
 {
   "status": "accepted",
-  "contextId": "b6c1…",
+  "contextId": "b6c1a2f0-…",
   "repository": "ai-github-repository-blog-generator",
-  "releaseTag": "v0.2.0"
+  "releaseTag": "v0.2.0",
+  "location": "s3://blog-gen-artifacts-…/release-contexts/2026/07/20/b6c1….json",
+  "warnings": 1
 }
 ```
 
-Validation errors return `400` with `{ "error": "invalid request: releaseTag is required" }`.
-The route is API-key protected, consistent with the existing registration and
-manual-trigger endpoints.
+The built context is persisted to S3 (`release-contexts/<date>/<id>.json`) when
+`CONTEXT_BUCKET` is set. Error mapping: `400` invalid request, `404`
+repository/release not found, `403` not authorized, `502` GitHub unavailable,
+`500` otherwise.
+
+### Handler → engine wiring
+
+```
+API Gateway (POST /release-context, x-api-key)
+      │
+      ▼
+Lambda: release-context  ──►  releasesource.GitHubSource (implements Sources)
+      │                              │  GitHub REST: repo, release, compare, tree, contents
+      ▼                              ▼
+releasecontext.Builder.Build ──► ReleaseContext (JSON) ──► S3 (optional)
+```
 
 ---
 
@@ -146,12 +167,13 @@ manual-trigger endpoints.
 
 ## 5. Status
 
-**Milestone 2 — Phase 1 (this change):** the Content Intelligence engine —
-domain schema, all analyzers, the orchestrating `Builder`, request validation,
-and the content-intelligence layer — implemented as pure, unit-tested Go
-(85%+ statement coverage on core logic).
+**Milestone 2 — implemented:**
 
-**Phase 2 (next):** the I/O layer — a GitHub REST + git adapter implementing
-`Sources`, the `/process` Lambda handler, the API Gateway route and
-CloudFormation, context persistence (S3/DynamoDB), and integration tests with
-mocked GitHub responses.
+- **Content Intelligence engine** ([`internal/releasecontext`](../internal/releasecontext)) — versioned schema, all analyzers, the orchestrating `Builder`, request validation, and the content-intelligence layer. Pure, unit-tested Go (85%+ coverage).
+- **GitHub adapter** ([`internal/releasesource`](../internal/releasesource)) — implements `Sources` over the GitHub REST client (repository, release, previous-tag, compare, tree, contents), with a memoized compare and curated content fetching.
+- **GitHub client** ([`internal/github`](../internal/github)) — `GetRepositoryDetail`, `GetReleaseByTag`, `ListReleases`, `CompareCommits`, `GetTree`, `GetFileContent` (integration-tested with mocked responses).
+- **Lambda + API Gateway + CloudFormation** — `POST /release-context` (API-key protected), the `release-context` Lambda, least-privilege IAM, a CloudWatch log group, and optional S3 persistence (all in [`infrastructure/serverless.yaml`](../infrastructure/serverless.yaml)).
+
+**Future milestones:** generate content (blog/social/SEO) from the context via
+Amazon Bedrock; diff successive contexts; a webhook path that builds a context
+automatically on release publication.
