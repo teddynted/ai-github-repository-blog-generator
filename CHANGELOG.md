@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.6.0] - 2026-07-18
+
+### Features
+
+- **shorts:** YouTube Shorts generator (Milestone 7)
+
+
 ## [0.5.0] - 2026-07-18
 
 ### Features
