@@ -134,6 +134,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🎬 **Storyboard Generator** | Turns a generated technical blog + Release Context into a scene-by-scene **video storyboard** (JSON + Markdown) — the Video Planning engine, grounded in real Mermaid diagrams ([docs](./docs/storyboard.md)) |
 | 🎙️ **Voice-over Generator** | Enriches a storyboard into a synchronized **voice-over script** (JSON + Markdown) — the Narration engine: timestamps, pacing, pronunciation, emphasis, pauses, and sync cues, ready for any TTS provider or human narrator ([docs](./docs/voiceover.md)) |
 | 📺 **YouTube Script Generator** | Combines the Release Context, blog, storyboard, and voice-over into a production-ready **long-form YouTube script** (JSON + Markdown) — the Long-form Video engine: hook, chapters, demos, callouts, CTAs, and SEO metadata ([docs](./docs/youtube.md)) |
+| 📱 **YouTube Shorts Generator** | Mines the release package for the best moments and plans multiple standalone **30–60s Shorts** (JSON + Markdown) — the Short-form Video engine: hooks, scene breakdowns, timed captions, grounded visuals, CTAs, and hashtags ([docs](./docs/shorts.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -846,6 +847,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Storyboard Generation](./docs/storyboard.md) | Scene-by-scene video storyboard from a blog + Release Context — the Video Planning engine (the `storyboard` CLI) |
 | [Voice-over Generation](./docs/voiceover.md) | Synchronized narration script from a storyboard — the Narration engine, TTS-agnostic (the `voiceover` CLI) |
 | [YouTube Script Generation](./docs/youtube.md) | Long-form YouTube script from the release package (context + blog + storyboard + voice-over) — the Long-form Video engine (the `youtube` CLI) |
+| [YouTube Shorts Generation](./docs/shorts.md) | Multiple standalone 30–60s Shorts mined from the release package — the Short-form Video engine (the `shorts` CLI) |
 | [Runbook: Release → Content](./docs/runbook-release-to-content.md) | End-to-end live validation — publish a release, verify a blog post is generated and published |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
