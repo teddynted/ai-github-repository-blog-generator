@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/brand/icon-dark.svg">
+  <img alt="AI GitHub Repository Blog Generator" src="./docs/assets/brand/icon.svg" width="96" height="96">
+</picture>
+
 # GitHub AI Blog Generator
 
 **Event-driven, fully self-hosted AI platform that turns GitHub repositories into high-quality technical content — but only when you opt in with a `blog:` commit. Powered by OpenClaw, Ollama, and local LLMs, orchestrated with n8n, triggered through Amazon EventBridge, and running on a scheduled On-Demand AWS EC2 instance provisioned entirely with AWS CloudFormation.**
