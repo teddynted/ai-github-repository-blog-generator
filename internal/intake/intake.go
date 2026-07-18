@@ -29,6 +29,11 @@ type Event struct {
 	CommitSHA      string `json:"commit_sha"`
 	CommitMessage  string `json:"commit_message"`
 	TriggerPattern string `json:"trigger_pattern"`
+	// ReleaseTag, when set, names the GitHub Release to build content for and
+	// routes the event to the release-content pipeline (Release Context → blog)
+	// instead of the snapshot pipeline. Set by published-release webhooks and by
+	// a manual /process request that names a release.
+	ReleaseTag string `json:"release_tag,omitempty"`
 	// Source identifies the trigger that produced the event (push, release,
 	// manual, …) for logging and future routing. Optional for back-compat.
 	Source string `json:"source,omitempty"`
@@ -178,6 +183,9 @@ type Request struct {
 	Owner      string `json:"owner"`
 	Branch     string `json:"branch,omitempty"`
 	Commit     string `json:"commit,omitempty"`
+	// ReleaseTag, when set, requests release-content generation (a technical
+	// blog + summaries) for that GitHub Release rather than a snapshot run.
+	ReleaseTag string `json:"releaseTag,omitempty"`
 	Force      bool   `json:"force,omitempty"`
 	Provider   string `json:"provider,omitempty"`
 }
@@ -206,14 +214,20 @@ func (r Request) ToEvent(source string) Event {
 	if branch == "" {
 		branch = "main"
 	}
+	tag := strings.TrimSpace(r.ReleaseTag)
+	ref := "refs/heads/" + branch
+	if tag != "" {
+		ref = "refs/tags/" + tag
+	}
 	return Event{
 		RepoFullName:   r.Owner + "/" + r.Repository,
 		Owner:          r.Owner,
 		Name:           r.Repository,
-		Ref:            "refs/heads/" + branch,
+		Ref:            ref,
 		CommitSHA:      strings.TrimSpace(r.Commit),
 		CommitMessage:  source + " trigger",
 		TriggerPattern: source,
+		ReleaseTag:     tag,
 		Source:         source,
 		Force:          r.Force,
 		Provider:       strings.TrimSpace(r.Provider),

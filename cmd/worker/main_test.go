@@ -159,6 +159,39 @@ func TestHandleMessageRoutesReleaseEvent(t *testing.T) {
 	}
 }
 
+// A manual /process request that names a release (source=manual, release_tag
+// set) also routes to the release-content pipeline.
+func TestHandleMessageRoutesManualReleaseTag(t *testing.T) {
+	q := &fakeConsumer{}
+	snapshot := &fakeRunner{}
+	rr := &fakeReleaseRunner{res: releasepipeline.Result{Published: 2}}
+	body := `{"detail":{"repo_full_name":"acme/widget","owner":"acme","name":"widget","ref":"refs/tags/v1.4.0","release_tag":"v1.4.0","source":"manual"}}`
+	handleMessage(context.Background(), discardLogger(), q, snapshot, rr, &fakeNotifier{}, &fakeMeter{}, msg(body))
+
+	if len(snapshot.ran) != 0 {
+		t.Error("a manual request with a release tag must use the release pipeline")
+	}
+	if len(rr.ran) != 1 || rr.ran[0].ReleaseTag != "v1.4.0" {
+		t.Errorf("release runner ran = %+v", rr.ran)
+	}
+}
+
+// A manual /process request WITHOUT a release tag keeps using the snapshot
+// pipeline (unchanged behavior).
+func TestHandleMessageManualNoTagUsesSnapshot(t *testing.T) {
+	q := &fakeConsumer{}
+	snapshot := &fakeRunner{res: pipeline.Result{Published: 1}}
+	rr := &fakeReleaseRunner{}
+	body := `{"detail":{"repo_full_name":"acme/widget","owner":"acme","name":"widget","ref":"refs/heads/main","source":"manual"}}`
+	handleMessage(context.Background(), discardLogger(), q, snapshot, rr, &fakeNotifier{}, &fakeMeter{}, msg(body))
+	if len(rr.ran) != 0 {
+		t.Error("a manual request without a release tag must NOT use the release pipeline")
+	}
+	if len(snapshot.ran) != 1 {
+		t.Error("manual (no tag) should use the snapshot pipeline")
+	}
+}
+
 // With no release runner configured, a release event falls through to the
 // snapshot pipeline (back-compat).
 func TestHandleMessageReleaseFallsBackWithoutRunner(t *testing.T) {

@@ -155,4 +155,11 @@ func TestRequestToEvent(t *testing.T) {
 	if ev2.Ref != "refs/heads/dev" || ev2.CommitSHA != "abc" {
 		t.Errorf("branch/commit mapping wrong: %+v", ev2)
 	}
+
+	// A release tag routes to the release-content path: it is carried on the
+	// event and the ref points at the tag (not a branch).
+	ev3 := Request{Repository: "w", Owner: "o", ReleaseTag: "v1.4.0"}.ToEvent("manual")
+	if ev3.ReleaseTag != "v1.4.0" || ev3.Ref != "refs/tags/v1.4.0" {
+		t.Errorf("release-tag mapping wrong: %+v", ev3)
+	}
 }

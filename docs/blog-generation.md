@@ -133,4 +133,8 @@ registered PAT** (resolved from the shared secret, the same credential used for
 cloning), so private repos work with no extra configuration. A `GITHUB_TOKEN`
 env var on the instance is the fallback for public or unregistered repos.
 
+The same release run can be triggered **manually** by calling
+`POST /process` with a `releaseTag` (see [Manual Trigger](./manual-trigger.md)) —
+useful for regenerating content for an existing release without re-publishing it.
+
 **Next:** deploy and run end to end against a real release.

@@ -201,6 +201,7 @@ func (h *Handler) releaseEvent(full string, body []byte, r repo.Repository) (int
 		CommitSHA:      rp.Release.TagName, // memory dedup key for releases
 		CommitMessage:  "Release " + name,
 		TriggerPattern: "release",
+		ReleaseTag:     rp.Release.TagName,
 		Source:         "release",
 	}, ""
 }

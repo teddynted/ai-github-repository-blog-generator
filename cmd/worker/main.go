@@ -238,9 +238,10 @@ func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) 
 		return
 	}
 
-	// A published-release event takes the release-content path (build a Release
-	// Context, then generate release-focused content) when it is configured.
-	if env.Detail.Source == "release" && rr != nil {
+	// Any event that names a release (a published-release webhook, or a manual
+	// /process request with a releaseTag) takes the release-content path: build
+	// a Release Context, then generate release-focused content.
+	if rr != nil && (env.Detail.Source == "release" || env.Detail.ReleaseTag != "") {
 		handleReleaseMessage(ctx, logger, q, rr, n, mt, env, m)
 		return
 	}
@@ -280,7 +281,10 @@ func handleMessage(ctx context.Context, logger interface{ Error(string, ...any) 
 func handleReleaseMessage(ctx context.Context, logger interface{ Error(string, ...any) }, q consumer, rr releaseRunner, n notify.Notifier, mt meter, env eventEnvelope, m awssqs.Message) {
 	repo := env.Detail.RepoFullName
 	owner, name := env.Detail.Owner, env.Detail.Name
-	tag := strings.TrimPrefix(env.Detail.Ref, "refs/tags/")
+	tag := env.Detail.ReleaseTag
+	if tag == "" {
+		tag = strings.TrimPrefix(env.Detail.Ref, "refs/tags/")
+	}
 	if owner == "" || name == "" || tag == "" {
 		logger.Error("release event missing owner/repo/tag; dropping", "repo", repo, "ref", env.Detail.Ref)
 		_ = q.Delete(ctx, m.ReceiptHandle)

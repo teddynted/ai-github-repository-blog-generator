@@ -84,6 +84,7 @@ fit for the existing architecture.)
   "owner": "username",
   "branch": "main",
   "commit": "optional",
+  "releaseTag": "v0.2.0",
   "force": false,
   "provider": "bedrock"
 }
@@ -93,10 +94,18 @@ fit for the existing architecture.)
 | --- | --- | --- | --- |
 | `repository` | **yes** | — | repository name (without owner) |
 | `owner` | **yes** | — | repository owner/org |
-| `branch` | no | `main` | mapped to `refs/heads/<branch>` |
+| `branch` | no | `main` | mapped to `refs/heads/<branch>` (snapshot run) |
 | `commit` | no | (resolved by pipeline) | specific commit SHA to process |
+| `releaseTag` | no | — | when set, generates **release content** (technical blog + summaries) for that GitHub Release via the [Release Context](./release-context.md) → [generation](./blog-generation.md) pipeline, instead of a snapshot run |
 | `force` | no | `false` | request reprocessing even if already published (carried through for the worker) |
 | `provider` | no | local Ollama | AI-provider hint (e.g. `bedrock`); carried through for future use |
+
+> **Two run modes.** Without `releaseTag`, `/process` triggers a **snapshot run**
+> (clone the branch and generate content from the working copy). With
+> `releaseTag`, it triggers a **release run** — the same path a published-release
+> webhook takes — building the Release Context for that tag and generating a
+> long-form blog post plus summaries. `POST /release-context` builds only the
+> context (no generation); `/process` with a tag builds *and* generates.
 
 The payload is **extensible**: unknown fields are ignored, and `force`/`provider`
 flow through on the event for future enhancements. Required fields are validated
