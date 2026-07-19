@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.7.0] - 2026-07-19
+
+### Features
+
+- **tiktok:** TikTok video generator (Milestone 8)
+
+
 ## [0.6.0] - 2026-07-18
 
 ### Features
