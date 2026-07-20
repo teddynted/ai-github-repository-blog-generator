@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.11.0] - 2026-07-20
+
+### Features
+
+- **xthread:** technical X thread generator (Milestone 13)
+
+
 ## [0.10.0] - 2026-07-20
 
 ### Features
