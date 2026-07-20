@@ -1,0 +1,124 @@
+package linkedin
+
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+// title returns a professional, non-clickbait post title for a candidate.
+func title(pkg ReleasePackage, c postCandidate) string {
+	repo := repoShort(pkg)
+	t := tag(pkg)
+	switch c.Type {
+	case "Release Announcement":
+		return fmt.Sprintf("Shipping %s %s", repo, t)
+	case "Feature Spotlight":
+		return "A closer look at " + lowerFirst(firstSentences(c.Seed, 1))
+	case "Architecture Deep Dive":
+		return fmt.Sprintf("How %s %s is architected", repo, t)
+	case "AWS Best Practice":
+		return "An AWS pattern worth sharing"
+	case "AI Engineering Highlight":
+		return "Grounded AI engineering, in practice"
+	case "Engineering Lesson":
+		return "A lesson from building " + repo + " " + t
+	case "Developer Productivity Tip":
+		return "A small workflow win from " + repo
+	case "Behind-the-Build":
+		return "Behind the build: " + repo + " " + t
+	case "Performance Improvement":
+		return "Making " + repo + " more reliable"
+	default:
+		return repo + " " + t + " — technical notes"
+	}
+}
+
+// body assembles the LinkedIn post. It builds a grounded, professional draft and
+// (when a Model is configured) asks the model to write it in an authentic,
+// non-hype voice — never adding facts. Falls back to the draft.
+func (g *Generator) body(ctx context.Context, pkg ReleasePackage, c postCandidate, highlights []string, engagement, cta string) string {
+	draft := bodyDraft(pkg, c, highlights, engagement, cta)
+	if g.Model == nil || strings.TrimSpace(draft) == "" {
+		return draft
+	}
+	if out, err := g.Model.Generate(ctx, bodyPrompt(c, draft)); err == nil {
+		if r := strings.TrimSpace(out); r != "" {
+			return r
+		}
+	}
+	return draft
+}
+
+// bodyDraft builds a grounded, well-structured LinkedIn post.
+func bodyDraft(pkg ReleasePackage, c postCandidate, highlights []string, engagement, cta string) string {
+	var b strings.Builder
+	repo := repoShort(pkg)
+	t := tag(pkg)
+
+	// Opening line by type.
+	fmt.Fprintf(&b, "%s\n\n", openingLine(c, repo, t))
+
+	// Grounded context.
+	if seed := firstSentences(c.Seed, 2); seed != "" {
+		fmt.Fprintf(&b, "%s\n\n", seed)
+	}
+
+	// Technical highlights as a scannable list.
+	if len(highlights) > 0 {
+		b.WriteString("What stood out:\n")
+		for _, h := range topStrings(highlights, 4) {
+			fmt.Fprintf(&b, "• %s\n", collapse(h))
+		}
+		b.WriteString("\n")
+	}
+
+	// Stack line (grounded).
+	if stack := topStrings(append(append([]string{}, awsServices(pkg)...), technologies(pkg)...), 5); len(stack) > 0 {
+		fmt.Fprintf(&b, "Stack: %s.\n\n", joinAnd(stack))
+	}
+
+	// Engagement prompt + CTA.
+	if engagement != "" {
+		fmt.Fprintf(&b, "%s\n\n", engagement)
+	}
+	if cta != "" {
+		fmt.Fprintf(&b, "%s", cta)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func openingLine(c postCandidate, repo, t string) string {
+	switch c.Type {
+	case "Release Announcement":
+		return fmt.Sprintf("Just shipped %s %s.", repo, t)
+	case "Feature Spotlight":
+		return "One feature I'm genuinely happy with in this release:"
+	case "Architecture Deep Dive":
+		return "A note on the architecture behind this one."
+	case "AWS Best Practice":
+		return "Sharing an AWS pattern that's been working well."
+	case "AI Engineering Highlight":
+		return "Some notes on the AI-engineering side of this project."
+	case "Engineering Lesson":
+		return "A lesson worth writing down from this release."
+	case "Developer Productivity Tip":
+		return "Small thing, real time saved:"
+	case "Behind-the-Build":
+		return "A bit of the story behind how this was built."
+	case "Performance Improvement":
+		return "Reliability work that quietly pays off:"
+	default:
+		return "A few technical notes on " + repo + " " + t + "."
+	}
+}
+
+func bodyPrompt(c postCandidate, draft string) string {
+	return fmt.Sprintf(
+		"You are an experienced software engineer writing a LinkedIn post (type: %s) for %s.\n\n"+
+			"Rewrite the DRAFT into an authentic, professional LinkedIn post: educational, technically accurate, and "+
+			"approachable. NO marketing hype, NO clickbait, NO exaggerated or performance claims, NO buzzword stuffing. "+
+			"Keep the bullet highlights, the engagement question, and the CTA. Use ONLY the facts in the draft — invent "+
+			"nothing. Output only the post text.\n\nDRAFT:\n%s",
+		c.Type, c.Audience, draft)
+}
