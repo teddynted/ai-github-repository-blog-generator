@@ -143,6 +143,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🧵 **X Thread Generator** | Composes technical **X (Twitter) threads** (JSON + Markdown) from the pipeline — the Social Marketing engine: configurable-length threads with 280-char-enforced posts, grounded code snippets, key takeaways, engagement prompts, CTAs, and hashtags ([docs](./docs/xthread.md)) |
 | 🚀 **Publishing Automation** | Distributes **approved** content to multiple platforms (Dev.to, Medium, Hashnode, YouTube, GitHub) — the Content Distribution engine: a common Publisher interface, scheduling, retries with backoff, per-platform metadata, publication tracking, and a full audit trail; **never publishes unapproved content** ([docs](./docs/publishing.md)) |
 | 🛡️ **Review & Approval Workflow** | The governance layer every asset passes before publishing — deterministic validation, AI quality review grounded in the Release Context, 8-dimension scoring, a revision loop, human approval gates, publication-readiness checks, and a full audit trail; **never approves hallucinated content** ([docs](./docs/governance.md)) |
+| 📊 **Social Media Intelligence** | Cross-platform performance tracking for YouTube, Instagram, X, and TikTok — the Analytics engine: immutable daily snapshots, growth trends, content effectiveness (virality/evergreen), subscriber conversion, cross-platform comparison, a daily morning briefing, and a Business Advisory Council package, with grounded AI insights that **never fabricate statistics** ([docs](./docs/social-intelligence.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -864,6 +865,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [X Thread Generation](./docs/xthread.md) | Technical X (Twitter) threads from the pipeline — configurable length, 280-char posts, grounded code snippets (the `xthread` CLI) |
 | [Publishing Automation](./docs/publishing.md) | Distribute approved content to Dev.to, Medium, Hashnode, YouTube, and GitHub — scheduling, retries, tracking, and audit (the `distribute` CLI) |
 | [Review & Approval Workflow](./docs/governance.md) | Content governance — validation, AI review, scoring, approval gates, readiness, and audit trail (the `govern` CLI) |
+| [Social Media Intelligence](./docs/social-intelligence.md) | Cross-platform tracking (YouTube/Instagram/X/TikTok) — immutable snapshots, trends, effectiveness, subscriber conversion, morning briefing, and advisory package (the `socialintel` CLI) |
 | [Runbook: Release → Content](./docs/runbook-release-to-content.md) | End-to-end live validation — publish a release, verify a blog post is generated and published |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
