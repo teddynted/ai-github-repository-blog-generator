@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.16.0] - 2026-07-20
+
+### Features
+
+- **contentoptimizer:** AI content optimization engine (Milestone 18)
+
+
 ## [0.15.0] - 2026-07-20
 
 ### Features
