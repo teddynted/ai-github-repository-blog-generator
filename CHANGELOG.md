@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.17.0] - 2026-07-20
+
+### Features
+
+- **platform:** extensibility platform & provider abstraction (Milestone 19)
+
+
 ## [0.16.0] - 2026-07-20
 
 ### Features
