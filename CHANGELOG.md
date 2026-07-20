@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.9.0] - 2026-07-20
+
+### Features
+
+- **architecture:** AWS architecture diagram generator (Milestone 11)
+
+
 ## [0.8.0] - 2026-07-20
 
 ### Features
