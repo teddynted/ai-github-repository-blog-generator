@@ -10,6 +10,14 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.8.0] - 2026-07-20
+
+### Features
+
+- **seo:** canonical SEO metadata generator (Milestone 10)
+- **visualassets:** AI image prompt generator (Milestone 9)
+
+
 ## [0.7.0] - 2026-07-19
 
 ### Features
