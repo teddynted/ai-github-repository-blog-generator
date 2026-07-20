@@ -138,6 +138,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🎵 **TikTok Generator** | Adapts the release package into multiple **20–60s TikTok videos** (JSON + Markdown) — the Social Video engine: native hooks, problem/solution scripts, engagement prompts, timed captions, grounded visuals, hashtags, and a retention score ([docs](./docs/tiktok.md)) |
 | 🎨 **Visual Asset Generator** | Turns the release package into **provider-neutral AI image prompts** (JSON + Markdown) for thumbnails, social graphics, blog headers, banners, and technical illustrations — the Visual Design engine: grounded prompts, negative prompts, a shared brand identity, and text placeholders (no baked-in text) ([docs](./docs/visual-assets.md)) |
 | 🔎 **SEO Metadata Generator** | Aggregates the whole pipeline into **canonical SEO metadata** (JSON + Markdown) for blog, YouTube, short-form, and social — the SEO engine: keyword taxonomy, slugs, excerpts, hashtags, Open Graph, JSON-LD/RSS/sitemap, platform limits, and a confidence score ([docs](./docs/seo.md)) |
+| 📐 **Architecture Diagram Generator** | Renders grounded **AWS architecture diagrams** (Mermaid + Graphviz DOT + SVG + PNG metadata) from the Release Context — the Architecture Visualization engine: analysis → one shared graph → three synchronized renderings, with edges only when explicit ([docs](./docs/architecture-diagrams.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -854,6 +855,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [TikTok Generation](./docs/tiktok.md) | Multiple 20–60s TikTok videos adapted from the release package — the Social Video engine (the `tiktok` CLI) |
 | [Visual Asset Generation](./docs/visual-assets.md) | Provider-neutral AI image prompts for thumbnails, social, blog headers, banners, and illustrations — the Visual Design engine (the `visualassets` CLI) |
 | [SEO Metadata Generation](./docs/seo.md) | Canonical SEO metadata for every channel — keywords, slugs, hashtags, Open Graph, and structured data (the `seo` CLI) |
+| [Architecture Diagram Generation](./docs/architecture-diagrams.md) | Grounded AWS architecture diagrams — Mermaid, Graphviz DOT, SVG, PNG metadata — the Architecture Visualization engine (the `architecture` CLI) |
 | [Runbook: Release → Content](./docs/runbook-release-to-content.md) | End-to-end live validation — publish a release, verify a blog post is generated and published |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
