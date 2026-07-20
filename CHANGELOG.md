@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.14.0] - 2026-07-20
+
+### Features
+
+- **socialintel:** cross-platform social media intelligence (Milestone 16)
+
+
 ## [0.13.0] - 2026-07-20
 
 ### Features
