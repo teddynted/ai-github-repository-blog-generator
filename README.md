@@ -140,6 +140,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🔎 **SEO Metadata Generator** | Aggregates the whole pipeline into **canonical SEO metadata** (JSON + Markdown) for blog, YouTube, short-form, and social — the SEO engine: keyword taxonomy, slugs, excerpts, hashtags, Open Graph, JSON-LD/RSS/sitemap, platform limits, and a confidence score ([docs](./docs/seo.md)) |
 | 📐 **Architecture Diagram Generator** | Renders grounded **AWS architecture diagrams** (Mermaid + Graphviz DOT + SVG + PNG metadata) from the Release Context — the Architecture Visualization engine: analysis → one shared graph → three synchronized renderings, with edges only when explicit ([docs](./docs/architecture-diagrams.md)) |
 | 💼 **LinkedIn Content Generator** | Composes multiple professional **LinkedIn post variations** (JSON + Markdown) from the pipeline — the Professional Marketing engine: audience-targeted posts, grounded technical highlights, engagement prompts, CTAs, hashtags, and references to existing visuals ([docs](./docs/linkedin.md)) |
+| 🧵 **X Thread Generator** | Composes technical **X (Twitter) threads** (JSON + Markdown) from the pipeline — the Social Marketing engine: configurable-length threads with 280-char-enforced posts, grounded code snippets, key takeaways, engagement prompts, CTAs, and hashtags ([docs](./docs/xthread.md)) |
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
@@ -858,6 +859,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [SEO Metadata Generation](./docs/seo.md) | Canonical SEO metadata for every channel — keywords, slugs, hashtags, Open Graph, and structured data (the `seo` CLI) |
 | [Architecture Diagram Generation](./docs/architecture-diagrams.md) | Grounded AWS architecture diagrams — Mermaid, Graphviz DOT, SVG, PNG metadata — the Architecture Visualization engine (the `architecture` CLI) |
 | [LinkedIn Content Generation](./docs/linkedin.md) | Professional LinkedIn post variations from the pipeline — the Professional Marketing engine (the `linkedin` CLI) |
+| [X Thread Generation](./docs/xthread.md) | Technical X (Twitter) threads from the pipeline — configurable length, 280-char posts, grounded code snippets (the `xthread` CLI) |
 | [Runbook: Release → Content](./docs/runbook-release-to-content.md) | End-to-end live validation — publish a release, verify a blog post is generated and published |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
