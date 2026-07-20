@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.13.0] - 2026-07-20
+
+### Features
+
+- **publishing:** publishing automation platform (Milestone 15)
+
+
 ## [0.12.0] - 2026-07-20
 
 ### Features
