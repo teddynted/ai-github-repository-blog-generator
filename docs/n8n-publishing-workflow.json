@@ -1,0 +1,106 @@
+{
+  "name": "Approved Content Publishing",
+  "meta": {
+    "description": "Milestone 15 publishing automation: once content is Approved by the Review & Approval Workflow, validate it, generate platform-specific metadata, distribute to every enabled platform, update status, notify, and record analytics. The distribute CLI exits 0 on success and 3 when any platform failed, so the IF node can branch. Scheduled publications are parked and picked up by a periodic 'Run Due' tick."
+  },
+  "nodes": [
+    {
+      "id": "approved",
+      "name": "Approved Content",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "parameters": { "path": "content-approved", "httpMethod": "POST" }
+    },
+    {
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "parameters": { "conditions": { "boolean": [{ "value1": "={{$json.approved}}", "value2": true }] } }
+    },
+    {
+      "id": "distribute",
+      "name": "Generate Metadata + Publish",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [680, 260],
+      "parameters": { "command": "go run ./cmd/distribute --content /tmp/post.md --approval {{$json.approvalRef}} --platforms devto,medium,hashnode,github --gh-owner {{$json.owner}} --gh-repo {{$json.repo}} --dry-run=false --format json --out /tmp/pub.json" }
+    },
+    {
+      "id": "succeeded",
+      "name": "All Published?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [920, 260],
+      "parameters": { "conditions": { "number": [{ "value1": "={{$node[\"distribute\"].exitCode}}", "operation": "equal", "value2": 0 }] } }
+    },
+    {
+      "id": "updateStatus",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1160, 200],
+      "parameters": {}
+    },
+    {
+      "id": "notify",
+      "name": "Notify (Slack/Email)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1400, 200],
+      "parameters": {}
+    },
+    {
+      "id": "analytics",
+      "name": "Analytics",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1640, 200],
+      "parameters": {}
+    },
+    {
+      "id": "complete",
+      "name": "Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1880, 200],
+      "parameters": {}
+    },
+    {
+      "id": "retry",
+      "name": "Notify Failure / Retry",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1160, 360],
+      "parameters": {}
+    },
+    {
+      "id": "runDue",
+      "name": "Run Due (schedule tick)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 560],
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] } }
+    },
+    {
+      "id": "runDueCmd",
+      "name": "Publish Due Scheduled",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [440, 560],
+      "parameters": { "command": "go run ./cmd/distribute --run-due" }
+    }
+  ],
+  "connections": {
+    "Approved Content": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "Generate Metadata + Publish", "type": "main", "index": 0 }], [{ "node": "Notify Failure / Retry", "type": "main", "index": 0 }]] },
+    "Generate Metadata + Publish": { "main": [[{ "node": "All Published?", "type": "main", "index": 0 }]] },
+    "All Published?": { "main": [[{ "node": "Update Status", "type": "main", "index": 0 }], [{ "node": "Notify Failure / Retry", "type": "main", "index": 0 }]] },
+    "Update Status": { "main": [[{ "node": "Notify (Slack/Email)", "type": "main", "index": 0 }]] },
+    "Notify (Slack/Email)": { "main": [[{ "node": "Analytics", "type": "main", "index": 0 }]] },
+    "Analytics": { "main": [[{ "node": "Complete", "type": "main", "index": 0 }]] },
+    "Run Due (schedule tick)": { "main": [[{ "node": "Publish Due Scheduled", "type": "main", "index": 0 }]] }
+  }
+}
