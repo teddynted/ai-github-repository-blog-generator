@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.18.0] - 2026-07-21
+
+### Features
+
+- **ami:** shared baked AMI management & image lifecycle (Milestone 20)
+
+
 ## [0.17.0] - 2026-07-20
 
 ### Features
