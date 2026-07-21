@@ -169,6 +169,48 @@ See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
 
 ---
 
-## 11. Reporting a Vulnerability
+## 11. Generated Content Safety & Prompt Injection
+
+The content pipeline feeds **untrusted repository text** — release notes, commit
+messages, README, and documentation — into LLM prompts. A crafted commit message
+or release body could attempt a **prompt-injection** ("ignore previous
+instructions and …") to steer a generated artifact.
+
+**Mitigations in place today:**
+
+- **Grounding, not free generation.** Every generator is instructed to ground its
+  output strictly in the Release Context and *not invent* facts, versions,
+  services, or features; deterministic fallbacks produce output with no model at
+  all. This bounds what injected text can achieve — the generators are built to
+  refuse fabrication (and, per the QA edge-case work, to skip rather than invent
+  when there is nothing groundable).
+- **Human review + approval gate.** No artifact is published without passing the
+  Review & Approval Workflow ([governance](./governance.md)); the publishing layer
+  **refuses content that is not approved**. A successful injection therefore
+  cannot auto-publish — a human sees the output first.
+- **Local inference only.** All generation runs on local Ollama; injected text
+  cannot exfiltrate data to a third-party model provider.
+- **Trigger gate limits initiation.** Runs fire only on a matching `blog:` commit
+  (or an authenticated `POST /process`), so an outside party cannot freely trigger
+  generation on arbitrary input.
+
+**Residual risk & recommended hardening (fast-follow, not yet implemented):**
+
+- Treat repository text as **data, not instructions**: wrap untrusted content in
+  explicit delimiters in each prompt and instruct the model to ignore any
+  instructions found inside those delimiters.
+- Keep the **human-approval gate mandatory** for any public destination — do not
+  add a fully-unattended publish path for externally-sourced content.
+- Consider a lightweight content check (denylist for injected directives, links to
+  unexpected domains) before the review stage for defense in depth.
+
+> The current posture (grounding + mandatory review/approval + local inference)
+> keeps injection from producing an auto-published or data-exfiltrating outcome.
+> The hardening above reduces the chance of injected text degrading an artifact's
+> *quality* before a human catches it.
+
+---
+
+## 12. Reporting a Vulnerability
 
 Please report security issues privately (e.g. GitHub Security Advisories or a maintainer email) rather than opening a public issue. Include reproduction steps and impact. Do not include exploit details in public channels until a fix is released.
