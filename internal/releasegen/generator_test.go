@@ -85,9 +85,9 @@ func TestGenerateAllProducesEveryFormat(t *testing.T) {
 }
 
 func TestGenerateAllAggregatesErrors(t *testing.T) {
-	// The model fails only for the LinkedIn prompt; the rest still succeed.
+	// The model fails only for the documentation prompt; the rest still succeed.
 	fm := &fakeModel{reply: func(p string) (string, error) {
-		if strings.Contains(p, "LinkedIn post") {
+		if strings.Contains(p, "updating project documentation") {
 			return "", errors.New("model overloaded")
 		}
 		return "ok", nil
