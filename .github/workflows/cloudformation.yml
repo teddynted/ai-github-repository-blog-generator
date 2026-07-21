@@ -31,4 +31,6 @@ jobs:
         run: pip install cfn-lint
 
       - name: lint templates
-        run: cfn-lint infrastructure/*.yaml
+        # Recurse so the reusable modules (infrastructure/modules/**) and examples
+        # are linted alongside the top-level stacks.
+        run: cfn-lint infrastructure/*.yaml infrastructure/**/*.yaml

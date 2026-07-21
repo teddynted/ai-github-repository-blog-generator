@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable SHARED-PARAMETERS module (Milestone 21). A central SSM Parameter Store
+  registry of shared platform configuration + the versioned baked-AMI pointers
+  (latest / stable / development / version-specific). It is the discoverable,
+  semver-aware contract downstream projects read instead of hard-coding ids. The
+  networking/IAM/storage modules also publish their own SSM entries; this module
+  owns the AMI channel pointers and the platform-wide config keys.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  LatestAmiId:
+    Type: AWS::EC2::Image::Id
+    Description: AMI id for the "latest" channel.
+  StableAmiId:
+    Type: String
+    Default: ""
+    Description: AMI id for the "stable" channel (empty to skip).
+  DevelopmentAmiId:
+    Type: String
+    Default: ""
+    Description: AMI id for the "development" channel (empty to skip).
+  AmiVersion:
+    Type: String
+    Default: v1.0.0
+    AllowedPattern: ^v[0-9]+\.[0-9]+\.[0-9]+$
+    Description: SemVer for the version-specific pointer (/platform/amis/vX.Y.Z).
+  DefaultRegion:
+    Type: String
+    Default: us-east-1
+  ResourcePrefix:
+    Type: String
+    Default: ai-platform
+    Description: Canonical resource prefix shared across stacks (naming standard).
+
+Conditions:
+  HasStable: !Not [!Equals [!Ref StableAmiId, ""]]
+  HasDevelopment: !Not [!Equals [!Ref DevelopmentAmiId, ""]]
+
+Resources:
+  # --- Versioned AMI channel pointers --------------------------------------
+  AmiLatest:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/amis/latest"
+      Type: String
+      Value: !Ref LatestAmiId
+      Description: Latest shared AMI (rolling).
+
+  AmiVersioned:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/amis/${AmiVersion}"
+      Type: String
+      Value: !Ref LatestAmiId
+      Description: !Sub "Immutable AMI pointer for ${AmiVersion}."
+
+  AmiStable:
+    Type: AWS::SSM::Parameter
+    Condition: HasStable
+    Properties:
+      Name: !Sub "/${PlatformName}/amis/stable"
+      Type: String
+      Value: !Ref StableAmiId
+      Description: Stable/production-promoted shared AMI.
+
+  AmiDevelopment:
+    Type: AWS::SSM::Parameter
+    Condition: HasDevelopment
+    Properties:
+      Name: !Sub "/${PlatformName}/amis/development"
+      Type: String
+      Value: !Ref DevelopmentAmiId
+      Description: Development/bleeding-edge shared AMI.
+
+  # --- Platform-wide configuration keys ------------------------------------
+  ConfigRegion:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/config/region"
+      Type: String
+      Value: !Ref DefaultRegion
+
+  ConfigPrefix:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/config/resource-prefix"
+      Type: String
+      Value: !Ref ResourcePrefix
+
+  ConfigContractVersion:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/config/contract-version"
+      Type: String
+      Value: "1.0.0"
+      Description: Infrastructure-contract SemVer (bump on a breaking export change).
+
+Outputs:
+  AmiLatestParameter:
+    Description: SSM path for the latest shared AMI (consume with SSM::Parameter::Value<Image::Id>).
+    Value: !Sub "/${PlatformName}/amis/latest"
+    Export: { Name: !Sub "${PlatformName}-${Environment}-ami-latest-parameter" }
+  ContractVersion:
+    Description: Infrastructure-contract version consumers can assert against.
+    Value: "1.0.0"
+    Export: { Name: !Sub "${PlatformName}-${Environment}-contract-version" }
+  ResourcePrefixExport:
+    Value: !Ref ResourcePrefix
+    Export: { Name: !Sub "${PlatformName}-${Environment}-resource-prefix" }

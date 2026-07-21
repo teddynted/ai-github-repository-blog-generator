@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable SECURITY GROUPS module (Milestone 21). A tiered set of shared security
+  groups (web -> app -> data) plus an operator SSH group, wired secure-by-default:
+  egress is explicit, inter-tier access flows one way, and SSH is restricted to an
+  operator CIDR. Imports the VPC by Fn::ImportValue so it composes with the network
+  module. Group ids are exported for consumption by launch templates and databases.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  OperatorCidr:
+    Type: String
+    Default: 127.0.0.1/32
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    Description: CIDR allowed SSH to the operator group (default blocks all; set to your IP/32).
+
+Resources:
+  WebSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${PlatformName}-${Environment} web tier (public 80/443)"
+      VpcId: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-vpc-id" }
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS }
+      SecurityGroupEgress:
+        - { IpProtocol: -1, CidrIp: 0.0.0.0/0, Description: All egress }
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-web-sg" }
+        - { Key: Tier, Value: web }
+
+  AppSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${PlatformName}-${Environment} app tier (from web only)"
+      VpcId: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-vpc-id" }
+      SecurityGroupEgress:
+        - { IpProtocol: -1, CidrIp: 0.0.0.0/0, Description: All egress }
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-app-sg" }
+        - { Key: Tier, Value: app }
+
+  AppFromWeb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AppSg
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref WebSg
+      Description: App port from the web tier only
+
+  DataSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${PlatformName}-${Environment} data tier (from app only)"
+      VpcId: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-vpc-id" }
+      SecurityGroupEgress:
+        - { IpProtocol: -1, CidrIp: 0.0.0.0/0, Description: All egress }
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-data-sg" }
+        - { Key: Tier, Value: data }
+
+  DataFromApp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DataSg
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref AppSg
+      Description: Database port from the app tier only
+
+  OperatorSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${PlatformName}-${Environment} operator SSH"
+      VpcId: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-vpc-id" }
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref OperatorCidr, Description: SSH from operator }
+      SecurityGroupEgress:
+        - { IpProtocol: -1, CidrIp: 0.0.0.0/0, Description: All egress }
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-operator-sg" }
+
+Outputs:
+  WebSecurityGroupId:
+    Value: !Ref WebSg
+    Export: { Name: !Sub "${PlatformName}-${Environment}-web-sg-id" }
+  AppSecurityGroupId:
+    Value: !Ref AppSg
+    Export: { Name: !Sub "${PlatformName}-${Environment}-app-sg-id" }
+  DataSecurityGroupId:
+    Value: !Ref DataSg
+    Export: { Name: !Sub "${PlatformName}-${Environment}-data-sg-id" }
+  OperatorSecurityGroupId:
+    Value: !Ref OperatorSg
+    Export: { Name: !Sub "${PlatformName}-${Environment}-operator-sg-id" }

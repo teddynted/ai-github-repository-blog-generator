@@ -1,0 +1,155 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Platform ROOT stack (Milestone 21). Composes the reusable modules as NESTED
+  STACKS in dependency order (network -> security-groups -> iam -> storage /
+  database / monitoring / messaging -> compute). It is the single, idempotent
+  entry point that stands up the whole shared platform for one environment, and
+  it demonstrates centralized configuration via Mappings (per-environment
+  instance sizing + NAT + retention) so no value is duplicated across modules.
+
+  Nested templates are referenced by TemplateURL, so upload infrastructure/modules
+  to S3 first (see docs/cfn-modules.md, "Deployment"):
+    aws s3 sync infrastructure/modules s3://<bucket>/modules/
+    aws cloudformation deploy --template-file infrastructure/platform.yaml \
+      --stack-name ai-platform-prod --capabilities CAPABILITY_NAMED_IAM \
+      --parameter-overrides TemplateBaseUrl=https://<bucket>.s3.amazonaws.com/modules
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  TemplateBaseUrl:
+    Type: String
+    Description: HTTPS base URL of the uploaded modules/ tree (S3).
+  BaseAmiParameter:
+    Type: String
+    Default: /ai-platform/ami/base/latest
+    Description: SSM path of the shared base AMI id (Milestone 20).
+  OperatorCidr:
+    Type: String
+    Default: 127.0.0.1/32
+    Description: CIDR allowed operator SSH.
+
+Mappings:
+  # Centralized, per-environment configuration — the single source of truth.
+  EnvConfig:
+    dev:
+      InstanceType: t3.small
+      EnableNat: "false"
+      LogRetention: "7"
+      VpcCidr: 10.10.0.0/16
+    staging:
+      InstanceType: t3.medium
+      EnableNat: "false"
+      LogRetention: "30"
+      VpcCidr: 10.15.0.0/16
+    prod:
+      InstanceType: t3.large
+      EnableNat: "true"
+      LogRetention: "90"
+      VpcCidr: 10.20.0.0/16
+
+Resources:
+  Network:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/network/vpc.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+        VpcCidr: !FindInMap [EnvConfig, !Ref Environment, VpcCidr]
+        EnableNatGateway: !FindInMap [EnvConfig, !Ref Environment, EnableNat]
+      Tags:
+        - { Key: Module, Value: network }
+
+  SecurityGroups:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: Network
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/network/security-groups.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+        OperatorCidr: !Ref OperatorCidr
+      Tags:
+        - { Key: Module, Value: security }
+
+  Iam:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/iam/roles.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+      Tags:
+        - { Key: Module, Value: iam }
+
+  Storage:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/storage/s3-bucket.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+        Purpose: artifacts
+      Tags:
+        - { Key: Module, Value: storage }
+
+  Database:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/database/dynamodb.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+        TablePurpose: state
+      Tags:
+        - { Key: Module, Value: database }
+
+  Monitoring:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/monitoring/observability.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+        Component: platform
+        LogRetentionDays: !FindInMap [EnvConfig, !Ref Environment, LogRetention]
+      Tags:
+        - { Key: Module, Value: monitoring }
+
+  Messaging:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/messaging/messaging.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+      Tags:
+        - { Key: Module, Value: messaging }
+
+  Compute:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [SecurityGroups, Iam]
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/compute/launch-template.yaml"
+      Parameters:
+        PlatformName: !Ref PlatformName
+        Environment: !Ref Environment
+        BaseAmiParameter: !Ref BaseAmiParameter
+        InstanceType: !FindInMap [EnvConfig, !Ref Environment, InstanceType]
+      Tags:
+        - { Key: Module, Value: compute }
+
+Outputs:
+  NetworkStackId:
+    Value: !Ref Network
+  ComputeStackId:
+    Value: !Ref Compute
+  PlatformEnvironment:
+    Description: The environment this platform instance serves.
+    Value: !Ref Environment
