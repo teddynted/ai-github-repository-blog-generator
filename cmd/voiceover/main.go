@@ -145,6 +145,7 @@ func resolveBlog(ctx context.Context, blogPath string, rctx *rc.ReleaseContext, 
 	if model == nil {
 		return releasegen.BlogPost{}, fmt.Errorf("no --storyboard/--blog provided and --offline set: nothing to narrate")
 	}
+	fmt.Fprintln(os.Stderr, "warning: no --blog provided; generating a fresh blog (may differ from other stages). Pass --blog, or use ./cmd/generate-all for one consistent blog across the suite.")
 	return (&releasegen.Generator{Model: model}).Blog(ctx, rctx)
 }
 

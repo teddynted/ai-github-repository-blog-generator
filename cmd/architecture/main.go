@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -81,6 +82,12 @@ func run(args []string) int {
 
 	pkg := architecture.ReleasePackage{Context: rctx, Blog: post, Storyboard: sb}
 	col, err := (&architecture.Generator{Model: mdl}).Architecture(ctx, pkg)
+	if errors.Is(err, architecture.ErrNoInfrastructure) {
+		// A documentation-only / non-AWS release has nothing to diagram. That is a
+		// legitimate skip, not a failure — exit cleanly so a pipeline continues.
+		fmt.Fprintln(os.Stderr, "no groundable infrastructure in this release — skipping architecture diagram")
+		return 0
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1

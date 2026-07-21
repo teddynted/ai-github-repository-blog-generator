@@ -44,6 +44,31 @@ func extractSections(markdown string) []section {
 	return sections
 }
 
+// syntheticSections builds a single grounded "overview" section from the blog
+// body when it has no ## headings. This lets small releases (a short blog, a
+// bug-fix note) still produce a one-scene storyboard instead of failing — using
+// the blog's own prose, so it invents nothing. Returns nil when there is no body
+// to work with (a genuinely empty blog).
+func syntheticSections(markdown, title string) []section {
+	body := stripFrontMatter(markdown)
+	var kept []string
+	for _, ln := range strings.Split(body, "\n") {
+		if strings.HasPrefix(ln, "# ") { // drop the H1 title
+			continue
+		}
+		kept = append(kept, ln)
+	}
+	text := strings.TrimSpace(strings.Join(kept, "\n"))
+	if text == "" {
+		return nil
+	}
+	t := cleanInline(strings.TrimSpace(title))
+	if t == "" {
+		t = "Overview"
+	}
+	return []section{{Title: t, Body: text}}
+}
+
 // stripFrontMatter removes a leading YAML front-matter block (--- … ---).
 func stripFrontMatter(md string) string {
 	s := strings.TrimLeft(md, "\n")
