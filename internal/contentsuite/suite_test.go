@@ -81,10 +81,10 @@ func TestOrchestratorRunsEveryStageOffline(t *testing.T) {
 }
 
 func TestOrchestratorIsFaultTolerant(t *testing.T) {
-	// A blog with no ## sections makes the storyboard stage fail — but the run
-	// must continue and still produce the blog, recording the failure.
+	// An empty blog (title only, no body) makes the storyboard stage fail — but the
+	// run must continue and still produce the blog, recording the failure.
 	o := &Orchestrator{}
-	blog := &releasegen.BlogPost{Title: "x", Markdown: "# x\n\nNo sections here.\n"}
+	blog := &releasegen.BlogPost{Title: "x", Markdown: "# x\n"}
 	s := o.Run(context.Background(), sampleContext(), blog)
 
 	if s.Manifest.Failed == 0 {
@@ -106,6 +106,33 @@ func TestOrchestratorIsFaultTolerant(t *testing.T) {
 	// Every stage is still attempted (11 records) even after a mid-chain failure.
 	if len(s.Manifest.Stages) != 11 {
 		t.Errorf("all 11 stages should be attempted, got %d", len(s.Manifest.Stages))
+	}
+}
+
+func TestOrchestratorSkipsArchitectureWithoutInfra(t *testing.T) {
+	// A release with no groundable infrastructure marks the architecture stage as
+	// SKIPPED (a graceful non-failure), not FAILED, and the run still succeeds.
+	ctx := sampleContext()
+	ctx.Architecture = rc.Architecture{}             // no AWS services
+	ctx.CloudFormation = rc.CloudFormationAnalysis{} // no CFN
+	o := &Orchestrator{}
+	s := o.Run(context.Background(), ctx, wellFormedBlog())
+
+	var archSkipped bool
+	for _, st := range s.Manifest.Stages {
+		if st.Name == "architecture" {
+			archSkipped = st.Status == StageSkipped
+		}
+	}
+	if !archSkipped {
+		t.Error("architecture should be SKIPPED (not failed) when there is no infrastructure")
+	}
+	if s.Manifest.Skipped != 1 {
+		t.Errorf("skipped count = %d, want 1", s.Manifest.Skipped)
+	}
+	// The rest still produced — a skip never aborts the run.
+	if s.Manifest.Produced < 10 {
+		t.Errorf("produced = %d, want >= 10 despite the skip", s.Manifest.Produced)
 	}
 }
 

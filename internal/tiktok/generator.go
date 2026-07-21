@@ -2,12 +2,18 @@ package tiktok
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
+
+// ErrNoTopics signals that the release has no TikTok-worthy topics. It is a
+// graceful skip (the generator refuses to fabricate content), not a failure —
+// callers can errors.Is it to treat the stage as skipped.
+var ErrNoTopics = errors.New("tiktok: no TikTok-worthy topics found in the release package")
 
 // Generator adapts a ReleasePackage into a collection of TikTok-native videos.
 // It reuses the shared releasegen.Model port; when Model is nil, generation is
@@ -40,7 +46,7 @@ func (g *Generator) TikTok(ctx context.Context, pkg ReleasePackage) (TikTokColle
 
 	topics := discover(pkg, g.MaxVideos)
 	if len(topics) == 0 {
-		return TikTokCollection{}, fmt.Errorf("tiktok: no TikTok-worthy topics found in the release package")
+		return TikTokCollection{}, ErrNoTopics
 	}
 
 	collection := TikTokCollection{

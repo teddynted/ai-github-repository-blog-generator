@@ -2,12 +2,18 @@ package shorts
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
+
+// ErrNoMoments signals that the release has no Short-worthy moments. It is a
+// graceful skip (the generator refuses to fabricate content), not a failure —
+// callers can errors.Is it to treat the stage as skipped.
+var ErrNoMoments = errors.New("shorts: no Short-worthy moments found in the release package")
 
 // Generator mines a ReleasePackage for the best technical moments and plans a
 // collection of standalone YouTube Shorts. It reuses the shared releasegen.Model
@@ -40,7 +46,7 @@ func (g *Generator) YouTubeShorts(ctx context.Context, pkg ReleasePackage) (Shor
 
 	candidates := discover(pkg, g.MaxShorts)
 	if len(candidates) == 0 {
-		return ShortsCollection{}, fmt.Errorf("shorts: no Short-worthy moments found in the release package")
+		return ShortsCollection{}, ErrNoMoments
 	}
 
 	collection := ShortsCollection{

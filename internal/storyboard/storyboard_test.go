@@ -274,6 +274,38 @@ func TestValidateCatchesProblems(t *testing.T) {
 	}
 }
 
+func TestStoryboardFallsBackWhenNoSections(t *testing.T) {
+	g := &Generator{}
+	// A short blog with no ## headings must still produce a one-scene storyboard
+	// (grounded in the body) rather than failing.
+	post := releasegen.BlogPost{Title: "Small fix", Markdown: "# Small fix\n\nThis release fixes a race in the SQS drainer.\n"}
+	sb, err := g.Storyboard(context.Background(), post, sampleContext())
+	if err != nil {
+		t.Fatalf("section-less blog should not error: %v", err)
+	}
+	if len(sb.Scenes) != 1 {
+		t.Errorf("want 1 fallback scene, got %d", len(sb.Scenes))
+	}
+	var warned bool
+	for _, w := range sb.Warnings {
+		if strings.Contains(w, "no ## sections") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("fallback should record a warning, got %v", sb.Warnings)
+	}
+}
+
+func TestStoryboardStillErrorsOnEmptyBlog(t *testing.T) {
+	g := &Generator{}
+	// No body at all — nothing groundable to scene, so it still errors honestly.
+	post := releasegen.BlogPost{Title: "x", Markdown: "# x\n"}
+	if _, err := g.Storyboard(context.Background(), post, sampleContext()); err == nil {
+		t.Error("an empty blog should still error")
+	}
+}
+
 func titles(secs []section) []string {
 	out := make([]string, len(secs))
 	for i, s := range secs {

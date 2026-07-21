@@ -2,6 +2,7 @@ package architecture
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,6 +10,13 @@ import (
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
+
+// ErrNoInfrastructure signals that the release has nothing groundable to diagram
+// (no AWS services, CloudFormation, or architecture components). It is not a
+// failure — callers should treat it as a graceful skip, since the generator
+// deliberately refuses to invent infrastructure. It is a distinct sentinel so
+// callers can errors.Is it rather than string-matching.
+var ErrNoInfrastructure = errors.New("architecture: the release context has no groundable infrastructure to diagram")
 
 // Generator produces architecture diagrams from a ReleasePackage. It reuses the
 // shared releasegen.Model port; when Model is nil, generation is fully
@@ -41,7 +49,7 @@ func (g *Generator) Architecture(ctx context.Context, pkg ReleasePackage) (Archi
 	a := analyze(pkg)
 	specs := buildDiagrams(pkg, a)
 	if len(specs) == 0 {
-		return ArchitectureCollection{}, fmt.Errorf("architecture: the release context has no groundable infrastructure to diagram")
+		return ArchitectureCollection{}, ErrNoInfrastructure
 	}
 
 	generatedAt := g.now().Format(time.RFC3339)

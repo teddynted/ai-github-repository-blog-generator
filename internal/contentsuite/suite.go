@@ -18,6 +18,7 @@ package contentsuite
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -66,6 +67,7 @@ type Manifest struct {
 	Offline       bool          `json:"offline"`
 	Stages        []StageResult `json:"stages"`
 	Produced      int           `json:"produced"`
+	Skipped       int           `json:"skipped"`
 	Failed        int           `json:"failed"`
 }
 
@@ -232,13 +234,29 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 func (o *Orchestrator) stage(s *Suite, name string, milestone int, filename string, fn func() (string, error)) {
 	md, err := fn()
 	if err != nil {
-		s.record(name, milestone, StageFailed, "", err, "")
+		// A deliberate "nothing to do" refusal (no infrastructure to diagram, no
+		// Short-worthy moments, no TikTok-worthy topics) is a graceful skip, not a
+		// failure — the generator is honouring its grounding, not breaking.
+		status := StageFailed
+		if isSkip(err) {
+			status = StageSkipped
+		}
+		s.record(name, milestone, status, "", err, "")
 		if o.Logger != nil {
-			o.Logger.Warn("content stage failed", slog.String("stage", name), slog.Int("milestone", milestone), slog.String("error", err.Error()))
+			o.Logger.Warn("content stage "+string(status), slog.String("stage", name), slog.Int("milestone", milestone), slog.String("error", err.Error()))
 		}
 		return
 	}
 	s.record(name, milestone, StageOK, filename, nil, md)
+}
+
+// isSkip reports whether an error is a grounded "nothing worthy to generate"
+// refusal — a graceful skip rather than a failure. New generators that add such a
+// sentinel are registered here.
+func isSkip(err error) bool {
+	return errors.Is(err, architecture.ErrNoInfrastructure) ||
+		errors.Is(err, shorts.ErrNoMoments) ||
+		errors.Is(err, tiktok.ErrNoTopics)
 }
 
 func (s *Suite) record(name string, milestone int, status StageStatus, filename string, err error, md string) {
@@ -253,6 +271,8 @@ func (s *Suite) record(name string, milestone int, status StageStatus, filename 
 		if filename != "" {
 			s.artifacts = append(s.artifacts, Artifact{Filename: filename, Kind: name, Markdown: md})
 		}
+	case StageSkipped:
+		s.Manifest.Skipped++
 	case StageFailed:
 		s.Manifest.Failed++
 	}

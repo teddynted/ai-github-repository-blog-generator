@@ -27,14 +27,26 @@ flowchart LR
     ARCH --> X
 ```
 
-## Fault tolerance
+## Fault tolerance & graceful degradation
 
-Every stage is isolated: a stage that fails (e.g. a blog with no `##` sections, or
-a release with no groundable infrastructure to diagram) is **recorded in the
-manifest and the run continues** — one weak input never aborts the whole pipeline.
-Inspect `manifest.json` for per-stage `ok`/`failed` status. This is deliberate: the
-generators keep their strict grounding (they refuse to hallucinate), and the
-orchestrator degrades gracefully around a refusal instead of aborting.
+Every stage is isolated: an issue in one stage is **recorded in the manifest and
+the run continues** — one weak input never aborts the whole pipeline. Each stage
+resolves to one of three states in `manifest.json`:
+
+- **`ok`** — the artifact was produced.
+- **`skipped`** — the generator had nothing groundable to produce and *refused to
+  fabricate* (e.g. a documentation-only release with no infrastructure to diagram,
+  or a small release with no Short-worthy moments / TikTok-worthy topics). This is
+  a healthy outcome, not an error.
+- **`failed`** — the stage genuinely errored (e.g. a completely empty blog).
+
+The manifest reports `produced` / `skipped` / `failed` counts. This is deliberate:
+the generators keep their strict grounding, and the orchestrator degrades
+gracefully around a refusal instead of aborting. Small releases, documentation-only
+releases, and bug-fix releases therefore produce a coherent subset of artifacts
+with the rest cleanly skipped. (Graceful degradation also applies to the individual
+CLIs: a section-less blog now storyboards a single overview scene, and the
+architecture CLI exits `0` with a skip notice when there is no infrastructure.)
 
 ## Usage
 

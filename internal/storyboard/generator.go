@@ -46,9 +46,16 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		},
 	}
 
+	var extraWarnings []string
 	sections := extractSections(post.Markdown)
 	if len(sections) == 0 {
-		return sb, fmt.Errorf("storyboard: blog has no ## sections to scene")
+		// Graceful degradation: scene the blog as a single overview from its body
+		// rather than failing on a section-less (small) release.
+		sections = syntheticSections(post.Markdown, post.Title)
+		if len(sections) == 0 {
+			return sb, fmt.Errorf("storyboard: blog has no sections and no body to scene")
+		}
+		extraWarnings = append(extraWarnings, "blog had no ## sections; storyboarded a single overview scene from the intro")
 	}
 
 	scenes := make([]Scene, 0, len(sections))
@@ -86,7 +93,7 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 	sb.Scenes = scenes
 	sb.Video = planVideo(scenes, g.rate())
 	sb.ContentIntelligence = planIntelligence(scenes, post, rctx, sb.Video)
-	sb.Warnings = collectWarnings(sb, rctx)
+	sb.Warnings = append(extraWarnings, collectWarnings(sb, rctx)...)
 
 	if g.Logger != nil {
 		g.Logger.Info("storyboard generated",
