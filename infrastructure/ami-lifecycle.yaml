@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AI Platform Base AMI - lifecycle automation (Milestone 20). Runs the retention
+  policy on a schedule: keeps the newest N base AMIs, deprecates the next band,
+  and deregisters older images plus their backing EBS snapshots. It mirrors
+  scripts/ami/lifecycle.sh as a serverless, scheduled EventBridge -> Lambda job so
+  obsolete images and snapshots are cleaned up without manual intervention. The
+  current /ai-platform/ami/base/latest image is always protected.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  RetainCount:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    Description: Number of newest base AMIs to keep as "current"/"previous" (rollback headroom).
+  Schedule:
+    Type: String
+    Default: cron(0 3 2 * ? *)
+    Description: When to run cleanup (default 2nd of month, 03:00 UTC - after the monthly rebuild).
+  ParameterPrefix:
+    Type: String
+    Default: /ai-platform/ami/base
+  DryRun:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: When true, log the plan without making changes.
+
+Resources:
+  LifecycleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${PlatformName}-ami-lifecycle-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ami-lifecycle
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeImages
+                  - ec2:EnableImageDeprecation
+                  - ec2:DeregisterImage
+                  - ec2:DeleteSnapshot
+                  - ec2:CreateTags
+                Resource: "*"
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPrefix}/*"
+
+  LifecycleFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${PlatformName}-ami-lifecycle"
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 120
+      Role: !GetAtt LifecycleRole.Arn
+      Environment:
+        Variables:
+          RETAIN: !Ref RetainCount
+          PARAM_PREFIX: !Ref ParameterPrefix
+          DRY_RUN: !Ref DryRun
+      Code:
+        ZipFile: |
+          import os, boto3
+          ec2 = boto3.client("ec2")
+          ssm = boto3.client("ssm")
+
+          def handler(event, _ctx):
+              retain = int(os.environ.get("RETAIN", "3"))
+              prefix = os.environ["PARAM_PREFIX"]
+              dry = os.environ.get("DRY_RUN", "true") == "true"
+              try:
+                  latest = ssm.get_parameter(Name=f"{prefix}/latest")["Parameter"]["Value"]
+              except ssm.exceptions.ParameterNotFound:
+                  latest = None
+
+              images = ec2.describe_images(
+                  Owners=["self"],
+                  Filters=[
+                      {"Name": "tag:Project", "Values": ["ai-platform"]},
+                      {"Name": "tag:Component", "Values": ["base-ami"]},
+                  ],
+              )["Images"]
+              images.sort(key=lambda i: i["CreationDate"], reverse=True)
+
+              actions = []
+              for rank, img in enumerate(images, start=1):
+                  ami = img["ImageId"]
+                  if ami == latest or rank <= retain:
+                      actions.append(("keep", ami, rank))
+                      continue
+                  if rank <= retain * 2:
+                      actions.append(("deprecate", ami, rank))
+                      if not dry:
+                          ec2.enable_image_deprecation(ImageId=ami, DeprecateAt="2000-01-01T00:00:00Z")
+                          ec2.create_tags(Resources=[ami], Tags=[{"Key": "Lifecycle", "Value": "deprecated"}])
+                      continue
+                  actions.append(("delete", ami, rank))
+                  if not dry:
+                      snaps = [m["Ebs"]["SnapshotId"] for m in img.get("BlockDeviceMappings", []) if m.get("Ebs", {}).get("SnapshotId")]
+                      ec2.deregister_image(ImageId=ami)
+                      for s in snaps:
+                          ec2.delete_snapshot(SnapshotId=s)
+
+              print({"dryRun": dry, "retain": retain, "latest": latest, "actions": actions})
+              return {"count": len(images), "actions": [[a, i, r] for a, i, r in actions]}
+
+  ScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Scheduled AI Platform base AMI lifecycle cleanup.
+      ScheduleExpression: !Ref Schedule
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt LifecycleFunction.Arn
+          Id: lifecycle-fn
+
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LifecycleFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduleRule.Arn
+
+Outputs:
+  LifecycleFunctionArn:
+    Description: The scheduled lifecycle cleanup function.
+    Value: !GetAtt LifecycleFunction.Arn

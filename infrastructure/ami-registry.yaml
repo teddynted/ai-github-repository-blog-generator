@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AI Platform Base AMI - registry stack (Milestone 20). Owns the canonical
+  publishing surface for the shared, versioned golden base AMI so downstream
+  projects (designing-an-ai-agent-platform-on-aws, football-match-prediction-
+  platform, trading-bot, ...) consume ONE source of truth. It writes the AMI id
+  + version + full metadata to SSM Parameter Store AND re-exports them as
+  cross-stack CloudFormation Exports (for stacks that prefer Fn::ImportValue).
+  scripts/ami/publish-metadata.sh writes the live values after each bake; this
+  stack pins/gowerns the parameter names and exports.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+    Description: Cost-allocation + export name prefix for the shared platform.
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Current AI Platform Base AMI id (from scripts/build-base-ami.sh).
+  AmiVersion:
+    Type: String
+    AllowedPattern: ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
+    Description: SemVer of the AMI, e.g. v1.2.0.
+  BaseOS:
+    Type: String
+    Default: ubuntu-22.04
+    Description: Base operating system of the image.
+  Architecture:
+    Type: String
+    Default: x86_64
+    AllowedValues: [x86_64, arm64]
+    Description: CPU architecture of the image.
+  GitCommit:
+    Type: String
+    Default: unknown
+    Description: Short git commit the image was built from.
+  Release:
+    Type: String
+    Default: unreleased
+    Description: Repository release tag associated with the image.
+  ParameterPrefix:
+    Type: String
+    Default: /ai-platform/ami/base
+    Description: SSM Parameter Store prefix for the shared AMI pointers.
+
+Resources:
+  # The canonical "latest" pointer. Downstream stacks read this with the type
+  # AWS::SSM::Parameter::Value<AWS::EC2::Image::Id> so they always launch the
+  # current golden image without hard-coding an AMI id.
+  LatestAmiParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${ParameterPrefix}/latest"
+      Type: String
+      Value: !Ref AmiId
+      Description: !Sub "Current ${PlatformName} base AMI id."
+      Tier: Standard
+      Tags:
+        Project: !Ref PlatformName
+        Component: base-ami
+        Lifecycle: current
+
+  LatestVersionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${ParameterPrefix}/latest/version"
+      Type: String
+      Value: !Ref AmiVersion
+      Description: !Sub "Current ${PlatformName} base AMI version."
+      Tier: Standard
+
+  # Immutable per-version pointer — the target of rollbacks.
+  VersionedAmiParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${ParameterPrefix}/versions/${AmiVersion}"
+      Type: String
+      Value: !Ref AmiId
+      Description: !Sub "${PlatformName} base AMI id for ${AmiVersion} (immutable)."
+      Tier: Standard
+
+  MetadataParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${ParameterPrefix}/metadata"
+      Type: String
+      Value: !Sub |
+        {"amiId":"${AmiId}","version":"${AmiVersion}","baseOS":"${BaseOS}","architecture":"${Architecture}","gitCommit":"${GitCommit}","release":"${Release}","owner":"ai-github-repository-blog-generator","lifecycle":"current"}
+      Description: !Sub "Full ${PlatformName} base AMI metadata (JSON)."
+      Tier: Standard
+
+Outputs:
+  BaseAmiId:
+    Description: Current shared base AMI id.
+    Value: !Ref AmiId
+    Export:
+      Name: !Sub "${PlatformName}-base-ami-id"
+  BaseAmiVersion:
+    Description: Current shared base AMI version.
+    Value: !Ref AmiVersion
+    Export:
+      Name: !Sub "${PlatformName}-base-ami-version"
+  BaseAmiParameterName:
+    Description: SSM parameter name for the current base AMI id (preferred consumption path).
+    Value: !Sub "${ParameterPrefix}/latest"
+    Export:
+      Name: !Sub "${PlatformName}-base-ami-parameter"
+  BaseAmiArchitecture:
+    Description: Architecture of the shared base AMI.
+    Value: !Ref Architecture
+    Export:
+      Name: !Sub "${PlatformName}-base-ami-arch"

@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AI Platform Base AMI - EC2 Image Builder pipeline (Milestone 20, optional
+  automated path). Provides a repeatable, scheduled, no-server build of the shared
+  golden base AMI as an alternative to the Packer path (scripts/build-base-ami.sh).
+  It installs the base software stack + hardening via a component, distributes the
+  image with the standard tags, notifies via SNS, and (on image-available) invokes
+  a small function that publishes the new AMI id to SSM Parameter Store so the
+  /ai-platform/ami/base/latest pointer stays current automatically.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  ComponentVersion:
+    Type: String
+    Default: 1.0.0
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+    Description: SemVer for the Image Builder component/recipe (no leading v).
+  ParentImage:
+    Type: String
+    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
+    Description: SSM public parameter for the Ubuntu 22.04 parent image.
+  InstanceType:
+    Type: String
+    Default: t3.large
+  BuildSchedule:
+    Type: String
+    Default: cron(0 6 1 * ? *)
+    Description: Monthly rebuild schedule (1st of month, 06:00 UTC) per the patch policy.
+  ParameterPrefix:
+    Type: String
+    Default: /ai-platform/ami/base
+
+Resources:
+  # --- IAM: the build instance role (least privilege for Image Builder) ---
+  ImageBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${PlatformName}-imagebuilder-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilder
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  ImageBuilderInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${PlatformName}-imagebuilder-profile"
+      Roles: [!Ref ImageBuilderRole]
+
+  # --- Component: base software stack + hardening ---
+  BaseComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub "${PlatformName}-base-component"
+      Platform: Linux
+      Version: !Ref ComponentVersion
+      Description: Install the AI Platform base stack (Docker, Ollama, Go, Python, FFmpeg, agents) and harden.
+      Data: |
+        name: ai-platform-base
+        description: Base software stack + hardening
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: InstallStack
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - export DEBIAN_FRONTEND=noninteractive
+                    - apt-get update -y && apt-get upgrade -y
+                    - apt-get install -y ca-certificates curl gnupg jq git ffmpeg python3 python3-pip python3-venv build-essential auditd unattended-upgrades
+                    - install -m 0755 -d /etc/apt/keyrings
+                    - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable" > /etc/apt/sources.list.d/docker.list
+                    - apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+                    - systemctl enable docker
+                    - curl -fsSL https://ollama.com/install.sh | sh
+                    - curl -fsSL https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb -o /tmp/cw.deb && dpkg -i -E /tmp/cw.deb
+              - name: Harden
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - printf 'PermitRootLogin no\nPasswordAuthentication no\nX11Forwarding no\nMaxAuthTries 3\n' > /etc/ssh/sshd_config.d/90-hardening.conf
+                    - printf 'APT::Periodic::Unattended-Upgrade "1";\n' > /etc/apt/apt.conf.d/20auto-upgrades
+                    - systemctl enable unattended-upgrades auditd || true
+          - name: validate
+            steps:
+              - name: VerifyStack
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - command -v docker && command -v ollama && command -v ffmpeg && command -v python3
+
+  # --- Recipe: parent image + component ---
+  BaseRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub "${PlatformName}-base-recipe"
+      Version: !Ref ComponentVersion
+      ParentImage: !Sub "{{resolve:ssm:${ParentImage}}}"
+      Components:
+        - ComponentArn: !Ref BaseComponent
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+
+  # --- Infrastructure: how/where the build instance runs ---
+  BuildInfrastructure:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub "${PlatformName}-base-infra"
+      InstanceProfileName: !Ref ImageBuilderInstanceProfile
+      InstanceTypes: [!Ref InstanceType]
+      InstanceMetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      SnsTopicArn: !Ref BuildNotifications
+      TerminateInstanceOnFailure: true
+
+  # --- Distribution: tag the produced AMI so lifecycle.sh can find it ---
+  BaseDistribution:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub "${PlatformName}-base-dist"
+      Distributions:
+        - Region: !Ref AWS::Region
+          AmiDistributionConfiguration:
+            Name: "ai-platform-base-{{ imagebuilder:buildDate }}"
+            Description: AI Platform Base AMI (Image Builder)
+            AmiTags:
+              Project: !Ref PlatformName
+              Component: base-ami
+              Role: golden-base
+              Architecture: x86_64
+              BaseOS: ubuntu-22.04
+              Owner: ai-github-repository-blog-generator
+              Lifecycle: current
+              ManagedBy: image-builder
+
+  BasePipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Sub "${PlatformName}-base-pipeline"
+      ImageRecipeArn: !Ref BaseRecipe
+      InfrastructureConfigurationArn: !Ref BuildInfrastructure
+      DistributionConfigurationArn: !Ref BaseDistribution
+      Status: ENABLED
+      Schedule:
+        ScheduleExpression: !Ref BuildSchedule
+        PipelineExecutionStartCondition: EXPRESSION_MATCH_ONLY
+
+  BuildNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${PlatformName}-base-ami-builds"
+
+  # --- Auto-publish: on "image available", write the new AMI id to SSM latest ---
+  PublishFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: publish-ssm
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ssm:PutParameter]
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPrefix}/*"
+
+  PublishFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${PlatformName}-base-ami-publish"
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      Role: !GetAtt PublishFunctionRole.Arn
+      Environment:
+        Variables:
+          PARAM_PREFIX: !Ref ParameterPrefix
+      Code:
+        ZipFile: |
+          import os, boto3
+          ssm = boto3.client("ssm")
+          def handler(event, _ctx):
+              # EC2 Image Builder emits the output AMI(s) in the state-change detail.
+              detail = event.get("detail", {})
+              amis = (detail.get("outputResources", {}) or {}).get("amis", [])
+              if not amis:
+                  return {"status": "no-ami"}
+              ami = amis[0]
+              ami_id = ami.get("image")
+              version = ami.get("name", "unknown")
+              prefix = os.environ["PARAM_PREFIX"]
+              for name, value in ((f"{prefix}/latest", ami_id), (f"{prefix}/latest/version", version)):
+                  ssm.put_parameter(Name=name, Type="String", Value=value, Overwrite=True)
+              return {"status": "published", "ami": ami_id}
+
+  ImageAvailableRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Publish the new base AMI id to SSM when Image Builder finishes.
+      EventPattern:
+        source: [aws.imagebuilder]
+        detail-type: ["EC2 Image Builder Image State Change"]
+        detail:
+          state:
+            status: [AVAILABLE]
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt PublishFunction.Arn
+          Id: publish-fn
+
+  PublishInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PublishFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ImageAvailableRule.Arn
+
+Outputs:
+  PipelineArn:
+    Description: Image Builder pipeline ARN (trigger a build with start-image-pipeline-execution).
+    Value: !Ref BasePipeline
+  NotificationsTopicArn:
+    Description: SNS topic for build notifications.
+    Value: !Ref BuildNotifications
