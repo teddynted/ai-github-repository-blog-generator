@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable DATABASE module (Milestone 21). A secure-by-default DynamoDB table:
+  on-demand billing (cost-optimized, scales to zero), SSE encryption, point-in-time
+  recovery (continuous backup), and optional TTL. A configurable partition/sort key
+  and an optional GSI keep it general. The table name + ARN are exported and mirrored
+  to SSM for cross-stack consumption.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  TablePurpose:
+    Type: String
+    Default: state
+    AllowedPattern: ^[a-z0-9-]+$
+    Description: Table purpose suffix (e.g. state, jobs, memory).
+  PartitionKeyName:
+    Type: String
+    Default: pk
+  SortKeyName:
+    Type: String
+    Default: sk
+    Description: Sort key name. Set to empty to create a partition-only table.
+  TtlAttribute:
+    Type: String
+    Default: ttl
+    Description: TTL attribute name. Empty disables TTL.
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: Optional CMK ARN. Empty uses the AWS-owned DynamoDB key.
+
+Conditions:
+  HasSortKey: !Not [!Equals [!Ref SortKeyName, ""]]
+  HasTtl: !Not [!Equals [!Ref TtlAttribute, ""]]
+  UseCmk: !Not [!Equals [!Ref KmsKeyArn, ""]]
+
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${PlatformName}-${Environment}-${TablePurpose}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        !If
+          - HasSortKey
+          - - { AttributeName: !Ref PartitionKeyName, AttributeType: S }
+            - { AttributeName: !Ref SortKeyName, AttributeType: S }
+          - - { AttributeName: !Ref PartitionKeyName, AttributeType: S }
+      KeySchema:
+        !If
+          - HasSortKey
+          - - { AttributeName: !Ref PartitionKeyName, KeyType: HASH }
+            - { AttributeName: !Ref SortKeyName, KeyType: RANGE }
+          - - { AttributeName: !Ref PartitionKeyName, KeyType: HASH }
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: !If [UseCmk, "KMS", !Ref AWS::NoValue]
+        KMSMasterKeyId: !If [UseCmk, !Ref KmsKeyArn, !Ref AWS::NoValue]
+      TimeToLiveSpecification:
+        !If
+          - HasTtl
+          - { AttributeName: !Ref TtlAttribute, Enabled: true }
+          - !Ref AWS::NoValue
+      Tags:
+        - { Key: Platform, Value: !Ref PlatformName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Purpose, Value: !Ref TablePurpose }
+
+  TableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/database/${TablePurpose}-table"
+      Type: String
+      Value: !Ref Table
+
+Outputs:
+  TableName:
+    Value: !Ref Table
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${TablePurpose}-table-name" }
+  TableArn:
+    Value: !GetAtt Table.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${TablePurpose}-table-arn" }

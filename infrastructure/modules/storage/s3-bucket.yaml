@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable STORAGE module (Milestone 21). A secure-by-default S3 bucket: SSE
+  (SSE-S3 or SSE-KMS), all public access blocked, versioning, a TLS-only bucket
+  policy, and a tiered lifecycle policy (transition to IA/Glacier, expire old
+  versions). The name and ARN are exported + published to SSM for cross-stack use.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  Purpose:
+    Type: String
+    Default: artifacts
+    AllowedPattern: ^[a-z0-9-]+$
+    Description: Bucket purpose suffix (e.g. artifacts, assets, logs).
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: Optional KMS key ARN for SSE-KMS. Empty uses SSE-S3 (AES256).
+  TransitionIaDays:
+    Type: Number
+    Default: 30
+    Description: Days before transitioning to STANDARD_IA.
+  TransitionGlacierDays:
+    Type: Number
+    Default: 90
+    Description: Days before transitioning to GLACIER (must be greater than TransitionIaDays).
+  ExpireNoncurrentDays:
+    Type: Number
+    Default: 90
+
+Conditions:
+  UseKms: !Not [!Equals [!Ref KmsKeyArn, ""]]
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      # Globally-unique, convention-driven name.
+      BucketName: !Sub "${PlatformName}-${Environment}-${Purpose}-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !If [UseKms, "aws:kms", "AES256"]
+              KMSMasterKeyID: !If [UseKms, !Ref KmsKeyArn, !Ref AWS::NoValue]
+            BucketKeyEnabled: !If [UseKms, true, !Ref AWS::NoValue]
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: tiering-and-cleanup
+            Status: Enabled
+            Transitions:
+              - { StorageClass: STANDARD_IA, TransitionInDays: !Ref TransitionIaDays }
+              - { StorageClass: GLACIER, TransitionInDays: !Ref TransitionGlacierDays }
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref ExpireNoncurrentDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - { Key: Platform, Value: !Ref PlatformName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Purpose, Value: !Ref Purpose }
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt Bucket.Arn
+              - !Sub "${Bucket.Arn}/*"
+            Condition:
+              Bool: { "aws:SecureTransport": "false" }
+
+  BucketNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/storage/${Purpose}-bucket"
+      Type: String
+      Value: !Ref Bucket
+
+Outputs:
+  BucketName:
+    Value: !Ref Bucket
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${Purpose}-bucket-name" }
+  BucketArn:
+    Value: !GetAtt Bucket.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${Purpose}-bucket-arn" }

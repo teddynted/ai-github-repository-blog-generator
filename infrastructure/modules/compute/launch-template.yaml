@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable COMPUTE module (Milestone 21). An Auto-Scaling-ready Launch Template
+  that composes the shared platform: it resolves the shared baked AMI from SSM
+  (Milestone 20), attaches the shared EC2 instance profile and app security group
+  by Fn::ImportValue, and enforces IMDSv2 + an encrypted root volume. Consumers
+  reference the exported Launch Template id from an ASG or RunInstances call — no
+  AMI id, role, or SG is ever hard-coded.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  BaseAmiParameter:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /ai-platform/ami/base/latest
+    Description: SSM parameter resolving to the shared base AMI id (Milestone 20).
+  InstanceType:
+    Type: String
+    Default: t3.large
+  RootVolumeSize:
+    Type: Number
+    Default: 40
+    MinValue: 30
+  UseSharedInstanceProfile:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Attach the shared IAM instance profile exported by the iam module.
+
+Conditions:
+  HasSharedProfile: !Equals [!Ref UseSharedInstanceProfile, "true"]
+
+Resources:
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${PlatformName}-${Environment}-lt"
+      LaunchTemplateData:
+        ImageId: !Ref BaseAmiParameter
+        InstanceType: !Ref InstanceType
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+          HttpPutResponseHopLimit: 1
+        Monitoring: { Enabled: true }
+        IamInstanceProfile:
+          !If
+            - HasSharedProfile
+            - Arn: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-ec2-profile-arn" }
+            - !Ref AWS::NoValue
+        SecurityGroupIds:
+          - { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-app-sg-id" }
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: !Ref RootVolumeSize
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: Platform, Value: !Ref PlatformName }
+              - { Key: Environment, Value: !Ref Environment }
+              - { Key: ManagedBy, Value: compute-module }
+
+Outputs:
+  LaunchTemplateId:
+    Value: !Ref LaunchTemplate
+    Export: { Name: !Sub "${PlatformName}-${Environment}-launch-template-id" }
+  LaunchTemplateLatestVersion:
+    Value: !GetAtt LaunchTemplate.LatestVersionNumber
+    Export: { Name: !Sub "${PlatformName}-${Environment}-launch-template-version" }

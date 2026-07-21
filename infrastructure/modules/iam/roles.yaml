@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable IAM module (Milestone 21). Least-privilege roles the platform's
+  workloads share: an EC2 role + instance profile (SSM-managed, scoped CloudWatch
+  + Bedrock invoke), a Lambda execution role, a dedicated Bedrock role, and a
+  GitHub Actions OIDC deploy role (no long-lived keys). Every ARN is exported and
+  mirrored to SSM so consuming stacks attach shared roles instead of minting their
+  own. Scope is deliberately narrow — widen per project by attaching extra policies.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  GitHubOrg:
+    Type: String
+    Default: teddynted
+    Description: GitHub org/user allowed to assume the Actions deploy role.
+  GitHubRepo:
+    Type: String
+    Default: ai-github-repository-blog-generator
+    Description: Repository allowed to assume the Actions deploy role.
+  CreateGitHubOidcProvider:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create the GitHub OIDC provider (set false if it already exists in the account).
+
+Conditions:
+  MakeOidc: !Equals [!Ref CreateGitHubOidcProvider, "true"]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+
+  # --- EC2 role + instance profile (SSM-managed, scoped) -------------------
+  Ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${PlatformName}-${Environment}-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: cloudwatch-and-bedrock
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*"
+
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${PlatformName}-${Environment}-ec2-profile"
+      Roles: [!Ref Ec2Role]
+
+  # --- Lambda execution role ----------------------------------------------
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${PlatformName}-${Environment}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # --- Bedrock invoke role (for services that call models) ----------------
+  BedrockRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${PlatformName}-${Environment}-bedrock-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [ec2.amazonaws.com, lambda.amazonaws.com] }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: bedrock-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, bedrock:ListFoundationModels]
+                Resource: "*"
+
+  # --- GitHub Actions OIDC deploy role (no static credentials) ------------
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${PlatformName}-${Environment}-gha-deploy-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - MakeOidc
+                - !Ref GitHubOidcProvider
+                - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+              StringLike:
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubOrg}/${GitHubRepo}:*"
+      Policies:
+        - PolicyName: cfn-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: "*"
+
+Outputs:
+  Ec2RoleArn:
+    Value: !GetAtt Ec2Role.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-ec2-role-arn" }
+  Ec2InstanceProfileArn:
+    Value: !GetAtt Ec2InstanceProfile.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-ec2-profile-arn" }
+  LambdaRoleArn:
+    Value: !GetAtt LambdaRole.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-lambda-role-arn" }
+  BedrockRoleArn:
+    Value: !GetAtt BedrockRole.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-bedrock-role-arn" }
+  GitHubActionsRoleArn:
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-gha-deploy-role-arn" }

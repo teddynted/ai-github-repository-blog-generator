@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable MESSAGING module (Milestone 21). The shared event backbone: an SNS
+  topic, an SQS queue with a dead-letter queue and a redrive policy, and a custom
+  EventBridge bus with a sample rule that fans platform events into the queue.
+  Encrypted at rest, secure-by-default. ARNs/URLs are exported and mirrored to SSM
+  so producers/consumers across stacks share one messaging fabric.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  QueueName:
+    Type: String
+    Default: events
+    AllowedPattern: ^[a-z0-9-]+$
+  MaxReceiveCount:
+    Type: Number
+    Default: 5
+    Description: Deliveries before a message moves to the DLQ.
+  MessageRetentionSeconds:
+    Type: Number
+    Default: 345600
+    Description: SQS message retention (default 4 days).
+
+Resources:
+  Topic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${PlatformName}-${Environment}-${QueueName}-topic"
+      KmsMasterKeyId: alias/aws/sns
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${PlatformName}-${Environment}-${QueueName}-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${PlatformName}-${Environment}-${QueueName}"
+      MessageRetentionPeriod: !Ref MessageRetentionSeconds
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: !Ref MaxReceiveCount
+
+  # Allow EventBridge to deliver to the queue.
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref Queue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridge
+            Effect: Allow
+            Principal: { Service: events.amazonaws.com }
+            Action: sqs:SendMessage
+            Resource: !GetAtt Queue.Arn
+            Condition:
+              ArnEquals: { "aws:SourceArn": !GetAtt EventRule.Arn }
+
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub "${PlatformName}-${Environment}-bus"
+
+  EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${PlatformName}-${Environment}-${QueueName}-rule"
+      EventBusName: !Ref EventBus
+      EventPattern:
+        source: [!Sub "${PlatformName}.${Environment}"]
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt Queue.Arn
+          Id: to-queue
+
+  QueueUrlParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/messaging/${QueueName}-queue-url"
+      Type: String
+      Value: !Ref Queue
+
+Outputs:
+  TopicArn:
+    Value: !Ref Topic
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${QueueName}-topic-arn" }
+  QueueUrl:
+    Value: !Ref Queue
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${QueueName}-queue-url" }
+  QueueArn:
+    Value: !GetAtt Queue.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${QueueName}-queue-arn" }
+  DeadLetterQueueUrl:
+    Value: !Ref DeadLetterQueue
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${QueueName}-dlq-url" }
+  EventBusName:
+    Value: !Ref EventBus
+    Export: { Name: !Sub "${PlatformName}-${Environment}-event-bus-name" }
+  EventBusArn:
+    Value: !GetAtt EventBus.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-event-bus-arn" }

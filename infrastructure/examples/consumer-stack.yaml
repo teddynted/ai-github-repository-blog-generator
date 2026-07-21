@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  EXAMPLE consumer stack (Milestone 21). Shows how a downstream project
+  (designing-an-ai-agent-platform-on-aws, football-prediction-platform,
+  trading-bot, ...) consumes the shared platform with MINIMAL configuration, using
+  both consumption paths: Fn::ImportValue for the network/security/IAM contracts,
+  and SSM Parameter Store for the shared AMI. It launches a single instance on the
+  shared network with the shared instance profile and app SG — hard-coding nothing.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+    Description: Must match the platform stacks whose exports are imported.
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  BaseAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /ai-platform/amis/latest
+    Description: Shared AMI resolved from the SSM registry (shared-parameters module).
+  InstanceType:
+    Type: String
+    Default: t3.small
+
+Resources:
+  # Consume the shared launch template (already wired to shared AMI/role/SG) OR,
+  # as shown here, launch directly against imported contracts for illustration.
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref BaseAmi
+      InstanceType: !Ref InstanceType
+      # Land on the shared private subnet.
+      SubnetId: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-private-subnet-1" }
+      # Reuse the shared app-tier security group.
+      SecurityGroupIds:
+        - { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-app-sg-id" }
+      # Reuse the shared least-privilege instance profile.
+      IamInstanceProfile: { "Fn::ImportValue": !Sub "${PlatformName}-${Environment}-ec2-profile-arn" }
+      # Inherit hardening: IMDSv2 required, encrypted root.
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: { VolumeSize: 40, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true }
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-consumer-app" }
+        - { Key: ConsumesPlatform, Value: !Ref PlatformName }
+
+Outputs:
+  InstanceId:
+    Description: The consumer instance running on the shared platform.
+    Value: !Ref AppInstance
+  ConsumedPlatform:
+    Description: The platform whose shared contracts this stack consumes.
+    Value: !Sub "${PlatformName}-${Environment}"

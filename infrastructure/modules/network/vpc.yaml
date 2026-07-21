@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable NETWORK module (Milestone 21). A production-grade, multi-AZ VPC with
+  public + private subnets, an Internet Gateway, per-tier route tables, an
+  optional cost-aware NAT Gateway, and an S3 Gateway VPC endpoint. Every id is
+  exported under the predictable convention <Platform>-<Env>-<resource> and
+  mirrored into SSM Parameter Store at /<platform>/<env>/network/*, so any stack
+  or repository can consume the shared network by Fn::ImportValue OR SSM lookup.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+    Description: Platform prefix for names, exports, and SSM paths.
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Environment for isolation (drives naming + tags).
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.20.0.0/20
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.20.16.0/20
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: 10.20.128.0/20
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: 10.20.144.0/20
+  EnableNatGateway:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create a NAT Gateway for private egress (has hourly + data cost).
+
+Conditions:
+  MakeNat: !Equals [!Ref EnableNatGateway, "true"]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-vpc" }
+        - { Key: Platform, Value: !Ref PlatformName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-igw" }
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-public-1" }
+        - { Key: Tier, Value: public }
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-public-2" }
+        - { Key: Tier, Value: public }
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-private-1" }
+        - { Key: Tier, Value: private }
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-private-2" }
+        - { Key: Tier, Value: private }
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-public-rt" }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PublicRouteTable, SubnetId: !Ref PublicSubnet1 }
+  PublicSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PublicRouteTable, SubnetId: !Ref PublicSubnet2 }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-private-rt" }
+
+  PrivateSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PrivateRouteTable, SubnetId: !Ref PrivateSubnet1 }
+  PrivateSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PrivateRouteTable, SubnetId: !Ref PrivateSubnet2 }
+
+  # Optional NAT (single-AZ, cost-aware) for private egress.
+  NatEip:
+    Type: AWS::EC2::EIP
+    Condition: MakeNat
+    Properties: { Domain: vpc }
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: MakeNat
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - { Key: Name, Value: !Sub "${PlatformName}-${Environment}-nat" }
+
+  PrivateNatRoute:
+    Type: AWS::EC2::Route
+    Condition: MakeNat
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  # S3 Gateway endpoint (free) — private subnets reach S3 without NAT.
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref PrivateRouteTable, !Ref PublicRouteTable]
+
+  # SSM mirror so consumers can look up by path (cross-account/region friendly).
+  VpcIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/network/vpc-id"
+      Type: String
+      Value: !Ref Vpc
+  PublicSubnetsParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/network/public-subnet-ids"
+      Type: StringList
+      Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+  PrivateSubnetsParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${PlatformName}/${Environment}/network/private-subnet-ids"
+      Type: StringList
+      Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+
+Outputs:
+  VpcId:
+    Description: VPC id.
+    Value: !Ref Vpc
+    Export: { Name: !Sub "${PlatformName}-${Environment}-vpc-id" }
+  VpcCidr:
+    Description: VPC CIDR.
+    Value: !Ref VpcCidr
+    Export: { Name: !Sub "${PlatformName}-${Environment}-vpc-cidr" }
+  PublicSubnet1:
+    Value: !Ref PublicSubnet1
+    Export: { Name: !Sub "${PlatformName}-${Environment}-public-subnet-1" }
+  PublicSubnet2:
+    Value: !Ref PublicSubnet2
+    Export: { Name: !Sub "${PlatformName}-${Environment}-public-subnet-2" }
+  PrivateSubnet1:
+    Value: !Ref PrivateSubnet1
+    Export: { Name: !Sub "${PlatformName}-${Environment}-private-subnet-1" }
+  PrivateSubnet2:
+    Value: !Ref PrivateSubnet2
+    Export: { Name: !Sub "${PlatformName}-${Environment}-private-subnet-2" }
+  PublicSubnets:
+    Description: Comma-separated public subnet ids.
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+    Export: { Name: !Sub "${PlatformName}-${Environment}-public-subnets" }
+  PrivateSubnets:
+    Description: Comma-separated private subnet ids.
+    Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+    Export: { Name: !Sub "${PlatformName}-${Environment}-private-subnets" }

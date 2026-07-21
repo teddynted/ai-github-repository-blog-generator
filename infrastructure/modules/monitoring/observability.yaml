@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Reusable MONITORING module (Milestone 21). A shared observability baseline: a
+  retained CloudWatch Log Group, an SNS alarm topic, a couple of representative
+  alarms (billing-agnostic), and a starter dashboard. Consuming stacks send logs
+  to the exported log group and subscribe operators to the exported alarm topic,
+  so every project reports to a consistent place.
+
+Parameters:
+  PlatformName:
+    Type: String
+    Default: ai-platform
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  Component:
+    Type: String
+    Default: platform
+    AllowedPattern: ^[a-z0-9-]+$
+    Description: Component the log group/dashboard belong to.
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 7, 14, 30, 60, 90, 180, 365]
+  AlarmEmail:
+    Type: String
+    Default: ""
+    Description: Optional email to subscribe to the alarm topic.
+
+Conditions:
+  HasEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/${PlatformName}/${Environment}/${Component}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${PlatformName}-${Environment}-alarms"
+      DisplayName: !Sub "${PlatformName} ${Environment} alarms"
+
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
+  # Representative alarm: log-group ingestion stalls (a common "silent failure").
+  NoLogsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${PlatformName}-${Environment}-${Component}-no-logs"
+      AlarmDescription: No log events ingested in the evaluation window.
+      Namespace: AWS/Logs
+      MetricName: IncomingLogEvents
+      Dimensions:
+        - { Name: LogGroupName, Value: !Sub "/${PlatformName}/${Environment}/${Component}" }
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlarmTopic]
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${PlatformName}-${Environment}-${Component}"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "text", "x": 0, "y": 0, "width": 24, "height": 2,
+              "properties": { "markdown": "# ${PlatformName} ${Environment} - ${Component}" }
+            },
+            {
+              "type": "metric", "x": 0, "y": 2, "width": 12, "height": 6,
+              "properties": {
+                "title": "Log ingestion",
+                "region": "${AWS::Region}",
+                "metrics": [["AWS/Logs", "IncomingLogEvents", "LogGroupName", "/${PlatformName}/${Environment}/${Component}"]],
+                "period": 300, "stat": "Sum"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  LogGroupName:
+    Value: !Ref LogGroup
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${Component}-log-group" }
+  LogGroupArn:
+    Value: !GetAtt LogGroup.Arn
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${Component}-log-group-arn" }
+  AlarmTopicArn:
+    Value: !Ref AlarmTopic
+    Export: { Name: !Sub "${PlatformName}-${Environment}-alarm-topic-arn" }
+  DashboardName:
+    Value: !Ref Dashboard
+    Export: { Name: !Sub "${PlatformName}-${Environment}-${Component}-dashboard" }
