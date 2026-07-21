@@ -35,16 +35,18 @@ const (
 	FormatBlog           Format = "blog"
 	FormatReleaseSummary Format = "release-summary"
 	FormatDocumentation  Format = "documentation"
-	FormatLinkedIn       Format = "linkedin"
-	FormatYouTubeShorts  Format = "youtube-shorts"
-	FormatTikTok         Format = "tiktok"
-	FormatSEO            Format = "seo-metadata"
 )
 
 // AllFormats is the default set produced by GenerateAll when none are given.
+//
+// releasegen deliberately covers only the long-form written formats (blog,
+// release summary, documentation). The social/video/SEO artifacts (LinkedIn,
+// YouTube Shorts, TikTok, SEO metadata) have dedicated, richer generators in
+// internal/linkedin, internal/shorts, internal/tiktok and internal/seo — those
+// are the single source of truth, orchestrated by internal/contentsuite. Do not
+// re-add prompt-only versions of them here (that was the M21 QA "H2" duplication).
 var AllFormats = []Format{
 	FormatBlog, FormatReleaseSummary, FormatDocumentation,
-	FormatLinkedIn, FormatYouTubeShorts, FormatTikTok, FormatSEO,
 }
 
 // Asset is one generated piece of content.
@@ -83,26 +85,6 @@ var specs = map[Format]spec{
 		role:        "You are a technical writer updating project documentation.",
 		instruction: "Write or update documentation in GitHub-flavoured Markdown that reflects the changes in this release. Focus on new capabilities and how to use them.",
 		closing:     "Produce a Markdown documentation page.",
-	},
-	FormatLinkedIn: {
-		role:        "You are a developer advocate writing a LinkedIn post.",
-		instruction: "Write a professional, engaging LinkedIn post (roughly 120–200 words) announcing this release. Open with a strong hook, convey the value in plain language, and end with 3–5 relevant hashtags. Plain text, not Markdown.",
-		closing:     "Produce only the LinkedIn post text.",
-	},
-	FormatYouTubeShorts: {
-		role:        "You are scripting a 45–60 second vertical YouTube Short for developers.",
-		instruction: "Write a punchy script with a 3-second hook, 3–4 fast beats explaining the release, and a closing call to action. Mark [HOOK], [BEAT], and [CTA] sections.",
-		closing:     "Produce only the script.",
-	},
-	FormatTikTok: {
-		role:        "You are scripting a short, energetic TikTok dev-log.",
-		instruction: "Write a very short, casual, high-energy script (under 150 words) about what shipped in this release, with an attention-grabbing first line.",
-		closing:     "Produce only the script.",
-	},
-	FormatSEO: {
-		role:        "You are an SEO specialist for developer content.",
-		instruction: "Produce SEO metadata for a blog post about this release: an SEO title (<= 60 chars), a meta description (<= 155 chars), a URL slug, and 5–10 keywords.",
-		closing:     "Produce the metadata as a Markdown list with labelled fields (Title, Description, Slug, Keywords).",
 	},
 }
 
@@ -177,7 +159,7 @@ func (g *Generator) buildPrompt(sp spec, rctx *rc.ReleaseContext) string {
 // content-intelligence blog titles the context already computed.
 func suggestTitle(format Format, rctx *rc.ReleaseContext) string {
 	switch format {
-	case FormatBlog, FormatSEO:
+	case FormatBlog:
 		if len(rctx.ContentIntelligence.BlogTitles) > 0 {
 			return rctx.ContentIntelligence.BlogTitles[0]
 		}
