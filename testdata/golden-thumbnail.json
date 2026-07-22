@@ -1,0 +1,1157 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "repository": "acme/widget",
+    "release": "v1.0.0",
+    "sourceBlogTitle": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+    "generatedAt": "0001-01-01T00:00:00Z",
+    "assetCount": 14,
+    "sourceSchemas": {
+      "releaseContext": "1.0.0",
+      "shorts": "1.0.0",
+      "storyboard": "1.0.0",
+      "tikTok": "1.0.0",
+      "youTube": "1.0.0"
+    }
+  },
+  "branding": {
+    "primaryColors": [
+      "#0B1F33",
+      "#12263A"
+    ],
+    "accentColors": [
+      "#FF9900",
+      "#4F9DFF"
+    ],
+    "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+    "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+    "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+    "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+    "depth": "layered flat planes with soft drop shadows for hierarchy",
+    "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+    "spacing": "generous margins, clear focal point, uncluttered composition",
+    "visualTone": "modern, confident, engineering-credible, approachable",
+    "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+  },
+  "assets": [
+    {
+      "id": 1,
+      "type": "YouTube Thumbnail",
+      "platform": "YouTube",
+      "aspectRatio": "16:9",
+      "dimensions": "1280x720",
+      "title": "YouTube Thumbnail — widget v1.0.0",
+      "purpose": "Drive clicks on the long-form release deep dive.",
+      "prompt": "YouTube Thumbnail illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: release architecture at a glance. Composition: single bold focal subject offset to the right, large empty headline zone on the left third, strong visual hierarchy, minimal clutter. Perspective: slight isometric hero angle for depth. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: high-energy, credible, click-worthy without being clickbait. Style: bold flat vector with subtle depth, high contrast, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: left third for the headline and lower-left for the release tag. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 16:9 aspect ratio (1280x720).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "single bold focal subject offset to the right, large empty headline zone on the left third, strong visual hierarchy, minimal clutter",
+        "perspective": "slight isometric hero angle for depth",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "high-energy, credible, click-worthy without being clickbait",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "bold flat vector with subtle depth, high contrast, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "release architecture at a glance"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "left third",
+          "purpose": "headline"
+        },
+        {
+          "area": "lower-left",
+          "purpose": "release tag"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "release architecture at a glance",
+        "visualComplexity": "medium",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-youtube-thumbnail.png"
+      }
+    },
+    {
+      "id": 2,
+      "type": "Repository Hero Image",
+      "platform": "GitHub",
+      "aspectRatio": "16:9",
+      "dimensions": "1600x900",
+      "title": "Repository Hero Image — widget v1.0.0",
+      "purpose": "Hero image for the repository README / landing.",
+      "prompt": "Repository Hero Image illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: what the repository does. Composition: wide banner composition with a central-to-right focal graphic and a generous headline zone, announcement-grade framing. Perspective: hero isometric or gentle three-quarter view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: celebratory but professional, confident release energy. Style: bold flat vector with layered depth, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: left third for the announcement headline and lower-left for the release tag. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 16:9 aspect ratio (1600x900).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "wide banner composition with a central-to-right focal graphic and a generous headline zone, announcement-grade framing",
+        "perspective": "hero isometric or gentle three-quarter view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "celebratory but professional, confident release energy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "bold flat vector with layered depth, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "what the repository does"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "left third",
+          "purpose": "announcement headline"
+        },
+        {
+          "area": "lower-left",
+          "purpose": "release tag"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "what the repository does",
+        "visualComplexity": "medium",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-repository-hero-image.png"
+      }
+    },
+    {
+      "id": 3,
+      "type": "GitHub Social Card",
+      "platform": "GitHub",
+      "aspectRatio": "1.91:1",
+      "dimensions": "1280x640",
+      "title": "GitHub Social Card — widget v1.0.0",
+      "purpose": "GitHub social preview when the repo is shared.",
+      "prompt": "GitHub Social Card illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: widget v1.0.0. Composition: balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing. Perspective: clean front or gentle isometric view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: professional, modern, trustworthy. Style: polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: left half for the headline and lower-left for the repository name. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 1.91:1 aspect ratio (1280x640).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing",
+        "perspective": "clean front or gentle isometric view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "professional, modern, trustworthy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "widget v1.0.0"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "left half",
+          "purpose": "headline"
+        },
+        {
+          "area": "lower-left",
+          "purpose": "repository name"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "widget v1.0.0",
+        "visualComplexity": "low",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-github-social-card.png"
+      }
+    },
+    {
+      "id": 4,
+      "type": "LinkedIn Banner",
+      "platform": "LinkedIn",
+      "aspectRatio": "1.91:1",
+      "dimensions": "1200x627",
+      "title": "LinkedIn Banner — widget v1.0.0",
+      "purpose": "Professional announcement graphic for LinkedIn.",
+      "prompt": "LinkedIn Banner illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: release announcement. Composition: balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing. Perspective: clean front or gentle isometric view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: professional, modern, trustworthy. Style: polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: left half for the headline and lower-left for the repository name. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 1.91:1 aspect ratio (1200x627).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing",
+        "perspective": "clean front or gentle isometric view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "professional, modern, trustworthy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "release announcement"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "left half",
+          "purpose": "headline"
+        },
+        {
+          "area": "lower-left",
+          "purpose": "repository name"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "release announcement",
+        "visualComplexity": "low",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-linkedin-banner.png"
+      }
+    },
+    {
+      "id": 5,
+      "type": "X Image",
+      "platform": "X",
+      "aspectRatio": "16:9",
+      "dimensions": "1600x900",
+      "title": "X Image — widget v1.0.0",
+      "purpose": "Shareable image for an X (Twitter) post.",
+      "prompt": "X Image illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: release highlight. Composition: balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing. Perspective: clean front or gentle isometric view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: punchy, modern, shareable. Style: polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: left half for the headline and lower-left for the repository name. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 16:9 aspect ratio (1600x900).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing",
+        "perspective": "clean front or gentle isometric view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "punchy, modern, shareable",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "release highlight"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "left half",
+          "purpose": "headline"
+        },
+        {
+          "area": "lower-left",
+          "purpose": "repository name"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "release highlight",
+        "visualComplexity": "low",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-x-image.png"
+      }
+    },
+    {
+      "id": 6,
+      "type": "Blog Header",
+      "platform": "Blog",
+      "aspectRatio": "16:9",
+      "dimensions": "1600x900",
+      "title": "Blog Header — widget v1.0.0",
+      "purpose": "Header image for the technical blog post.",
+      "prompt": "Blog Header illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: the technical story of the release. Composition: editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title. Perspective: gentle isometric or layered flat scene. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: thoughtful, technical, inviting. Style: conceptual flat vector illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: center or lower-third for the article title. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 16:9 aspect ratio (1600x900).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no stock-photo clichés, no photorealistic people",
+      "style": {
+        "composition": "editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title",
+        "perspective": "gentle isometric or layered flat scene",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "thoughtful, technical, inviting",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "conceptual flat vector illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "the technical story of the release"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "center or lower-third",
+          "purpose": "article title"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "the technical story of the release",
+        "visualComplexity": "low",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-blog-header.png"
+      }
+    },
+    {
+      "id": 7,
+      "type": "Dev.to Cover",
+      "platform": "Dev.to",
+      "aspectRatio": "1000:420",
+      "dimensions": "1000x420",
+      "title": "Dev.to Cover — widget v1.0.0",
+      "purpose": "Cover image for the Dev.to cross-post.",
+      "prompt": "Dev.to Cover illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: the technical story of the release. Composition: editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title. Perspective: gentle isometric or layered flat scene. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: thoughtful, technical, inviting. Style: conceptual flat vector illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: center or lower-third for the article title. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 1000:420 aspect ratio (1000x420).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no stock-photo clichés, no photorealistic people",
+      "style": {
+        "composition": "editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title",
+        "perspective": "gentle isometric or layered flat scene",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "thoughtful, technical, inviting",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "conceptual flat vector illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "the technical story of the release"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "center or lower-third",
+          "purpose": "article title"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "the technical story of the release",
+        "visualComplexity": "low",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-dev-to-cover.png"
+      }
+    },
+    {
+      "id": 8,
+      "type": "Medium Cover",
+      "platform": "Medium",
+      "aspectRatio": "3:2",
+      "dimensions": "1500x1000",
+      "title": "Medium Cover — widget v1.0.0",
+      "purpose": "Cover image for the Medium cross-post.",
+      "prompt": "Medium Cover illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: the technical story of the release. Composition: editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title. Perspective: gentle isometric or layered flat scene. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: thoughtful, technical, inviting. Style: conceptual flat vector illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: center or lower-third for the article title. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 3:2 aspect ratio (1500x1000).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no stock-photo clichés, no photorealistic people",
+      "style": {
+        "composition": "editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title",
+        "perspective": "gentle isometric or layered flat scene",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "thoughtful, technical, inviting",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "conceptual flat vector illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "the technical story of the release"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "center or lower-third",
+          "purpose": "article title"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "the technical story of the release",
+        "visualComplexity": "low",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-medium-cover.png"
+      }
+    },
+    {
+      "id": 9,
+      "type": "Architecture Illustration",
+      "platform": "Docs",
+      "aspectRatio": "16:9",
+      "dimensions": "1920x1080",
+      "title": "Architecture Illustration — widget v1.0.0",
+      "purpose": "Explain the system architecture in documentation.",
+      "prompt": "Architecture Illustration illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: component relationships. Composition: clear left-to-right technical diagram flow, labelled component blocks connected by directional arrows, balanced spacing, no text baked in. Perspective: clean isometric or flat top-down schematic. Lighting: even, diagrammatic lighting with soft shadows for layering. Mood: clear, educational, precise. Style: isometric technical illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: component blocks for the node labels (added by compositor). Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 16:9 aspect ratio (1920x1080).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no distorted diagrams, no tangled or crossing connectors, no unreadable component shapes, no unrelated AWS services (Amazon RDS, Amazon EKS, Amazon Redshift)",
+      "style": {
+        "composition": "clear left-to-right technical diagram flow, labelled component blocks connected by directional arrows, balanced spacing, no text baked in",
+        "perspective": "clean isometric or flat top-down schematic",
+        "lighting": "even, diagrammatic lighting with soft shadows for layering",
+        "mood": "clear, educational, precise",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "isometric technical illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "component relationships"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "component blocks",
+          "purpose": "node labels (added by compositor)"
+        }
+      ],
+      "references": [
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS",
+        "Amazon EC2"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "component relationships",
+        "visualComplexity": "high",
+        "estimatedCost": "~2 credits (detailed illustration; may need a higher-quality tier)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-architecture-illustration.png"
+      }
+    },
+    {
+      "id": 10,
+      "type": "AWS Workflow Diagram",
+      "platform": "Docs",
+      "aspectRatio": "16:9",
+      "dimensions": "1920x1080",
+      "title": "AWS Workflow Diagram — widget v1.0.0",
+      "purpose": "Illustrate the AWS event flow.",
+      "prompt": "AWS Workflow Diagram illustration depicting an event-driven AWS workflow using AWS Lambda, Amazon EventBridge, Amazon SQS, and Amazon EC2. Technical focus: aWS service flow. Composition: clear left-to-right technical diagram flow, labelled component blocks connected by directional arrows, balanced spacing, no text baked in. Perspective: clean isometric or flat top-down schematic. Lighting: even, diagrammatic lighting with soft shadows for layering. Mood: clear, educational, precise. Style: isometric technical illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: component blocks for the node labels (added by compositor). Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 16:9 aspect ratio (1920x1080).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no distorted diagrams, no tangled or crossing connectors, no unreadable component shapes, no unrelated AWS services (Amazon RDS, Amazon EKS, Amazon Redshift)",
+      "style": {
+        "composition": "clear left-to-right technical diagram flow, labelled component blocks connected by directional arrows, balanced spacing, no text baked in",
+        "perspective": "clean isometric or flat top-down schematic",
+        "lighting": "even, diagrammatic lighting with soft shadows for layering",
+        "mood": "clear, educational, precise",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "isometric technical illustration, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "AWS service flow"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "component blocks",
+          "purpose": "node labels (added by compositor)"
+        }
+      ],
+      "references": [
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS",
+        "Amazon EC2"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "AWS service flow",
+        "visualComplexity": "high",
+        "estimatedCost": "~2 credits (detailed illustration; may need a higher-quality tier)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-aws-workflow-diagram.png"
+      }
+    },
+    {
+      "id": 11,
+      "type": "Release Card",
+      "platform": "Generic",
+      "aspectRatio": "1:1",
+      "dimensions": "1080x1080",
+      "title": "Release Card — widget v1.0.0",
+      "purpose": "Square release-announcement card for feeds.",
+      "prompt": "Release Card illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: widget v1.0.0 release. Composition: centered square composition with a strong focal graphic, headline zone reserved along the lower third. Perspective: hero isometric or gentle three-quarter view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: celebratory but professional, confident release energy. Style: bold flat vector with layered depth, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: lower third for the release headline and top-left for the logo. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 1:1 aspect ratio (1080x1080).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "centered square composition with a strong focal graphic, headline zone reserved along the lower third",
+        "perspective": "hero isometric or gentle three-quarter view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "celebratory but professional, confident release energy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "bold flat vector with layered depth, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "widget v1.0.0 release"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "lower third",
+          "purpose": "release headline"
+        },
+        {
+          "area": "top-left",
+          "purpose": "logo"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "widget v1.0.0 release",
+        "visualComplexity": "medium",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-release-card.png"
+      }
+    },
+    {
+      "id": 12,
+      "type": "Promotional Graphic",
+      "platform": "Generic",
+      "aspectRatio": "1:1",
+      "dimensions": "1080x1080",
+      "title": "Promotional Graphic — widget v1.0.0",
+      "purpose": "Promote the feature / open-source project.",
+      "prompt": "Promotional Graphic illustration depicting this release. Technical focus: the headline feature. Composition: centered square composition with a strong focal graphic, headline zone reserved along the lower third. Perspective: hero isometric or gentle three-quarter view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: celebratory but professional, confident release energy. Style: bold flat vector with layered depth, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: lower third for the release headline and top-left for the logo. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 1:1 aspect ratio (1080x1080).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "centered square composition with a strong focal graphic, headline zone reserved along the lower third",
+        "perspective": "hero isometric or gentle three-quarter view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "celebratory but professional, confident release energy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "bold flat vector with layered depth, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "the headline feature"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "lower third",
+          "purpose": "release headline"
+        },
+        {
+          "area": "top-left",
+          "purpose": "logo"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "the headline feature",
+        "visualComplexity": "medium",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-promotional-graphic.png"
+      }
+    },
+    {
+      "id": 13,
+      "type": "YouTube Shorts Cover",
+      "platform": "YouTube Shorts",
+      "aspectRatio": "9:16",
+      "dimensions": "1080x1920",
+      "title": "YouTube Shorts Cover — widget v1.0.0",
+      "purpose": "Vertical cover for the YouTube Short.",
+      "prompt": "YouTube Shorts Cover illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: architecture Reveal. Composition: balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing. Perspective: clean front or gentle isometric view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: professional, modern, trustworthy. Style: polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: upper third for the hook headline and lower third for the handle / CTA. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 9:16 aspect ratio (1080x1920).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing",
+        "perspective": "clean front or gentle isometric view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "professional, modern, trustworthy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "architecture Reveal"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "upper third",
+          "purpose": "hook headline"
+        },
+        {
+          "area": "lower third",
+          "purpose": "handle / CTA"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "architecture Reveal",
+        "visualComplexity": "medium",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-youtube-shorts-cover.png"
+      }
+    },
+    {
+      "id": 14,
+      "type": "TikTok Cover",
+      "platform": "TikTok",
+      "aspectRatio": "9:16",
+      "dimensions": "1080x1920",
+      "title": "TikTok Cover — widget v1.0.0",
+      "purpose": "Vertical cover for the TikTok video.",
+      "prompt": "TikTok Cover illustration depicting widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Technical focus: architecture Insight. Composition: balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing. Perspective: clean front or gentle isometric view. Lighting: soft directional key light, gentle rim light on focal shapes, no harsh shadows. Mood: professional, modern, trustworthy. Style: polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly. Color palette: #0B1F33, #12263A, #FF9900, #4F9DFF. Visual tone: modern, confident, engineering-credible, approachable. Depth: layered flat planes with soft drop shadows for hierarchy. Reserve empty space: upper third for the hook headline and lower third for the handle / CTA. Render NO text, letters, numbers, logos, or watermarks — leave the reserved areas clean for a compositor to add copy. Target format: 9:16 aspect ratio (1080x1920).",
+      "negativePrompt": "no gibberish text, no misspelled words, no watermarks, no signatures, no logos, no clutter, no excessive visual noise, no distorted shapes, no low-resolution artifacts, no photorealistic human faces, no busy backgrounds that fight the headline",
+      "style": {
+        "composition": "balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing",
+        "perspective": "clean front or gentle isometric view",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "mood": "professional, modern, trustworthy",
+        "colorPalette": [
+          "#0B1F33",
+          "#12263A",
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "style": "polished flat vector, flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "technicalFocus": "architecture Insight"
+      },
+      "branding": {
+        "primaryColors": [
+          "#0B1F33",
+          "#12263A"
+        ],
+        "accentColors": [
+          "#FF9900",
+          "#4F9DFF"
+        ],
+        "illustrationStyle": "flat vector with subtle isometric depth, clean geometric shapes, technical but friendly",
+        "iconStyle": "minimal line + solid hybrid icons, consistent stroke weight, rounded corners",
+        "backgroundStyle": "dark gradient with a faint grid or circuit texture, generous negative space",
+        "lighting": "soft directional key light, gentle rim light on focal shapes, no harsh shadows",
+        "depth": "layered flat planes with soft drop shadows for hierarchy",
+        "typographyPlacement": "headline zone reserved but left empty; strong left or lower-third alignment",
+        "spacing": "generous margins, clear focal point, uncluttered composition",
+        "visualTone": "modern, confident, engineering-credible, approachable",
+        "fontStyle": "geometric sans-serif feel (guidance only — render no text)"
+      },
+      "textPlaceholders": [
+        {
+          "area": "upper third",
+          "purpose": "hook headline"
+        },
+        {
+          "area": "lower third",
+          "purpose": "handle / CTA"
+        }
+      ],
+      "references": [
+        "widget",
+        "v1.0.0",
+        "AWS Lambda",
+        "Amazon EventBridge",
+        "Amazon SQS"
+      ],
+      "metadata": {
+        "targetAudience": "Software engineers and cloud practitioners",
+        "difficulty": "intermediate",
+        "topic": "architecture Insight",
+        "visualComplexity": "medium",
+        "estimatedCost": "~1 credit (standard quality)",
+        "seoKeywords": [
+          "AWS Lambda",
+          "Amazon EventBridge",
+          "Amazon SQS",
+          "Amazon EC2",
+          "AWS CloudFormation",
+          "Amazon CloudWatch",
+          "Go",
+          "aws"
+        ],
+        "recommendedFilename": "widget-v1-0-0-tiktok-cover.png"
+      }
+    }
+  ],
+  "contentIntelligence": {
+    "assetCount": 14,
+    "platforms": [
+      "YouTube",
+      "GitHub",
+      "LinkedIn",
+      "X",
+      "Blog",
+      "Dev.to",
+      "Medium",
+      "Docs",
+      "Generic",
+      "YouTube Shorts",
+      "TikTok"
+    ],
+    "audience": "Software engineers and cloud practitioners",
+    "difficulty": "intermediate",
+    "visualComplexity": "high",
+    "seoKeywords": [
+      "AWS Lambda",
+      "Amazon EventBridge",
+      "Amazon SQS",
+      "Amazon EC2",
+      "AWS CloudFormation",
+      "Amazon CloudWatch",
+      "Go",
+      "aws"
+    ],
+    "estimatedCost": "~16 credits total (provider-neutral estimate)",
+    "productionNotes": [
+      "Prompts are provider-neutral: usable with GPT Image, DALL·E, Stable Diffusion, Midjourney, Nova Canvas, or Flux.",
+      "Images render no text — add real copy in the reserved placeholder zones during compositing.",
+      "Apply the shared Branding across every asset for a consistent visual identity."
+    ]
+  }
+}
