@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.19.1] - 2026-07-22
+
+### Bug Fixes
+
+- **scheduler:** run the EC2 power window 7 days a week + DLQ hardening
+
+
 ## [0.19.0] - 2026-07-22
 
 ### Features
