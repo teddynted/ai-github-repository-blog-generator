@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/publish"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
@@ -126,6 +127,45 @@ func TestPipelineHappyPath(t *testing.T) {
 	}
 	if note.calls != 1 || !strings.Contains(note.subject, "published") {
 		t.Errorf("notify = %d / %q", note.calls, note.subject)
+	}
+}
+
+func TestPipelineFullSuite(t *testing.T) {
+	pub := &fakePublisher{}
+	note := &fakeNotifier{}
+	// A model returning a multi-section blog body so the suite has scenes to work with.
+	model := fakeModel{reply: func(string) (string, error) {
+		return "## Overview\n\nWhat changed and why it matters in this release.\n\n## How it works\n\nThe implementation, grounded in the release context.\n", nil
+	}}
+	p := &Pipeline{
+		Builder:   &fakeBuilder{ctx: sampleContext()},
+		Generator: &releasegen.Generator{Model: model},
+		Suite:     &contentsuite.Orchestrator{Model: model},
+		Reviewer:  fakeReviewer{passAll: true},
+		Publisher: pub,
+		Notifier:  note,
+	}
+	res, err := p.Run(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v0.2.0"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// The full suite produces many more artifacts than the 2-format default path.
+	if res.Generated < 6 {
+		t.Fatalf("full suite should generate many artifacts, got %d", res.Generated)
+	}
+	if res.Published != res.Generated {
+		t.Errorf("all passing review should publish: generated=%d published=%d", res.Generated, res.Published)
+	}
+	// The published set spans multimedia stages — proof the suite flowed through
+	// the SAME review/publish stages, not just the written formats.
+	kinds := map[generation.Kind]bool{}
+	for _, a := range pub.assets {
+		kinds[a.Kind] = true
+	}
+	for _, want := range []generation.Kind{"blog", "storyboard", "youtube", "linkedin"} {
+		if !kinds[want] {
+			t.Errorf("published set missing %q", want)
+		}
 	}
 }
 

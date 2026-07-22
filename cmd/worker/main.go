@@ -27,6 +27,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/github"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
@@ -142,15 +143,19 @@ func main() {
 	// Read private repos with each repo's registered PAT (same credential as
 	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
 	releaseSrc.TokenFor = tokenSource.Token
+	// One model backs both the blog generator and the full content suite.
+	genModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL))
 	releasePipe := &releasepipeline.Pipeline{
 		Builder: &rc.Builder{
 			Sources: releaseSrc,
 			Logger:  a.Logger,
 		},
-		Generator: &releasegen.Generator{
-			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
-			Logger: a.Logger,
-		},
+		Generator: &releasegen.Generator{Model: genModel, Logger: a.Logger},
+		// Emit the FULL artifact set (blog → storyboard → voice-over → YouTube →
+		// Shorts → TikTok → visual assets → SEO → architecture → LinkedIn → X
+		// thread) from a published release, all gated by the same review/publish
+		// stages. A thin release degrades gracefully (stages skip, not fail).
+		Suite:     &contentsuite.Orchestrator{Model: genModel, Logger: a.Logger},
 		Reviewer:  review.Reviewer{},
 		Publisher: publisher,
 		Logger:    a.Logger,

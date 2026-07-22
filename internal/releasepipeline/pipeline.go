@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
@@ -52,7 +53,14 @@ type Notifier interface {
 type Pipeline struct {
 	Builder   ContextBuilder
 	Generator Generator
-	// Formats to generate; defaults to blog + release summary when empty.
+	// Suite, when set, produces the FULL multimedia artifact set (blog, storyboard,
+	// voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture,
+	// LinkedIn, X thread) via internal/contentsuite, so the automated release path
+	// emits every artifact — not just the written formats — and runs them all
+	// through the same review/publish/notify stages. When nil the pipeline falls
+	// back to Formats (below), preserving the original behaviour.
+	Suite *contentsuite.Orchestrator
+	// Formats to generate when Suite is nil; defaults to blog + release summary.
 	Formats   []releasegen.Format
 	Reviewer  Reviewer
 	Publisher Publisher
@@ -77,7 +85,9 @@ var defaultFormats = []releasegen.Format{releasegen.FormatBlog, releasegen.Forma
 // Run executes the full flow for one repository + release.
 func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 	start := time.Now()
-	if p.Builder == nil || p.Generator == nil || p.Reviewer == nil || p.Publisher == nil {
+	// Generation is served by either the full Suite or the Formats path; require
+	// one of them, plus the always-needed stages.
+	if p.Builder == nil || (p.Generator == nil && p.Suite == nil) || p.Reviewer == nil || p.Publisher == nil {
 		return Result{}, fmt.Errorf("release pipeline is missing a required stage")
 	}
 
@@ -120,6 +130,9 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 // dedicated long-form Blog path for the blog format. A single format failing is
 // collected, not fatal, so the rest still publish.
 func (p *Pipeline) generate(ctx context.Context, rctx *rc.ReleaseContext) ([]generation.Content, []string) {
+	if p.Suite != nil {
+		return p.generateSuite(ctx, rctx)
+	}
 	formats := p.Formats
 	if len(formats) == 0 {
 		formats = defaultFormats
@@ -144,6 +157,37 @@ func (p *Pipeline) generate(ctx context.Context, rctx *rc.ReleaseContext) ([]gen
 		out = append(out, generation.Content{Kind: generation.Kind(f), Markdown: asset.Body})
 	}
 	return out, errs
+}
+
+// generateSuite runs the full content suite and adapts each produced artifact
+// into generation.Content for the shared review/publish stages. Skipped and
+// failed stages are surfaced as non-fatal issues (recorded in the Result), so a
+// thin release still publishes the artifacts it could produce.
+func (p *Pipeline) generateSuite(ctx context.Context, rctx *rc.ReleaseContext) ([]generation.Content, []string) {
+	suite := p.Suite.Run(ctx, rctx, nil)
+	out := make([]generation.Content, 0, len(suite.Artifacts()))
+	for _, a := range suite.Artifacts() {
+		out = append(out, generation.Content{Kind: generation.Kind(a.Kind), Markdown: a.Markdown})
+	}
+	var issues []string
+	for _, st := range suite.Manifest.Stages {
+		if st.Status == contentsuite.StageOK {
+			continue
+		}
+		msg := fmt.Sprintf("%s (M%d): %s", st.Name, st.Milestone, st.Status)
+		if st.Error != "" {
+			msg += " — " + st.Error
+		}
+		issues = append(issues, msg)
+	}
+	if p.Logger != nil {
+		p.Logger.Info("content suite generated",
+			slog.String("release", rctx.Release.Tag),
+			slog.Int("produced", suite.Manifest.Produced),
+			slog.Int("skipped", suite.Manifest.Skipped),
+			slog.Int("failed", suite.Manifest.Failed))
+	}
+	return out, issues
 }
 
 func (p *Pipeline) notify(ctx context.Context, res Result, ok bool, issues []string) {
