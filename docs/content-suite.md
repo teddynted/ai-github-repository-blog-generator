@@ -71,10 +71,21 @@ to also live in `internal/releasegen` were removed — `releasegen` now covers j
 the long-form written formats (blog, release summary, documentation), so there is
 one implementation per artifact and no divergent output.
 
-## Relationship to the automated worker
+## Automated vs. manual — where automation begins and ends
 
-The scheduled worker (`cmd/worker`) generates the written core (blog, README,
-docs, architecture summary, release notes, architecture diagram) inline. Use
-`generate-all` to additionally produce the full multimedia suite from the same
-Release Context — locally, in CI, or as a follow-on step. Both consume the exact
-same Milestone 2 Release Context.
+The scheduled worker (`cmd/worker`) drains SQS and drives two automated paths that
+share the same review → approval → publish stages:
+
+| Trigger | Path | What is generated automatically |
+|---------|------|---------------------------------|
+| **A published GitHub Release** | `releasepipeline` → **content suite** | The **complete artifact set** (this doc): blog, storyboard, voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture, LinkedIn, X thread — SemVer-gated, then reviewed, approved, and published. **No manual `generate-all` needed.** |
+| **A matching `blog:` commit** (or `POST /process`) | `internal/pipeline` (repo-clone) | The written core: blog, README improvements, docs, architecture summary, release notes, architecture diagram. |
+
+So **automation begins** when a GitHub Release is published (or a `blog:` commit
+lands) and **ends** at the published, human-approved artifacts. The same worker,
+the same Milestone 2 Release Context, and the same governance gate apply to both.
+
+`cmd/generate-all` runs the *identical* content-suite orchestrator **manually** —
+for local development, CI, one-off regeneration, or producing the suite outside a
+release event. It is the manual door onto the same pipeline the release path runs
+automatically; it does not duplicate any orchestration logic.

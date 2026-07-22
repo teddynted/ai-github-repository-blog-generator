@@ -199,7 +199,9 @@ flowchart TB
     LOOP --> O[Draft content set]
 ```
 
-**Content types:** technical blog post, README improvements, project documentation, architecture summary, API documentation, project overview, release notes, changelog, technical tutorial ([FR-3](./requirements.md#13-documentation--content-generation)).
+**Content types (commit-triggered path):** technical blog post, README improvements, project documentation, architecture summary, API documentation, project overview, release notes, changelog, technical tutorial ([FR-3](./requirements.md#13-documentation--content-generation)).
+
+**Release-triggered path:** a published GitHub Release runs the **full content suite** — blog, storyboard, voice-over, YouTube script, Shorts, TikTok, visual assets, SEO, architecture diagrams, LinkedIn, and X thread — automatically, gated by SemVer validation and the same review/approval/publish stages. See [Full Content Suite](./content-suite.md).
 
 The model (`OLLAMA_MODEL`, default Qwen) and parameters come from configuration ([AI-2](./requirements.md#6-ai--local-inference-requirements)); there is **no external inference API**.
 
