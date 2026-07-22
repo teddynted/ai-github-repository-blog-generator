@@ -1,0 +1,686 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "repository": "acme/widget",
+    "release": "v1.0.0",
+    "sourceBlogTitle": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+    "generatedAt": "0001-01-01T00:00:00Z",
+    "sourceSchemas": {
+      "releaseContext": "1.0.0",
+      "shorts": "1.0.0",
+      "storyboard": "1.0.0",
+      "tikTok": "1.0.0",
+      "visualAssets": "1.0.0",
+      "voiceOver": "1.0.0",
+      "youTube": "1.0.0"
+    }
+  },
+  "blog": {
+    "title": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+    "metaDescription": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+    "keywords": [
+      "this release",
+      "AWS Lambda",
+      "aws",
+      "serverless",
+      "Go",
+      "Amazon SQS",
+      "Amazon EventBridge",
+      "AWS CloudFormation",
+      "eventbridge",
+      "sqs",
+      "Amazon EC2",
+      "Amazon CloudWatch"
+    ],
+    "tags": [
+      "aws",
+      "serverless",
+      "eventbridge",
+      "sqs",
+      "go",
+      "this release"
+    ],
+    "slug": "shipping-widget-v1-0-0-event-driven-pipeline",
+    "alternativeSlugs": [
+      "widget-release",
+      "aws-lambda-release",
+      "release-release-v1-0-0"
+    ],
+    "excerpt": "Widget v1.0.0 is the first production release — an event-driven, serverless widget-processing platform built with Go on AWS. This post walks through what changed, how the pipeline works, and why it matters. The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy,…",
+    "excerpts": {
+      "short50": "Widget v1.0.0 is the first production release — an event-driven, serverless widget-processing platform built with Go on AWS. This post walks through what changed, how the pipeline works, and why it matters. The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy,…",
+      "medium100": "Widget v1.0.0 is the first production release — an event-driven, serverless widget-processing platform built with Go on AWS. This post walks through what changed, how the pipeline works, and why it matters. The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy, and coupled ingestion to processing. We needed a pipeline that absorbs bursts, decouples the front door from the worker, and keeps cost bounded. Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching…",
+      "long200": "Widget v1.0.0 is the first production release — an event-driven, serverless widget-processing platform built with Go on AWS. This post walks through what changed, how the pipeline works, and why it matters. The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy, and coupled ingestion to processing. We needed a pipeline that absorbs bursts, decouples the front door from the worker, and keeps cost bounded. Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching events into an Amazon SQS queue, which provides durable buffering and retries; a dead-letter queue captures poison messages. - A scheduled EC2 worker drains the queue during its window and processes each widget. The bus, queue, DLQ, and worker are defined as a single AWS CloudFormation stack, so the whole pipeline is reproducible infrastructure-as-code. When a widget event arrives, the Lambda verifies its signature and publishes it to EventBridge. Because EventBridge fans out to SQS, ingestion never blocks on processing — bursts pile up safely in the queue. The EC2 worker, started on a schedule, pulls messages, processes them, and…"
+    },
+    "openGraphTitle": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+    "openGraphDescription": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+    "twitter": {
+      "card": "summary_large_image",
+      "title": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+      "description": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+      "imageAlt": "widget v1.0.0 — this release"
+    },
+    "canonical": {
+      "robots": "index, follow"
+    },
+    "readingTime": "1 min read",
+    "readingTimeMinutes": 1,
+    "category": "Cloud \u0026 DevOps",
+    "topicClusters": [
+      "AWS \u0026 Cloud Infrastructure",
+      "AI-Powered Content Generation",
+      "Clean Architecture in Go",
+      "GitHub Release Automation"
+    ],
+    "platforms": [
+      "Blog",
+      "Dev.to",
+      "Medium",
+      "Documentation"
+    ]
+  },
+  "youtube": {
+    "title": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+    "alternativeTitles": [
+      "How acme/widget v1.0.0 Actually Works",
+      "Building v1.0.0: A Full Architecture Walkthrough"
+    ],
+    "description": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.\n\n⏱ Chapters:\n00:00 Intro / Hook\n00:15 The problem\n00:31 The architecture\n00:54 How it works\n01:16 Security\n01:24 Breaking change\n01:30 Wrapping up\n01:30 Conclusion\n\n🔗 Repository: https://github.com/acme/widget\n\n#aws #serverless #eventbridge #sqs #go #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation",
+    "keywords": [
+      "this release",
+      "AWS Lambda",
+      "aws",
+      "serverless",
+      "Go",
+      "Amazon SQS",
+      "Amazon EventBridge",
+      "AWS CloudFormation",
+      "eventbridge",
+      "sqs",
+      "Amazon EC2",
+      "Amazon CloudWatch",
+      "GitHub automation",
+      "AI content generation",
+      "technical blogging"
+    ],
+    "tags": [
+      "aws",
+      "serverless",
+      "eventbridge",
+      "sqs",
+      "go",
+      "AWS Lambda",
+      "Amazon EventBridge",
+      "Amazon SQS",
+      "Amazon EC2",
+      "AWS CloudFormation",
+      "Amazon CloudWatch",
+      "software engineering",
+      "golang",
+      "clean architecture",
+      "devops"
+    ],
+    "hashtags": [
+      "#Aws",
+      "#Serverless",
+      "#Eventbridge",
+      "#Sqs",
+      "#Go"
+    ],
+    "chapterTitles": [
+      {
+        "timestamp": "00:00",
+        "title": "Intro / Hook"
+      },
+      {
+        "timestamp": "00:15",
+        "title": "The problem"
+      },
+      {
+        "timestamp": "00:31",
+        "title": "The architecture"
+      },
+      {
+        "timestamp": "00:54",
+        "title": "How it works"
+      },
+      {
+        "timestamp": "01:16",
+        "title": "Security"
+      },
+      {
+        "timestamp": "01:24",
+        "title": "Breaking change"
+      },
+      {
+        "timestamp": "01:30",
+        "title": "Wrapping up"
+      },
+      {
+        "timestamp": "01:30",
+        "title": "Conclusion"
+      }
+    ],
+    "pinnedComment": "📌 acme/widget v1.0.0 — everything in this video is generated from the repository's own Release Context. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?",
+    "playlists": [
+      "acme/widget — Release Deep Dives",
+      "Release Deep Dives",
+      "AWS \u0026 Cloud Engineering"
+    ],
+    "thumbnailText": [
+      "V1.0.0 · AWS Lambda",
+      "THE ARCHITECTURE",
+      "V1.0.0"
+    ]
+  },
+  "shorts": {
+    "items": [
+      {
+        "platform": "YouTube Shorts",
+        "title": "This architecture in under a minute",
+        "description": "Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video + repo in the description. https://github.com/acme/widget",
+        "keywords": [
+          "Architecture Reveal",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#SystemDesign",
+          "#Architecture",
+          "#CloudArchitecture",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation"
+        ],
+        "caption": "This is the whole architecture in one shot.",
+        "cta": "The full architecture walkthrough is on the channel."
+      },
+      {
+        "platform": "YouTube Shorts",
+        "title": "An AWS best practice worth stealing",
+        "description": "Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video + repo in the description. https://github.com/acme/widget",
+        "keywords": [
+          "AWS Best Practice",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#AWS",
+          "#CloudComputing",
+          "#BestPractices",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation"
+        ],
+        "caption": "Here's an AWS best practice most teams skip.",
+        "cta": "Full video on the channel. Follow for more."
+      },
+      {
+        "platform": "YouTube Shorts",
+        "title": "A developer tip from v1.0.0",
+        "description": "Notice how the logic sits behind a small interface, which is what keeps it unit-testable. Full video + repo in the description. https://github.com/acme/widget",
+        "keywords": [
+          "Developer Tip",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#DevTips",
+          "#Productivity",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation",
+          "#AmazonCloudWatch"
+        ],
+        "caption": "Quick tip you'll actually use.",
+        "cta": "Star the repo — link below."
+      },
+      {
+        "platform": "YouTube Shorts",
+        "title": "How this code actually works",
+        "description": "When a widget event arrives, the Lambda verifies its signature and publishes it to EventBridge. Full video + repo in the description. https://github.com/acme/widget",
+        "keywords": [
+          "Code Walkthrough",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#Coding",
+          "#Golang",
+          "#CleanCode",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation"
+        ],
+        "caption": "Here's how this actually works under the hood.",
+        "cta": "See the full run in the complete video — link below."
+      },
+      {
+        "platform": "YouTube Shorts",
+        "title": "The numbers behind v1.0.0",
+        "description": "This release analyzed 5 commits. Full video + repo in the description. https://github.com/acme/widget",
+        "keywords": [
+          "Interesting Statistic",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#OpenSource",
+          "#DevLife",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation",
+          "#AmazonCloudWatch"
+        ],
+        "caption": "This release analyzed 5 commits.",
+        "cta": "Watch the full breakdown — link in the description."
+      },
+      {
+        "platform": "TikTok",
+        "title": "The architecture nobody explains",
+        "description": "Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video + repo in bio.",
+        "keywords": [
+          "Architecture Insight",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#SystemDesign",
+          "#Architecture",
+          "#CloudArchitecture",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation"
+        ],
+        "caption": "Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video + repo in bio.",
+        "engagementPrompt": "Would you have designed it differently? Tell me how.",
+        "cta": "Full architecture walkthrough on YouTube — link in bio."
+      },
+      {
+        "platform": "TikTok",
+        "title": "An AWS tip most devs miss",
+        "description": "Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video + repo in bio.",
+        "keywords": [
+          "AWS Tip",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#AWS",
+          "#CloudComputing",
+          "#DevOps",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation"
+        ],
+        "caption": "Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video + repo in bio.",
+        "engagementPrompt": "Which AWS service would you reach for here?",
+        "cta": "Repo's in the description. Go build it."
+      },
+      {
+        "platform": "TikTok",
+        "title": "Steal this developer workflow",
+        "description": "Notice how the logic sits behind a small interface, which is what keeps it unit-testable. Full video + repo in bio.",
+        "keywords": [
+          "Developer Productivity",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#DevTips",
+          "#Productivity",
+          "#GoLang",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation"
+        ],
+        "caption": "Notice how the logic sits behind a small interface, which is what keeps it unit-testable. Full video + repo in bio.",
+        "engagementPrompt": "What would you automate next?",
+        "cta": "Grab the repo from my bio and try it."
+      },
+      {
+        "platform": "TikTok",
+        "title": "The numbers behind v1.0.0",
+        "description": "This release analyzed 5 commits. Full video + repo in bio.",
+        "keywords": [
+          "Interesting Statistic",
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#OpenSource",
+          "#DevLife",
+          "#AWSLambda",
+          "#AmazonEventBridge",
+          "#AmazonSQS",
+          "#AmazonEC2",
+          "#AWSCloudFormation",
+          "#AmazonCloudWatch"
+        ],
+        "caption": "This release analyzed 5 commits. Full video + repo in bio.",
+        "engagementPrompt": "Does that number surprise you?",
+        "cta": "Follow for more AI engineering."
+      }
+    ]
+  },
+  "social": {
+    "items": [
+      {
+        "platform": "LinkedIn",
+        "title": "widget v1.0.0: this release",
+        "summary": "widget v1.0.0 ships this release. Here's how it's built — grounded in the repository's own release analysis.",
+        "excerpt": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "keywords": [
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#SoftwareEngineering",
+          "#CloudComputing",
+          "#AIEngineering",
+          "#AWSLambda",
+          "#AmazonEventBridge"
+        ],
+        "engagementPrompt": "How would you have approached this? I'd love to hear your take."
+      },
+      {
+        "platform": "X",
+        "title": "widget v1.0.0 is out",
+        "summary": "widget v1.0.0 ships this release. Full write-up + video below. 🧵",
+        "excerpt": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "keywords": [
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#DevOps",
+          "#AWS",
+          "#AWSLambda",
+          "#AmazonEventBridge"
+        ],
+        "engagementPrompt": "What would you build with this?"
+      },
+      {
+        "platform": "Facebook",
+        "title": "widget v1.0.0 — new release",
+        "summary": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "excerpt": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "keywords": [
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "hashtags": [
+          "#Aws",
+          "#Serverless",
+          "#Eventbridge",
+          "#Sqs",
+          "#Go"
+        ],
+        "engagementPrompt": "Have you tried something like this?"
+      },
+      {
+        "platform": "GitHub",
+        "title": "Release v1.0.0",
+        "summary": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "excerpt": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "keywords": [
+          "this release",
+          "AWS Lambda",
+          "aws",
+          "serverless"
+        ],
+        "engagementPrompt": "Issues and PRs welcome."
+      },
+      {
+        "platform": "Developer Communities",
+        "title": "How widget builds this release",
+        "summary": "A grounded, end-to-end look at this release in widget v1.0.0.",
+        "excerpt": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+        "keywords": [
+          "aws",
+          "serverless",
+          "eventbridge",
+          "sqs",
+          "go"
+        ],
+        "hashtags": [
+          "#Aws",
+          "#Serverless",
+          "#Eventbridge",
+          "#Sqs"
+        ],
+        "engagementPrompt": "Curious what the community would optimize first."
+      }
+    ]
+  },
+  "keywords": {
+    "primary": [
+      "this release",
+      "AWS Lambda",
+      "aws",
+      "serverless"
+    ],
+    "secondary": [
+      "Go",
+      "Amazon SQS",
+      "Amazon EventBridge",
+      "AWS CloudFormation",
+      "eventbridge",
+      "sqs"
+    ],
+    "longTail": [
+      "widget v1.0.0 architecture",
+      "event-driven pipeline with aws lambda and amazon eventbridge",
+      "AI-powered content generation from GitHub releases"
+    ],
+    "technical": [
+      "aws",
+      "serverless",
+      "eventbridge",
+      "sqs",
+      "go"
+    ],
+    "technology": [
+      "Go",
+      "AWS Lambda",
+      "Amazon SQS",
+      "Amazon EventBridge",
+      "AWS CloudFormation"
+    ],
+    "aws": [
+      "AWS Lambda",
+      "Amazon EventBridge",
+      "Amazon SQS",
+      "Amazon EC2",
+      "AWS CloudFormation",
+      "Amazon CloudWatch"
+    ],
+    "developer": [
+      "GitHub automation",
+      "AI content generation",
+      "technical blogging",
+      "developer productivity",
+      "Clean Architecture",
+      "DevOps"
+    ]
+  },
+  "hashtags": {
+    "youtube": [
+      "#Aws",
+      "#Serverless",
+      "#Eventbridge",
+      "#Sqs",
+      "#Go"
+    ],
+    "tiktok": [
+      "#SystemDesign",
+      "#Architecture",
+      "#CloudArchitecture",
+      "#AWSLambda",
+      "#AmazonEventBridge",
+      "#AmazonSQS"
+    ],
+    "linkedin": [
+      "#SoftwareEngineering",
+      "#CloudComputing",
+      "#AIEngineering",
+      "#AWSLambda",
+      "#AmazonEventBridge"
+    ],
+    "x": [
+      "#DevOps",
+      "#AWS",
+      "#AWSLambda",
+      "#AmazonEventBridge"
+    ],
+    "all": [
+      "#Aws",
+      "#Serverless",
+      "#Eventbridge",
+      "#Sqs",
+      "#Go",
+      "#SystemDesign",
+      "#Architecture",
+      "#CloudArchitecture",
+      "#AWSLambda",
+      "#AmazonEventBridge",
+      "#AmazonSQS",
+      "#SoftwareEngineering",
+      "#CloudComputing",
+      "#AIEngineering",
+      "#DevOps"
+    ]
+  },
+  "openGraph": {
+    "ogTitle": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+    "ogDescription": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+    "ogType": "article",
+    "ogSiteName": "widget",
+    "ogLocale": "en_US",
+    "ogImageGuidance": "1200x630 social card; use the generated Blog Header / GitHub Social Card visual asset. Alt: widget v1.0.0 — this release",
+    "twitter": {
+      "card": "summary_large_image",
+      "title": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+      "description": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+      "imageAlt": "widget v1.0.0 — this release"
+    }
+  },
+  "structuredData": {
+    "schemaType": "TechArticle",
+    "jsonLd": {
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      "about": [
+        "this release",
+        "AWS Lambda",
+        "aws",
+        "serverless"
+      ],
+      "articleSection": "Cloud \u0026 DevOps",
+      "author": {
+        "@type": "Organization",
+        "name": "widget"
+      },
+      "dateModified": "2026-07-22T11:24:37Z",
+      "datePublished": "2026-01-01T00:00:00Z",
+      "description": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+      "headline": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+      "inLanguage": "en",
+      "keywords": "this release, AWS Lambda, aws, serverless, Go, Amazon SQS, Amazon EventBridge, AWS CloudFormation, eventbridge, sqs, Amazon EC2, Amazon CloudWatch",
+      "publisher": {
+        "@type": "Organization",
+        "name": "widget"
+      },
+      "wordCount": 270
+    },
+    "rss": {
+      "title": "Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS",
+      "link": "https://github.com/acme/widget",
+      "description": "Widget v1.0.0 is the first production release — an event-driven, serverless widget-processing platform built with Go on AWS. This post walks through what changed, how the pipeline works, and why it matters. The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy,…",
+      "categories": [
+        "aws",
+        "serverless",
+        "eventbridge",
+        "sqs",
+        "go"
+      ],
+      "pubDate": "2026-01-01T00:00:00Z",
+      "guid": "https://github.com/acme/widget/releases/tag/v1.0.0"
+    },
+    "sitemap": {
+      "changefreq": "monthly",
+      "priority": "0.8",
+      "lastmod": "2026-07-22T11:24:37Z"
+    }
+  },
+  "contentIntelligence": {
+    "audience": "Software engineers, cloud, DevOps, and AI developers",
+    "difficulty": "intermediate",
+    "topic": "this release",
+    "category": "Cloud \u0026 DevOps",
+    "contentType": "Technical tutorial / release deep dive",
+    "technologyStack": [
+      "Go",
+      "AWS Lambda",
+      "Amazon SQS",
+      "Amazon EventBridge",
+      "AWS CloudFormation"
+    ],
+    "cloudServices": [
+      "AWS Lambda",
+      "Amazon EventBridge",
+      "Amazon SQS",
+      "Amazon EC2",
+      "AWS CloudFormation",
+      "Amazon CloudWatch"
+    ],
+    "programmingLanguages": [
+      "Go"
+    ],
+    "estimatedReadingTime": "1 min read",
+    "estimatedWatchTime": "1:40",
+    "searchIntent": "informational / how-to",
+    "userIntent": "learn how the release works and how to build something similar",
+    "seoConfidenceScore": 100
+  }
+}

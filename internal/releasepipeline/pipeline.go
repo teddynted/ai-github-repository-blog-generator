@@ -10,6 +10,7 @@ package releasepipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -19,7 +20,12 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/semver"
 )
+
+// ErrInvalidVersion is returned when a release tag is not valid SemVer 2.0.0, so
+// callers can errors.Is it (the pipeline fails this gate before any generation).
+var ErrInvalidVersion = errors.New("releasepipeline: invalid semantic version")
 
 // ContextBuilder builds a Release Context (satisfied by *releasecontext.Builder).
 type ContextBuilder interface {
@@ -89,6 +95,13 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 	// one of them, plus the always-needed stages.
 	if p.Builder == nil || (p.Generator == nil && p.Suite == nil) || p.Reviewer == nil || p.Publisher == nil {
 		return Result{}, fmt.Errorf("release pipeline is missing a required stage")
+	}
+
+	// Semantic Version Validation — the first gate. Reject a non-SemVer release
+	// tag before doing any context-building or generation work, so an invalid
+	// release fails fast and cheaply. Reuses internal/semver (no duplicate logic).
+	if !semver.IsValid(req.ReleaseTag) {
+		return Result{}, fmt.Errorf("%w: release tag %q is not a valid SemVer 2.0.0 version", ErrInvalidVersion, req.ReleaseTag)
 	}
 
 	rctx, err := p.Builder.Build(ctx, req)

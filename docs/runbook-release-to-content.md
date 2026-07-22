@@ -1,11 +1,14 @@
 # Runbook: Release → Content (end-to-end validation)
 
 This runbook validates the complete pipeline on a live AWS account: publishing a
-GitHub Release produces a reviewed, published technical blog post. It exercises
-Milestone 2 (Release Context) and Milestone 3 (Content Generation) together with
-the existing review/publish/notify stages.
+GitHub Release produces the **full, reviewed, published content suite** — blog,
+storyboard, voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture,
+LinkedIn, and X thread. It exercises Semantic Version validation, Milestone 2
+(Release Context), the Milestone 3–13 content suite, and the review/publish/notify
+stages together. No manual `generate-all` invocation is required — the worker's
+release path runs the whole suite automatically.
 
-Related: [Deployment](./deployment.md) · [Release Context](./release-context.md) · [Blog Generation](./blog-generation.md).
+Related: [Deployment](./deployment.md) · [Release Context](./release-context.md) · [Full Content Suite](./content-suite.md) · [Blog Generation](./blog-generation.md).
 
 ---
 
@@ -17,9 +20,11 @@ flowchart LR
     WH -->|release event| EB[EventBridge]
     EB --> SQS[(SQS)]
     SQS --> W[worker on EC2]
-    W --> CTX[Release Context]
-    CTX --> GEN[blog + summary via Ollama]
-    GEN --> REV[review] --> PUB[publish] --> OUT[(output bucket / EBS)]
+    W --> SV{SemVer valid?}
+    SV -- no --> STOP[reject early]
+    SV -- yes --> CTX[Release Context]
+    CTX --> GEN[full content suite via Ollama\nblog → … → X thread]
+    GEN --> REV[review] --> APP[approval] --> PUB[publish] --> OUT[(output bucket / EBS)]
     W -.-> NOTE[notify]
 ```
 

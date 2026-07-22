@@ -172,7 +172,7 @@ func TestPipelineFullSuite(t *testing.T) {
 func TestPipelineAllRejected(t *testing.T) {
 	note := &fakeNotifier{}
 	p := newPipeline(fakeReviewer{passAll: false}, &fakePublisher{}, note)
-	res, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1"})
+	res, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1.0.0"})
 	if err == nil {
 		t.Fatal("expected error when all assets fail review")
 	}
@@ -191,21 +191,38 @@ func TestPipelineGeneratorFailsAll(t *testing.T) {
 		Reviewer:  fakeReviewer{passAll: true},
 		Publisher: &fakePublisher{},
 	}
-	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1"}); err == nil {
+	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1.0.0"}); err == nil {
 		t.Error("expected error when no content is generated")
 	}
 }
 
 func TestPipelinePublishError(t *testing.T) {
 	p := newPipeline(fakeReviewer{passAll: true}, &fakePublisher{err: errors.New("disk full")}, &fakeNotifier{})
-	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1"}); err == nil {
+	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1.0.0"}); err == nil {
 		t.Error("expected publish error to propagate")
+	}
+}
+
+func TestPipelineRejectsInvalidSemVer(t *testing.T) {
+	pub := &fakePublisher{}
+	p := newPipeline(fakeReviewer{passAll: true}, pub, &fakeNotifier{})
+	// A non-SemVer tag must fail the first gate, before any context build/generation.
+	_, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "not-a-version"})
+	if !errors.Is(err, ErrInvalidVersion) {
+		t.Fatalf("expected ErrInvalidVersion, got %v", err)
+	}
+	if len(pub.assets) != 0 {
+		t.Error("nothing should be generated/published for an invalid version")
+	}
+	// A valid SemVer tag (with or without a leading v) passes the gate.
+	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v0.2.0"}); err != nil {
+		t.Errorf("valid SemVer should pass the gate: %v", err)
 	}
 }
 
 func TestPipelineMissingStage(t *testing.T) {
 	p := &Pipeline{Builder: &fakeBuilder{ctx: sampleContext()}}
-	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1"}); err == nil {
+	if _, err := p.Run(context.Background(), rc.Request{Owner: "a", Repository: "b", ReleaseTag: "v1.0.0"}); err == nil {
 		t.Error("expected error for missing stages")
 	}
 }

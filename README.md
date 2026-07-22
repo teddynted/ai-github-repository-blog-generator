@@ -81,7 +81,14 @@ Supported outputs include technical blog posts, README improvements, documentati
 
 **What works end to end today:**
 
-register repo → **trigger** (webhook HMAC + commit-trigger gate, _or_ authenticated `POST /process`) → EventBridge → SQS → (scheduled 18:00 On-Demand start, or manual on-demand start) → **worker**: skip-if-already-published → clone repo (go-git) → read README/docs/commits → generate 5 content types via local Ollama → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → scheduled 20:00 stop.
+register repo → **trigger** (webhook HMAC + commit-trigger gate, _or_ authenticated `POST /process`) → EventBridge → SQS → (scheduled 18:00 On-Demand start, or manual on-demand start) → **worker** → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → scheduled 20:00 stop.
+
+The worker drives **two automated paths** through the same review/approval/publish stages:
+
+- **A published GitHub Release** → SemVer gate → Release Context → the **complete content suite** (blog, storyboard, voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture, LinkedIn, X thread) — generated automatically, **no manual step**. See [Full Content Suite](./docs/content-suite.md).
+- **A matching `blog:` commit** → clone repo (go-git) → read README/docs/commits → generate the written core (blog, README, docs, architecture summary, release notes, architecture diagram) via local Ollama.
+
+`cmd/generate-all` runs the *same* content-suite orchestrator manually (local/CI/one-off) — the manual door onto the pipeline the release path runs automatically.
 
 | Area | Status |
 | --- | --- |
@@ -89,7 +96,8 @@ register repo → **trigger** (webhook HMAC + commit-trigger gate, _or_ authenti
 | Webhook handler — HMAC verify + commit-message trigger gate (no AI, never reads the PAT) | ✅ Implemented |
 | Event processing — EventBridge → SQS buffer (drained during the scheduled window) | ✅ Implemented |
 | Instance lifecycle — scheduled weekday start/stop (EventBridge Scheduler) | ✅ Implemented |
-| Content pipeline — clone, analyse, generate (5 types), review, approval, publish, memory, notify | ✅ Implemented |
+| Release pipeline — published Release → SemVer gate → Release Context → **full content suite** (11 artifacts) → review, approval, publish | ✅ Implemented |
+| Commit pipeline — `blog:` commit → clone, analyse, generate written core, review, approval, publish, memory, notify | ✅ Implemented |
 | Local inference — Ollama + Qwen (no paid API) | ✅ Implemented |
 | Infrastructure — modular CloudFormation (`cfn-lint`-clean) | ✅ Implemented |
 | CI/CD — Go tests, cfn-lint, security scanning, opt-in OIDC deploy | ✅ Implemented |
@@ -879,6 +887,7 @@ Contributions are welcome! Please read [`docs/contributing.md`](./docs/contribut
 | [Shared Baked AMI](./docs/baked-ami.md) | AI Platform Base AMI — golden-image build (Packer/Image Builder), semver + metadata, SSM/CloudFormation publishing, reusable Launch Template, lifecycle cleanup, rollback, and downstream consumption (with all lifecycle diagrams) |
 | [Reusable CloudFormation Modules](./docs/cfn-modules.md) | Cross-stack platform library — network/IAM/compute/storage/database/monitoring/messaging modules, nested root stack, Exports + SSM contracts, naming standards, versioning, migration guide, and consumer example (with all dependency/flow diagrams) |
 | [Runbook: Release → Content](./docs/runbook-release-to-content.md) | End-to-end live validation — publish a release, verify a blog post is generated and published |
+| [Configuration Reference](./docs/configuration.md) | Every environment variable — purpose, required/optional, default, example, format, and validation |
 | [Security](./docs/security.md) | IAM, signature validation, secrets, and SSH |
 | [Monitoring](./docs/monitoring.md) | CloudWatch logs, metrics, and alarms |
 | [Local Development](./docs/local-development.md) | Running the stack locally with Docker Compose |

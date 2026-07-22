@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
@@ -129,125 +130,159 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	// --- M3 Blog (foundational) ---
 	if blog != nil {
 		s.Blog = *blog
-		s.record("blog", 3, StageOK, "01-blog.md", nil, s.Blog.Markdown)
+		s.record(stageOutcome{name: "blog", milestone: 3, filename: "01-blog.md", status: StageOK, md: s.Blog.Markdown})
 	} else {
-		o.stage(s, "blog", 3, "01-blog.md", func() (string, error) {
+		s.record(o.run("blog", 3, "01-blog.md", func() (string, error) {
 			b, err := (&releasegen.Generator{Model: o.Model}).Blog(ctx, rctx)
 			s.Blog = b
 			return b.Markdown, err
-		})
+		}))
 	}
 
 	// --- M4 Storyboard (blog + context) ---
-	o.stage(s, "storyboard", 4, "02-storyboard.md", func() (string, error) {
+	s.record(o.run("storyboard", 4, "02-storyboard.md", func() (string, error) {
 		sb, err := (&storyboard.Generator{Model: o.Model}).Storyboard(ctx, s.Blog, rctx)
 		s.Storyboard = sb
 		return sb.Markdown(), err
-	})
+	}))
 
 	// --- M5 Voice-over (storyboard) ---
-	o.stage(s, "voiceover", 5, "03-voiceover.md", func() (string, error) {
+	s.record(o.run("voiceover", 5, "03-voiceover.md", func() (string, error) {
 		vo, err := (&voiceover.Generator{Model: o.Model}).VoiceOver(ctx, s.Storyboard)
 		s.VoiceOver = vo
 		return vo.Markdown(), err
-	})
+	}))
+
+	// --- M11 Architecture (context+blog+storyboard) runs CONCURRENTLY with the
+	// M6→M10 chain: it depends only on the blog + storyboard (both ready), not on
+	// the YouTube→SEO chain. Its result is recorded in canonical position (after
+	// SEO) so the manifest/artifact order stays deterministic regardless of timing.
+	var wg sync.WaitGroup
+	var archOut stageOutcome
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		archOut = o.run("architecture", 11, "09-architecture.md", func() (string, error) {
+			col, err := (&architecture.Generator{Model: o.Model}).Architecture(ctx, architecture.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
+			})
+			s.Architecture = col
+			return col.Markdown(), err
+		})
+	}()
 
 	// --- M6 YouTube script (context+blog+storyboard+voiceover) ---
-	o.stage(s, "youtube", 6, "04-youtube-script.md", func() (string, error) {
+	s.record(o.run("youtube", 6, "04-youtube-script.md", func() (string, error) {
 		sc, err := (&youtube.Generator{Model: o.Model}).YouTube(ctx, youtube.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver,
 		})
 		s.YouTube = sc
 		return sc.Markdown(), err
-	})
+	}))
 
 	// --- M7 YouTube Shorts (+youtube) ---
-	o.stage(s, "youtube-shorts", 7, "05-youtube-shorts.md", func() (string, error) {
+	s.record(o.run("youtube-shorts", 7, "05-youtube-shorts.md", func() (string, error) {
 		col, err := (&shorts.Generator{Model: o.Model, MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
 		})
 		s.Shorts = col
 		return col.Markdown(), err
-	})
+	}))
 
 	// --- M8 TikTok (+shorts) ---
-	o.stage(s, "tiktok", 8, "06-tiktok.md", func() (string, error) {
+	s.record(o.run("tiktok", 8, "06-tiktok.md", func() (string, error) {
 		col, err := (&tiktok.Generator{Model: o.Model, MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts,
 		})
 		s.TikTok = col
 		return col.Markdown(), err
-	})
+	}))
 
 	// --- M9 Visual Assets (+tiktok) ---
-	o.stage(s, "visual-assets", 9, "07-visual-assets.md", func() (string, error) {
+	s.record(o.run("visual-assets", 9, "07-visual-assets.md", func() (string, error) {
 		col, err := (&visualassets.Generator{Model: o.Model, MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok,
 		})
 		s.VisualAssets = col
 		return col.Markdown(), err
-	})
+	}))
 
 	// --- M10 SEO metadata (+visual assets) ---
-	o.stage(s, "seo-metadata", 10, "08-seo-metadata.md", func() (string, error) {
+	s.record(o.run("seo-metadata", 10, "08-seo-metadata.md", func() (string, error) {
 		m, err := (&seo.Generator{Model: o.Model}).SEO(ctx, seo.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets,
 		})
 		s.SEO = m
 		return m.Markdown(), err
-	})
+	}))
 
-	// --- M11 Architecture diagrams (context+blog+storyboard) ---
-	o.stage(s, "architecture", 11, "09-architecture.md", func() (string, error) {
-		col, err := (&architecture.Generator{Model: o.Model}).Architecture(ctx, architecture.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
-		})
-		s.Architecture = col
-		return col.Markdown(), err
-	})
+	// Join the architecture branch and record it at its canonical position (11).
+	wg.Wait()
+	s.record(archOut)
 
-	// --- M12 LinkedIn (everything) ---
-	o.stage(s, "linkedin", 12, "10-linkedin.md", func() (string, error) {
-		col, err := (&linkedin.Generator{Model: o.Model, MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-			Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+	// --- M12 LinkedIn and M13 X thread both depend on everything above but NOT on
+	// each other, so they run concurrently; results are recorded in canonical order.
+	var liOut, xtOut stageOutcome
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		liOut = o.run("linkedin", 12, "10-linkedin.md", func() (string, error) {
+			col, err := (&linkedin.Generator{Model: o.Model, MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+				Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+			})
+			s.LinkedIn = col
+			return col.Markdown(), err
 		})
-		s.LinkedIn = col
-		return col.Markdown(), err
-	})
-
-	// --- M13 X thread (everything) ---
-	o.stage(s, "x-thread", 13, "11-x-thread.md", func() (string, error) {
-		col, err := (&xthread.Generator{Model: o.Model, MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-			Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+	}()
+	go func() {
+		defer wg.Done()
+		xtOut = o.run("x-thread", 13, "11-x-thread.md", func() (string, error) {
+			col, err := (&xthread.Generator{Model: o.Model, MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+				Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+			})
+			s.XThread = col
+			return col.Markdown(), err
 		})
-		s.XThread = col
-		return col.Markdown(), err
-	})
+	}()
+	wg.Wait()
+	s.record(liOut)
+	s.record(xtOut)
 
 	return s
 }
 
-// stage runs one generator, recording the outcome and appending the artifact on
-// success. A failure is logged and recorded — never fatal.
-func (o *Orchestrator) stage(s *Suite, name string, milestone int, filename string, fn func() (string, error)) {
+// stageOutcome is the computed result of one stage, before it is recorded into
+// the manifest. Separating computation from recording lets independent stages run
+// concurrently while the manifest and artifact list stay in canonical order.
+type stageOutcome struct {
+	name      string
+	milestone int
+	filename  string
+	status    StageStatus
+	err       error
+	md        string
+}
+
+// run executes one generator and returns its outcome WITHOUT touching shared
+// manifest state, so it is safe to call from concurrent goroutines. A deliberate
+// "nothing to do" refusal (no infrastructure to diagram, no Short-worthy moments,
+// no TikTok-worthy topics) becomes a graceful skip, not a failure. The caller
+// records the outcome (Suite.record) in canonical order.
+func (o *Orchestrator) run(name string, milestone int, filename string, fn func() (string, error)) stageOutcome {
 	md, err := fn()
 	if err != nil {
-		// A deliberate "nothing to do" refusal (no infrastructure to diagram, no
-		// Short-worthy moments, no TikTok-worthy topics) is a graceful skip, not a
-		// failure — the generator is honouring its grounding, not breaking.
 		status := StageFailed
 		if isSkip(err) {
 			status = StageSkipped
 		}
-		s.record(name, milestone, status, "", err, "")
 		if o.Logger != nil {
 			o.Logger.Warn("content stage "+string(status), slog.String("stage", name), slog.Int("milestone", milestone), slog.String("error", err.Error()))
 		}
-		return
+		return stageOutcome{name: name, milestone: milestone, status: status, err: err}
 	}
-	s.record(name, milestone, StageOK, filename, nil, md)
+	return stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: md}
 }
 
 // isSkip reports whether an error is a grounded "nothing worthy to generate"
@@ -259,17 +294,21 @@ func isSkip(err error) bool {
 		errors.Is(err, tiktok.ErrNoTopics)
 }
 
-func (s *Suite) record(name string, milestone int, status StageStatus, filename string, err error, md string) {
-	r := StageResult{Name: name, Milestone: milestone, Status: status, Artifact: filename}
-	if err != nil {
-		r.Error = err.Error()
+// record appends a stage outcome to the manifest (and the artifact list on
+// success). It is called only from the orchestrating goroutine, in canonical
+// milestone order, so the manifest is deterministic even when stages run
+// concurrently.
+func (s *Suite) record(o stageOutcome) {
+	r := StageResult{Name: o.name, Milestone: o.milestone, Status: o.status, Artifact: o.filename}
+	if o.err != nil {
+		r.Error = o.err.Error()
 	}
 	s.Manifest.Stages = append(s.Manifest.Stages, r)
-	switch status {
+	switch o.status {
 	case StageOK:
 		s.Manifest.Produced++
-		if filename != "" {
-			s.artifacts = append(s.artifacts, Artifact{Filename: filename, Kind: name, Markdown: md})
+		if o.filename != "" {
+			s.artifacts = append(s.artifacts, Artifact{Filename: o.filename, Kind: o.name, Markdown: o.md})
 		}
 	case StageSkipped:
 		s.Manifest.Skipped++
