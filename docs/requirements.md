@@ -4,7 +4,7 @@ This document defines the requirements for the **GitHub AI Blog Generator** — 
 
 For the **MVP**, users onboard a repository by providing a **GitHub Repository URL** and a **GitHub Personal Access Token (PAT)**. The platform validates access, creates a GitHub webhook, stores repository metadata, and stores the PAT securely in **AWS Secrets Manager**. GitHub App authentication is a **future enhancement** ([§15](#15-future-enhancements)).
 
-When a matched webhook event or a manual `POST /process` request arrives, it is published to **Amazon EventBridge** and buffered in **Amazon SQS**. Compute runs on an **On-Demand EC2 Instance** powered on a fixed weekday window (18:00–20:00, Mon–Fri) by **EventBridge Scheduler** (a manual request additionally starts the host on demand), where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
+When a matched webhook event or a manual `POST /process` request arrives, it is published to **Amazon EventBridge** and buffered in **Amazon SQS**. Compute runs on an **On-Demand EC2 Instance** powered on a fixed daily window (18:00–20:00, 7 days a week) by **EventBridge Scheduler** (a manual request additionally starts the host on demand), where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
 
 Requirements use the following convention:
 
@@ -239,7 +239,7 @@ All infrastructure MUST be provisioned with **AWS CloudFormation**. **Terraform 
 | INF-5 | Provision a **persistent gp3 EBS volume** for models, n8n state, and Repository Memory. | MUST |
 | INF-6 | Provision **Amazon API Gateway** for the webhook ingress and the **registration** endpoint. | MUST |
 | INF-7 | Provision **AWS Lambda** functions: registration, webhook handler, scheduled start, scheduled stop. | MUST |
-| INF-8 | Provision **Amazon EventBridge** (event bus + rule) for matched events, and **EventBridge Scheduler** for the weekday power window. | MUST |
+| INF-8 | Provision **Amazon EventBridge** (event bus + rule) for matched events, and **EventBridge Scheduler** for the daily power window. | MUST |
 | INF-9 | Provision **Amazon SQS** (with a dead-letter queue) as the durable event buffer. | MUST |
 | INF-10 | Provision **AWS Secrets Manager** for GitHub PATs and per-repository webhook secrets. | MUST |
 | INF-11 | Provision a **metadata store** (Amazon DynamoDB) for repository metadata. | MUST |
@@ -277,9 +277,9 @@ See [Cost Optimisation](./cost-optimization.md).
 | --- | --- | --- |
 | COST-1 | **Repository access and token permissions MUST be validated at registration**, before any AI execution. | MUST |
 | COST-2 | **Trigger pre-filtering** MUST occur before any compute or AI is invoked. | MUST |
-| COST-3 | Compute MUST be **scheduled**: the EC2 instance MUST NOT run continuously — it runs only during a fixed weekday window. | MUST |
-| COST-4 | The compute host MUST be an **On-Demand EC2 Instance** whose power is owned by **EventBridge Scheduler** (default 18:00–20:00, Mon–Fri); the webhook path MUST NOT start it. | MUST |
-| COST-5 | The instance MUST be **stopped automatically** at the scheduled stop time (default 20:00, Mon–Fri). | MUST |
+| COST-3 | Compute MUST be **scheduled**: the EC2 instance MUST NOT run continuously — it runs only during a fixed daily window. | MUST |
+| COST-4 | The compute host MUST be an **On-Demand EC2 Instance** whose power is owned by **EventBridge Scheduler** (default 18:00–20:00, 7 days a week); the webhook path MUST NOT start it. | MUST |
+| COST-5 | The instance MUST be **stopped automatically** at the scheduled stop time (default 20:00, daily). | MUST |
 | COST-6 | Models, state, and Repository Memory MUST persist on **EBS** to avoid re-downloading models. | MUST |
 | COST-7 | **Amazon SQS** MUST buffer matched events that arrive outside the window so none is lost (processed at the next scheduled start). | MUST |
 | COST-8 | GitHub secrets MUST be retrieved **only when necessary**. | MUST |

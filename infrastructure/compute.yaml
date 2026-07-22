@@ -3,8 +3,8 @@ Description: >
   GitHub AI Blog Generator - Compute stack. An On-Demand EC2 instance (Ubuntu)
   that runs n8n + OpenClaw + Ollama via Docker Compose, plus a persistent gp3
   EBS volume that survives start/stop cycles (models, n8n state, Repository
-  Memory). The instance is powered on/off on a fixed weekday schedule by the
-  scheduler stack (default 18:00-20:00 Mon-Fri); On-Demand is used so a start
+  Memory). The instance is powered on/off on a fixed daily schedule by the
+  scheduler stack (default 18:00-20:00, 7 days a week); On-Demand is used so a start
   always succeeds within that window (no Spot-capacity dependency). Imports the
   subnet and security group from the network stack and the SQS queue from the
   serverless stack.
@@ -231,8 +231,8 @@ Resources:
   # A launch template centralizes the instance configuration (type, AMI, key,
   # profile, security group, root volume, user data) so the AWS::EC2::Instance
   # below stays a thin reference. This is an On-Demand instance: there are no
-  # InstanceMarketOptions, so a start (from the scheduler stack at 18:00 on a
-  # weekday, or a manual maintenance start) always succeeds without depending on
+  # InstanceMarketOptions, so a start (from the scheduler stack at 18:00 daily,
+  # or a manual maintenance start) always succeeds without depending on
   # Spot capacity at a max price.
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate

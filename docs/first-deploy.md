@@ -202,12 +202,12 @@ opt-in gate working.
 | --- | --- |
 | GitHub → Webhooks | Delivery shows ✓ (HTTP 200) |
 | CloudWatch (handler) | verify → trigger match → PutEvents |
-| EC2 | instance is `running` during the window (18:00–20:00 Mon–Fri); force a start now with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` |
+| EC2 | instance is `running` during the window (18:00–20:00 daily); force a start now with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` |
 | Instance (SSH) | `docker ps` shows `ollama`; `curl -s localhost:11434/api/tags` lists the model; `nvidia-smi` (GPU); `systemctl status blog-gen-worker` active |
 | Instance (SSH) | `journalctl -u blog-gen-worker -f` — process → generate → review → publish |
 | Output | new Markdown at the destination (S3 `OUTPUT_S3_BUCKET`, else `/data/generated-content`) |
 | Email | notification arrives (if configured) |
-| EC2 | returns to `stopped` at the scheduled stop (20:00 Mon–Fri) |
+| EC2 | returns to `stopped` at the scheduled stop (20:00 daily) |
 
 The generated package includes the blog, README/docs suggestions, an
 architecture summary, release notes, and the evidence-grounded **AWS
@@ -235,7 +235,7 @@ architecture diagrams**.
   fix; Ollama auto-falls back to CPU so the pipeline still runs. See the Ollama
   notes in [development-plan.md](./development-plan.md).
 - **Scheduled stop/start** — at 20:00 the instance stops; the gp3 volume (models,
-  memory) persists, and the next weekday 18:00 start brings it back with data
+  memory) persists, and the next daily 18:00 start brings it back with data
   intact. Buffered events wait in SQS until then.
 - **`InsufficientInstanceCapacity` / "do not have sufficient g4dn.xlarge capacity
   in <az>"** — that AZ is momentarily out of On-Demand capacity for the type. Set

@@ -63,7 +63,7 @@ jobs:
       - name: build + package lambdas
         run: |
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
-          # owns instance power on the fixed weekday window (deployed below,
+          # owns instance power on the fixed daily window (deployed below,
           # wired to the compute stack's InstanceId).
           for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
@@ -166,15 +166,15 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides $PARAMS
 
-      - name: deploy scheduler stack (weekday power window)
+      - name: deploy scheduler stack (daily power window)
         env:
-          # Optional overrides; defaults are Etc/UTC and 18:00-20:00 Mon-Fri
+          # Optional overrides; defaults are Etc/UTC and 18:00-20:00 every day (Mon-Sun)
           # (the scheduler.yaml defaults). Set SCHEDULE_TIMEZONE to run the
           # window in local wall-clock time (e.g. Africa/Johannesburg).
           SCHEDULE_TIMEZONE: ${{ vars.SCHEDULE_TIMEZONE }}
         run: |
           # The scheduler stack owns instance power: it starts the On-Demand host
-          # at 18:00 and stops it at 20:00, Mon-Fri. Wire it to the compute
+          # at 18:00 and stops it at 20:00, every day (7 days a week). Wire it to the compute
           # stack's InstanceId so the schedule targets the real host.
           INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
             --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)

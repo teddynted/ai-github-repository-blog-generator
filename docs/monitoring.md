@@ -108,7 +108,7 @@ Alarms publish to an SNS topic subscribed by the operator (and optionally Slack)
 | --- | --- | --- |
 | Elevated `ColdStartMs` | Instance/model warm-up is slow at the 18:00 start | Verify EBS re-attach; confirm model is cached, not re-downloaded |
 | `StatusCheckFailed` / instance terminated | Host unhealthy or replaced | SQS visibility timeout returns the message; the next scheduled start resumes work |
-| No start at 18:00 on a weekday | `scheduled-start` failed or schedule misconfigured | Check the start Lambda logs and `ScheduleTimezone`/`ScheduleState` |
+| No start at 18:00 | `scheduled-start` failed or schedule misconfigured | Check the start Lambda logs and `ScheduleTimezone`/`ScheduleState` |
 | DLQ messages appearing | Repeated processing failure | Inspect payload and n8n logs; fix and redrive |
 
 Because the instance stops and starts on the schedule, in-flight work at 20:00 that does not complete returns to the queue and is retried at the next start ([Cost Optimisation §5](./cost-optimization.md#5-on-demand-on-a-schedule-not-spot)).
@@ -118,7 +118,7 @@ Because the instance stops and starts on the schedule, in-flight work at 20:00 t
 ## 7. Cost & Idle Monitoring
 
 - Track **triggered vs ignored** ratio — a sudden rise in `TriggerMatched` may indicate misuse of the `blog:` trigger and rising cost.
-- Track instance **running hours** to confirm the schedule works — the instance should be `running` only 18:00–20:00 on weekdays and `stopped` otherwise.
+- Track instance **running hours** to confirm the schedule works — the instance should be `running` only 18:00–20:00 every day and `stopped` otherwise.
 - A `scheduled-stop` error is a **cost risk**: if the instance fails to stop at 20:00, it keeps billing until the next successful stop.
 - Because inference is local, there are **no token/usage metrics to bill** — cost tracking focuses on EC2 running time and EBS size ([Cost Optimisation](./cost-optimization.md)).
 

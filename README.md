@@ -60,7 +60,7 @@
 
 **GitHub AI Blog Generator** is a fully self-hosted, event-driven AI platform that turns any GitHub repository into publication-ready technical content — **on demand, under your explicit control**.
 
-You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, creates the webhook, stores metadata, and stores the token securely in **AWS Secrets Manager**. From then on, the platform monitors the repository with **GitHub Webhooks** — but **receiving a webhook does not automatically generate anything**. Every event is first checked against a **configurable commit-message trigger** (default `blog:`). Only when a commit message matches does the platform publish the event to **Amazon EventBridge**, which durably buffers it in **Amazon SQS**. The compute host — an **On-Demand EC2 instance** — runs on a fixed **weekday schedule (18:00–20:00, Mon–Fri)** driven by EventBridge Scheduler, and the worker drains the buffered events while it is up. Every non-matching event is acknowledged with `HTTP 200` and ignored.
+You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, creates the webhook, stores metadata, and stores the token securely in **AWS Secrets Manager**. From then on, the platform monitors the repository with **GitHub Webhooks** — but **receiving a webhook does not automatically generate anything**. Every event is first checked against a **configurable commit-message trigger** (default `blog:`). Only when a commit message matches does the platform publish the event to **Amazon EventBridge**, which durably buffers it in **Amazon SQS**. The compute host — an **On-Demand EC2 instance** — runs on a fixed **daily schedule (18:00–20:00, 7 days a week)** driven by EventBridge Scheduler, and the worker drains the buffered events while it is up. Every non-matching event is acknowledged with `HTTP 200` and ignored.
 
 AI processing can be initiated in **two ways**, both feeding the *same* pipeline (EventBridge → SQS → worker):
 
@@ -95,7 +95,7 @@ The worker drives **two automated paths** through the same review/approval/publi
 | Repository registration (URL + PAT → Secrets Manager + DynamoDB, auto webhook) | ✅ Implemented |
 | Webhook handler — HMAC verify + commit-message trigger gate (no AI, never reads the PAT) | ✅ Implemented |
 | Event processing — EventBridge → SQS buffer (drained during the scheduled window) | ✅ Implemented |
-| Instance lifecycle — scheduled weekday start/stop (EventBridge Scheduler) | ✅ Implemented |
+| Instance lifecycle — scheduled daily start/stop (EventBridge Scheduler) | ✅ Implemented |
 | Release pipeline — published Release → SemVer gate → Release Context → **full content suite** (11 artifacts) → review, approval, publish | ✅ Implemented |
 | Commit pipeline — `blog:` commit → clone, analyse, generate written core, review, approval, publish, memory, notify | ✅ Implemented |
 | Local inference — Ollama + Qwen (no paid API) | ✅ Implemented |
@@ -122,7 +122,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 
 - **Opt-in, not automatic.** Content is generated **only** for commits you explicitly mark with a `blog:` trigger. Normal development never produces content.
 - **No paid inference.** All models run locally via Ollama. You are never billed per token.
-- **Bounded, scheduled compute.** The On-Demand instance runs only during a fixed weekday window (18:00–20:00, Mon–Fri); outside it the system costs only cents per month (EBS storage).
+- **Bounded, scheduled compute.** The On-Demand instance runs only during a fixed daily window (18:00–20:00, 7 days a week); outside it the system costs only cents per month (EBS storage).
 - **Own your data.** Repository content is analysed on infrastructure you control; nothing is sent to a third-party model provider.
 - **Reproducible infrastructure.** Everything is defined in modular AWS CloudFormation — no click-ops, no Terraform.
 
@@ -161,7 +161,7 @@ Most "AI content" projects assume two things this project rejects: that every re
 | 🔐 **Signature validation** | Every delivery is verified with HMAC SHA-256 before evaluation |
 | 🧭 **EventBridge event bus** | Matched events are published to EventBridge, which buffers the run in SQS |
 | 📥 **Durable buffering** | Events are held in Amazon SQS so nothing is lost while the instance is outside its window |
-| ⏰ **Scheduled compute** | The On-Demand EC2 instance runs on a fixed weekday window (18:00–20:00, Mon–Fri) via EventBridge Scheduler |
+| ⏰ **Scheduled compute** | The On-Demand EC2 instance runs on a fixed daily window (18:00–20:00, 7 days a week) via EventBridge Scheduler |
 | 🧠 **Local LLM inference** | Ollama runs Qwen (or any local model) — no external API, no per-token cost |
 | 🔍 **Deep repository analysis** | OpenClaw inspects README, source, structure, IaC, Docker, CI/CD, and docs |
 | 🗂️ **Repository Memory** | Persistent per-repo memory of prior analyses and published topics for continuity and de-duplication |
@@ -291,7 +291,7 @@ flowchart TD
     PUT --> EB["Amazon EventBridge (event bus)"]
     EB --> SQS[("Amazon SQS (durable buffer + DLQ)")]
 
-    SCHED["EventBridge Scheduler<br/>(18:00 / 20:00, Mon–Fri)"] --> PWR["Lambda: scheduled-start / scheduled-stop"]
+    SCHED["EventBridge Scheduler<br/>(18:00 / 20:00, daily)"] --> PWR["Lambda: scheduled-start / scheduled-stop"]
     PWR -->|"Start/StopInstances"| EC2
 
     subgraph EC2["EC2 On-Demand Instance (Ubuntu + Docker Compose)"]
@@ -324,9 +324,9 @@ flowchart TD
    - **No match** → return **HTTP 200** and stop. Nothing else runs.
    - **Match** → **publish the event to Amazon EventBridge** and return HTTP 200.
 4. **EventBridge** routes the matched event to the **SQS** durable buffer. The webhook does **not** start the instance; the handler reports `accepted` if the host is currently running (inside the window) or `deferred` if it is not.
-5. **EventBridge Scheduler** starts the **On-Demand EC2 instance** at **18:00 (Mon–Fri)**; it boots Ubuntu with Docker Compose running **n8n**, **OpenClaw**, and **Ollama**.
+5. **EventBridge Scheduler** starts the **On-Demand EC2 instance** at **18:00 (daily)**; it boots Ubuntu with Docker Compose running **n8n**, **OpenClaw**, and **Ollama**.
 6. **n8n polls SQS** and runs the pipeline over the buffered backlog: checkout → analysis → **Repository Memory** → topic identification → outline → **AI generation (Ollama/Qwen)** → quality review → **optional human approval** → publish → notify.
-7. **EventBridge Scheduler** stops the instance at **20:00 (Mon–Fri)** via the **scheduled-stop Lambda**.
+7. **EventBridge Scheduler** stops the instance at **20:00 (daily)** via the **scheduled-stop Lambda**.
 
 For a deeper treatment, see [`docs/architecture.md`](./docs/architecture.md).
 
@@ -357,13 +357,13 @@ sequenceDiagram
     end
 
     Note over SCH,EC2: Weekday schedule owns instance power
-    SCH->>EC2: StartInstances (18:00 Mon–Fri)
+    SCH->>EC2: StartInstances (18:00 daily)
     Note over EC2: Ubuntu + Docker Compose + Ollama
     N8N->>SQS: poll for events
     SQS-->>N8N: buffered publish-requested event(s)
     N8N->>N8N: checkout → analyze → memory → topic → outline
     N8N->>N8N: generate (Ollama/Qwen) → review → (approval) → publish → notify
-    SCH->>EC2: StopInstances (20:00 Mon–Fri)
+    SCH->>EC2: StopInstances (20:00 daily)
 ```
 
 The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs/workflows.md).
@@ -382,7 +382,7 @@ The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs
 | **Ingress** | Amazon API Gateway | Public HTTPS endpoint for webhooks and registration |
 | **Serverless** | AWS Lambda | Registration, handler (validate + publish), scheduled start/stop |
 | **Event bus** | Amazon EventBridge | Route matched events; buffer via SQS |
-| **Scheduler** | Amazon EventBridge Scheduler | Start/stop the instance on the weekday window (18:00–20:00, Mon–Fri) |
+| **Scheduler** | Amazon EventBridge Scheduler | Start/stop the instance on the daily window (18:00–20:00, 7 days a week) |
 | **Queue** | Amazon SQS | Durable buffer so events survive until the next scheduled window |
 | **Compute** | EC2 On-Demand Instance (Ubuntu) | Scheduled host for AI processing |
 | **Storage** | gp3 EBS Volume | Persistent models, n8n state, and Repository Memory |
@@ -416,7 +416,7 @@ The handler simply returns `HTTP 200` and stops. You pay for AI processing only 
 
 ### Other design principles
 
-- **Scheduled compute.** The instance runs only during a fixed **weekday window (18:00–20:00, Mon–Fri)** set by EventBridge Scheduler. Outside that window there is no running server — only cheap EBS storage.
+- **Scheduled compute.** The instance runs only during a fixed **daily window (18:00–20:00, 7 days a week)** set by EventBridge Scheduler. Outside that window there is no running server — only cheap EBS storage.
 - **Bounded, predictable cost.** Compute is capped at ~2 h/day × 5 days ≈ **40 h/month**, known in advance rather than driven by webhook volume.
 - **On-Demand, not Spot.** Availability is the priority inside the window; On-Demand removes the Spot-capacity/interruption risk so a scheduled start always succeeds. See [Why On-Demand](#why-on-demand-scheduled-runtime).
 - **Local inference.** Ollama runs the model locally, so there are **no per-token API fees**.
@@ -432,13 +432,13 @@ Full numbers and tuning guidance: [`docs/cost-optimization.md`](./docs/cost-opti
 
 ## Why On-Demand (Scheduled Runtime)
 
-The compute host is an **On-Demand** EC2 instance powered on/off by **EventBridge Scheduler** on a fixed weekday window (**18:00–20:00, Mon–Fri**). The schedule — not the webhook — is the authority for instance availability.
+The compute host is an **On-Demand** EC2 instance powered on/off by **EventBridge Scheduler** on a fixed daily window (**18:00–20:00, 7 days a week**). The schedule — not the webhook — is the authority for instance availability.
 
 **Why On-Demand was selected over Spot** — the earlier design started a **Spot** instance per matched event. Spot is ~70–90% cheaper but is **interruptible** (two-minute reclaim) and a start only succeeds if there is **capacity at your max price** in the AZ — for scarce GPU types this regularly fails with `InsufficientInstanceCapacity`. Pinning the host to a **short, known daily window** already caps compute cost (~40 h/month), so the marginal saving from Spot no longer justifies the availability risk. On-Demand guarantees the scheduled start succeeds and the host stays up for the whole window, so a webhook that arrives inside it is processed immediately.
 
 **Trade-off** — On-Demand's hourly rate is higher, but total spend is bounded by the schedule and predictable in advance. Cost math: [`docs/cost-optimization.md`](./docs/cost-optimization.md).
 
-**Availability model** — the instance runs only 18:00–20:00 on weekdays. A matched event outside that window is durably buffered in SQS and processed at the next scheduled start (see [above](#how-sqs-defers-events-to-the-next-window)). A one-off maintenance run is a manual start (or invoking the scheduled-start Lambda); details in [`docs/scheduling.md`](./docs/scheduling.md).
+**Availability model** — the instance runs only 18:00–20:00 every day. A matched event outside that window is durably buffered in SQS and processed at the next scheduled start (see [above](#how-sqs-defers-events-to-the-next-window)). A one-off maintenance run is a manual start (or invoking the scheduled-start Lambda); details in [`docs/scheduling.md`](./docs/scheduling.md).
 
 ---
 
@@ -473,7 +473,7 @@ Rebuild only when **runtime dependencies** change (model, Docker/NVIDIA/Ollama, 
 flowchart TD
   A["Matched webhook (blog: commit / release)"] --> B["API Gateway → handler Lambda"]
   B --> C["EventBridge → SQS (durable job, buffered until the window)"]
-  S["EventBridge Scheduler: 18:00 Mon–Fri"] --> D["scheduled-start Lambda: start On-Demand instance"]
+  S["EventBridge Scheduler: 18:00 daily"] --> D["scheduled-start Lambda: start On-Demand instance"]
   D --> E{"Boot from CustomAmi?"}
   E -->|"Yes (fast path)"| F["Runtime init only:<br/>mount /data · seed model · write env · fetch worker binary"]
   E -->|"No (fallback)"| G["Run provision.sh at boot<br/>(Docker · NVIDIA · Ollama · model)"]
@@ -578,8 +578,8 @@ Configuration is provided through environment variables and CloudFormation param
 | `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | `a-long-random-string` |
 | `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
 | `INSTANCE_TYPE` | EC2 instance type for the On-Demand instance | `g4dn.xlarge` |
-| `StartExpression` | Scheduler cron for the weekday START | `cron(0 18 ? * MON-FRI *)` |
-| `StopExpression` | Scheduler cron for the weekday STOP | `cron(0 20 ? * MON-FRI *)` |
+| `StartExpression` | Scheduler cron for the daily START | `cron(0 18 ? * * *)` |
+| `StopExpression` | Scheduler cron for the daily STOP | `cron(0 20 ? * * *)` |
 | `ScheduleTimezone` | IANA timezone the crons evaluate in | `Etc/UTC` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
@@ -622,7 +622,7 @@ Provisioned resources include: **VPC, Public Subnet, Internet Gateway, Route Tab
 | **Network** | `network.yaml` | VPC, public subnet, IGW, route tables, security groups |
 | **Serverless** | `serverless.yaml` | API Gateway, Lambdas, EventBridge bus + rule, SQS + DLQ, IAM |
 | **Compute** | `compute.yaml` | On-Demand EC2 instance, gp3 EBS volume, instance IAM role, user data |
-| **Scheduler** | `scheduler.yaml` | EventBridge Schedules + 2 Go Lambdas that start/stop the instance on the weekday window (owns instance power) ([docs](./docs/scheduling.md)) |
+| **Scheduler** | `scheduler.yaml` | EventBridge Schedules + 2 Go Lambdas that start/stop the instance on the daily window (owns instance power) ([docs](./docs/scheduling.md)) |
 | **Observability** | `observability.yaml` | CloudWatch log groups, metrics, alarms |
 
 ```bash
@@ -647,7 +647,7 @@ aws cloudformation deploy \
       InstanceType=$INSTANCE_TYPE \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 4. Scheduler layer — start 18:00 / stop 20:00, Mon–Fri (owns instance power)
+# 4. Scheduler layer — start 18:00 / stop 20:00, daily (owns instance power)
 INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
   --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
 aws cloudformation deploy \
@@ -673,15 +673,15 @@ See [`docs/infrastructure.md`](./docs/infrastructure.md) for the full parameter 
 
 The `scheduler.yaml` stack **owns instance power** for the platform: it starts
 the On-Demand host in the evening and stops it later the same night — keeping it
-available during a fixed window (default **18:00 → 20:00, Mon–Fri**) without
+available during a fixed window (default **18:00 → 20:00, daily**) without
 paying for compute the rest of the week. It targets an instance by ID (wired to
 the compute stack's `InstanceId`) and its Lambdas are otherwise independent of
 the application stacks, so the same stack can schedule any instance.
 
 ```mermaid
 flowchart LR
-  S1["EventBridge Schedule<br/>start · cron(0 18 ? * MON-FRI *)"] --> R[Scheduler invoke role]
-  S2["EventBridge Schedule<br/>stop · cron(0 20 ? * MON-FRI *)"] --> R
+  S1["EventBridge Schedule<br/>start · cron(0 18 ? * * *)"] --> R[Scheduler invoke role]
+  S2["EventBridge Schedule<br/>stop · cron(0 20 ? * * *)"] --> R
   R --> LS["Lambda: scheduled-start<br/>(Go, idempotent)"]
   R --> LT["Lambda: scheduled-stop<br/>(Go, idempotent)"]
   LS -->|StartInstances| EC2["EC2 instance (by ID)"]
@@ -703,7 +703,7 @@ INSTANCE_ID=i-0123456789abcdef0 TIMEZONE=Africa/Johannesburg \
   scripts/deploy-scheduler.sh
 ```
 
-Running 2 h/day on weekdays (~40 h/month) instead of 24×7 cuts compute cost by
+Running 2 h/day, 7 days a week (~56 h/month) instead of 24×7 cuts compute cost by
 **~94%** (≈$7/mo vs ≈$121/mo for an On-Demand `t3.xlarge`). Full details —
 parameters, timezone, cost math, manual/maintenance start-stop, and
 troubleshooting — in [**`docs/scheduling.md`**](./docs/scheduling.md).
@@ -723,15 +723,15 @@ ai-github-repository-blog-generator/
 │   ├── network.yaml
 │   ├── serverless.yaml        # API Gateway, Lambdas, EventBridge, SQS, Secrets Manager, DynamoDB
 │   ├── compute.yaml           # On-Demand EC2 + persistent gp3 EBS
-│   ├── scheduler.yaml         # EventBridge Scheduler + start/stop Lambdas (weekday window)
+│   ├── scheduler.yaml         # EventBridge Scheduler + start/stop Lambdas (daily window)
 │   └── observability.yaml     # log groups, alarms, dashboard
 ├── lambdas/                   # Lambda entry points (Go)
 │   ├── registration/          # validate repo + PAT → create webhook → store metadata + secret
 │   ├── webhook-handler/       # resolve metadata, verify HMAC, trigger gate, publish, window gate
 │   ├── manual-trigger/        # authenticated POST /process — manual run via the shared intake module
 │   ├── release-context/       # authenticated POST /release-context — builds the structured Release Context
-│   ├── scheduled-start/       # start the On-Demand instance at 18:00 Mon–Fri
-│   └── scheduled-stop/        # stop the instance at 20:00 Mon–Fri
+│   ├── scheduled-start/       # start the On-Demand instance at 18:00 daily
+│   └── scheduled-stop/        # stop the instance at 20:00 daily
 ├── cmd/
 │   ├── worker/                # instance worker: drain SQS → run the content pipeline
 │   └── release/               # semantic-versioning release CLI (tag, changelog, GitHub Release)
@@ -762,7 +762,7 @@ ai-github-repository-blog-generator/
 - [x] Configurable custom trigger patterns (`[blog]`, `regex:`, per-repo rules)
 - [x] GitHub **Releases** as a trigger source (a published release always triggers); Git Tags / PR labels still planned
 - [ ] Manual blog generation from the application, and scheduled repository summaries
-- [x] On-Demand EC2 on a scheduled weekday runtime (replaced per-event Spot start)
+- [x] On-Demand EC2 on a scheduled daily runtime (replaced per-event Spot start)
 - [ ] Multi-model support and configurable per-repo schedules
 
 The living roadmap is maintained in [`docs/roadmap.md`](./docs/roadmap.md).

@@ -39,7 +39,7 @@ The only difference between sources is the **window policy**:
 | manual (`POST /process`) | `StartOutsideWindow` | **starts the instance on demand** (overriding the schedule), publishes, and returns 202 |
 
 The webhook never starts the instance — the [scheduler](./scheduling.md) owns
-its normal power window (default 18:00–20:00, Mon–Fri). The **manual** trigger
+its normal power window (default 18:00–20:00, 7 days a week). The **manual** trigger
 is an explicit override: it starts the On-Demand host if it is stopped so a run
 can be forced any time (its role has tag-scoped `ec2:StartInstances`; it never
 stops the instance). If the start call fails, the event is still buffered in SQS

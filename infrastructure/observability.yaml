@@ -93,10 +93,10 @@ Resources:
       AlarmActions:
         - !Ref AlarmTopic
 
-  # Power is owned by the scheduler stack (weekday window). These alarms watch
-  # the two functions that start/stop the instance. Their functions live in the
-  # scheduler stack; CloudWatch alarms key off the metric dimension (function
-  # name) so they work across stacks.
+  # Power is owned by the scheduler stack (daily window, 7 days a week). These
+  # alarms watch the two functions that start/stop the instance. Their functions
+  # live in the scheduler stack; CloudWatch alarms key off the metric dimension
+  # (function name) so they work across stacks.
   ScheduledStartErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -127,6 +127,28 @@ Resources:
         - Name: FunctionName
           Value: !Sub "${ProjectName}-scheduled-stop"
       Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  # Scheduler invocations that fail past the retry policy (e.g. the Scheduler
+  # cannot invoke the Lambda at all) land in the scheduler stack's DLQ. This
+  # catches failures that never surface as a Lambda error metric.
+  SchedulerDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-scheduler-dlq-not-empty"
+      AlarmDescription: A start/stop schedule invocation failed past its retries and was dead-lettered.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Sub "${ProjectName}-scheduler-dlq"
+      Statistic: Maximum
       Period: 300
       EvaluationPeriods: 1
       Threshold: 0

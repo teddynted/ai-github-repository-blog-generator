@@ -1,6 +1,6 @@
 # Workflows
 
-Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the On-Demand EC2 instance, which run the full generation pipeline. Matched events are buffered in **Amazon SQS** (via EventBridge); the instance runs on a fixed **weekday schedule (18:00–20:00, Mon–Fri)** owned by EventBridge Scheduler, and n8n **drains the SQS backlog** while it is up — then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
+Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the On-Demand EC2 instance, which run the full generation pipeline. Matched events are buffered in **Amazon SQS** (via EventBridge); the instance runs on a fixed **daily schedule (18:00–20:00, 7 days a week)** owned by EventBridge Scheduler, and n8n **drains the SQS backlog** while it is up — then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
 
 > **Registration is not an n8n workflow.** Onboarding a repository (URL + PAT → validate → create webhook → store metadata + PAT) is handled by the **Registration Lambda** ([Architecture §2](./architecture.md#2-repository-registration-mvp)). These workflows cover only the per-event generation pipeline.
 
@@ -27,7 +27,7 @@ flowchart TB
 
 - The handler is **not** an n8n workflow — it is a Lambda ([Architecture §3](./architecture.md#3-commit-message-trigger-gate)).
 - It performs **only**: resolve repo record → verify signature (webhook secret from the **shared** secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
-- EventBridge routes matched events to **SQS** (buffer). The webhook never starts the host — instance power is owned by **EventBridge Scheduler** (weekday window). A manual `POST /process` is the one path that starts the host on demand ([Manual Trigger](./manual-trigger.md)).
+- EventBridge routes matched events to **SQS** (buffer). The webhook never starts the host — instance power is owned by **EventBridge Scheduler** (daily window). A manual `POST /process` is the one path that starts the host on demand ([Manual Trigger](./manual-trigger.md)).
 
 ### 1a. Delivery sequence (end to end)
 

@@ -13,7 +13,7 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 - **Two trigger sources, one pipeline** — a run can be initiated **automatically by a GitHub webhook**, or **manually by the authenticated `POST /process` endpoint** ([Manual Trigger](./manual-trigger.md)). Both publish the same `blog.publish.requested` event, so the downstream pipeline is identical regardless of how it was triggered; future sources (CLI, Slack, cron) plug in the same way.
 - **Event-driven** — triggered events are published to **Amazon EventBridge** and buffered in **Amazon SQS**; the worker drains them while the instance is up. Nothing runs speculatively.
 - **Self-hosted inference** — all AI runs locally via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
-- **Pay only during the window** — an **On-Demand EC2 instance** runs on a fixed weekday schedule (18:00–20:00, Mon–Fri) set by EventBridge Scheduler; compute cost is bounded and predictable.
+- **Pay only during the window** — an **On-Demand EC2 instance** runs on a fixed daily schedule (18:00–20:00, 7 days a week) set by EventBridge Scheduler; compute cost is bounded and predictable.
 - **Durable buffering** — every matched event is buffered in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
 - **Persistent state, ephemeral compute** — models, n8n state, and **Repository Memory** live on a persistent **gp3 EBS volume**.
 - **Secure by default** — least-privilege IAM, secrets in Secrets Manager (never logged), HMAC-verified webhooks, encryption everywhere.
@@ -97,7 +97,7 @@ flowchart TB
         DDB[(DynamoDB<br/>repository metadata)]
         EB[Amazon EventBridge]
         SQS[(Amazon SQS + DLQ)]
-        SCH[EventBridge Scheduler<br/>18:00 / 20:00 Mon–Fri]
+        SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily]
         PWR[Lambda: scheduled-start / scheduled-stop]
         subgraph EC2["EC2 On-Demand Instance (Ubuntu + Docker Compose)"]
             N8N[n8n Orchestrator]
@@ -142,7 +142,7 @@ flowchart TB
 | Webhook Handler (Lambda) | Resolve repo metadata, verify signature, **validate trigger**, publish matched events. **No analysis or inference; never fetches the PAT** |
 | Amazon EventBridge | Route matched events to the SQS buffer |
 | Amazon SQS | Durable buffer so no matched event is lost while the instance is outside its window; DLQ |
-| EventBridge Scheduler | Authority for instance power — starts/stops the host on the weekday window (18:00–20:00, Mon–Fri) |
+| EventBridge Scheduler | Authority for instance power — starts/stops the host on the daily window (18:00–20:00, 7 days a week) |
 | scheduled-start / scheduled-stop (Lambda) | Start/stop the On-Demand instance on the schedule (idempotent) |
 | EC2 On-Demand Instance | Host running n8n, OpenClaw, Ollama via Docker Compose |
 | OpenClaw | Clone (using the PAT) and analyse the repository |
@@ -301,7 +301,7 @@ flowchart LR
     LH -->|match → PutEvents| EB[(EventBridge)]
     LH -->|no match → 200| STOP[Ignored]
     EB --> SQS[(SQS)]
-    SCH[EventBridge Scheduler<br/>18:00 / 20:00 Mon–Fri] --> PWR[scheduled-start / scheduled-stop]
+    SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily] --> PWR[scheduled-start / scheduled-stop]
     PWR -.->|power| N8N
     SQS --> N8N[n8n]
     GH[(GitHub repo)] -->|clone w/ PAT| OC[OpenClaw]
