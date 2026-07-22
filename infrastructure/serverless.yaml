@@ -7,7 +7,7 @@ Description: >
   dead-letter queue, the DynamoDB metadata table, and one shared Secrets Manager
   secret holding every repository's credentials (keyed by owner/name). Instance
   power is owned by
-  the scheduler stack (fixed weekday window), so this stack never starts or
+  the scheduler stack (fixed daily window), so this stack never starts or
   stops the compute host: a matched webhook is published to EventBridge and
   buffered in SQS, then drained by the worker while the instance is up. GitHub
   PATs and per-repo webhook secrets live in Secrets Manager under a fixed prefix

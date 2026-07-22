@@ -22,7 +22,7 @@ so behaviour is never undocumented.
 | **Go module layout** | **Single monorepo module** | One `go.mod` at the root; shared code in `internal/`; each Lambda is `lambdas/<fn>/` built with `go build ./lambdas/<fn>`. Maximises reuse (config, logging, signature, GitHub client) and suits Clean Architecture. |
 | **Lambda runtime** | `provided.al2023`, **Linux/arm64** (Graviton) | Documented; best price/performance. |
 | **Registration auth (MVP)** | **API Gateway API key** (`x-api-key`) | Simplest way to satisfy REG-9 "access-controlled"; revisited if GitHub App onboarding lands. |
-| **Instance power** | EventBridge → SQS buffer; **EventBridge Scheduler** starts/stops the On-Demand host on a weekday window; the worker drains SQS while up | The schedule owns availability; SQS keeps events durable between windows. |
+| **Instance power** | EventBridge → SQS buffer; **EventBridge Scheduler** starts/stops the On-Demand host on a daily window; the worker drains SQS while up | The schedule owns availability; SQS keeps events durable between windows. |
 
 ---
 
@@ -80,7 +80,7 @@ Deploy order: **network → serverless → compute → observability**.
 | `network.yaml` | VPC, public subnet, Internet Gateway, route table, instance security group (SSH from operator CIDR only) |
 | `serverless.yaml` | REST API Gateway (`/webhook` open, `/repositories` API-key), 2 Lambdas (registration, webhook-handler), per-function IAM roles, EventBridge bus + matched-event rule, SQS events queue + DLQ, DynamoDB metadata table |
 | `compute.yaml` | On-Demand EC2 launch template + instance, persistent gp3 EBS volume (retained), instance IAM role/profile, base-host user data |
-| `scheduler.yaml` | EventBridge Scheduler weekday start/stop schedules + `scheduled-start`/`scheduled-stop` Lambdas + least-privilege roles (targets the instance by ID) |
+| `scheduler.yaml` | EventBridge Scheduler daily start/stop schedules + `scheduled-start`/`scheduled-stop` Lambdas + least-privilege roles (targets the instance by ID) |
 | `observability.yaml` | CloudWatch log groups (bounded retention), SNS alarm topic, failure alarms, ops dashboard |
 
 Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
@@ -92,7 +92,7 @@ Validate: `make lint-cfn` (runs `cfn-lint infrastructure/*.yaml`).
   data) that the `AWS::EC2::Instance` references. There are no
   `InstanceMarketOptions`: it is an On-Demand instance, so a scheduled or manual
   start always succeeds without depending on Spot capacity. Instance power is
-  owned by `scheduler.yaml` (start 18:00 / stop 20:00, Mon–Fri).
+  owned by `scheduler.yaml` (start 18:00 / stop 20:00, daily).
 - **ID-scoped start/stop.** The scheduler's `scheduled-start`/`scheduled-stop`
   Lambdas take the compute stack's `InstanceId` and grant
   `ec2:Start/StopInstances` scoped to that single instance ARN. The webhook
@@ -176,20 +176,20 @@ Config gains `PROJECT_NAME` and `EVENT_SOURCE`; the serverless template passes
 
 > **Migration note.** Earlier revisions started a Spot instance per matched event
 > via an `instance-starter` Lambda. That was replaced by On-Demand compute on a
-> fixed weekday schedule (Milestone 6); the webhook no longer starts the host.
+> fixed daily schedule (Milestone 6); the webhook no longer starts the host.
 
 ---
 
 ## Milestone 6 — Infrastructure Lifecycle ✅
 
-Completes the cost-optimised compute loop with a scheduled weekday window.
+Completes the cost-optimised compute loop with a scheduled daily window.
 
 | Package | Responsibility |
 | --- | --- |
 | `internal/power` | `Switch.EnsureStarted`/`EnsureStopped` — start/stop a specific instance by ID unless already in the target state. Idempotent, inspects current state first. |
 | `internal/awssqs` | SQS adapter: receive/delete for the worker, plus `Depth` (visible + not-visible) for operational visibility. |
 | `internal/awsec2` | `InstanceState`/`Start`/`StopInstances` by ID (for the scheduler) and `FindInstance` by tag (for the window gate). |
-| `lambdas/scheduled-start`, `lambdas/scheduled-stop` | EventBridge Scheduler-invoked Lambdas that power the On-Demand host on/off at 18:00/20:00 Mon–Fri (`scheduler.yaml`). |
+| `lambdas/scheduled-start`, `lambdas/scheduled-stop` | EventBridge Scheduler-invoked Lambdas that power the On-Demand host on/off at 18:00/20:00 daily (`scheduler.yaml`). |
 
 **Readiness & n8n invocation (design decision).** In the hybrid model, n8n
 **pulls** work from SQS (its SQS-trigger workflow) rather than being pushed an
@@ -233,7 +233,7 @@ output — all deliberately deferred, with the seams in place.
 
 Milestones 1–7 are complete: an opt-in, event-driven, cost-optimised vertical
 slice from repository registration through the commit-trigger gate, event
-routing, scheduled On-Demand compute (weekday window), and the processing seam —
+routing, scheduled On-Demand compute (daily window), and the processing seam —
 all AWS-native, IaC-provisioned, and unit-tested. The next phase is Repository
 Intelligence and content generation on top of the `processing.Snapshot`.
 

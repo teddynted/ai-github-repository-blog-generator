@@ -110,7 +110,7 @@ Local configuration lives in `.env` (git-ignored). Start from `.env.example`:
 
 ## 5. Building & Testing the Lambdas
 
-The code is a **single Go module** (monorepo): shared logic lives under `internal/`, and each of the four functions — `registration` (validate + create webhook + store metadata/secret), `webhook-handler` (verify + trigger gate + publish + window gate), `scheduled-start` (start the On-Demand host at 18:00 Mon–Fri), and `scheduled-stop` (stop it at 20:00) — is an entry point under `lambdas/<fn>/`. See [Development Plan](./development-plan.md).
+The code is a **single Go module** (monorepo): shared logic lives under `internal/`, and each of the four functions — `registration` (validate + create webhook + store metadata/secret), `webhook-handler` (verify + trigger gate + publish + window gate), `scheduled-start` (start the On-Demand host at 18:00 daily), and `scheduled-stop` (stop it at 20:00) — is an entry point under `lambdas/<fn>/`. See [Development Plan](./development-plan.md).
 
 ```bash
 make check          # gofmt check + go vet + go test -race -cover

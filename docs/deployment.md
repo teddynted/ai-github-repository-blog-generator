@@ -77,8 +77,8 @@ cp .env.example .env
 | `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | random 32+ chars |
 | `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
 | `INSTANCE_TYPE` | EC2 instance type for the On-Demand instance | `g4dn.xlarge` |
-| `StartExpression` | Scheduler cron for the weekday START (scheduler stack) | `cron(0 18 ? * MON-FRI *)` |
-| `StopExpression` | Scheduler cron for the weekday STOP (scheduler stack) | `cron(0 20 ? * MON-FRI *)` |
+| `StartExpression` | Scheduler cron for the daily START (scheduler stack) | `cron(0 18 ? * * *)` |
+| `StopExpression` | Scheduler cron for the daily STOP (scheduler stack) | `cron(0 20 ? * * *)` |
 | `ScheduleTimezone` | IANA timezone the crons evaluate in (scheduler stack) | `Etc/UTC` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
@@ -106,8 +106,8 @@ done
 - `registration` — validate repo + PAT, create the webhook, store metadata + secrets.
 - `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events, and report processed-now vs deferred (the window gate).
 - `manual-trigger` — the authenticated `POST /process` endpoint; validates the request and submits it through the shared intake service, **starting the On-Demand host on demand** if it is stopped (202 accepted). See [Manual Trigger](./manual-trigger.md).
-- `scheduled-start` — start the On-Demand instance at 18:00 Mon–Fri (scheduler stack).
-- `scheduled-stop` — stop the instance at 20:00 Mon–Fri (scheduler stack).
+- `scheduled-start` — start the On-Demand instance at 18:00 daily (scheduler stack).
+- `scheduled-stop` — stop the instance at 20:00 daily (scheduler stack).
 
 Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless/scheduler templates' default code keys are `<fn>.zip` at the bucket root:
 
@@ -156,7 +156,7 @@ aws cloudformation deploy \
       SmtpUsername=$SMTP_USERNAME \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 4. Scheduler layer — owns instance power (start 18:00 / stop 20:00, Mon–Fri).
+# 4. Scheduler layer — owns instance power (start 18:00 / stop 20:00, daily).
 #    Wire it to the compute stack's InstanceId:
 INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
   --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
@@ -266,7 +266,7 @@ curl -sS -X POST "$REGISTRATION_URL" \
 
 On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with your `webhook_secret`, adds the credentials to the shared secret keyed by `acme/widget`, and writes metadata to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
 
-> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push and only publishes an event when the commit message matches the repository's trigger pattern (default `blog:`). It never starts the instance — that is owned by the scheduler's weekday window; a matched event that arrives outside the window is buffered in SQS and processed at the next 18:00 start.
+> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push and only publishes an event when the commit message matches the repository's trigger pattern (default `blog:`). It never starts the instance — that is owned by the scheduler's daily window; a matched event that arrives outside the window is buffered in SQS and processed at the next 18:00 start.
 
 ### Manual webhook setup (fallback)
 
@@ -320,10 +320,10 @@ Expected sequence for the triggered path:
 | GitHub Recent Deliveries | Green ✓ (HTTP 200); body `accepted` (in window) or `deferred` (outside) |
 | CloudWatch (handler) | Logs show verify → trigger match → PutEvents → window gate (accepted/deferred) |
 | EventBridge / SQS | Event published; SQS count increments (drains once the instance is up) |
-| EC2 (scheduled-start, 18:00 Mon–Fri) | Transitions `stopped` → `running`; verify with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` to force a start now |
+| EC2 (scheduled-start, 18:00 daily) | Transitions `stopped` → `running`; verify with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` to force a start now |
 | CloudWatch (n8n / worker) | Run logs: analyze → memory → generate → review → publish |
 | Published output | New Markdown content at the configured destination |
-| EC2 (scheduled-stop, 20:00 Mon–Fri) | Transitions back to `stopped` |
+| EC2 (scheduled-stop, 20:00 daily) | Transitions back to `stopped` |
 
 ---
 

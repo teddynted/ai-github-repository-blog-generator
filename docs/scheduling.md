@@ -1,9 +1,10 @@
 # Scheduled EC2 Power Management
 
 Automatically **start** an EC2 instance in the evening and **stop** it later the
-same night, on weekdays only, so the environment is available during a chosen
-window (default 18:00 → 20:00, Mon–Fri) but not billed for compute the rest of
-the week.
+same night, every day, so the environment is available during a chosen window
+(default 18:00 → 20:00, 7 days a week — Mon–Sun) but not billed for compute the
+rest of the day. The window is fully configurable, including a weekday-only
+option for extra cost savings (see below).
 
 For the blog-gen platform this stack **owns instance power**: it is the
 authority for when the On-Demand compute host is available, and the webhook path
@@ -18,8 +19,8 @@ and can schedule any instance independently of the application stacks.
 ```mermaid
 flowchart LR
   subgraph EB[Amazon EventBridge Scheduler]
-    S1["Start schedule<br/>cron(0 18 ? * MON-FRI *)<br/>timezone-aware"]
-    S2["Stop schedule<br/>cron(0 20 ? * MON-FRI *)<br/>timezone-aware"]
+    S1["Start schedule<br/>cron(0 18 ? * * *)<br/>timezone-aware"]
+    S2["Stop schedule<br/>cron(0 20 ? * * *)<br/>timezone-aware"]
   end
 
   R["Scheduler invoke role<br/>(lambda:InvokeFunction)"]
@@ -143,8 +144,8 @@ Scheduler can assume the created roles.
 | `ProjectName` | `blog-gen` | Resource name prefix + `Project` tag |
 | `Environment` | `dev` | `Environment` tag (`dev`/`staging`/`prod`) |
 | `ScheduleTimezone` | `Etc/UTC` | IANA timezone for the cron expressions |
-| `StartExpression` | `cron(0 18 ? * MON-FRI *)` | Weekday start time |
-| `StopExpression` | `cron(0 20 ? * MON-FRI *)` | Weekday stop time |
+| `StartExpression` | `cron(0 18 ? * * *)` | Daily start time (every day) |
+| `StopExpression` | `cron(0 20 ? * * *)` | Daily stop time (every day) |
 | `ScheduleState` | `ENABLED` | `DISABLED` pauses both schedules without deleting the stack |
 | `ManageSchedules` | `true` | `false` deploys only the Lambdas/roles (manual driving) |
 | `ArtifactsBucket` | *(required)* | S3 bucket holding the two Lambda zips |
@@ -164,14 +165,16 @@ EventBridge Scheduler cron format is `cron(Minutes Hours Day-of-month Month Day-
 
 | Expression | Meaning |
 | --- | --- |
-| `cron(0 18 ? * MON-FRI *)` | 18:00 Monday–Friday |
-| `cron(0 20 ? * MON-FRI *)` | 20:00 Monday–Friday |
-| `cron(0 18 * * ? *)` | 18:00 every day (7-day variant) |
+| `cron(0 18 ? * * *)` | 18:00 every day (default) |
+| `cron(0 20 ? * * *)` | 20:00 every day (default) |
+| `cron(0 18 ? * MON-FRI *)` | 18:00 Monday–Friday (weekday-only option) |
+| `cron(0 20 ? * MON-FRI *)` | 20:00 Monday–Friday (weekday-only option) |
 
 `?` marks "no specific value" in whichever of the day-of-month / day-of-week
-fields is not being constrained. With the `MON-FRI` default the instance runs
-**18:00 → 20:00 on weekdays only** and is stopped the rest of the time
-(evenings, nights, and all weekend).
+fields is not being constrained. With the default `cron(0 18 ? * * *)` the
+instance runs **18:00 → 20:00 every day (Mon–Sun)** and is stopped the rest of
+the time. To restrict to weekdays for extra savings, set the day-of-week field
+to `MON-FRI` (see below) — weekend releases then buffer in SQS until Monday.
 
 ### Example EventBridge Scheduler configuration
 
@@ -182,7 +185,7 @@ What the deploy creates (start schedule), viewable with
 {
   "Name": "blog-gen-scheduled-start",
   "State": "ENABLED",
-  "ScheduleExpression": "cron(0 18 ? * MON-FRI *)",
+  "ScheduleExpression": "cron(0 18 ? * * *)",
   "ScheduleExpressionTimezone": "Africa/Johannesburg",
   "FlexibleTimeWindow": { "Mode": "OFF" },
   "Target": {
@@ -318,7 +321,7 @@ aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout
 | Schedules missing, only Lambdas present | `ManageSchedules=false` (Lambdas-only mode) | Redeploy with `ManageSchedules=true` |
 | Schedules exist but never fire | `ScheduleState=DISABLED` | Set `ScheduleState=ENABLED` |
 | Fires at the "wrong" hour | `ScheduleTimezone` defaults to `Etc/UTC` | Set it to your IANA zone (e.g. `Africa/Johannesburg`) — see [Timezone configuration](#timezone-configuration) |
-| Nothing on Saturday/Sunday | Cron is `MON-FRI` by design | Adjust `StartExpression`/`StopExpression` if weekends are needed |
+| Nothing on Saturday/Sunday (but expected) | A weekday-only `MON-FRI` cron was configured (the default runs every day) | Redeploy with the default `StartExpression`/`StopExpression` (`cron(0 18 ? * * *)`) |
 | Log shows `changed:false` / "already running" | The instance was already in the desired state — the run is a **successful no-op**, not a failure | None — the Lambda still logs, so this proves it fired |
 
 An **empty** Lambda log group means the schedule never invoked the function (deploy
@@ -338,8 +341,9 @@ For this scheduler specifically:
 ### Why scheduling reduces EC2 cost
 
 You pay for an EC2 instance only while it is **running**. Running 18:00 → 20:00
-on weekdays is **~40 h/month** versus ~730 h for always-on — roughly **5.5%** of
-the month, a **~94% compute saving**.
+every day is **~60 h/month** versus ~730 h for always-on — roughly **8%** of the
+month, a **~92% compute saving**. (A weekday-only window drops this to ~40 h/month
+— see the note below.)
 
 ### Estimated monthly savings
 
@@ -348,10 +352,11 @@ For a `g4dn.xlarge` at the On-Demand rate of **$0.526/h** (us-east-1):
 | Mode | Hours/month | Compute cost/month |
 | --- | --- | --- |
 | Always-on (24×7) | ~730 | **~$384** |
-| Scheduled (2 h × weekdays) | ~40 | **~$21** |
-| **Saving** | | **~$363/mo (~94%)** |
+| Scheduled (2 h × 7 days) | ~60 | **~$32** |
+| Scheduled (2 h × weekdays, optional) | ~40 | **~$21** |
+| **Saving (7-day)** | | **~$352/mo (~92%)** |
 
-Because the window is fixed and weekday-only, the monthly compute cost is
+Because the window is fixed, the monthly compute cost is
 **known in advance** — it does not scale with webhook volume. (EBS storage is
 billed separately and is **not** affected by stopping — see below.)
 
@@ -361,7 +366,7 @@ The compute host is **On-Demand**. Spot would be ~70–90% cheaper per hour, but
 Spot `StartInstances` only succeeds if there is capacity at your max price at
 18:00 — for scarce GPU types that regularly fails (`InsufficientInstanceCapacity`),
 and Spot instances can be reclaimed mid-window with a 2-minute warning. Since the
-fixed weekday window already caps compute cost, On-Demand's guarantee that the
+fixed daily window already caps compute cost, On-Demand's guarantee that the
 **scheduled start always succeeds and the host stays up for the whole window** is
 worth more than the marginal Spot discount. A one-off maintenance run outside the
 window is a manual `start-instances` (or a manual invoke of the scheduled-start
@@ -387,7 +392,7 @@ root ≈ $2.40/mo) — that is the price of keeping state between windows.
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| Instance didn't start at 18:00 | Check the start Lambda's log group. Common: wrong `ScheduleTimezone`, or the day is a weekend (the cron is `MON-FRI`). Transient EC2 errors are retried by the Scheduler `RetryPolicy` for 1 h. |
+| Instance didn't start at 18:00 | Check the start Lambda's log group. Common: wrong `ScheduleTimezone`, or a weekday-only `MON-FRI` cron was set (the default runs every day). Transient EC2 errors are retried by the Scheduler `RetryPolicy` for 1 h. |
 | Schedule never fires | `ScheduleState=DISABLED`, or `ManageSchedules=false` (no schedules created). Check `aws scheduler get-schedule --name <name>`. |
 | `AccessDenied` invoking Lambda | Scheduler invoke role misconfigured — confirm the stack created `<project>-scheduler-invoke-role` and it lists both function ARNs. |
 | `UnauthorizedOperation` on Start/Stop | The `InstanceId` doesn't match the ARN the role is scoped to (redeployed against a different instance). Redeploy with the correct `InstanceId`. |

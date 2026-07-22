@@ -2,11 +2,11 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   Scheduled power management for an existing On-Demand EC2 instance. Two
   EventBridge Schedules (start + stop) invoke two Go Lambdas that start/stop a
-  specific instance by ID on a weekday, timezone-aware cron. Defaults run the
-  instance on weekday evenings only: start 18:00, stop 20:00, Monday-Friday.
-  This schedule is the authority for instance availability. Idempotent,
-  least-privilege, and independent of the blog-gen application stacks (it
-  targets any instance ID).
+  specific instance by ID on a timezone-aware cron. Defaults run the instance
+  every evening, 7 days a week (Mon-Sun): start 18:00, stop 20:00. This gives
+  weekend releases the same-evening processing as weekday releases. This schedule
+  is the authority for instance availability. Idempotent, least-privilege, and
+  independent of the blog-gen application stacks (it targets any instance ID).
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -43,12 +43,18 @@ Parameters:
       18:00/20:00 window is local wall-clock time, not hardcoded UTC.
   StartExpression:
     Type: String
-    Default: cron(0 18 ? * MON-FRI *)
-    Description: EventBridge Scheduler expression for the weekday START (default 18:00 Mon-Fri).
+    Default: cron(0 18 ? * * *)
+    Description: >
+      EventBridge Scheduler expression for the daily START (default 18:00 every
+      day, Mon-Sun). Day-of-month is '?' and day-of-week '*' so it fires all 7
+      days; set a MON-FRI day-of-week only if a weekday-only window is intended.
   StopExpression:
     Type: String
-    Default: cron(0 20 ? * MON-FRI *)
-    Description: EventBridge Scheduler expression for the weekday STOP (default 20:00 Mon-Fri).
+    Default: cron(0 20 ? * * *)
+    Description: >
+      EventBridge Scheduler expression for the daily STOP (default 20:00 every
+      day, Mon-Sun). Keep the STOP window matching the START window's days to
+      avoid leaving the instance running (cost) or off when expected.
   ScheduleState:
     Type: String
     Default: ENABLED
@@ -208,6 +214,24 @@ Resources:
                 Resource:
                   - !GetAtt StartFunction.Arn
                   - !GetAtt StopFunction.Arn
+              # Deliver invocations that exhaust the retry policy to the DLQ.
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt SchedulerDLQ.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  # Dead-letter queue for schedule invocations that fail past the retry policy —
+  # gives durable failure visibility beyond the CloudWatch error alarms. Encrypted,
+  # 14-day retention for forensics.
+  SchedulerDLQ:
+    Type: AWS::SQS::Queue
+    Condition: CreateSchedules
+    Properties:
+      QueueName: !Sub "${ProjectName}-scheduler-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
       Tags:
         - { Key: Project, Value: !Ref ProjectName }
         - { Key: Environment, Value: !Ref Environment }
@@ -273,7 +297,7 @@ Resources:
     Condition: CreateSchedules
     Properties:
       Name: !Sub "${ProjectName}-scheduled-start"
-      Description: Weekday start of the target EC2 instance (default 18:00 Mon-Fri).
+      Description: Daily start of the target EC2 instance (default 18:00, 7 days a week).
       State: !Ref ScheduleState
       FlexibleTimeWindow:
         Mode: "OFF"
@@ -285,13 +309,15 @@ Resources:
         RetryPolicy:
           MaximumRetryAttempts: 5
           MaximumEventAgeInSeconds: 3600
+        DeadLetterConfig:
+          Arn: !GetAtt SchedulerDLQ.Arn
 
   StopSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: CreateSchedules
     Properties:
       Name: !Sub "${ProjectName}-scheduled-stop"
-      Description: Weekday stop of the target EC2 instance (default 20:00 Mon-Fri).
+      Description: Daily stop of the target EC2 instance (default 20:00, 7 days a week).
       State: !Ref ScheduleState
       FlexibleTimeWindow:
         Mode: "OFF"
@@ -303,6 +329,8 @@ Resources:
         RetryPolicy:
           MaximumRetryAttempts: 5
           MaximumEventAgeInSeconds: 3600
+        DeadLetterConfig:
+          Arn: !GetAtt SchedulerDLQ.Arn
 
 Outputs:
   StartFunctionArn:
@@ -322,3 +350,7 @@ Outputs:
   ScheduleWindow:
     Description: Human-readable summary of the configured on/off window.
     Value: !Sub "start '${StartExpression}' / stop '${StopExpression}' (${ScheduleTimezone}), state=${ScheduleState}"
+  SchedulerDLQUrl:
+    Condition: CreateSchedules
+    Description: Dead-letter queue for failed schedule invocations (inspect on alarm).
+    Value: !Ref SchedulerDLQ

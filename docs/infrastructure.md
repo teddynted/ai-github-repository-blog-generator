@@ -85,8 +85,8 @@ Five small functions form the serverless control plane (three in `serverless.yam
 | `registration` | API Gateway (registration route) | Validate repo access + token permissions → create GitHub webhook → store metadata (DynamoDB) → store PAT + webhook secret (Secrets Manager) |
 | `webhook-handler` | API Gateway (webhook route) | Resolve repo metadata → verify HMAC (webhook secret from the shared secret) → **validate trigger** → hand to `intake.Service` (buffer policy) → report `accepted`/`deferred` → return 200. **No analysis, inference, or PAT access, and it never starts the instance.** |
 | `manual-trigger` | API Gateway (`POST /process`, API key) | Validate JSON request → hand to `intake.Service` (start policy) → **202**; starts the On-Demand host on demand if it is stopped (schedule override), then publishes. See [Manual Trigger](./manual-trigger.md). |
-| `scheduled-start` | EventBridge Scheduler (18:00 Mon–Fri) | Start the On-Demand instance if stopped (idempotent) |
-| `scheduled-stop` | EventBridge Scheduler (20:00 Mon–Fri) | Stop the On-Demand instance if running (idempotent) |
+| `scheduled-start` | EventBridge Scheduler (18:00 daily) | Start the On-Demand instance if stopped (idempotent) |
+| `scheduled-stop` | EventBridge Scheduler (20:00 daily) | Stop the On-Demand instance if running (idempotent) |
 
 Least-privilege roles:
 
@@ -116,7 +116,7 @@ EventBridge is the central **event bus** and the extension point for future trig
 
 - A **custom bus** receives `blog.publish.requested` events from any trigger source (the webhook handler and the manual `/process` trigger today).
 - A **rule** routes those events to a single target: the **SQS `events` queue** (durable buffer for the run). Its pattern matches the `${ProjectName}.` **source prefix**, so new trigger sources route with no rule change. There is **no** start-on-event target — instance power is owned by the scheduler stack.
-- Instance start/stop is handled separately by **EventBridge Scheduler** (in `scheduler.yaml`): two weekday schedules invoke the `scheduled-start`/`scheduled-stop` Lambdas. See [Scheduling](./scheduling.md).
+- Instance start/stop is handled separately by **EventBridge Scheduler** (in `scheduler.yaml`): two daily schedules invoke the `scheduled-start`/`scheduled-stop` Lambdas. See [Scheduling](./scheduling.md).
 - Future trigger sources (releases, tags, PR labels, manual, scheduled) publish to the **same bus**, so the downstream pipeline is unchanged ([Roadmap](./roadmap.md), [TRG-7](./requirements.md#2-publishing-trigger-requirements)).
 
 ---
@@ -137,10 +137,10 @@ EventBridge is the central **event bus** and the extension point for future trig
 
 ## 8. Amazon EC2 (On-Demand Instance)
 
-- An **On-Demand Instance** running **Ubuntu**. On-Demand (not Spot) is used so a scheduled start always succeeds and the host stays up for the whole window — the fixed weekday window already caps compute cost, so Spot's discount buys little. See [Cost Optimisation §5](./cost-optimization.md#5-on-demand-on-a-schedule-not-spot).
+- An **On-Demand Instance** running **Ubuntu**. On-Demand (not Spot) is used so a scheduled start always succeeds and the host stays up for the whole window — the fixed daily window already caps compute cost, so Spot's discount buys little. See [Cost Optimisation §5](./cost-optimization.md#5-on-demand-on-a-schedule-not-spot).
 - Runs **n8n**, **OpenClaw**, and **Ollama** (serving a local **Qwen** model) via **Docker Compose**.
 - Bootstrapped by **user data** (`instance/user-data.sh`) that installs Docker + Docker Compose, mounts the persistent EBS volume, pulls the model into Ollama (first boot only), and starts the Compose stack.
-- **Started/stopped on the weekday schedule** by EventBridge Scheduler (scheduled-start 18:00 / scheduled-stop 20:00, Mon–Fri) — see `scheduler.yaml`.
+- **Started/stopped on the daily schedule** by EventBridge Scheduler (scheduled-start 18:00 / scheduled-stop 20:00, daily) — see `scheduler.yaml`.
 - Attached instance profile grants only what the host needs: `sqs:ReceiveMessage`/`DeleteMessage`/`GetQueueAttributes` on the events queue and CloudWatch Logs.
 - Key parameters: `InstanceType`, `KeyPairName`, `OllamaModel`, `EbsVolumeSizeGb`; the schedule window is set on the scheduler stack (`StartExpression`, `StopExpression`, `ScheduleTimezone`).
 
@@ -182,7 +182,7 @@ infrastructure/
 ├── network.yaml         # VPC, public subnet, IGW, route tables, security groups
 ├── serverless.yaml      # API Gateway (webhook + registration + /process), Lambdas (registration + handler + manual-trigger), Secrets Manager, DynamoDB, EventBridge bus + rule, SQS + DLQ, IAM
 ├── compute.yaml         # On-Demand EC2 instance, gp3 EBS volume, instance profile, user data
-├── scheduler.yaml       # EventBridge Scheduler (weekday start/stop) + scheduled-start/scheduled-stop Lambdas + roles
+├── scheduler.yaml       # EventBridge Scheduler (daily start/stop) + scheduled-start/scheduled-stop Lambdas + roles
 └── observability.yaml   # CloudWatch log groups, metrics, alarms, dashboard
 ```
 

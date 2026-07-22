@@ -29,7 +29,7 @@ flowchart LR
 ```
 
 The webhook front door is always up; the **worker only runs during the instance
-window** (18:00–20:00 Mon–Fri by default). A release published outside the window
+window** (18:00–20:00 daily by default). A release published outside the window
 is buffered in SQS and processed at the next start — or force a start (§5).
 
 ---

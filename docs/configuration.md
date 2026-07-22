@@ -47,7 +47,7 @@ Legend: **Req?** = Required · **Def** = Default when unset.
 
 | Variable | Purpose | Req? | Def | Example | Format / values |
 |----------|---------|------|-----|---------|-----------------|
-| `INSTANCE_ID` | On-Demand EC2 host the scheduler powers on/off (fixed weekday window). | Yes (scheduler) | — | `i-0abc123` | EC2 instance id |
+| `INSTANCE_ID` | On-Demand EC2 host the scheduler powers on/off (fixed daily window). | Yes (scheduler) | — | `i-0abc123` | EC2 instance id |
 
 ## AI — local inference
 
