@@ -267,6 +267,69 @@ Structured JSON (one object per line). **Start, instance was stopped:**
 
 ---
 
+## Verifying the schedule is firing
+
+**There is no "scheduler" log group.** An `AWS::Scheduler::Schedule` does **not**
+write its own logs — that is normal AWS behaviour, not a gap in this stack. A
+schedule's execution is observed through **its target Lambda's logs**, through
+**CloudWatch metrics**, or through **CloudTrail**. So to answer "are the schedules
+running?", look at the two Lambda log groups, not for a scheduler log.
+
+The Lambdas log every invocation (see the examples above) into the groups the
+stack declares explicitly:
+
+```
+/aws/lambda/<ProjectName>-scheduled-start   (default: blog-gen-scheduled-start)
+/aws/lambda/<ProjectName>-scheduled-stop    (default: blog-gen-scheduled-stop)
+```
+
+### Checklist
+
+```bash
+# 1. Is the scheduler stack deployed at all?
+aws cloudformation describe-stacks --stack-name <scheduler-stack> \
+  --query 'Stacks[0].StackStatus'
+
+# 2. Do the schedules exist, and are they ENABLED on the timezone you expect?
+aws scheduler get-schedule --name blog-gen-scheduled-start \
+  --query '{State:State, Expr:ScheduleExpression, TZ:ScheduleExpressionTimezone}'
+aws scheduler get-schedule --name blog-gen-scheduled-stop \
+  --query '{State:State, Expr:ScheduleExpression, TZ:ScheduleExpressionTimezone}'
+
+# 3. Did the target Lambda actually run? A START/REPORT plus a
+#    "scheduled start complete" line means the schedule fired.
+aws logs tail /aws/lambda/blog-gen-scheduled-start --since 3d
+aws logs tail /aws/lambda/blog-gen-scheduled-stop  --since 3d
+
+# 4. Schedule-level metric — the closest signal to "did the schedule fire":
+#    CloudWatch → namespace AWS/Scheduler → InvocationAttemptCount / TargetErrorCount
+#    (dimensions ScheduleName / ScheduleGroup).
+
+# 5. Force a manual test — bypasses the schedule, proves the code + IAM work,
+#    then re-check the log group from step 3.
+aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout
+```
+
+### Why a *deployed* schedule can still look silent
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| No Lambda log group exists at all | The stack was never deployed | Deploy the scheduler stack (see [Deployment](#deployment)) |
+| Schedules missing, only Lambdas present | `ManageSchedules=false` (Lambdas-only mode) | Redeploy with `ManageSchedules=true` |
+| Schedules exist but never fire | `ScheduleState=DISABLED` | Set `ScheduleState=ENABLED` |
+| Fires at the "wrong" hour | `ScheduleTimezone` defaults to `Etc/UTC` | Set it to your IANA zone (e.g. `Africa/Johannesburg`) — see [Timezone configuration](#timezone-configuration) |
+| Nothing on Saturday/Sunday | Cron is `MON-FRI` by design | Adjust `StartExpression`/`StopExpression` if weekends are needed |
+| Log shows `changed:false` / "already running" | The instance was already in the desired state — the run is a **successful no-op**, not a failure | None — the Lambda still logs, so this proves it fired |
+
+An **empty** Lambda log group means the schedule never invoked the function (deploy
+/ state / timezone), **not** that it ran and did nothing — a no-op run still logs
+`scheduled start complete`. The `${ProjectName}-scheduled-start-errors` and
+`-scheduled-stop-errors` alarms in the [observability stack](./monitoring.md) fire
+on Lambda **errors**, so a green alarm with an empty log group means "never ran,"
+while a green alarm with recent logs means "running fine."
+
+---
+
 ## Cost considerations
 
 See [Cost Optimisation](./cost-optimization.md) for the platform-wide view.
