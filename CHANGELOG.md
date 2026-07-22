@@ -10,6 +10,26 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.19.0] - 2026-07-22
+
+### Features
+
+- **contentsuite:** unify release→all-artifacts pipeline; de-duplicate generators
+- **infra:** reusable CloudFormation modules & cross-stack sharing (Milestone 21)
+- **pipeline:** SemVer gate, parallel stages, and E2E fixtures (release readiness)
+- **pipeline:** automated release path emits the full artifact suite (readiness H2)
+
+### Bug Fixes
+
+- **pipeline:** graceful degradation for thin releases (QA edge cases M1/M2)
+
+### Documentation
+
+- **scheduling:** add "Verifying the schedule is firing" section
+- **security:** document prompt-injection risk & generated-content safety (QA)
+- configuration reference + automated-vs-manual reconciliation (readiness)
+
+
 ## [0.18.0] - 2026-07-21
 
 ### Features
