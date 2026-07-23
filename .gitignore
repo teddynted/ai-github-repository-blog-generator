@@ -2,6 +2,8 @@
 /dist/
 bootstrap
 *.zip
+# Compiled CLI binary from `go build ./cmd/mcp` at repo root
+/mcp
 
 # Local environment / secrets — never commit
 .env
