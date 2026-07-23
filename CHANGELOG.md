@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.20.0] - 2026-07-23
+
+### Features
+
+- **mcp:** MCP integration & tool ecosystem (Milestone 22)
+
+
 ## [0.19.1] - 2026-07-22
 
 ### Bug Fixes
