@@ -71,6 +71,54 @@ fields @timestamp, deliveryId, outcome
 | stats count() by outcome
 ```
 
+### Worker instance logs (`/blog-gen/instance`)
+
+The On-Demand worker host has **no SSH and no SSM shell** (least privilege), so it
+is diagnosed entirely through CloudWatch. The instance runs the CloudWatch agent
+(configured in the compute stack UserData) and ships to the `/blog-gen/instance`
+log group, one stream per source, keyed by instance id:
+
+| Stream | Source | Use |
+| --- | --- | --- |
+| `{id}/boot` | `/var/log/cloud-init-output.log` | Boot + provisioning (model seed, service start) |
+| `{id}/syslog` | `/var/log/syslog` | Full systemd/journald |
+| `{id}/worker` | `blog-gen-worker` | The pipeline: clone/context → generate → review → publish |
+| `{id}/ollama` | `blog-gen-ollama` | Model load + inference |
+| `{id}/health` | 60s `health.sh` probe | `READY` / `UNHEALTHY: <reason>` |
+
+**Watch the box live** (the fastest way to see a run happen or a failure land):
+
+```bash
+aws logs tail /blog-gen/instance --follow --region us-east-1
+```
+
+Useful variants:
+
+```bash
+# include more boot history, then follow
+aws logs tail /blog-gen/instance --follow --since 30m --region us-east-1
+
+# only the worker + errors
+aws logs tail /blog-gen/instance --follow --region us-east-1 \
+  --filter-pattern '?worker ?error ?panic ?failed'
+
+# is the box actually ready? (health probe)
+aws logs tail /blog-gen/instance --since 5m --region us-east-1 \
+  --log-stream-name-prefix "$(aws ec2 describe-instances \
+    --filters Name=tag:Project,Values=blog-gen Name=instance-state-name,Values=running \
+    --query 'Reservations[0].Instances[0].InstanceId' --output text)/health"
+```
+
+> There is a few-second ingestion delay (the agent batches), so lines appear
+> shortly after they're written on the host — normal, not a stall.
+
+### Instance resource metrics (`BlogGen/Instance` namespace)
+
+The same agent emits **CPU / memory / disk** (on `/` and `/data`) so the failure
+modes logs don't show are visible: **disk-full**, **OOM** (a 7B model on a
+memory-tight box), and **CPU pinning** (explains slow generation). Pair these with
+the `{id}/worker` stream when a run is slow or dies without a clean error.
+
 ---
 
 ## 4. Alerts
