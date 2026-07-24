@@ -26,7 +26,15 @@ mkdir -p /opt/blog-gen
 
 # --- Docker + base tools -------------------------------------------------
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg awscli jq
+apt-get install -y ca-certificates curl gnupg unzip jq
+
+# AWS CLI v2 — the `awscli` apt package was dropped on Ubuntu 22.04, so install
+# the official bundle. The instance uses it at boot (aws s3 cp worker binary, ssm).
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --update
+rm -rf /tmp/aws /tmp/awscliv2.zip
+
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
