@@ -187,6 +187,14 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+              # Publish CPU/mem/disk metrics via the CloudWatch agent (scoped to
+              # this project's metric namespace; PutMetricData cannot be resource-scoped).
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: "BlogGen/Instance"
               # Attach the persistent data volume at boot (see UserData). The
               # volume is managed by CloudFormation but attached by the instance
               # itself, so a stack update that replaces the instance never hits
@@ -286,12 +294,12 @@ Resources:
                 INSTANCE_ID=$(imds instance-id)
                 AZ=$(imds placement/availability-zone)
 
-                # --- Observability: ship boot + worker + ollama logs to
-                # --- CloudWatch (/${ProjectName}/instance) so the box is
-                # --- diagnosable without SSH/SSM. Installs the agent if the AMI
-                # --- lacks it (idempotent), then starts it early so it captures
-                # --- the rest of this boot. The instance role already grants
-                # --- CreateLogStream + PutLogEvents on the existing log group.
+                # --- Observability: ship boot/worker/ollama logs + CPU/mem/disk
+                # --- metrics to CloudWatch so the box is diagnosable without
+                # --- SSH/SSM. Installs the agent if the AMI lacks it (idempotent).
+                # --- Worker/Ollama get dedicated log streams (systemd drop-ins);
+                # --- a 60s health probe records readiness. Role grants
+                # --- CreateLogStream + PutLogEvents + PutMetricData.
                 CW=/opt/aws/amazon-cloudwatch-agent
                 if [ ! -x "$CW/bin/amazon-cloudwatch-agent-ctl" ]; then
                   ARCH=$(dpkg --print-architecture)
@@ -299,16 +307,72 @@ Resources:
                     && dpkg -i -E /tmp/cwagent.deb || true
                   rm -f /tmp/cwagent.deb
                 fi
-                mkdir -p "$CW/etc"
-                cat > "$CW/etc/blog-gen-logs.json" <<CWJSON
+                mkdir -p "$CW/etc" /var/log/blog-gen
+
+                # Dedicated worker + ollama log streams via systemd drop-ins (they
+                # start after /data mounts, below, so these are in place first).
+                mkdir -p /etc/systemd/system/blog-gen-worker.service.d /etc/systemd/system/blog-gen-ollama.service.d
+                cat > /etc/systemd/system/blog-gen-worker.service.d/logging.conf <<'DROPIN'
+                [Service]
+                StandardOutput=append:/var/log/blog-gen/worker.log
+                StandardError=append:/var/log/blog-gen/worker.log
+                DROPIN
+                cat > /etc/systemd/system/blog-gen-ollama.service.d/logging.conf <<'DROPIN'
+                [Service]
+                StandardOutput=append:/var/log/blog-gen/ollama.log
+                StandardError=append:/var/log/blog-gen/ollama.log
+                DROPIN
+
+                # 60s health probe -> its own stream (READY / UNHEALTHY: <reason>).
+                cat > /usr/local/bin/blog-gen-health-log.sh <<'HSH'
+                #!/usr/bin/env bash
+                out=$(/opt/blog-gen/health.sh 2>&1) || true
+                echo "$(date -u +%FT%TZ) $out" >> /var/log/blog-gen/health.log
+                HSH
+                chmod +x /usr/local/bin/blog-gen-health-log.sh
+                cat > /etc/systemd/system/blog-gen-health.service <<'UNIT'
+                [Unit]
+                Description=blog-gen health probe
+                [Service]
+                Type=oneshot
+                ExecStart=/usr/local/bin/blog-gen-health-log.sh
+                UNIT
+                cat > /etc/systemd/system/blog-gen-health.timer <<'UNIT'
+                [Unit]
+                Description=Run the blog-gen health probe every minute
+                [Timer]
+                OnBootSec=60
+                OnUnitActiveSec=60
+                [Install]
+                WantedBy=timers.target
+                UNIT
+                systemctl daemon-reload
+                systemctl enable --now blog-gen-health.timer || true
+
+                # Metrics (CPU/mem/disk on / and /data) + the five log streams.
+                # Quoted heredoc so the agent's ${!aws:InstanceId} placeholder
+                # (Fn::Sub emits the literal ${!aws:InstanceId}) survives to the agent.
+                cat > "$CW/etc/blog-gen-logs.json" <<'CWJSON'
                 {
-                  "agent": { "run_as_user": "root" },
+                  "agent": { "run_as_user": "root", "metrics_collection_interval": 60 },
+                  "metrics": {
+                    "namespace": "BlogGen/Instance",
+                    "append_dimensions": { "InstanceId": "${!aws:InstanceId}" },
+                    "metrics_collected": {
+                      "cpu": { "measurement": ["cpu_usage_idle", "cpu_usage_iowait"], "totalcpu": true },
+                      "mem": { "measurement": ["mem_used_percent"] },
+                      "disk": { "measurement": ["used_percent"], "resources": ["/", "/data"] }
+                    }
+                  },
                   "logs": {
                     "logs_collected": {
                       "files": {
                         "collect_list": [
                           { "file_path": "/var/log/cloud-init-output.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/boot" },
-                          { "file_path": "/var/log/syslog", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/syslog" }
+                          { "file_path": "/var/log/syslog", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/syslog" },
+                          { "file_path": "/var/log/blog-gen/worker.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/worker" },
+                          { "file_path": "/var/log/blog-gen/ollama.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/ollama" },
+                          { "file_path": "/var/log/blog-gen/health.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/health" }
                         ]
                       }
                     }
