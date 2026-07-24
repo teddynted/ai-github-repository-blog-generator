@@ -16,14 +16,17 @@ on:
       region:
         description: AWS region to build in
         default: us-east-1
+      instance_type:
+        description: Packer builder instance type (match the worker; use a GPU type only with enable_gpu=true)
+        default: t3.xlarge
       model:
         description: Ollama model to bake
         default: qwen2.5:7b
       enable_gpu:
-        description: Bake NVIDIA drivers + toolkit
+        description: Bake NVIDIA drivers + toolkit (only for a GPU worker; needs a GPU builder)
         type: choice
-        default: "true"
-        options: ["true", "false"]
+        default: "false"
+        options: ["false", "true"]
       bake_model:
         description: Bake the model into the AMI (larger image, no boot download)
         type: choice
@@ -59,8 +62,8 @@ jobs:
 
       - name: build AMI
         run: |
-          ARGS="--region ${{ inputs.region }} --model ${{ inputs.model }}"
-          [ "${{ inputs.enable_gpu }}" = "false" ] && ARGS="$ARGS --no-gpu"
+          ARGS="--region ${{ inputs.region }} --instance-type ${{ inputs.instance_type }} --model ${{ inputs.model }}"
+          [ "${{ inputs.enable_gpu }}" = "true" ] && ARGS="$ARGS --gpu"
           [ "${{ inputs.bake_model }}" = "false" ] && ARGS="$ARGS --no-bake-model"
           # shellcheck disable=SC2086
           scripts/build-ami.sh $ARGS
