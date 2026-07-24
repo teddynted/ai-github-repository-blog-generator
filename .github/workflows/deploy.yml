@@ -148,14 +148,11 @@ jobs:
           # The key pair is managed by the compute stack (AWS::EC2::KeyPair) — no
           # KeyPairName is passed, so CloudFormation always creates/owns it.
           PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
-          # Publish generated content to S3 (durable + inspectable) instead of the
-          # instance's ephemeral EBS. Defaults to the artifacts bucket, where the
-          # worker writes under its OUTPUT_S3_PREFIX (generated-content/), cleanly
-          # separated from the per-SHA deploy zips. Override with the OUTPUT_S3_BUCKET
-          # repo variable to publish to a dedicated bucket instead.
-          OUTPUT_BUCKET="${{ vars.OUTPUT_S3_BUCKET }}"
-          [ -z "$OUTPUT_BUCKET" ] && OUTPUT_BUCKET="$ARTIFACTS_BUCKET"
-          PARAMS="$PARAMS OutputS3Bucket=$OUTPUT_BUCKET"
+          # Generated content is published to S3 (durable + inspectable) instead
+          # of the instance's ephemeral EBS. The compute stack creates and owns a
+          # dedicated content bucket (blog-gen-content-<account>-<region>); set the
+          # OUTPUT_S3_BUCKET repo variable only to override with a pre-existing bucket.
+          [ -n "${{ vars.OUTPUT_S3_BUCKET }}" ] && PARAMS="$PARAMS OutputS3Bucket=${{ vars.OUTPUT_S3_BUCKET }}"
           # CPU smoke test: set INSTANCE_TYPE (e.g. t3.xlarge) + ENABLE_GPU=false
           # to validate the whole path on cheap, widely-available CPU capacity.
           [ -n "${{ vars.INSTANCE_TYPE }}" ] && PARAMS="$PARAMS InstanceType=${{ vars.INSTANCE_TYPE }}"
