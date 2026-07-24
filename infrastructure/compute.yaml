@@ -63,9 +63,9 @@ Parameters:
     Default: ""
     Description: >
       Optional override: publish generated content to this pre-existing S3
-      bucket instead of the dedicated ContentBucket this stack creates. When
-      set, the instance role is granted s3:PutObject on it. Leave blank to use
-      the stack-owned content bucket (the normal case).
+      bucket instead of the dedicated content bucket created by the bootstrap
+      stack (<project>-content-<account>-<region>). When set, the instance role
+      is granted s3:PutObject on it. Leave blank for the normal case.
 
   ArtifactsBucket:
     Type: String
@@ -116,30 +116,6 @@ Conditions:
     - !Not [!Equals [!Ref WorkerCodeKey, ""]]
 
 Resources:
-  # Dedicated bucket for generated content (blog, release-summary, …), kept
-  # separate from the CI artifacts bucket so it can carry its own lifecycle and
-  # retention. The worker publishes here under OUTPUT_S3_PREFIX (default
-  # generated-content/). Retained on stack delete so published content is never
-  # lost. The OutputS3Bucket parameter overrides this with a pre-existing bucket.
-  ContentBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      BucketName: !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
   # Container for the SMTP password. CFN creates it with a random placeholder;
   # the operator sets the real Turbo SMTP password out-of-band (put-secret-value)
   # so it never appears in the template or parameter history. Subsequent stack
@@ -228,14 +204,16 @@ Resources:
               - Effect: Allow
                 Action: ec2:DescribeVolumes
                 Resource: "*"
-              # Publish generated content to the dedicated ContentBucket (or the
-              # OutputS3Bucket override when one is supplied).
+              # Publish generated content to the dedicated content bucket created
+              # by the bootstrap stack (or the OutputS3Bucket override when one is
+              # supplied). The bucket name is deterministic, so no cross-stack
+              # import is needed.
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !If
                   - HasOutputBucket
                   - !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
-                  - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
               # Download the worker binary from the artifacts bucket at boot.
               - !If
                 - HasWorkerCode
@@ -437,8 +415,11 @@ Resources:
                 RepoSecretId:
                   Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
                 # Effective output bucket: the OutputS3Bucket override if given,
-                # else the stack-owned dedicated ContentBucket.
-                OutputBucketName: !If [HasOutputBucket, !Ref OutputS3Bucket, !Ref ContentBucket]
+                # else the bootstrap-created dedicated content bucket.
+                OutputBucketName: !If
+                  - HasOutputBucket
+                  - !Ref OutputS3Bucket
+                  - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
 
   Instance:
     Type: AWS::EC2::Instance
@@ -489,10 +470,12 @@ Outputs:
   ContentBucketName:
     Description: >
       S3 bucket the worker publishes generated content to (OUTPUT_S3_BUCKET) —
-      the dedicated ContentBucket, or the OutputS3Bucket override when supplied.
-    Value: !If [HasOutputBucket, !Ref OutputS3Bucket, !Ref ContentBucket]
-    Export:
-      Name: !Sub "${ProjectName}-ContentBucketName"
+      the bootstrap-created content bucket, or the OutputS3Bucket override when
+      supplied.
+    Value: !If
+      - HasOutputBucket
+      - !Ref OutputS3Bucket
+      - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
   PersistentVolumeId:
     Description: Persistent gp3 data volume ID.
     Value: !Ref PersistentVolume
