@@ -443,7 +443,7 @@ Startup still matters (the instance is stopped outside its window and started at
 network-heavy setup — NVIDIA driver, Docker, the Ollama image, and the
 ~4.7 GB model — is **pre-baked into a custom AMI** instead of run every launch.
 One canonical script, [`scripts/ami/provision.sh`](../scripts/ami/provision.sh),
-is both baked by Packer ([`packer/blog-gen.pkr.hcl`](../packer/blog-gen.pkr.hcl),
+is both baked by Packer ([`packer/worker/blog-gen.pkr.hcl`](../packer/worker/blog-gen.pkr.hcl),
 via `scripts/build-ami.sh`) and run at boot as the stock-AMI fallback, so the two
 never drift. The model is baked as a seed and **copied** to `/data` at first boot
 (no download). UserData shrank to runtime-only work (mount, seed, write env,
