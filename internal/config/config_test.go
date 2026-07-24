@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // envMap returns a Getenv backed by a map, so tests never touch process state.
@@ -24,6 +25,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.OllamaModel != DefaultOllamaModel {
 		t.Errorf("OllamaModel = %q, want %q", cfg.OllamaModel, DefaultOllamaModel)
 	}
+	if cfg.OllamaTimeout != DefaultOllamaTimeout {
+		t.Errorf("OllamaTimeout = %s, want %s", cfg.OllamaTimeout, DefaultOllamaTimeout)
+	}
 	if cfg.RequireHumanApproval != DefaultRequireHumanApprove {
 		t.Errorf("RequireHumanApproval = %v, want %v", cfg.RequireHumanApproval, DefaultRequireHumanApprove)
 	}
@@ -35,6 +39,27 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 	if cfg.SMTPPort != DefaultSMTPPort {
 		t.Errorf("SMTPPort = %d, want %d", cfg.SMTPPort, DefaultSMTPPort)
+	}
+}
+
+func TestLoadOllamaTimeout(t *testing.T) {
+	// A valid duration is parsed.
+	cfg, err := Load(envMap(map[string]string{"OLLAMA_TIMEOUT": "25m"}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OllamaTimeout != 25*time.Minute {
+		t.Errorf("OllamaTimeout = %s, want 25m", cfg.OllamaTimeout)
+	}
+	// Unparseable or non-positive values fall back to the default.
+	for _, bad := range []string{"nonsense", "0", "-5m"} {
+		cfg, err := Load(envMap(map[string]string{"OLLAMA_TIMEOUT": bad}))
+		if err != nil {
+			t.Fatalf("Load(%q): %v", bad, err)
+		}
+		if cfg.OllamaTimeout != DefaultOllamaTimeout {
+			t.Errorf("OLLAMA_TIMEOUT=%q -> %s, want default %s", bad, cfg.OllamaTimeout, DefaultOllamaTimeout)
+		}
 	}
 }
 

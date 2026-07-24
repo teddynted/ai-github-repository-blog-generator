@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/retry"
@@ -37,6 +38,19 @@ func TestGenerateSendsRequestAndReturnsResponse(t *testing.T) {
 	}
 	if out != "# Post\nbody" {
 		t.Errorf("out = %q", out)
+	}
+}
+
+func TestWithTimeoutOverridesDefault(t *testing.T) {
+	if got := New("m").http.Timeout; got != DefaultTimeout {
+		t.Errorf("default timeout = %s, want %s", got, DefaultTimeout)
+	}
+	if got := New("m", WithTimeout(30*time.Minute)).http.Timeout; got != 30*time.Minute {
+		t.Errorf("overridden timeout = %s, want 30m", got)
+	}
+	// Non-positive values are ignored, keeping the default.
+	if got := New("m", WithTimeout(0)).http.Timeout; got != DefaultTimeout {
+		t.Errorf("zero timeout = %s, want default %s", got, DefaultTimeout)
 	}
 }
 

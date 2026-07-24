@@ -123,7 +123,7 @@ func main() {
 	pipe := &pipeline.Pipeline{
 		Processor: processor,
 		Generator: &generation.Generator{
-			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL)),
+			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout)),
 			Logger: a.Logger,
 		},
 		Publisher:  publisher,
@@ -144,7 +144,7 @@ func main() {
 	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
 	releaseSrc.TokenFor = tokenSource.Token
 	// One model backs both the blog generator and the full content suite.
-	genModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL))
+	genModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
 	releasePipe := &releasepipeline.Pipeline{
 		Builder: &rc.Builder{
 			Sources: releaseSrc,
