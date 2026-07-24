@@ -158,11 +158,15 @@ aws sqs get-queue-attributes --queue-url "$QURL" \
 
 ## 7. Where the output lands
 
-- **S3 output bucket** (when `OUTPUT_S3_BUCKET` is set on the worker): objects
-  under the configured prefix, one Markdown file per asset (`blog`,
-  `release-summary`, …), dated.
-- **Instance filesystem** otherwise: under the worker's `OUTPUT_DIR`
-  (default `/data/generated-content`) on the persistent EBS volume.
+- **S3 output bucket** (default): `deploy.yml` sets `OUTPUT_S3_BUCKET` on the
+  worker to the artifacts bucket (`blog-gen-artifacts-<account>-<region>`), so
+  objects land under the `OUTPUT_S3_PREFIX` (default `generated-content/`), one
+  Markdown file per asset (`blog`, `release-summary`, …), dated — cleanly
+  separated from the per-SHA deploy zips. Override with the `OUTPUT_S3_BUCKET`
+  repo variable to publish to a dedicated bucket instead.
+- **Instance filesystem** only if `OUTPUT_S3_BUCKET` is cleared: under the
+  worker's `OUTPUT_DIR` (default `/data/generated-content`) on the persistent
+  EBS volume.
 - **Release Contexts**: `release-contexts/<yyyy>/<mm>/<dd>/<contextId>.json` in
   the artifacts bucket.
 
