@@ -281,6 +281,38 @@ Resources:
                 imds() { curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1" || true; }
                 INSTANCE_ID=$(imds instance-id)
                 AZ=$(imds placement/availability-zone)
+
+                # --- Observability: ship boot + worker + ollama logs to
+                # --- CloudWatch (/${ProjectName}/instance) so the box is
+                # --- diagnosable without SSH/SSM. Installs the agent if the AMI
+                # --- lacks it (idempotent), then starts it early so it captures
+                # --- the rest of this boot. The instance role already grants
+                # --- CreateLogStream + PutLogEvents on the existing log group.
+                CW=/opt/aws/amazon-cloudwatch-agent
+                if [ ! -x "$CW/bin/amazon-cloudwatch-agent-ctl" ]; then
+                  ARCH=$(dpkg --print-architecture)
+                  curl -fsSL "https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/$ARCH/latest/amazon-cloudwatch-agent.deb" -o /tmp/cwagent.deb \
+                    && dpkg -i -E /tmp/cwagent.deb || true
+                  rm -f /tmp/cwagent.deb
+                fi
+                mkdir -p "$CW/etc"
+                cat > "$CW/etc/blog-gen-logs.json" <<CWJSON
+                {
+                  "agent": { "run_as_user": "root" },
+                  "logs": {
+                    "logs_collected": {
+                      "files": {
+                        "collect_list": [
+                          { "file_path": "/var/log/cloud-init-output.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/boot" },
+                          { "file_path": "/var/log/syslog", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/syslog" }
+                        ]
+                      }
+                    }
+                  }
+                }
+                CWJSON
+                "$CW/bin/amazon-cloudwatch-agent-ctl" -a fetch-config -m ec2 -s -c file:"$CW/etc/blog-gen-logs.json" || true
+
                 for i in $(seq 1 90); do
                   VOL_ID=$(aws ec2 describe-volumes \
                     --filters "Name=tag:Project,Values=${ProjectName}" "Name=tag:Name,Values=${ProjectName}-data" "Name=availability-zone,Values=$AZ" \
