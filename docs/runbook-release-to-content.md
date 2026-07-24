@@ -158,9 +158,9 @@ aws sqs get-queue-attributes --queue-url "$QURL" \
 
 ## 7. Where the output lands
 
-- **Dedicated content bucket** (default): the compute stack creates and owns
-  `blog-gen-content-<account>-<region>` and wires it into the worker's
-  `OUTPUT_S3_BUCKET`. Generated assets land under `OUTPUT_S3_PREFIX` (default
+- **Dedicated content bucket** (default): the bootstrap stack creates
+  `blog-gen-content-<account>-<region>` and the compute stack wires it into the
+  worker's `OUTPUT_S3_BUCKET`. Generated assets land under `OUTPUT_S3_PREFIX` (default
   `generated-content/`), one Markdown file per asset (`blog`, `release-summary`,
   …), dated. The bucket is retained on stack delete. Override with the
   `OUTPUT_S3_BUCKET` repo variable to publish to a pre-existing bucket instead.

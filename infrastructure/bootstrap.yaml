@@ -61,6 +61,31 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  # Dedicated bucket for generated content (blog, release-summary, …), kept
+  # separate from the CI artifacts bucket so it carries its own retention. The
+  # worker (compute stack) publishes here under OUTPUT_S3_PREFIX (default
+  # generated-content/). Created here rather than in the compute stack because
+  # the deploy role is not granted s3:CreateBucket; the name is deterministic so
+  # the compute stack references it without a cross-stack import.
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
   ArtifactsBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -224,6 +249,9 @@ Outputs:
   ArtifactsBucketName:
     Description: Set this as the ARTIFACTS_BUCKET repository variable.
     Value: !Ref ArtifactsBucket
+  ContentBucketName:
+    Description: Dedicated bucket the worker publishes generated content to.
+    Value: !Ref ContentBucket
   DeployRoleArn:
     Description: Set this as the AWS_DEPLOY_ROLE_ARN repository secret.
     Value: !GetAtt DeployRole.Arn
