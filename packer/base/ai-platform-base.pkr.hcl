@@ -10,8 +10,8 @@
 # Build (semantic version is REQUIRED — it tags the AMI and drives publishing):
 #   scripts/build-base-ami.sh --version v1.0.0
 # or directly:
-#   packer init packer/
-#   packer build -var 'version=v1.0.0' packer/ai-platform-base.pkr.hcl
+#   packer init packer/base/
+#   packer build -var 'version=v1.0.0' packer/base/ai-platform-base.pkr.hcl
 #
 # Output: packer-manifest.json (region:ami-id) which build-base-ami.sh publishes.
 
@@ -104,11 +104,11 @@ build {
 
   # Provision the base software stack, then harden the OS.
   provisioner "file" {
-    source      = "${path.root}/../scripts/ami/base-provision.sh"
+    source      = "${path.root}/../../scripts/ami/base-provision.sh"
     destination = "/tmp/base-provision.sh"
   }
   provisioner "file" {
-    source      = "${path.root}/../scripts/ami/harden.sh"
+    source      = "${path.root}/../../scripts/ami/harden.sh"
     destination = "/tmp/harden.sh"
   }
 

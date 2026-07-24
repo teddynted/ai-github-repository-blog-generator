@@ -42,14 +42,14 @@ GIT_COMMIT="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)
 RELEASE="$(git -C "$HERE" describe --tags --abbrev=0 2>/dev/null || echo unreleased)"
 
 cd "$HERE"
-packer init packer/
+packer init packer/base/
 echo "Building AI Platform Base AMI ${VERSION} (region=${REGION} commit=${GIT_COMMIT})…"
 packer build \
   -var "region=${REGION}" \
   -var "version=${VERSION}" \
   -var "git_commit=${GIT_COMMIT}" \
   -var "release=${RELEASE}" \
-  packer/ai-platform-base.pkr.hcl
+  packer/base/ai-platform-base.pkr.hcl
 
 # Extract region:ami-id from the manifest Packer wrote.
 AMI_ID="$(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d: -f2)"

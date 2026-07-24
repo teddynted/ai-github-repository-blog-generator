@@ -1,7 +1,7 @@
 # Packer template for the pre-baked worker AMI. It runs the same
 # scripts/ami/provision.sh that the boot-time fallback would, so the AMI and the
 # fallback never diverge. Build with scripts/build-ami.sh (recommended) or:
-#   packer init packer/ && packer build packer/blog-gen.pkr.hcl
+#   packer init packer/worker/ && packer build packer/worker/blog-gen.pkr.hcl
 #
 # Output: an AMI id to pass to the compute stack as the CustomAmi parameter.
 
@@ -64,7 +64,7 @@ build {
   sources = ["source.amazon-ebs.blog_gen"]
 
   provisioner "file" {
-    source      = "${path.root}/../scripts/ami/provision.sh"
+    source      = "${path.root}/../../scripts/ami/provision.sh"
     destination = "/tmp/provision.sh"
   }
 
