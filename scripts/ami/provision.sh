@@ -25,8 +25,11 @@ export DEBIAN_FRONTEND=noninteractive
 mkdir -p /opt/blog-gen
 
 # --- Docker + base tools -------------------------------------------------
+# A freshly-booted AMI can hit a transient apt/mirror skew (e.g. jq's dep
+# libonig5 momentarily "not installable"); retry once after re-updating.
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg unzip jq
+install_base() { apt-get install -y ca-certificates curl gnupg unzip jq; }
+install_base || { sleep 5; apt-get update -y --fix-missing; install_base; }
 
 # AWS CLI v2 — the `awscli` apt package was dropped on Ubuntu 22.04, so install
 # the official bundle. The instance uses it at boot (aws s3 cp worker binary, ssm).
