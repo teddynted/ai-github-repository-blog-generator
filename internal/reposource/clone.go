@@ -13,6 +13,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
+// DefaultCloneDepth bounds the shallow clone. It must exceed the number of
+// commits the pipeline reads (the worker's processing CommitLimit, 20) so the
+// commit-log walk stays inside the fetched history; a depth-1 clone cannot
+// satisfy a multi-commit read and fails with "object not found".
+const DefaultCloneDepth = 50
+
 // GitCloner clones a repository with go-git (no external git binary). It uses a
 // per-repository working directory that is replaced on each run, so disk use is
 // bounded and no cleanup coordination is needed.
@@ -20,7 +26,10 @@ type GitCloner struct {
 	Tokens  TokenSource
 	BaseURL string // default https://github.com; a local path in tests
 	WorkDir string // parent directory for clones
-	Logger  *slog.Logger
+	// Depth bounds the shallow clone; 0 applies DefaultCloneDepth. Must exceed
+	// the pipeline's commit-read limit or the log walk hits the shallow boundary.
+	Depth  int
+	Logger *slog.Logger
 }
 
 // Clone performs a shallow, single-branch clone and returns the local path.
@@ -44,7 +53,11 @@ func (c *GitCloner) Clone(ctx context.Context, repoFullName, ref string) (string
 		return "", fmt.Errorf("create work dir: %w", err)
 	}
 
-	opts := &git.CloneOptions{URL: url, Depth: 1, SingleBranch: true}
+	depth := c.Depth
+	if depth <= 0 {
+		depth = DefaultCloneDepth
+	}
+	opts := &git.CloneOptions{URL: url, Depth: depth, SingleBranch: true}
 	if ref != "" {
 		opts.ReferenceName = plumbing.ReferenceName(ref)
 	}

@@ -150,6 +150,54 @@ func TestGitClonerClonesLocalRepo(t *testing.T) {
 	}
 }
 
+// A clone at the default depth must fetch enough history for a multi-commit
+// read; the old Depth:1 clone failed Commits with "object not found".
+func TestGitClonerDefaultDepthAllowsCommitRead(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "owner", "name.git")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, src) // 2 commits
+	work := t.TempDir()
+	cl := &GitCloner{Tokens: fakeTokens{}, BaseURL: base, WorkDir: work} // default depth
+	dir, err := cl.Clone(context.Background(), "owner/name", "")
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	commits, err := GitCommits{}.Commits(context.Background(), dir, 10)
+	if err != nil {
+		t.Fatalf("Commits after clone: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Errorf("got %d commits, want 2", len(commits))
+	}
+}
+
+// Reading commits from a shallow clone whose history is shorter than the limit
+// must return the available commits rather than error at the shallow boundary.
+func TestGitCommitsToleratesShallowBoundary(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "owner", "name.git")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, src) // 2 commits
+	work := t.TempDir()
+	cl := &GitCloner{Tokens: fakeTokens{}, BaseURL: base, WorkDir: work, Depth: 1} // force shallow
+	dir, err := cl.Clone(context.Background(), "owner/name", "")
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	commits, err := GitCommits{}.Commits(context.Background(), dir, 10)
+	if err != nil {
+		t.Fatalf("shallow boundary not tolerated: %v", err)
+	}
+	if len(commits) < 1 {
+		t.Errorf("want >=1 commit from a shallow clone, got %d", len(commits))
+	}
+}
+
 func TestFSAnalyzer(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "main.go"), "package main")

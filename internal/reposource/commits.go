@@ -2,9 +2,11 @@ package reposource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/storer"
 
@@ -38,7 +40,11 @@ func (GitCommits) Commits(_ context.Context, localPath string, limit int) ([]pro
 		})
 		return nil
 	})
-	if err != nil {
+	// A shallow clone only holds the fetched slice of history; walking to a
+	// parent commit beyond the shallow boundary yields ErrObjectNotFound. Treat
+	// that as the end of available history and return what we collected, rather
+	// than failing the whole run.
+	if err != nil && !errors.Is(err, plumbing.ErrObjectNotFound) {
 		return nil, fmt.Errorf("iterate log: %w", err)
 	}
 	return commits, nil
