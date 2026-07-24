@@ -37,7 +37,7 @@ command -v packer >/dev/null 2>&1 || {
 }
 
 cd "$HERE"
-packer init packer/
+packer init packer/worker/
 echo "Building AMI (region=$REGION type=$INSTANCE_TYPE model=$MODEL gpu=$ENABLE_GPU bake_model=$BAKE_MODEL)…"
 packer build \
 	-var "region=$REGION" \
@@ -45,7 +45,7 @@ packer build \
 	-var "ollama_model=$MODEL" \
 	-var "enable_gpu=$ENABLE_GPU" \
 	-var "bake_model=$BAKE_MODEL" \
-	packer/blog-gen.pkr.hcl
+	packer/worker/blog-gen.pkr.hcl
 
 echo
 echo "Done. Set the printed AMI id as the compute stack's CustomAmi parameter"

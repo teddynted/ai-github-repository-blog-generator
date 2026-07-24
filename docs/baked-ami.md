@@ -25,7 +25,7 @@ model, binary, and config at launch (UserData) or in a thin child AMI.
 
 | Layer | Contents | Where |
 |-------|----------|-------|
-| **Golden base AMI** (this repo) | hardened Ubuntu 22.04, Docker, Ollama, FFmpeg, Git, Go, Python, CloudWatch + SSM agents, startup hook, log config | `packer/ai-platform-base.pkr.hcl` |
+| **Golden base AMI** (this repo) | hardened Ubuntu 22.04, Docker, Ollama, FFmpeg, Git, Go, Python, CloudWatch + SSM agents, startup hook, log config | `packer/base/ai-platform-base.pkr.hcl` |
 | **Publishing surface** | SSM Parameter Store + CloudFormation Exports | `infrastructure/ami-registry.yaml` |
 | **Consumption** | reusable Launch Template resolving the AMI from SSM | `infrastructure/ami-launch-template.yaml` |
 | **Automation** | optional Image Builder pipeline; scheduled lifecycle cleanup | `ami-image-builder.yaml`, `ami-lifecycle.yaml` |

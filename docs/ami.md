@@ -62,7 +62,7 @@ from S3 at boot (a few MB). So ordinary code changes need no AMI rebuild.
 
 ## Reproducibility
 
-The AMI is defined entirely in code: [`packer/blog-gen.pkr.hcl`](../packer/blog-gen.pkr.hcl) (the image) + `scripts/ami/provision.sh` (its contents). Rebuilding is a single command and always reflects the current repo. Keep the Packer `ollama_model` default in sync with `config.DefaultOllamaModel`.
+The AMI is defined entirely in code: [`packer/worker/blog-gen.pkr.hcl`](../packer/worker/blog-gen.pkr.hcl) (the image) + `scripts/ami/provision.sh` (its contents). Rebuilding is a single command and always reflects the current repo. Keep the Packer `ollama_model` default in sync with `config.DefaultOllamaModel`.
 
 ## Operational considerations
 
