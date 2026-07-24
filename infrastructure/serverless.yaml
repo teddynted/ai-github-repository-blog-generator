@@ -126,7 +126,12 @@ Resources:
     Properties:
       QueueName: !Sub "${ProjectName}-events"
       SqsManagedSseEnabled: true
-      VisibilityTimeout: 900
+      # The worker holds one message for the entire content suite (blog → … →
+      # X thread), which is long-form LLM inference and can run well past the
+      # old 15m. Keep the visibility timeout above the worst-case run so a
+      # slow-but-succeeding message is not redelivered and reprocessed (which
+      # duplicates work and eventually dead-letters at maxReceiveCount).
+      VisibilityTimeout: 3600
       MessageRetentionPeriod: 1209600
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt EventsDeadLetterQueue.Arn

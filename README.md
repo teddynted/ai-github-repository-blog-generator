@@ -583,6 +583,7 @@ Configuration is provided through environment variables and CloudFormation param
 | `StopExpression` | Scheduler cron for the daily STOP | `cron(0 20 ? * * *)` |
 | `ScheduleTimezone` | IANA timezone the crons evaluate in | `Etc/UTC` |
 | `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
+| `OLLAMA_TIMEOUT` | Per-request inference timeout (Go duration) | `15m` |
 | `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
 | `KeyPairName` | (optional) existing key pair; blank = stack-managed key | (managed) |
 | `REQUIRE_HUMAN_APPROVAL` | Require manual approval before publishing | `false` |

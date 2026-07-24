@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Default values applied when an optional variable is unset.
@@ -19,6 +20,7 @@ const (
 	DefaultSecretsPrefix       = "blog-gen/repos"
 	DefaultOllamaModel         = "qwen2.5:7b"
 	DefaultOllamaBaseURL       = "http://localhost:11434"
+	DefaultOllamaTimeout       = 15 * time.Minute
 	DefaultOutputDir           = "/data/generated-content"
 	DefaultWorkDir             = "/data/work"
 	DefaultMemoryDir           = "/data/memory"
@@ -71,6 +73,9 @@ type Config struct {
 	OllamaModel string
 	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
 	OllamaBaseURL string
+	// OllamaTimeout bounds a single Ollama inference request (OLLAMA_TIMEOUT,
+	// e.g. "20m"). Long-form generation on CPU can exceed the old 5m ceiling.
+	OllamaTimeout time.Duration
 	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
 	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
@@ -136,6 +141,7 @@ func Load(getenv Getenv) (Config, error) {
 		WebhookURL:           getenv("WEBHOOK_URL"),
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
+		OllamaTimeout:        durationOrDefault(getenv("OLLAMA_TIMEOUT"), DefaultOllamaTimeout),
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		OutputS3Bucket:       getenv("OUTPUT_S3_BUCKET"),
 		OutputS3Prefix:       firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
@@ -237,4 +243,13 @@ func firstNonEmpty(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+// durationOrDefault parses a Go duration string (e.g. "20m", "1h30m") and
+// returns fallback when it is empty, unparseable, or non-positive.
+func durationOrDefault(v string, fallback time.Duration) time.Duration {
+	if d, err := time.ParseDuration(strings.TrimSpace(v)); err == nil && d > 0 {
+		return d
+	}
+	return fallback
 }

@@ -20,6 +20,14 @@ import (
 // DefaultBaseURL is the local Ollama endpoint.
 const DefaultBaseURL = "http://localhost:11434"
 
+// DefaultTimeout bounds a single Ollama request. Because Generate is
+// non-streaming, the whole completion must arrive within this window — and
+// long-form inference on a large model, especially CPU-only, can take many
+// minutes. The previous 5-minute ceiling was too low for release blog
+// generation (it aborted with "Client.Timeout exceeded while awaiting
+// headers"), so the default is generous; override with WithTimeout.
+const DefaultTimeout = 15 * time.Minute
+
 // Client talks to a local Ollama server for a fixed model.
 type Client struct {
 	baseURL string
@@ -37,6 +45,16 @@ func WithBaseURL(u string) Option { return func(c *Client) { c.baseURL = strings
 // WithHTTPClient injects a custom *http.Client.
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 
+// WithTimeout overrides the per-request HTTP timeout (e.g. from OLLAMA_TIMEOUT).
+// Non-positive values are ignored, keeping DefaultTimeout.
+func WithTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		if d > 0 {
+			c.http.Timeout = d
+		}
+	}
+}
+
 // WithRetry overrides the retry policy (e.g. faster in tests).
 func WithRetry(cfg retry.Config) Option { return func(c *Client) { c.retry = cfg } }
 
@@ -47,7 +65,7 @@ func New(model string, opts ...Option) *Client {
 	c := &Client{
 		baseURL: DefaultBaseURL,
 		model:   model,
-		http:    &http.Client{Timeout: 5 * time.Minute},
+		http:    &http.Client{Timeout: DefaultTimeout},
 		retry:   retry.Default,
 	}
 	for _, o := range opts {
