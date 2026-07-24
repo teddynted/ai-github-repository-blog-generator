@@ -10,6 +10,13 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.21.0] - 2026-07-24
+
+### Features
+
+- **scripts:** add process-repository.sh to trigger /process and confirm completion
+
+
 ## [0.20.0] - 2026-07-23
 
 ### Features
