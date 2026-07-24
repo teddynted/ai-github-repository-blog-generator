@@ -62,9 +62,10 @@ Parameters:
     Type: String
     Default: ""
     Description: >
-      Optional S3 bucket for published content. When set, the instance role is
-      granted s3:PutObject on it (the worker publishes to S3 instead of local
-      files when OUTPUT_S3_BUCKET is configured).
+      Optional override: publish generated content to this pre-existing S3
+      bucket instead of the dedicated ContentBucket this stack creates. When
+      set, the instance role is granted s3:PutObject on it. Leave blank to use
+      the stack-owned content bucket (the normal case).
 
   ArtifactsBucket:
     Type: String
@@ -115,6 +116,30 @@ Conditions:
     - !Not [!Equals [!Ref WorkerCodeKey, ""]]
 
 Resources:
+  # Dedicated bucket for generated content (blog, release-summary, …), kept
+  # separate from the CI artifacts bucket so it can carry its own lifecycle and
+  # retention. The worker publishes here under OUTPUT_S3_PREFIX (default
+  # generated-content/). Retained on stack delete so published content is never
+  # lost. The OutputS3Bucket parameter overrides this with a pre-existing bucket.
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
   # Container for the SMTP password. CFN creates it with a random placeholder;
   # the operator sets the real Turbo SMTP password out-of-band (put-secret-value)
   # so it never appears in the template or parameter history. Subsequent stack
@@ -203,13 +228,14 @@ Resources:
               - Effect: Allow
                 Action: ec2:DescribeVolumes
                 Resource: "*"
-              # Publish generated content to S3 (only when an output bucket is set).
-              - !If
-                - HasOutputBucket
-                - Effect: Allow
-                  Action: s3:PutObject
-                  Resource: !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
-                - !Ref AWS::NoValue
+              # Publish generated content to the dedicated ContentBucket (or the
+              # OutputS3Bucket override when one is supplied).
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !If
+                  - HasOutputBucket
+                  - !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}/*"
               # Download the worker binary from the artifacts bucket at boot.
               - !If
                 - HasWorkerCode
@@ -372,7 +398,7 @@ Resources:
                 OLLAMA_MODEL=${OllamaModel}
                 OLLAMA_BASE_URL=http://127.0.0.1:11434
                 OUTPUT_DIR=/data/generated-content
-                OUTPUT_S3_BUCKET=${OutputS3Bucket}
+                OUTPUT_S3_BUCKET=${OutputBucketName}
                 WORK_DIR=/data/work
                 MEMORY_DIR=/data/memory
                 PENDING_DIR=/data/pending
@@ -410,6 +436,9 @@ Resources:
                   Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
                 RepoSecretId:
                   Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
+                # Effective output bucket: the OutputS3Bucket override if given,
+                # else the stack-owned dedicated ContentBucket.
+                OutputBucketName: !If [HasOutputBucket, !Ref OutputS3Bucket, !Ref ContentBucket]
 
   Instance:
     Type: AWS::EC2::Instance
@@ -457,6 +486,13 @@ Outputs:
   InstancePublicIp:
     Description: Public IP (SSH; n8n/Ollama reached via SSH tunnel only).
     Value: !GetAtt Instance.PublicIp
+  ContentBucketName:
+    Description: >
+      S3 bucket the worker publishes generated content to (OUTPUT_S3_BUCKET) —
+      the dedicated ContentBucket, or the OutputS3Bucket override when supplied.
+    Value: !If [HasOutputBucket, !Ref OutputS3Bucket, !Ref ContentBucket]
+    Export:
+      Name: !Sub "${ProjectName}-ContentBucketName"
   PersistentVolumeId:
     Description: Persistent gp3 data volume ID.
     Value: !Ref PersistentVolume
