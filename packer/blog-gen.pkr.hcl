@@ -14,10 +14,14 @@ packer {
   }
 }
 
+# Builder defaults match the CPU worker (t3.xlarge, no GPU) so the baked AMI is a
+# faithful image of what actually runs. For a GPU worker, pass a GPU builder
+# (e.g. g4dn.xlarge) AND enable_gpu=true so the driver bake is validated on real
+# hardware.
 variable "region" { default = "us-east-1" }
-variable "instance_type" { default = "g4dn.xlarge" } # GPU box: bakes+validates drivers
-variable "ollama_model" { default = "qwen2.5:7b" }   # keep in sync with config.DefaultOllamaModel
-variable "enable_gpu" { default = "true" }
+variable "instance_type" { default = "t3.xlarge" }  # match the worker; CPU-only, no driver bake
+variable "ollama_model" { default = "qwen2.5:7b" }  # keep in sync with config.DefaultOllamaModel
+variable "enable_gpu" { default = "false" }
 variable "bake_model" { default = "true" }
 variable "project" { default = "blog-gen" }
 
@@ -28,7 +32,7 @@ source "amazon-ebs" "blog_gen" {
   instance_type   = var.instance_type
   ssh_username    = "ubuntu"
   ami_name        = "${var.project}-worker-${local.ts}"
-  ami_description = "Pre-baked GitHub AI Blog Generator worker host (Docker, NVIDIA, Ollama + model, systemd services)."
+  ami_description = "Pre-baked GitHub AI Blog Generator worker host (Docker, Ollama + model, systemd services; NVIDIA when enable_gpu=true)."
 
   source_ami_filter {
     filters = {
