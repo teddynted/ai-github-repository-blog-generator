@@ -249,7 +249,10 @@ Resources:
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs:
-              VolumeSize: 30
+              # Must be >= the baked worker AMI's root snapshot (40 GB, sized in
+              # packer/worker/blog-gen.pkr.hcl for Docker + the ollama image +
+              # the baked model seed). A smaller root fails to launch from it.
+              VolumeSize: 40
               VolumeType: gp3
               Encrypted: true
               DeleteOnTermination: true
