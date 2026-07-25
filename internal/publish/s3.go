@@ -21,8 +21,9 @@ type S3API interface {
 }
 
 // S3Publisher writes generated Markdown to S3 under
-// <prefix>/<owner>/<name>/<YYYY-MM-DD>/<kind>.md — the same dated layout as
-// FilePublisher, but remote.
+// <prefix>/<owner>/<name>/releases/<tag>/<kind>.md for a release (first-class,
+// tag-addressable) or <prefix>/<owner>/<name>/<YYYY-MM-DD>/<kind>.md for a
+// snapshot — the same layout as FilePublisher, but remote.
 type S3Publisher struct {
 	api    S3API
 	bucket string
@@ -46,8 +47,11 @@ func (p *S3Publisher) Publish(ctx context.Context, repoFullName string, assets [
 		return apperror.New(apperror.CodeInvalidInput, "invalid repository name")
 	}
 	date := p.now().UTC().Format("2006-01-02")
+	release := batchRelease(assets)
+	segs := runSegments(release, date)
 	for _, a := range assets {
-		key := path.Join(p.prefix, owner, name, date, string(a.Kind)+".md")
+		parts := append([]string{p.prefix, owner, name}, segs...)
+		key := path.Join(append(parts, string(a.Kind)+".md")...)
 		_, err := p.api.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:      aws.String(p.bucket),
 			Key:         aws.String(key),
@@ -61,6 +65,7 @@ func (p *S3Publisher) Publish(ctx context.Context, repoFullName string, assets [
 	if p.Logger != nil {
 		p.Logger.Info("published content to s3",
 			slog.String("repo", repoFullName),
+			slog.String("release", release),
 			slog.String("bucket", p.bucket),
 			slog.Int("assets", len(assets)))
 	}

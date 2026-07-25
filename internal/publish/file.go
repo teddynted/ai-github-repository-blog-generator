@@ -14,7 +14,8 @@ import (
 )
 
 // FilePublisher writes generated Markdown to the local filesystem under
-// <dir>/<owner>/<name>/<YYYY-MM-DD>/<kind>.md. On the instance <dir> is on the
+// <dir>/<owner>/<name>/releases/<tag>/<kind>.md for a release, or
+// <dir>/<owner>/<name>/<YYYY-MM-DD>/<kind>.md for a snapshot. On the instance <dir> is on the
 // persistent EBS volume. It is the first real publish destination; remote
 // destinations (Git / object store / CMS) can follow behind the same Publisher.
 type FilePublisher struct {
@@ -25,7 +26,7 @@ type FilePublisher struct {
 
 // Publish writes each asset as a Markdown file and returns the first error.
 func (p *FilePublisher) Publish(_ context.Context, repoFullName string, assets []generation.Content) error {
-	dir, err := p.targetDir(repoFullName)
+	dir, err := p.targetDir(repoFullName, batchRelease(assets))
 	if err != nil {
 		return err
 	}
@@ -41,21 +42,25 @@ func (p *FilePublisher) Publish(_ context.Context, repoFullName string, assets [
 	if p.Logger != nil {
 		p.Logger.Info("published content",
 			slog.String("repo", repoFullName),
+			slog.String("release", batchRelease(assets)),
 			slog.String("dir", dir),
 			slog.Int("assets", len(assets)))
 	}
 	return nil
 }
 
-// targetDir builds the dated output directory, guarding against path traversal
-// from an unexpected repository name.
-func (p *FilePublisher) targetDir(repoFullName string) (string, error) {
+// targetDir builds the output directory for a run, guarding against path
+// traversal from an unexpected repository name. A release run is first-class
+// (<dir>/<owner>/<name>/releases/<tag>); a snapshot keeps the dated layout
+// (<dir>/<owner>/<name>/<date>).
+func (p *FilePublisher) targetDir(repoFullName, release string) (string, error) {
 	owner, name, ok := strings.Cut(repoFullName, "/")
 	if !ok || owner == "" || name == "" || strings.Contains(repoFullName, "..") {
 		return "", apperror.New(apperror.CodeInvalidInput, "invalid repository name")
 	}
 	date := p.now().UTC().Format("2006-01-02")
-	return filepath.Join(p.Dir, owner, name, date), nil
+	parts := append([]string{p.Dir, owner, name}, runSegments(release, date)...)
+	return filepath.Join(parts...), nil
 }
 
 func (p *FilePublisher) now() time.Time {
