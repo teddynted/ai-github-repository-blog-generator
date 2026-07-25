@@ -96,10 +96,14 @@ JSON
 # it at this base config (or overlays its own) from UserData, then starts it.
 systemctl enable amazon-cloudwatch-agent || true
 
-# --- SSM Agent (present on Ubuntu AMIs via snap; ensure enabled) ----------
+# --- SSM Agent (present on Ubuntu AMIs via snap) --------------------------
+# Installed so Session Manager access is available if the account configures an
+# SSM instance-management role, but left DISABLED: without that role the agent
+# only logs an AccessDenied every ~25m and this platform drives the instance via
+# SQS/S3/Secrets, not SSM. Enable it (and the account role) if you want a shell.
 snap install amazon-ssm-agent --classic 2>/dev/null || true
-systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service 2>/dev/null || \
-  systemctl enable amazon-ssm-agent 2>/dev/null || true
+snap stop --disable amazon-ssm-agent 2>/dev/null || true
+systemctl disable --now snap.amazon-ssm-agent.amazon-ssm-agent.service 2>/dev/null || true
 
 # --- Log directory + first-boot startup hook ------------------------------
 install -d -m 0755 /var/log/ai-platform

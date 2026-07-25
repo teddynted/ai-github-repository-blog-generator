@@ -349,6 +349,15 @@ Resources:
                 systemctl daemon-reload
                 systemctl enable --now blog-gen-health.timer || true
 
+                # The SSM agent is baked into the base image but this account has
+                # no SSM instance-management role, so it logs an AccessDenied
+                # every ~25m and adds nothing (the pipeline uses SQS/S3/Secrets,
+                # not SSM). Stop and disable it to keep syslog clean. If Session
+                # Manager access is wanted later, configure the account SSM role
+                # and re-enable snap.amazon-ssm-agent.amazon-ssm-agent.
+                snap stop --disable amazon-ssm-agent 2>/dev/null || true
+                systemctl disable --now snap.amazon-ssm-agent.amazon-ssm-agent.service 2>/dev/null || true
+
                 # Metrics (CPU/mem/disk on / and /data) + the five log streams.
                 # Quoted heredoc so the agent's ${!aws:InstanceId} placeholder
                 # (Fn::Sub emits the literal ${!aws:InstanceId}) survives to the agent.
