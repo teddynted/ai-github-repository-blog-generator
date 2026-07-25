@@ -169,7 +169,8 @@ aws sqs get-queue-attributes --queue-url "$QURL" \
   `blog-gen-content-<account>-<region>` and the compute stack wires it into the
   worker's `OUTPUT_S3_BUCKET`. Generated assets land under `OUTPUT_S3_PREFIX` (default
   `generated-content/`), one Markdown file per asset (`blog`, `release-summary`,
-  …), dated. The bucket is retained on stack delete. Override with the
+  …), keyed by `<owner>/<repo>/releases/<tag>/` for a release run or
+  `<owner>/<repo>/<date>/` for a snapshot. The bucket is retained on stack delete. Override with the
   `OUTPUT_S3_BUCKET` repo variable to publish to a pre-existing bucket instead.
   Find the effective name from the stack output:
 
@@ -185,9 +186,13 @@ aws sqs get-queue-attributes --queue-url "$QURL" \
 
 Fetch and eyeball the blog post:
 
+Release runs are first-class in the path — `.../<owner>/<repo>/releases/<tag>/<kind>.md`
+(snapshots keep the dated layout `.../<owner>/<repo>/<date>/<kind>.md`):
+
 ```bash
 aws s3 ls "s3://<output-bucket>/<prefix>/" --recursive | tail
-aws s3 cp "s3://<output-bucket>/<prefix>/<owner>-<repo>/<date>/blog.md" - | head -60
+# a specific release, addressable by tag:
+aws s3 cp "s3://<output-bucket>/<prefix>/<owner>/<repo>/releases/v0.3.0/blog.md" - | head -60
 ```
 
 Acceptance: the `blog.md` opens with YAML front matter (`title`, a **150–160

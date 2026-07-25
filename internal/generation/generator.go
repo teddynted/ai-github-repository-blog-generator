@@ -47,6 +47,11 @@ const (
 type Content struct {
 	Kind     Kind   `json:"kind"`
 	Markdown string `json:"markdown"`
+	// Release is the release tag this content was generated for (e.g. "v0.3.0").
+	// Empty for snapshot (non-release) runs. Publishers use it to make releases
+	// first-class in the output path (…/releases/<tag>/… vs the dated snapshot
+	// layout), so a release is addressable by tag and re-runs are idempotent.
+	Release string `json:"release,omitempty"`
 }
 
 // Generator produces content from a Snapshot via the local model.

@@ -42,3 +42,18 @@ func TestFilePublisherRejectsBadRepoName(t *testing.T) {
 		}
 	}
 }
+
+func TestFilePublisherReleaseFirstClass(t *testing.T) {
+	dir := t.TempDir()
+	p := &FilePublisher{Dir: dir, Now: func() time.Time { return time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC) }}
+	if err := p.Publish(context.Background(), "acme/widget", []generation.Content{
+		{Kind: generation.KindBlog, Markdown: "# post", Release: "v0.3.0"},
+	}); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	// Release run → releases/<tag>, no date segment.
+	blog := filepath.Join(dir, "acme", "widget", "releases", "v0.3.0", "blog.md")
+	if _, err := os.ReadFile(blog); err != nil {
+		t.Errorf("release blog not at %s: %v", blog, err)
+	}
+}

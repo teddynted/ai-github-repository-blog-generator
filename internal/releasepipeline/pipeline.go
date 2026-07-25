@@ -190,7 +190,7 @@ func (p *Pipeline) generate(ctx context.Context, rctx *rc.ReleaseContext) ([]gen
 				errs = append(errs, fmt.Sprintf("%s: %v", f, err))
 				continue
 			}
-			out = append(out, generation.Content{Kind: generation.Kind(f), Markdown: post.Markdown})
+			out = append(out, generation.Content{Kind: generation.Kind(f), Markdown: post.Markdown, Release: rctx.Release.Tag})
 			continue
 		}
 		asset, err := p.Generator.Generate(ctx, f, rctx)
@@ -198,7 +198,7 @@ func (p *Pipeline) generate(ctx context.Context, rctx *rc.ReleaseContext) ([]gen
 			errs = append(errs, fmt.Sprintf("%s: %v", f, err))
 			continue
 		}
-		out = append(out, generation.Content{Kind: generation.Kind(f), Markdown: asset.Body})
+		out = append(out, generation.Content{Kind: generation.Kind(f), Markdown: asset.Body, Release: rctx.Release.Tag})
 	}
 	return out, errs
 }
@@ -211,7 +211,7 @@ func (p *Pipeline) generateSuite(ctx context.Context, rctx *rc.ReleaseContext) (
 	suite := p.Suite.Run(ctx, rctx, nil)
 	out := make([]generation.Content, 0, len(suite.Artifacts()))
 	for _, a := range suite.Artifacts() {
-		out = append(out, generation.Content{Kind: generation.Kind(a.Kind), Markdown: a.Markdown})
+		out = append(out, generation.Content{Kind: generation.Kind(a.Kind), Markdown: a.Markdown, Release: rctx.Release.Tag})
 	}
 	var issues []string
 	for _, st := range suite.Manifest.Stages {
