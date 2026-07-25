@@ -66,17 +66,23 @@ func canonical(kind string) string {
 	return k
 }
 
-// ParseRules parses a JSON routing config into a kind->provider map. It accepts
-// two equivalent shapes:
+// ParseRules parses a routing config into a kind->provider map. It accepts a
+// JSON form and a shell-safe compact form:
 //
-//	{"claude": ["blog","architecture"], "ollama": ["seo-metadata"]}   (provider -> kinds)
-//	{"blog": "claude", "seo-metadata": "ollama"}                       (kind -> provider)
+//	{"claude": ["blog","architecture"], "ollama": ["seo-metadata"]}   (JSON: provider -> kinds)
+//	{"blog": "claude", "seo-metadata": "ollama"}                       (JSON: kind -> provider)
+//	claude=blog,architecture;ollama=seo-metadata,tiktok               (compact: provider=kinds; …)
 //
-// An empty string yields the DefaultRules. Later entries win on conflict.
+// The compact form has no quotes, spaces, or braces, so it survives being passed
+// as a GitHub repo variable → CloudFormation parameter → systemd EnvironmentFile
+// without escaping. An empty string yields the DefaultRules.
 func ParseRules(s string) (map[string]string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return DefaultRules(), nil
+	}
+	if !strings.HasPrefix(s, "{") {
+		return parseCompact(s)
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(s), &raw); err != nil {
@@ -100,6 +106,34 @@ func ParseRules(s string) (map[string]string, error) {
 			continue
 		}
 		return nil, fmt.Errorf("airouter: routing entry %q is neither a provider list nor a provider name", key)
+	}
+	return out, nil
+}
+
+// parseCompact parses the shell-safe form "provider=kind,kind;provider=kind".
+func parseCompact(s string) (map[string]string, error) {
+	out := make(map[string]string)
+	for _, group := range strings.Split(s, ";") {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		provider, kinds, ok := strings.Cut(group, "=")
+		if !ok {
+			return nil, fmt.Errorf("airouter: routing group %q must be provider=kinds", group)
+		}
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if provider == "" {
+			return nil, fmt.Errorf("airouter: routing group %q has an empty provider", group)
+		}
+		for _, k := range strings.Split(kinds, ",") {
+			if k = strings.TrimSpace(k); k != "" {
+				out[canonical(k)] = provider
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("airouter: no routing rules parsed from %q", s)
 	}
 	return out, nil
 }

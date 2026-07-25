@@ -51,6 +51,14 @@ Parameters:
       claude-sonnet-4-5), used when the Anthropic API key secret holds a key.
       Blank uses the client default. The Anthropic API is preferred over Bedrock
       when a key is present.
+  AIRoutingRules:
+    Type: String
+    Default: ""
+    Description: >
+      Hybrid AI Routing policy override. Use the shell-safe compact form
+      "provider=kind,kind;provider=kind" (e.g.
+      claude=blog,architecture,linkedin,x-thread;ollama=seo-metadata,tiktok).
+      Blank uses the built-in default policy. See internal/airouter.
   EnableGpu:
     Type: String
     Default: "true"
@@ -495,6 +503,7 @@ Resources:
                 BEDROCK_MODEL_ID=${BedrockModelId}
                 ANTHROPIC_API_KEY_SECRET=${AnthropicApiKeySecret}
                 ANTHROPIC_MODEL=${AnthropicModel}
+                AI_ROUTING_RULES=${AIRoutingRules}
                 OUTPUT_DIR=/data/generated-content
                 OUTPUT_S3_BUCKET=${OutputBucketName}
                 WORK_DIR=/data/work

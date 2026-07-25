@@ -124,3 +124,22 @@ func TestDecisionsReflectPolicy(t *testing.T) {
 		t.Errorf("decisions = %+v", d)
 	}
 }
+
+func TestParseRulesCompactForm(t *testing.T) {
+	rules, err := ParseRules("claude=blog,architecture,linkedin,x-thread;ollama=seo,tiktok")
+	if err != nil {
+		t.Fatalf("ParseRules compact: %v", err)
+	}
+	if rules["blog"] != "claude" || rules["x-thread"] != "claude" {
+		t.Errorf("claude compact rules = %+v", rules)
+	}
+	if rules["seo-metadata"] != "ollama" || rules["tiktok"] != "ollama" {
+		t.Errorf("ollama compact rules = %+v", rules)
+	}
+}
+
+func TestParseRulesCompactInvalid(t *testing.T) {
+	if _, err := ParseRules("claude"); err == nil {
+		t.Fatal("expected error for compact group with no '='")
+	}
+}

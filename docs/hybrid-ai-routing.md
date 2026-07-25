@@ -63,9 +63,15 @@ Everything is config — no recompilation to change providers or policy.
 | `BEDROCK_MODEL_ID` | Registers Claude via Bedrock (used if no Anthropic key). |
 | `OLLAMA_MODEL` / `OLLAMA_BASE_URL` / `OLLAMA_TIMEOUT` | The local provider. |
 
-`AI_ROUTING_RULES` accepts either shape (aliases like `seo`, `shorts`, `xthread`
-are normalised):
+`AI_ROUTING_RULES` accepts a **compact form** (recommended for production — no
+quotes/spaces, so it passes cleanly through a GitHub repo variable →
+CloudFormation parameter → systemd `EnvironmentFile`) or **JSON** (handy locally).
+Aliases like `seo`, `shorts`, `xthread` are normalised.
 
+```
+# compact — provider=kinds;provider=kinds
+claude=blog,architecture,linkedin,x-thread;ollama=seo-metadata,tiktok,youtube-shorts
+```
 ```json
 { "claude": ["architecture", "linkedin", "x-thread"],
   "ollama": ["seo", "visual-assets", "youtube-shorts", "tiktok"] }
@@ -73,6 +79,10 @@ are normalised):
 ```json
 { "blog": "claude", "seo-metadata": "ollama" }
 ```
+
+**Production override:** set the `AI_ROUTING_RULES` **repo variable** (compact
+form) → `deploy.yml` passes it to the `AIRoutingRules` stack parameter →
+`worker.env`. Leave it unset for the default policy.
 
 ## Observability
 
