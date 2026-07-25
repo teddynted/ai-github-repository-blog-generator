@@ -94,9 +94,16 @@ and **Settings → Webhooks** lists the `release` event.
 
 ## 5. Trigger a run
 
+> **Reference target.** The pipeline is validated end-to-end against
+> `teddynted/designing-an-ai-agent-platform-on-aws` at `v0.3.0` (published 7
+> assets). `scripts/process-repository.sh` defaults to that repo, so
+> `scripts/process-repository.sh --release-tag v0.3.0` reruns the reference
+> release from your localhost. Substitute `<owner>/<repo>` below for any other
+> registered repository.
+
 ### Option A — full loop (recommended): publish a release
 
-1. On the registered repo, publish a GitHub Release (e.g. tag `v0.2.0`).
+1. On the registered repo, publish a GitHub Release (e.g. tag `v0.3.0`).
 2. If **outside the instance window**, force a start so the worker drains the
    queue now:
 
@@ -117,7 +124,7 @@ KEY_ID=$(aws cloudformation describe-stacks --stack-name ${STACK}-serverless \
 API_KEY=$(aws apigateway get-api-key --api-key "$KEY_ID" --include-value --query value --output text)
 
 curl -sS -X POST "$URL" -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"owner":"<owner>","repository":"<repo>","releaseTag":"v0.2.0"}'
+  -d '{"owner":"teddynted","repository":"designing-an-ai-agent-platform-on-aws","releaseTag":"v0.3.0"}'
 # -> {"status":"accepted","contextId":"…","location":"s3://…/release-contexts/…json", "warnings":N}
 ```
 

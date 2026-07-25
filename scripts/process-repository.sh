@@ -13,15 +13,21 @@
 # A successful call STARTS the on-demand EC2 host if it is stopped and launches a
 # real (billable) run. Use --no-wait to fire-and-forget.
 #
+# With no --owner/--repository it targets the reference repo the pipeline is
+# validated against (teddynted/designing-an-ai-agent-platform-on-aws); pass the
+# flags (or OWNER/REPOSITORY env vars) to point it elsewhere.
+#
 # Usage:
+#   scripts/process-repository.sh                                    # reference repo, snapshot
+#   scripts/process-repository.sh --release-tag v0.3.0               # reference repo, release run
 #   scripts/process-repository.sh --owner acme --repository widget
 #   scripts/process-repository.sh --owner acme --repository widget --branch dev
 #   scripts/process-repository.sh --owner acme --repository widget --release-tag v1.2.0
 #   scripts/process-repository.sh --owner acme --repository widget --no-wait
 #
 # Flags / environment:
-#   --owner        <o>   (required) GitHub owner/org
-#   --repository   <r>   (required) repository name (without owner)
+#   --owner        <o>   GitHub owner/org         (default: teddynted)
+#   --repository   <r>   repository name, no owner (default: designing-an-ai-agent-platform-on-aws)
 #   --branch       <b>   branch for a snapshot run          (default: main)
 #   --release-tag  <t>   run release-content generation for this tag instead
 #   --provider     <p>   AI-provider hint (e.g. bedrock), carried through
@@ -40,8 +46,10 @@ set -euo pipefail
 STACK_NAME="${STACK_NAME:-blog-gen-serverless}"
 REGION="${REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}"
 PROJECT="${PROJECT:-blog-gen}"
-OWNER=""
-REPOSITORY=""
+# Default target: the reference repo the pipeline is validated against. Override
+# with --owner/--repository or the OWNER/REPOSITORY env vars.
+OWNER="${OWNER:-teddynted}"
+REPOSITORY="${REPOSITORY:-designing-an-ai-agent-platform-on-aws}"
 BRANCH="main"
 RELEASE_TAG=""
 PROVIDER=""
@@ -80,8 +88,8 @@ command -v aws  >/dev/null 2>&1 || die "aws CLI not found on PATH"
 command -v curl >/dev/null 2>&1 || die "curl not found on PATH"
 command -v jq   >/dev/null 2>&1 || die "jq not found on PATH (needed to build JSON safely)"
 
-[ -n "$OWNER" ]      || die "--owner is required"
-[ -n "$REPOSITORY" ] || die "--repository is required"
+[ -n "$OWNER" ]      || die "--owner must not be empty"
+[ -n "$REPOSITORY" ] || die "--repository must not be empty"
 
 REPO_FULL="${OWNER}/${REPOSITORY}"
 LOG_GROUP="/${PROJECT}/instance"
