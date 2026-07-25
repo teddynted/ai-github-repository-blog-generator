@@ -124,15 +124,32 @@ the other, and the extraction can be cached, inspected, and reviewed on its own.
 
 ## Configuration
 
+The Stage-3 writer is chosen by **preference: Anthropic API → Amazon Bedrock →
+local Ollama**. The first one configured wins; if none is, Ollama writes
+(zero-paid default).
+
 | Env | Effect |
 | --- | --- |
-| `BEDROCK_MODEL_ID` | Bedrock Claude model id for the writer. **Set → Claude writes**; unset → Ollama writes (zero-paid default). |
-| `AWS_REGION` | Region for the Bedrock endpoint (auth is IAM via the instance role). |
-| `OLLAMA_MODEL` / `OLLAMA_BASE_URL` / `OLLAMA_TIMEOUT` | The local model used for Stage 2 (and Stage 3 when Bedrock is unset). |
+| `ANTHROPIC_API_KEY_SECRET` | Secrets Manager id/ARN holding an Anthropic API key. **Key present → Claude via api.anthropic.com** (needs no AWS model access). Resolved at startup; never in plaintext env. `ANTHROPIC_API_KEY` is the local-dev equivalent. |
+| `ANTHROPIC_MODEL` | Anthropic API model id (e.g. `claude-sonnet-4-5`); blank uses the client default. |
+| `BEDROCK_MODEL_ID` | Bedrock Claude model id. Used when no Anthropic key is set. Auth is IAM via the instance role (`bedrock:InvokeModel`); the model must be authorized in the account. |
+| `AWS_REGION` | Region for the Bedrock endpoint. |
+| `OLLAMA_MODEL` / `OLLAMA_BASE_URL` / `OLLAMA_TIMEOUT` | The local model — always Stage 2, and Stage 3 when no Claude provider is configured. |
 
-The instance role needs `bedrock:InvokeModel` on the chosen model, and the model
-must be enabled in the account's Bedrock model access. A Bedrock init failure
-degrades gracefully to the local writer — the run never hard-fails on it.
+**Resilience:** the chosen Claude writer is wrapped in a per-call fallback
+(`internal/modelfallback`) — if a provider is configured but an invocation fails
+(Bedrock "Operation not allowed" without model access, an Anthropic auth/rate
+error, an outage), that stage degrades to the local Ollama model instead of
+losing content. The run never hard-fails on a writer error.
+
+**Setting the Anthropic key (production):** the compute stack creates an empty
+`<project>/anthropic/api-key` secret; put the real key in without it ever
+touching the template or repo:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id blog-gen/anthropic/api-key --secret-string 'sk-ant-...' --region us-east-1
+```
 
 ## Where it lives
 

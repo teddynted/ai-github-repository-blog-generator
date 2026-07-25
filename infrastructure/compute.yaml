@@ -43,6 +43,14 @@ Parameters:
       content (grounded in the local Ollama engineering analysis); blank keeps
       the local model as the writer (zero paid inference). Auth is IAM via the
       instance role — no API key.
+  AnthropicModel:
+    Type: String
+    Default: ""
+    Description: >
+      Anthropic API model id for the technical-writer stage (e.g.
+      claude-sonnet-4-5), used when the Anthropic API key secret holds a key.
+      Blank uses the client default. The Anthropic API is preferred over Bedrock
+      when a key is present.
   EnableGpu:
     Type: String
     Default: "true"
@@ -138,6 +146,19 @@ Resources:
         PasswordLength: 32
         ExcludePunctuation: true
 
+  # Container for the Anthropic API key (technical-writer stage). CFN creates it
+  # with a random placeholder; set the real key out-of-band with put-secret-value
+  # so it never appears in the template or parameter history. Empty/placeholder =
+  # the writer stays on the local model. Subsequent stack updates leave it intact.
+  AnthropicApiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/anthropic/api-key"
+      Description: Anthropic API key for the Claude technical-writer (set the real value with put-secret-value).
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+
   # Created only when no external KeyPairName is supplied. CloudFormation/EC2
   # generates the key pair and stores the private key in SSM Parameter Store at
   # /ec2/keypair/<key-pair-id> (SecureString) — retrieve it with get-parameter.
@@ -180,6 +201,7 @@ Resources:
                 Resource:
                   - Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
                   - !Ref NotificationsSecret
+                  - !Ref AnthropicApiKeySecret
               # Update last-processed commit SHA after a run.
               - Effect: Allow
                 Action:
@@ -471,6 +493,8 @@ Resources:
                 OLLAMA_MODEL=${OllamaModel}
                 OLLAMA_BASE_URL=http://127.0.0.1:11434
                 BEDROCK_MODEL_ID=${BedrockModelId}
+                ANTHROPIC_API_KEY_SECRET=${AnthropicApiKeySecret}
+                ANTHROPIC_MODEL=${AnthropicModel}
                 OUTPUT_DIR=/data/generated-content
                 OUTPUT_S3_BUCKET=${OutputBucketName}
                 WORK_DIR=/data/work

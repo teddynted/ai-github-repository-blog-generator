@@ -161,6 +161,10 @@ jobs:
           # BEDROCK_MODEL_ID repo variable to a Bedrock Claude model id to enable
           # it; leave unset for the zero-paid local writer.
           [ -n "${{ vars.BEDROCK_MODEL_ID }}" ] && PARAMS="$PARAMS BedrockModelId=${{ vars.BEDROCK_MODEL_ID }}"
+          # Optional: Anthropic API technical-writer (preferred over Bedrock when the
+          # api-key secret holds a key). Set ANTHROPIC_MODEL to pin the model id; the
+          # key itself lives only in Secrets Manager, never a repo variable.
+          [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && PARAMS="$PARAMS AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
           AMI_ID=$(aws ssm get-parameter --name /blog-gen/worker-ami \
             --query Parameter.Value --output text 2>/dev/null || echo "")
           [ -n "$AMI_ID" ]           && PARAMS="$PARAMS CustomAmi=$AMI_ID"

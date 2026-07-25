@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
@@ -36,6 +37,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/modelfallback"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/notify"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
@@ -146,22 +148,58 @@ func main() {
 	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
 	releaseSrc.TokenFor = tokenSource.Token
 	// Two-stage model split. Stage 2 (engineering analysis) always uses the local
-	// Ollama model — cheap, deterministic, private. Stage 3 (writing) uses Claude
-	// on Bedrock when BEDROCK_MODEL_ID is set, otherwise the same local model, so
-	// the platform is zero-paid-inference by default and upgrades to Claude by
-	// config alone. A Bedrock init failure degrades to the local writer.
+	// Ollama model — cheap, deterministic, private. Stage 3 (writing) uses a Claude
+	// model when configured, otherwise the same local model, so the platform is
+	// zero-paid-inference by default and upgrades to Claude by config alone. Writer
+	// preference: Anthropic API (needs only a key) > Amazon Bedrock (IAM auth) >
+	// local Ollama.
+	//
+	// Resilience: a Claude client can construct successfully yet fail on every
+	// invocation (e.g. Bedrock "Operation not allowed" without model access, or an
+	// Anthropic auth/rate error). We wrap the chosen writer so a per-call failure
+	// falls back to the local model instead of losing the stage (the blog, and
+	// everything downstream of it).
 	analysisModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
 	var writerModel releasegen.Model = analysisModel
-	if a.Config.BedrockModelID != "" {
-		claude, err := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{
+
+	// Resolve the Anthropic API key: a Secrets Manager reference wins over a
+	// plaintext env value, so the credential need never sit in the instance's env.
+	anthropicKey := a.Config.AnthropicAPIKey
+	if a.Config.AnthropicAPIKeySecret != "" {
+		if k, kerr := sec.Value(ctx, a.Config.AnthropicAPIKeySecret); kerr != nil {
+			a.Logger.Warn("could not resolve Anthropic API key secret; skipping Anthropic writer", "error", kerr.Error())
+		} else {
+			anthropicKey = k
+		}
+	}
+
+	switch {
+	case anthropicKey != "":
+		cl, cerr := anthropic.New(anthropic.Config{
+			APIKey: anthropicKey,
+			Model:  a.Config.AnthropicModel,
+			System: bedrockclaude.WriterPersona,
+		})
+		if cerr != nil {
+			a.Logger.Warn("anthropic client init failed; using local writer", "error", cerr.Error())
+		} else {
+			writerModel = &modelfallback.Fallback{Primary: cl, Secondary: analysisModel, Label: "anthropic-api", Logger: a.Logger}
+			model := a.Config.AnthropicModel
+			if model == "" {
+				model = anthropic.DefaultModel
+			}
+			a.Logger.Info("technical-writer model: claude via anthropic api (falls back to local on error)", "model", model)
+		}
+	case a.Config.BedrockModelID != "":
+		claude, berr := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{
 			ModelID: a.Config.BedrockModelID,
 			System:  bedrockclaude.WriterPersona,
 		})
-		if err != nil {
-			a.Logger.Warn("bedrock claude init failed; using local writer", "error", err.Error())
+		if berr != nil {
+			a.Logger.Warn("bedrock claude init failed; using local writer", "error", berr.Error())
 		} else {
-			writerModel = claude
-			a.Logger.Info("technical-writer model: claude on bedrock", "model", a.Config.BedrockModelID)
+			writerModel = &modelfallback.Fallback{Primary: claude, Secondary: analysisModel, Label: "bedrock-claude", Logger: a.Logger}
+			a.Logger.Info("technical-writer model: claude on bedrock (falls back to local on error)", "model", a.Config.BedrockModelID)
 		}
 	}
 	releasePipe := &releasepipeline.Pipeline{
