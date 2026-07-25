@@ -76,6 +76,13 @@ type Config struct {
 	// OllamaTimeout bounds a single Ollama inference request (OLLAMA_TIMEOUT,
 	// e.g. "20m"). Long-form generation on CPU can exceed the old 5m ceiling.
 	OllamaTimeout time.Duration
+	// BedrockModelID selects the Amazon Bedrock Claude model for the Stage-3
+	// technical-writer (BEDROCK_MODEL_ID, e.g.
+	// "anthropic.claude-3-5-sonnet-20240620-v1:0"). When set, Claude writes the
+	// content (grounded in the Ollama engineering analysis); when blank, Ollama
+	// remains the writer (the zero-paid-inference default). Auth is IAM via the
+	// instance role in AWSRegion — no API key.
+	BedrockModelID string
 	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
 	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
@@ -142,6 +149,7 @@ func Load(getenv Getenv) (Config, error) {
 		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
 		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
 		OllamaTimeout:        durationOrDefault(getenv("OLLAMA_TIMEOUT"), DefaultOllamaTimeout),
+		BedrockModelID:       getenv("BEDROCK_MODEL_ID"),
 		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		OutputS3Bucket:       getenv("OUTPUT_S3_BUCKET"),
 		OutputS3Prefix:       firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),

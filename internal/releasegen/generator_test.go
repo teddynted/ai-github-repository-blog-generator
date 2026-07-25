@@ -57,7 +57,7 @@ func TestGenerateGroundsPromptInContext(t *testing.T) {
 		t.Errorf("title = %q (should reuse content-intelligence blog title)", asset.Title)
 	}
 	p := fm.prompts[0]
-	for _, want := range []string{"acme/widget", "v0.2.0", "add release context builder", "Do not invent", "You are a senior software engineer"} {
+	for _, want := range []string{"acme/widget", "v0.2.0", "add release context builder", "Do not invent", "lead software engineer who built this platform"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt missing %q", want)
 		}
