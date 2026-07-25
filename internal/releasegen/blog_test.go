@@ -87,8 +87,9 @@ func TestBlogPromptStructureAndGrounding(t *testing.T) {
 	_, _ = (&Generator{Model: fm}).Blog(context.Background(), blogContext())
 	p := fm.prompts[0]
 	for _, want := range []string{
-		"Introduction", "Architecture and Design", "How to Use or Extend the Feature", "Conclusion",
-		"Do NOT invent", "not available", "1,500–2,500 words",
+		"Introduction", "Architecture", "Engineering Decisions", "Tradeoffs",
+		"How Developers Can Use or Extend It", "What's Next", "Conclusion",
+		"Never invent", "omit it silently", "Do NOT narrate the changelog", "1,500–2,500 words",
 		"acme/widget", "v0.2.0", "add release context builder", // grounding
 	} {
 		if !strings.Contains(p, want) {
@@ -147,5 +148,23 @@ func TestBlogTagsNormalized(t *testing.T) {
 func TestBlogNoModel(t *testing.T) {
 	if _, err := (&Generator{}).Blog(context.Background(), blogContext()); err == nil {
 		t.Error("expected error without a model")
+	}
+}
+
+func TestBlogCapsArchitectureDiagramsAtTwo(t *testing.T) {
+	rctx := blogContext()
+	// Give the context more diagrams than the cap.
+	rctx.Mermaid = []rc.MermaidDiagram{
+		{Summary: "one", Type: "flowchart", Edges: []rc.MermaidEdge{{From: "A", To: "B"}}},
+		{Summary: "two", Type: "flowchart", Edges: []rc.MermaidEdge{{From: "C", To: "D"}}},
+		{Summary: "three", Type: "flowchart", Edges: []rc.MermaidEdge{{From: "E", To: "F"}}},
+	}
+	md := assembleBlog("Title", "desc", []string{"aws"}, "## Introduction\n\nBody.", rctx)
+	if n := strings.Count(md, "```mermaid"); n > maxBlogDiagrams {
+		t.Errorf("embedded %d diagrams, want <= %d", n, maxBlogDiagrams)
+	}
+	// The third diagram must not appear.
+	if strings.Contains(md, "three") {
+		t.Error("a diagram beyond the cap was embedded")
 	}
 }

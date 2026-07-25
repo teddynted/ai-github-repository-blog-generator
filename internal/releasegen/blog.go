@@ -10,6 +10,10 @@ import (
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
 
+// maxBlogDiagrams caps how many architecture diagrams a blog embeds (the spec:
+// never dump every diagram extracted from the repository).
+const maxBlogDiagrams = 2
+
 // BlogPost is a long-form technical article with SEO front matter.
 type BlogPost struct {
 	Title           string   `json:"title"`
@@ -59,38 +63,48 @@ func (g *Generator) blogPrompt(rctx *rc.ReleaseContext, title string) string {
 	ground := safeTruncate(contextBlock(rctx), max)
 
 	var b strings.Builder
-	b.WriteString("You are a senior software engineer and technical writer producing a long-form engineering blog post.\n\n")
-	b.WriteString("Write a professional, educational, technically accurate article of roughly 1,500–2,500 words in GitHub-flavoured Markdown. ")
-	b.WriteString("Engaging for developers, cloud engineers, and AI practitioners; avoid promotional language.\n\n")
-	b.WriteString("The working title is: ")
+	b.WriteString("You are a senior software engineer writing a publication-quality engineering blog post for experienced software, cloud, platform, and AI engineers.\n")
+	b.WriteString("This is NOT marketing copy, NOT documentation, and NOT a changelog. Write to educate engineers, in the register of the AWS Builders' Library, Stripe, Cloudflare, or Netflix engineering blogs — professional, technical, confident, clear.\n\n")
+	b.WriteString("Write roughly 1,500–2,500 words in GitHub-flavoured Markdown. The working title is: ")
 	b.WriteString(title)
-	b.WriteString("\n\nUse these second-level (##) sections, in order, including only those supported by the context:\n")
+	b.WriteString("\n\nUse these second-level (##) sections, in order, including only those the context supports (omit a section rather than pad it):\n")
 	for _, s := range blogSections {
 		b.WriteString("- ")
 		b.WriteString(s)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nRules:\n")
-	b.WriteString("- Ground every statement strictly in the Release Context below. Do NOT invent facts, versions, features, code, or AWS resources.\n")
-	b.WriteString("- If a detail is missing from the context, say it was not available rather than guessing.\n")
+	b.WriteString("\nHARD RULES:\n")
+	b.WriteString("- Ground EVERY claim in the Release Context below. Never invent facts, versions, features, code, AWS resources, or motivations.\n")
+	b.WriteString("- Never speculate. Do not write phrases like \"probably\", \"this likely\", \"we wanted\", \"when I started this project\", or \"this was created because\". If something is not in the context, omit it silently — do not mention that it is missing.\n")
+	b.WriteString("- Do NOT narrate the changelog or list commits (\"commit abc added X\"). Explain what the release ACCOMPLISHES and how it works.\n")
+	b.WriteString("- No AI filler or marketing: never write \"this marks an exciting milestone\", \"demonstrates the power\", \"showcases innovation\", \"highlights the importance\", or \"revolutionises\".\n")
+	b.WriteString("- Show engineering depth: architecture, system design, event flow, AWS services, design decisions, trade-offs, scalability, maintainability, developer experience, and extensibility — only where the context supports them.\n")
+	b.WriteString("- Only discuss files or directories that are actually relevant to this release; do not describe the whole repository.\n")
+	b.WriteString("- \"What's Next\": briefly introduce the next milestone or future direction using ONLY the future work / roadmap present in the context. Do not invent implementation details.\n")
 	b.WriteString("- Do NOT write YAML front matter, an H1 title, or Mermaid diagrams — those are added separately. Start at \"## Introduction\".\n")
-	b.WriteString("- Use fenced code blocks for any commands or configuration you cite from the context.\n\n")
+	b.WriteString("- Use fenced code blocks for any commands or configuration you cite from the context. Use proper Unicode punctuation (straight quotes and real em dashes); never emit mojibake.\n\n")
 	b.WriteString("=== RELEASE CONTEXT ===\n")
 	b.WriteString(ground)
 	b.WriteString("\n=== END RELEASE CONTEXT ===\n")
 	return b.String()
 }
 
-// blogSections is the canonical long-form article structure.
+// blogSections is the canonical long-form article structure — the sequence a
+// senior engineer would use to explain a release: what changed, why, how it
+// works, the decisions and trade-offs, and where it goes next.
 var blogSections = []string{
 	"Introduction",
-	"Background and Context",
-	"What Was Implemented",
-	"Architecture and Design",
+	"Background",
+	"Problem Being Solved",
+	"What's New in this Release",
+	"Architecture",
 	"Implementation Details",
-	"Repository and Code Changes",
-	"Benefits and Outcomes",
-	"How to Use or Extend the Feature",
+	"Engineering Decisions",
+	"Repository Changes",
+	"Benefits",
+	"Tradeoffs",
+	"How Developers Can Use or Extend It",
+	"What's Next",
 	"Conclusion",
 }
 
@@ -107,10 +121,16 @@ func assembleBlog(title, meta string, tags []string, body string, rctx *rc.Relea
 	fmt.Fprintf(&b, "# %s\n\n", title)
 	b.WriteString(body)
 
+	// Attach at most two architecture diagrams, chosen from the release's real
+	// Mermaid diagrams — never dump every diagram extracted from the repository.
 	if len(rctx.Mermaid) > 0 && !strings.Contains(body, "```mermaid") {
+		diagrams := rctx.Mermaid
+		if len(diagrams) > maxBlogDiagrams {
+			diagrams = diagrams[:maxBlogDiagrams]
+		}
 		b.WriteString("\n\n## Architecture Diagrams\n\n")
 		b.WriteString("The following diagrams are taken directly from the repository's documentation.\n")
-		for _, d := range rctx.Mermaid {
+		for _, d := range diagrams {
 			if strings.TrimSpace(d.Source) != "" {
 				fmt.Fprintf(&b, "\n_%s (%s)_\n\n", d.Summary, d.Source)
 			} else {
