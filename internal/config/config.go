@@ -96,6 +96,11 @@ type Config struct {
 	// AnthropicModel is the Anthropic API model id for the writer (ANTHROPIC_MODEL,
 	// e.g. "claude-sonnet-4-5"). Blank uses the client default.
 	AnthropicModel string
+	// AIRoutingRules is the Hybrid AI Routing policy as JSON (AI_ROUTING_RULES),
+	// mapping content kinds to providers — e.g.
+	// {"claude":["blog","architecture"],"ollama":["seo-metadata","tiktok"]}.
+	// Blank uses the built-in default policy. See internal/airouter.
+	AIRoutingRules string
 	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
 	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
@@ -166,6 +171,7 @@ func Load(getenv Getenv) (Config, error) {
 		AnthropicAPIKey:       getenv("ANTHROPIC_API_KEY"),
 		AnthropicAPIKeySecret: getenv("ANTHROPIC_API_KEY_SECRET"),
 		AnthropicModel:        getenv("ANTHROPIC_MODEL"),
+		AIRoutingRules:        getenv("AI_ROUTING_RULES"),
 		OutputDir:             firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		OutputS3Bucket:        getenv("OUTPUT_S3_BUCKET"),
 		OutputS3Prefix:        firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
