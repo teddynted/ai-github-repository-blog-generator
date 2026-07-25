@@ -83,6 +83,19 @@ type Config struct {
 	// remains the writer (the zero-paid-inference default). Auth is IAM via the
 	// instance role in AWSRegion — no API key.
 	BedrockModelID string
+	// AnthropicAPIKey is an Anthropic API key for the Stage-3 writer via
+	// api.anthropic.com (ANTHROPIC_API_KEY). Prefer AnthropicAPIKeySecret in
+	// production so the key never sits in plaintext env. When either resolves to a
+	// non-empty key, the Anthropic API writer is used in preference to Bedrock.
+	AnthropicAPIKey string
+	// AnthropicAPIKeySecret is a Secrets Manager id/ARN whose value is the
+	// Anthropic API key (ANTHROPIC_API_KEY_SECRET). Resolved at startup; takes
+	// precedence over AnthropicAPIKey so the credential never lives in the
+	// instance's env file.
+	AnthropicAPIKeySecret string
+	// AnthropicModel is the Anthropic API model id for the writer (ANTHROPIC_MODEL,
+	// e.g. "claude-sonnet-4-5"). Blank uses the client default.
+	AnthropicModel string
 	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
 	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
@@ -134,38 +147,41 @@ type Getenv func(key string) string
 // different subset.
 func Load(getenv Getenv) (Config, error) {
 	cfg := Config{
-		AWSRegion:            getenv("AWS_REGION"),
-		ProjectName:          getenv("PROJECT_NAME"),
-		EventSource:          getenv("EVENT_SOURCE"),
-		PublishTrigger:       firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
-		RepositoriesTable:    getenv("REPOSITORIES_TABLE"),
-		SecretsPrefix:        firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
-		RepoSecretID:         getenv("REPO_SECRET_ID"),
-		EventBusName:         getenv("EVENT_BUS_NAME"),
-		QueueURL:             getenv("QUEUE_URL"),
-		InstanceID:           getenv("INSTANCE_ID"),
-		N8NWebhookURL:        getenv("N8N_WEBHOOK_URL"),
-		WebhookURL:           getenv("WEBHOOK_URL"),
-		OllamaModel:          firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
-		OllamaBaseURL:        firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
-		OllamaTimeout:        durationOrDefault(getenv("OLLAMA_TIMEOUT"), DefaultOllamaTimeout),
-		BedrockModelID:       getenv("BEDROCK_MODEL_ID"),
-		OutputDir:            firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
-		OutputS3Bucket:       getenv("OUTPUT_S3_BUCKET"),
-		OutputS3Prefix:       firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
-		WorkDir:              firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
-		MemoryDir:            firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
-		PendingDir:           firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
-		NotifyWebhookURL:     getenv("NOTIFY_WEBHOOK_URL"),
-		NotifyEmailFrom:      getenv("NOTIFY_EMAIL_FROM"),
-		NotifyEmailTo:        getenv("NOTIFY_EMAIL_TO"),
-		SMTPHost:             firstNonEmpty(getenv("SMTP_HOST"), DefaultSMTPHost),
-		SMTPPort:             DefaultSMTPPort,
-		SMTPUsername:         getenv("SMTP_USERNAME"),
-		SMTPPassword:         getenv("SMTP_PASSWORD"),
-		SMTPPasswordSecret:   getenv("SMTP_PASSWORD_SECRET"),
-		LogLevel:             firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
-		RequireHumanApproval: DefaultRequireHumanApprove,
+		AWSRegion:             getenv("AWS_REGION"),
+		ProjectName:           getenv("PROJECT_NAME"),
+		EventSource:           getenv("EVENT_SOURCE"),
+		PublishTrigger:        firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
+		RepositoriesTable:     getenv("REPOSITORIES_TABLE"),
+		SecretsPrefix:         firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
+		RepoSecretID:          getenv("REPO_SECRET_ID"),
+		EventBusName:          getenv("EVENT_BUS_NAME"),
+		QueueURL:              getenv("QUEUE_URL"),
+		InstanceID:            getenv("INSTANCE_ID"),
+		N8NWebhookURL:         getenv("N8N_WEBHOOK_URL"),
+		WebhookURL:            getenv("WEBHOOK_URL"),
+		OllamaModel:           firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
+		OllamaBaseURL:         firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
+		OllamaTimeout:         durationOrDefault(getenv("OLLAMA_TIMEOUT"), DefaultOllamaTimeout),
+		BedrockModelID:        getenv("BEDROCK_MODEL_ID"),
+		AnthropicAPIKey:       getenv("ANTHROPIC_API_KEY"),
+		AnthropicAPIKeySecret: getenv("ANTHROPIC_API_KEY_SECRET"),
+		AnthropicModel:        getenv("ANTHROPIC_MODEL"),
+		OutputDir:             firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
+		OutputS3Bucket:        getenv("OUTPUT_S3_BUCKET"),
+		OutputS3Prefix:        firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
+		WorkDir:               firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
+		MemoryDir:             firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
+		PendingDir:            firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
+		NotifyWebhookURL:      getenv("NOTIFY_WEBHOOK_URL"),
+		NotifyEmailFrom:       getenv("NOTIFY_EMAIL_FROM"),
+		NotifyEmailTo:         getenv("NOTIFY_EMAIL_TO"),
+		SMTPHost:              firstNonEmpty(getenv("SMTP_HOST"), DefaultSMTPHost),
+		SMTPPort:              DefaultSMTPPort,
+		SMTPUsername:          getenv("SMTP_USERNAME"),
+		SMTPPassword:          getenv("SMTP_PASSWORD"),
+		SMTPPasswordSecret:    getenv("SMTP_PASSWORD_SECRET"),
+		LogLevel:              firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
+		RequireHumanApproval:  DefaultRequireHumanApprove,
 	}
 
 	if raw := getenv("SMTP_PORT"); raw != "" {
