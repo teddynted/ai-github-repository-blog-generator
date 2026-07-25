@@ -36,6 +36,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/modelfallback"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/notify"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
@@ -149,7 +150,13 @@ func main() {
 	// Ollama model — cheap, deterministic, private. Stage 3 (writing) uses Claude
 	// on Bedrock when BEDROCK_MODEL_ID is set, otherwise the same local model, so
 	// the platform is zero-paid-inference by default and upgrades to Claude by
-	// config alone. A Bedrock init failure degrades to the local writer.
+	// config alone.
+	//
+	// Resilience: the Claude client can construct successfully yet fail on every
+	// invocation (e.g. Bedrock "Operation not allowed" when model access is not
+	// granted). We therefore wrap it so a per-call failure falls back to the local
+	// model, instead of losing the stage (the blog, and everything downstream of
+	// it). Both an init failure and a per-call failure degrade to Ollama.
 	analysisModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
 	var writerModel releasegen.Model = analysisModel
 	if a.Config.BedrockModelID != "" {
@@ -160,8 +167,14 @@ func main() {
 		if err != nil {
 			a.Logger.Warn("bedrock claude init failed; using local writer", "error", err.Error())
 		} else {
-			writerModel = claude
-			a.Logger.Info("technical-writer model: claude on bedrock", "model", a.Config.BedrockModelID)
+			writerModel = &modelfallback.Fallback{
+				Primary:   claude,
+				Secondary: analysisModel,
+				Label:     "bedrock-claude",
+				Logger:    a.Logger,
+			}
+			a.Logger.Info("technical-writer model: claude on bedrock (falls back to local on error)",
+				"model", a.Config.BedrockModelID)
 		}
 	}
 	releasePipe := &releasepipeline.Pipeline{
