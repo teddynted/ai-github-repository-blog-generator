@@ -165,6 +165,10 @@ jobs:
           # api-key secret holds a key). Set ANTHROPIC_MODEL to pin the model id; the
           # key itself lives only in Secrets Manager, never a repo variable.
           [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && PARAMS="$PARAMS AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
+          # Optional: override the Hybrid AI Routing policy. Use the shell-safe
+          # compact form (no quotes/spaces), e.g.
+          # claude=blog,architecture,linkedin,x-thread;ollama=seo-metadata,tiktok
+          [ -n "${{ vars.AI_ROUTING_RULES }}" ] && PARAMS="$PARAMS AIRoutingRules=${{ vars.AI_ROUTING_RULES }}"
           AMI_ID=$(aws ssm get-parameter --name /blog-gen/worker-ami \
             --query Parameter.Value --output text 2>/dev/null || echo "")
           [ -n "$AMI_ID" ]           && PARAMS="$PARAMS CustomAmi=$AMI_ID"

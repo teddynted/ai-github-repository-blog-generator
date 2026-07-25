@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/airouter"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
@@ -37,7 +38,6 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/memory"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/modelfallback"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/notify"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
@@ -148,19 +148,14 @@ func main() {
 	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
 	releaseSrc.TokenFor = tokenSource.Token
 	// Two-stage model split. Stage 2 (engineering analysis) always uses the local
-	// Ollama model — cheap, deterministic, private. Stage 3 (writing) uses a Claude
-	// model when configured, otherwise the same local model, so the platform is
-	// zero-paid-inference by default and upgrades to Claude by config alone. Writer
-	// preference: Anthropic API (needs only a key) > Amazon Bedrock (IAM auth) >
-	// local Ollama.
-	//
-	// Resilience: a Claude client can construct successfully yet fail on every
-	// invocation (e.g. Bedrock "Operation not allowed" without model access, or an
-	// Anthropic auth/rate error). We wrap the chosen writer so a per-call failure
-	// falls back to the local model instead of losing the stage (the blog, and
-	// everything downstream of it).
+	// Ollama model. Stage 3 (writing) is routed per artifact by the Hybrid AI
+	// Router: high-value public-facing content (blog, architecture, LinkedIn, X
+	// thread) goes to Claude when configured; commodity artifacts (SEO, visual
+	// assets, short-form scripts) stay on Ollama — quality where it matters, cheap
+	// where it doesn't. Claude provider preference: Anthropic API (key) > Bedrock
+	// (IAM). Every routed selection wraps a per-call fallback to Ollama, so an
+	// unavailable provider degrades gracefully rather than losing a stage.
 	analysisModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
-	var writerModel releasegen.Model = analysisModel
 
 	// Resolve the Anthropic API key: a Secrets Manager reference wins over a
 	// plaintext env value, so the credential need never sit in the instance's env.
@@ -173,35 +168,42 @@ func main() {
 		}
 	}
 
+	// Register providers: Ollama always; Claude via Anthropic API (preferred) or
+	// Bedrock when configured. A Claude init failure just leaves it unregistered,
+	// so its routes fall through to Ollama.
+	providers := map[string]airouter.Model{airouter.ProviderOllama: analysisModel}
 	switch {
 	case anthropicKey != "":
-		cl, cerr := anthropic.New(anthropic.Config{
-			APIKey: anthropicKey,
-			Model:  a.Config.AnthropicModel,
-			System: bedrockclaude.WriterPersona,
-		})
-		if cerr != nil {
-			a.Logger.Warn("anthropic client init failed; using local writer", "error", cerr.Error())
+		am := a.Config.AnthropicModel
+		if am == "" {
+			am = anthropic.DefaultModel
+		}
+		if cl, cerr := anthropic.New(anthropic.Config{APIKey: anthropicKey, Model: a.Config.AnthropicModel, System: bedrockclaude.WriterPersona}); cerr != nil {
+			a.Logger.Warn("anthropic client init failed; Claude routes degrade to local", "error", cerr.Error())
 		} else {
-			writerModel = &modelfallback.Fallback{Primary: cl, Secondary: analysisModel, Label: "anthropic-api", Logger: a.Logger}
-			model := a.Config.AnthropicModel
-			if model == "" {
-				model = anthropic.DefaultModel
-			}
-			a.Logger.Info("technical-writer model: claude via anthropic api (falls back to local on error)", "model", model)
+			providers[airouter.ProviderClaude] = cl
+			a.Logger.Info("premium writer registered: claude via anthropic api", "model", am)
 		}
 	case a.Config.BedrockModelID != "":
-		claude, berr := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{
-			ModelID: a.Config.BedrockModelID,
-			System:  bedrockclaude.WriterPersona,
-		})
-		if berr != nil {
-			a.Logger.Warn("bedrock claude init failed; using local writer", "error", berr.Error())
+		if claude, berr := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{ModelID: a.Config.BedrockModelID, System: bedrockclaude.WriterPersona}); berr != nil {
+			a.Logger.Warn("bedrock claude init failed; Claude routes degrade to local", "error", berr.Error())
 		} else {
-			writerModel = &modelfallback.Fallback{Primary: claude, Secondary: analysisModel, Label: "bedrock-claude", Logger: a.Logger}
-			a.Logger.Info("technical-writer model: claude on bedrock (falls back to local on error)", "model", a.Config.BedrockModelID)
+			providers[airouter.ProviderClaude] = claude
+			a.Logger.Info("premium writer registered: claude on bedrock", "model", a.Config.BedrockModelID)
 		}
 	}
+
+	// Hybrid routing policy: the recommended default, overridable via the
+	// AI_ROUTING_RULES env var (JSON). Ollama is both the default and the fallback.
+	rules, rerr := airouter.ParseRules(a.Config.AIRoutingRules)
+	if rerr != nil {
+		a.Logger.Warn("invalid AI_ROUTING_RULES; using default policy", "error", rerr.Error())
+		rules = airouter.DefaultRules()
+	}
+	router := airouter.New(providers, rules, airouter.ProviderOllama, airouter.ProviderOllama, a.Logger)
+	a.Logger.Info("hybrid ai routing configured",
+		"providers", router.Providers(), "decisions", router.Decisions(airouter.AllKinds))
+	routed := func(kind string) releasegen.Model { return router.ModelFor(kind) }
 	releasePipe := &releasepipeline.Pipeline{
 		Builder: &rc.Builder{
 			Sources: releaseSrc,
@@ -213,8 +215,8 @@ func main() {
 		// → voice-over → YouTube → Shorts → TikTok → visual assets → SEO →
 		// architecture → LinkedIn → X thread), all grounded in the analysis and gated
 		// by the same review/publish stages. A thin release degrades gracefully.
-		Generator: &releasegen.Generator{Model: writerModel, Logger: a.Logger},
-		Suite:     &contentsuite.Orchestrator{Model: writerModel, Logger: a.Logger},
+		Generator: &releasegen.Generator{Model: routed("blog"), Logger: a.Logger},
+		Suite:     &contentsuite.Orchestrator{Model: analysisModel, ModelFor: routed, Logger: a.Logger},
 		Reviewer:  review.Reviewer{},
 		Publisher: publisher,
 		Logger:    a.Logger,

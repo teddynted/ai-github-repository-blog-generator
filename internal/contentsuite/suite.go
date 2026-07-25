@@ -103,7 +103,12 @@ func (s *Suite) Artifacts() []Artifact { return s.artifacts }
 // generator in its deterministic, offline mode (no network) — except the blog,
 // which requires a model; supply a pre-generated blog to Run when offline.
 type Orchestrator struct {
-	Model          releasegen.Model
+	Model releasegen.Model
+	// ModelFor, when set, selects the model per content kind (Hybrid AI Routing):
+	// premium model for high-value artifacts, local model for commodity ones. The
+	// argument is the stage name ("blog", "architecture", "seo-metadata", …). When
+	// nil, Model is used for every stage — fully backward compatible.
+	ModelFor       func(kind string) releasegen.Model
 	Logger         *slog.Logger
 	MaxShorts      int
 	MaxVideos      int
@@ -111,6 +116,15 @@ type Orchestrator struct {
 	MaxPosts       int
 	MaxThreads     int
 	PostsPerThread int
+}
+
+// model returns the model for a stage: the router's per-kind choice when
+// ModelFor is set, otherwise the single Model.
+func (o *Orchestrator) model(kind string) releasegen.Model {
+	if o.ModelFor != nil {
+		return o.ModelFor(kind)
+	}
+	return o.Model
 }
 
 // Run executes every stage for one release. If blog is nil it is generated first
@@ -133,7 +147,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		s.record(stageOutcome{name: "blog", milestone: 3, filename: "01-blog.md", status: StageOK, md: s.Blog.Markdown})
 	} else {
 		s.record(o.run("blog", 3, "01-blog.md", func() (string, error) {
-			b, err := (&releasegen.Generator{Model: o.Model}).Blog(ctx, rctx)
+			b, err := (&releasegen.Generator{Model: o.model("blog")}).Blog(ctx, rctx)
 			s.Blog = b
 			return b.Markdown, err
 		}))
@@ -141,14 +155,14 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M4 Storyboard (blog + context) ---
 	s.record(o.run("storyboard", 4, "02-storyboard.md", func() (string, error) {
-		sb, err := (&storyboard.Generator{Model: o.Model}).Storyboard(ctx, s.Blog, rctx)
+		sb, err := (&storyboard.Generator{Model: o.model("storyboard")}).Storyboard(ctx, s.Blog, rctx)
 		s.Storyboard = sb
 		return sb.Markdown(), err
 	}))
 
 	// --- M5 Voice-over (storyboard) ---
 	s.record(o.run("voiceover", 5, "03-voiceover.md", func() (string, error) {
-		vo, err := (&voiceover.Generator{Model: o.Model}).VoiceOver(ctx, s.Storyboard)
+		vo, err := (&voiceover.Generator{Model: o.model("voiceover")}).VoiceOver(ctx, s.Storyboard)
 		s.VoiceOver = vo
 		return vo.Markdown(), err
 	}))
@@ -163,7 +177,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	go func() {
 		defer wg.Done()
 		archOut = o.run("architecture", 11, "09-architecture.md", func() (string, error) {
-			col, err := (&architecture.Generator{Model: o.Model}).Architecture(ctx, architecture.ReleasePackage{
+			col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
 				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
 			})
 			s.Architecture = col
@@ -173,7 +187,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M6 YouTube script (context+blog+storyboard+voiceover) ---
 	s.record(o.run("youtube", 6, "04-youtube-script.md", func() (string, error) {
-		sc, err := (&youtube.Generator{Model: o.Model}).YouTube(ctx, youtube.ReleasePackage{
+		sc, err := (&youtube.Generator{Model: o.model("youtube")}).YouTube(ctx, youtube.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver,
 		})
 		s.YouTube = sc
@@ -182,7 +196,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M7 YouTube Shorts (+youtube) ---
 	s.record(o.run("youtube-shorts", 7, "05-youtube-shorts.md", func() (string, error) {
-		col, err := (&shorts.Generator{Model: o.Model, MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
+		col, err := (&shorts.Generator{Model: o.model("youtube-shorts"), MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
 		})
 		s.Shorts = col
@@ -191,7 +205,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M8 TikTok (+shorts) ---
 	s.record(o.run("tiktok", 8, "06-tiktok.md", func() (string, error) {
-		col, err := (&tiktok.Generator{Model: o.Model, MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
+		col, err := (&tiktok.Generator{Model: o.model("tiktok"), MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts,
 		})
 		s.TikTok = col
@@ -200,7 +214,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M9 Visual Assets (+tiktok) ---
 	s.record(o.run("visual-assets", 9, "07-visual-assets.md", func() (string, error) {
-		col, err := (&visualassets.Generator{Model: o.Model, MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
+		col, err := (&visualassets.Generator{Model: o.model("visual-assets"), MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok,
 		})
 		s.VisualAssets = col
@@ -209,7 +223,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M10 SEO metadata (+visual assets) ---
 	s.record(o.run("seo-metadata", 10, "08-seo-metadata.md", func() (string, error) {
-		m, err := (&seo.Generator{Model: o.Model}).SEO(ctx, seo.ReleasePackage{
+		m, err := (&seo.Generator{Model: o.model("seo-metadata")}).SEO(ctx, seo.ReleasePackage{
 			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets,
 		})
 		s.SEO = m
@@ -227,7 +241,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	go func() {
 		defer wg.Done()
 		liOut = o.run("linkedin", 12, "10-linkedin.md", func() (string, error) {
-			col, err := (&linkedin.Generator{Model: o.Model, MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
+			col, err := (&linkedin.Generator{Model: o.model("linkedin"), MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
 				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
 				Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
 			})
@@ -238,7 +252,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	go func() {
 		defer wg.Done()
 		xtOut = o.run("x-thread", 13, "11-x-thread.md", func() (string, error) {
-			col, err := (&xthread.Generator{Model: o.Model, MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
+			col, err := (&xthread.Generator{Model: o.model("x-thread"), MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
 				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
 				Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
 			})
