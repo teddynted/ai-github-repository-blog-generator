@@ -226,3 +226,64 @@ func TestPipelineMissingStage(t *testing.T) {
 		t.Error("expected error for missing stages")
 	}
 }
+
+// --- Stage 2: engineering analysis ---
+
+type fakeAnalyzer struct {
+	ec     *rc.EngineeringContext
+	err    error
+	called bool
+}
+
+func (f *fakeAnalyzer) Analyze(_ context.Context, _ *rc.ReleaseContext) (*rc.EngineeringContext, error) {
+	f.called = true
+	return f.ec, f.err
+}
+
+// The analyzer must run and its output must reach generation grounding.
+func TestPipelineRunsAnalyzerAndGroundsGeneration(t *testing.T) {
+	an := &fakeAnalyzer{ec: &rc.EngineeringContext{
+		Problem:              "webhook spikes overwhelmed the worker",
+		EngineeringDecisions: []rc.EngineeringDecision{{Decision: "buffer via SQS", Rationale: "decouple ingest from compute"}},
+	}}
+	var sawAnalysis bool
+	p := &Pipeline{
+		Builder:  &fakeBuilder{ctx: sampleContext()},
+		Analyzer: an,
+		Generator: &releasegen.Generator{Model: fakeModel{reply: func(prompt string) (string, error) {
+			if strings.Contains(prompt, "ENGINEERING ANALYSIS") && strings.Contains(prompt, "buffer via SQS") {
+				sawAnalysis = true
+			}
+			return "# Post\n\nBody.", nil
+		}}},
+		Reviewer:  fakeReviewer{passAll: true},
+		Publisher: &fakePublisher{},
+	}
+	if _, err := p.Run(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v0.2.0"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !an.called {
+		t.Error("analyzer was not called")
+	}
+	if !sawAnalysis {
+		t.Error("engineering analysis did not reach the generation prompt")
+	}
+}
+
+// A failing analyzer must NOT fail the run — generation proceeds on facts alone.
+func TestPipelineAnalyzerFailureIsNonFatal(t *testing.T) {
+	p := &Pipeline{
+		Builder:   &fakeBuilder{ctx: sampleContext()},
+		Analyzer:  &fakeAnalyzer{err: errors.New("model down")},
+		Generator: &releasegen.Generator{Model: fakeModel{}},
+		Reviewer:  fakeReviewer{passAll: true},
+		Publisher: &fakePublisher{},
+	}
+	res, err := p.Run(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v0.2.0"})
+	if err != nil {
+		t.Fatalf("analyzer failure should be non-fatal, got: %v", err)
+	}
+	if res.Published == 0 {
+		t.Error("run should still publish despite analysis failure")
+	}
+}

@@ -40,6 +40,12 @@ type ReleaseContext struct {
 	Changelog           ChangelogAnalysis      `json:"changelog"`
 	Implementation      ImplementationSummary  `json:"implementation"`
 	ContentIntelligence ContentIntelligence    `json:"contentIntelligence"`
+	// Engineering is the structured engineering analysis (Stage 2 of the content
+	// pipeline). It is populated by the Ollama analyzer AFTER the factual context
+	// is built, and consumed by the Claude technical-writer stage. Nil when the
+	// analysis stage is disabled or failed, in which case generation falls back
+	// to the factual context alone. See internal/engineeringanalysis.
+	Engineering *EngineeringContext `json:"engineering,omitempty"`
 	// Warnings collects non-fatal analyzer notices (e.g. a missing CHANGELOG),
 	// so a partial context is still useful and the gaps are explicit.
 	Warnings []string `json:"warnings,omitempty"`

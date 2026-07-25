@@ -16,6 +16,15 @@ func contextBlock(c *rc.ReleaseContext) string {
 	var b strings.Builder
 	line := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
 
+	// Lead with the structured engineering analysis (Stage 2) when present: it is
+	// the reasoning distilled from the raw facts — decisions, trade-offs, service
+	// choices — and is what turns a summary into an engineering narrative. The
+	// factual context below remains, but the writer is steered by this first.
+	if eb := c.Engineering.GroundingBlock(); eb != "" {
+		b.WriteString(eb)
+		b.WriteString("\n")
+	}
+
 	line("# Repository: %s", c.Repository.FullName)
 	if c.Repository.Summary != "" {
 		line("%s", c.Repository.Summary)

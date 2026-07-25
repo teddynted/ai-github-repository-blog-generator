@@ -72,9 +72,12 @@ type spec struct {
 
 var specs = map[Format]spec{
 	FormatBlog: {
-		role:        "You are a senior software engineer writing a technical blog post.",
-		instruction: "Write a clear, accurate, publication-ready technical blog post in GitHub-flavoured Markdown about this software release. Follow the suggested outline where useful. Explain what changed, how it works, and why it matters.",
-		closing:     "Produce only the Markdown blog post, starting with a single top-level title.",
+		role: "You are the lead software engineer who built this platform, writing a technical blog post for other senior engineers.",
+		instruction: "Write a publication-ready technical blog post in GitHub-flavoured Markdown as a first-person engineering narrative about this release. " +
+			"Lead with the engineering problem and why it mattered — never a generic AI preamble. Explain the decisions you made and why, the trade-offs and alternatives you weighed, the AWS/architecture choices and their rationale, and the lessons learned. " +
+			"Where the ENGINEERING ANALYSIS block is present, make it the backbone of the story; treat the rest as supporting facts. " +
+			"Write in prose with a clear point of view; use code or a diagram only when it earns its place; avoid long bullet lists, marketing language, repetition, and anything that reads like release notes or a repository summary.",
+		closing: "Produce only the Markdown blog post, starting with a single top-level title. Do not include a preamble or a meta description of the article.",
 	},
 	FormatReleaseSummary: {
 		role:        "You are preparing a concise GitHub Release summary.",

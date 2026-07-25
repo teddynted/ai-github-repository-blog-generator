@@ -32,6 +32,16 @@ type ContextBuilder interface {
 	Build(ctx context.Context, req rc.Request) (*rc.ReleaseContext, error)
 }
 
+// Analyzer extracts the structured EngineeringContext (Stage 2 of the content
+// pipeline) from the factual context. Optional; when set, the pipeline runs it
+// between context-building and generation and attaches the result to the
+// ReleaseContext, so every generator is grounded in the engineering reasoning —
+// decisions, trade-offs, service choices — rather than the raw facts alone.
+// Satisfied by *engineeringanalysis.Analyzer.
+type Analyzer interface {
+	Analyze(ctx context.Context, rctx *rc.ReleaseContext) (*rc.EngineeringContext, error)
+}
+
 // Generator produces content assets (satisfied by *releasegen.Generator via the
 // adapter methods below; used through the concrete type for the blog path).
 type Generator interface {
@@ -55,9 +65,14 @@ type Notifier interface {
 	Notify(ctx context.Context, subject, body string) error
 }
 
-// Pipeline orchestrates release → context → content → review → publish → notify.
+// Pipeline orchestrates release → context → analysis → content → review →
+// publish → notify.
 type Pipeline struct {
-	Builder   ContextBuilder
+	Builder ContextBuilder
+	// Analyzer is the optional Stage-2 engineering analysis. When set, its
+	// structured output is attached to the context before generation; a failure
+	// is non-fatal (generation proceeds on the factual context).
+	Analyzer  Analyzer
 	Generator Generator
 	// Suite, when set, produces the FULL multimedia artifact set (blog, storyboard,
 	// voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture,
@@ -109,6 +124,22 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 		return Result{}, fmt.Errorf("build release context: %w", err)
 	}
 	res := Result{ContextID: rctx.ContextID, Repository: rctx.Repository.FullName, Release: rctx.Release.Tag}
+
+	// Stage 2 — engineering analysis. Extract the structured reasoning and attach
+	// it to the context so generation is grounded in it. A failure here is
+	// non-fatal by design: the run degrades to the factual context rather than
+	// stopping, preserving the "always produce something" contract.
+	if p.Analyzer != nil {
+		ec, aerr := p.Analyzer.Analyze(ctx, rctx)
+		if aerr != nil {
+			p.log("engineering analysis failed; generating on factual context",
+				slog.String("release", res.Release), slog.String("error", aerr.Error()))
+		} else {
+			rctx.Engineering = ec
+			p.log("engineering analysis attached", slog.String("release", res.Release),
+				slog.Bool("empty", ec.IsZero()))
+		}
+	}
 
 	assets, genErrs := p.generate(ctx, rctx)
 	res.Generated = len(assets)

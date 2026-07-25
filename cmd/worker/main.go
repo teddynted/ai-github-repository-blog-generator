@@ -27,7 +27,9 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/engineeringanalysis"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/github"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
@@ -143,19 +145,38 @@ func main() {
 	// Read private repos with each repo's registered PAT (same credential as
 	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
 	releaseSrc.TokenFor = tokenSource.Token
-	// One model backs both the blog generator and the full content suite.
-	genModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
+	// Two-stage model split. Stage 2 (engineering analysis) always uses the local
+	// Ollama model — cheap, deterministic, private. Stage 3 (writing) uses Claude
+	// on Bedrock when BEDROCK_MODEL_ID is set, otherwise the same local model, so
+	// the platform is zero-paid-inference by default and upgrades to Claude by
+	// config alone. A Bedrock init failure degrades to the local writer.
+	analysisModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
+	var writerModel releasegen.Model = analysisModel
+	if a.Config.BedrockModelID != "" {
+		claude, err := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{
+			ModelID: a.Config.BedrockModelID,
+			System:  bedrockclaude.WriterPersona,
+		})
+		if err != nil {
+			a.Logger.Warn("bedrock claude init failed; using local writer", "error", err.Error())
+		} else {
+			writerModel = claude
+			a.Logger.Info("technical-writer model: claude on bedrock", "model", a.Config.BedrockModelID)
+		}
+	}
 	releasePipe := &releasepipeline.Pipeline{
 		Builder: &rc.Builder{
 			Sources: releaseSrc,
 			Logger:  a.Logger,
 		},
-		Generator: &releasegen.Generator{Model: genModel, Logger: a.Logger},
-		// Emit the FULL artifact set (blog → storyboard → voice-over → YouTube →
-		// Shorts → TikTok → visual assets → SEO → architecture → LinkedIn → X
-		// thread) from a published release, all gated by the same review/publish
-		// stages. A thin release degrades gracefully (stages skip, not fail).
-		Suite:     &contentsuite.Orchestrator{Model: genModel, Logger: a.Logger},
+		// Stage 2: extract the structured engineering analysis with the local model.
+		Analyzer: &engineeringanalysis.Analyzer{Model: analysisModel, Logger: a.Logger},
+		// Stage 3: the writer model produces the FULL artifact set (blog → storyboard
+		// → voice-over → YouTube → Shorts → TikTok → visual assets → SEO →
+		// architecture → LinkedIn → X thread), all grounded in the analysis and gated
+		// by the same review/publish stages. A thin release degrades gracefully.
+		Generator: &releasegen.Generator{Model: writerModel, Logger: a.Logger},
+		Suite:     &contentsuite.Orchestrator{Model: writerModel, Logger: a.Logger},
 		Reviewer:  review.Reviewer{},
 		Publisher: publisher,
 		Logger:    a.Logger,

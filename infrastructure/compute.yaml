@@ -34,6 +34,15 @@ Parameters:
     Type: String
     Default: qwen2.5:7b
     Description: Local model served by Ollama.
+  BedrockModelId:
+    Type: String
+    Default: ""
+    Description: >
+      Amazon Bedrock Claude model id for the technical-writer stage (e.g.
+      anthropic.claude-3-5-sonnet-20240620-v1:0). When set, Claude writes the
+      content (grounded in the local Ollama engineering analysis); blank keeps
+      the local model as the writer (zero paid inference). Auth is IAM via the
+      instance role — no API key.
   EnableGpu:
     Type: String
     Default: "true"
@@ -187,6 +196,15 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
+              # Invoke Claude on Bedrock for the technical-writer stage (used only
+              # when BEDROCK_MODEL_ID is set; the run falls back to the local model
+              # otherwise). Scoped to Anthropic foundation models + inference
+              # profiles — auth is this instance role, so there is no API key.
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/anthropic.*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
               # Publish CPU/mem/disk metrics via the CloudWatch agent (scoped to
               # this project's metric namespace; PutMetricData cannot be resource-scoped).
               - Effect: Allow
@@ -439,6 +457,7 @@ Resources:
                 REPO_SECRET_ID=${RepoSecretId}
                 OLLAMA_MODEL=${OllamaModel}
                 OLLAMA_BASE_URL=http://127.0.0.1:11434
+                BEDROCK_MODEL_ID=${BedrockModelId}
                 OUTPUT_DIR=/data/generated-content
                 OUTPUT_S3_BUCKET=${OutputBucketName}
                 WORK_DIR=/data/work
