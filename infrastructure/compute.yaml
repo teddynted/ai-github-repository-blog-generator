@@ -199,12 +199,16 @@ Resources:
               # Invoke Claude on Bedrock for the technical-writer stage (used only
               # when BEDROCK_MODEL_ID is set; the run falls back to the local model
               # otherwise). Scoped to Anthropic foundation models + inference
-              # profiles — auth is this instance role, so there is no API key.
+              # profiles — auth is this instance role, so there is no API key. The
+              # foundation-model ARN uses a region wildcard because a cross-region
+              # inference profile (e.g. us.anthropic.*) routes InvokeModel to the
+              # underlying models in several regions.
               - Effect: Allow
                 Action: bedrock:InvokeModel
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/anthropic.*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.*"
                   - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*"
               # Publish CPU/mem/disk metrics via the CloudWatch agent (scoped to
               # this project's metric namespace; PutMetricData cannot be resource-scoped).
               - Effect: Allow
