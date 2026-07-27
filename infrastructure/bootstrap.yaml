@@ -157,6 +157,46 @@ Resources:
               Bool:
                 aws:SecureTransport: "false"
 
+  # Operator role for the content-admin CLI (history / compare / rollback /
+  # promote-latest). It can READ and COPY content — deliberately separate from
+  # the worker, which stays write-only. Trusts the account root so an admin can
+  # delegate assume-role; scope it to specific principals in production.
+  ContentOperatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-content-operator"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: content-admin
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadWriteContentObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub "${ContentBucket.Arn}/*"
+              - Sid: ListContentVersions
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                Resource: !GetAtt ContentBucket.Arn
+              - Sid: UseContentKey
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !GetAtt ContentBucketKey.Arn
+
   ArtifactsBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -328,6 +368,9 @@ Outputs:
     Value: !GetAtt ContentBucketKey.Arn
     Export:
       Name: !Sub "${ProjectName}-content-bucket-key-arn"
+  ContentOperatorRoleArn:
+    Description: Assume this role to run the content-admin CLI (read/rollback).
+    Value: !GetAtt ContentOperatorRole.Arn
   DeployRoleArn:
     Description: Set this as the AWS_DEPLOY_ROLE_ARN repository secret.
     Value: !GetAtt DeployRole.Arn

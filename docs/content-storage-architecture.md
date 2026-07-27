@@ -76,8 +76,19 @@ Only semantics S3 does not already store (omit size/ETag/Last-Modified/Content-T
 - **Single artifact:** `CopyObject` a prior `versionId` back onto the current key.
 - **Entire release:** copy each artifact's recorded `versionId` back, or re-point `latest/`.
 - **Compare / history:** `ListObjectVersions` (or read a historical `metadata.json`) → `GetObject` by version.
-- Exposed via an operator CLI (Phase 4). The **worker stays write-only**; reads and
-  rollback run under a separate operator role (defense in depth).
+- Exposed via the `content-admin` CLI (`cmd/content-admin`). The **worker stays
+  write-only**; reads and rollback run under the separate `content-operator` IAM
+  role (defense in depth):
+
+```bash
+content-admin history        --repo owner/name --release v0.3.0 --artifact blog.md
+content-admin compare        --repo owner/name --release v0.3.0 --artifact blog.md --a <ver> --b <ver>
+content-admin rollback       --repo owner/name --release v0.3.0 --artifact blog.md --to <ver>
+content-admin promote-latest --repo owner/name --release v0.3.0
+```
+
+Rollback is non-destructive: it server-side-copies a prior version back onto the
+live key, creating a new current version equal to the old one.
 
 ## Roadmap
 
@@ -86,7 +97,7 @@ Only semantics S3 does not already store (omit size/ETag/Last-Modified/Content-T
 | 1 | Infra: versioning, SSE-KMS, lifecycle, TLS-only policy, worker KMS IAM | **done** |
 | 2 | Publish `metadata.json` with provenance (provider/model/promptVersion/sha256/versionId) | **done** |
 | 3 | `latest/` promotion of approved releases (content + metadata + `latest.json`) | **done** |
-| 4 | Operator CLI: `history`, `compare`, `rollback`, `promote-latest` | planned |
+| 4 | Operator CLI (`content-admin`) + `content-operator` IAM role | **done** |
 | 5 | `experiments/` namespace + prompt-version registry | planned |
 
 Existing `releases/{tag}/{kind}.{ext}` keys are unchanged throughout, so downstream
