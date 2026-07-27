@@ -117,7 +117,7 @@ func generate(args []string) int {
 	fs := flag.NewFlagSet("content", flag.ContinueOnError)
 	o := options{}
 	fs.StringVar(&o.artifact, "artifact", "all", "artifact to generate (blog, architecture, …, or 'all')")
-	fs.StringVar(&o.provider, "provider", "ollama", "provider: anthropic | bedrock | ollama")
+	fs.StringVar(&o.provider, "provider", "ollama", "provider: anthropic | bedrock | ollama | claude-code (local: uses your Claude Code subscription via `claude -p`)")
 	fs.StringVar(&o.ctxPath, "context", "", "path to a Release Context fixture JSON (required)")
 	fs.StringVar(&o.outDir, "output", "output", "output directory")
 	fs.Float64Var(&o.temperature, "temperature", 0, "sampling temperature (Anthropic/Bedrock)")
@@ -316,8 +316,16 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 			model = envOr("OLLAMA_MODEL", "qwen2.5:7b")
 		}
 		return ollama.New(model, ollama.WithBaseURL(o.ollamaURL)), fingerprint("ollama", model, o.system, o.temperature, o.maxTokens), nil
+	case "claude-code":
+		// Local-dev only: generate via the Claude Code subscription (`claude -p`)
+		// instead of Anthropic API credits.
+		m, err := newClaudeCodeModel()
+		if err != nil {
+			return nil, nil, err
+		}
+		return m, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens), nil
 	default:
-		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, or ollama)", o.provider)
+		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, ollama, or claude-code)", o.provider)
 	}
 }
 

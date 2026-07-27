@@ -25,7 +25,7 @@ func playground(args []string) int {
 	fmt.Println("Content Prompt Playground — Ctrl-C to exit")
 	fmt.Println()
 
-	provider := choose(in, "Provider", []string{"ollama", "anthropic", "bedrock"})
+	provider := choose(in, "Provider", []string{"claude-code", "ollama", "anthropic", "bedrock"})
 	art := choose(in, "Artifact", append([]string{"all"}, supportedArtifacts...))
 	fixture := choose(in, "Release Context fixture", listFixtures(fixturesDir))
 	if provider == "" || art == "" || fixture == "" {
