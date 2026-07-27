@@ -14,10 +14,6 @@ The system decouples events from generation.
 
 EventBridge routes to SQS, drained by an EC2 worker.
 
-## Conclusion
-
-The pattern generalises to event-driven workloads.
-
 ## Architecture Diagrams
 
 The following diagrams are taken directly from the repository's documentation.
@@ -27,3 +23,7 @@ _Webhook publishes to EventBridge, which buffers in SQS, drained by the EC2 work
 ```mermaid
 flowchart TD
 ```
+
+## Conclusion
+
+The pattern generalises to event-driven workloads.

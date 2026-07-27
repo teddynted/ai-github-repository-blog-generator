@@ -17,7 +17,7 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 
 **Excerpt (50w):** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
-**Excerpt (100w):** The system decouples events from generation. EventBridge routes to SQS, drained by an EC2 worker. The pattern generalises to event-driven workloads. The following diagrams are taken directly from the repository's documentation. _Webhook publishes to EventBridge, which buffers in SQS, drained by the EC2 worker._
+**Excerpt (100w):** The system decouples events from generation. EventBridge routes to SQS, drained by an EC2 worker. The following diagrams are taken directly from the repository's documentation. _Webhook publishes to EventBridge, which buffers in SQS, drained by the EC2 worker._ The pattern generalises to event-driven workloads.
 
 ---
 
@@ -32,8 +32,8 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
   - `00:00` Intro / Hook
   - `00:15` Introduction
   - `00:25` Architecture
-  - `00:35` Conclusion
-  - `00:45` Architecture Diagrams
+  - `00:35` Architecture Diagrams
+  - `00:45` Conclusion
   - `00:45` Conclusion
 - **Playlists:** acme/widget — Release Deep Dives, Release Deep Dives, AWS & Cloud Engineering
 - **Thumbnail text:** V1.0.0 · AWS Lambda / THE ARCHITECTURE / V1.0.0

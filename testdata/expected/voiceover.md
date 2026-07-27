@@ -57,37 +57,13 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
   - [Overlay] Land the on-screen text as you say it. (Amazon EC2)
   - [Overlay] Land the on-screen text as you say it. (AWS CloudFormation)
 - **Closing cue:** Settle the last word cleanly so the transition can carry the cut.
-- **Transition:** Now that we've walked the architecture, let's wrap up.
+- **Transition:** Now that we've walked the architecture, let's step through the architecture.
 
 ---
 
-## Scene 3 — Conclusion
+## Scene 3 — Architecture Diagrams
 
 - **Timestamp:** `00:20–00:30` (10s allocated, ~10s spoken)
-- **Voice:** Warm and resolving · satisfied · energy medium · pace Conversational
-- **Opening cue:** Ease in as the closing card appears.
-
-> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-- **Pronunciation:**
-  - **EC2** — E-C-two (`say-as: as-written`)
-  - **EventBridge** — ee-VENT-bridge (`say-as: as-written`)
-  - **SQS** — S-Q-S (`say-as: spell-out`)
-- **Pauses:**
-  - [short, 300ms] opening — Let the opening line settle before continuing.
-  - [long, 1000ms] after-key-takeaway — Hold after the key takeaway before moving on.
-  - [short, 300ms] closing — Brief pause before the transition.
-- **Sync:**
-  - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Slow Zoom Out)
-  - [Overlay] Land the on-screen text as you say it. (Conclusion)
-- **Closing cue:** Settle the last word cleanly so the transition can carry the cut.
-- **Transition:** From here, let's step through the architecture.
-
----
-
-## Scene 4 — Architecture Diagrams
-
-- **Timestamp:** `00:30–00:40` (10s allocated, ~10s spoken)
 - **Voice:** Clear and instructive · focused · energy medium · pace Slow
 - **Opening cue:** Hold a beat as the diagram begins to build, then start narrating.
 
@@ -110,8 +86,32 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
   - [Overlay] Land the on-screen text as you say it. (Amazon SQS)
   - [Overlay] Land the on-screen text as you say it. (Amazon EC2)
   - [Overlay] Land the on-screen text as you say it. (AWS CloudFormation)
+- **Closing cue:** Settle the last word cleanly so the transition can carry the cut.
+- **Transition:** Now that we've walked the architecture, let's wrap up.
+
+---
+
+## Scene 4 — Conclusion
+
+- **Timestamp:** `00:30–00:40` (10s allocated, ~10s spoken)
+- **Voice:** Warm and resolving · satisfied · energy medium · pace Conversational
+- **Opening cue:** Ease in as the closing card appears.
+
+> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+
+- **Pronunciation:**
+  - **EC2** — E-C-two (`say-as: as-written`)
+  - **EventBridge** — ee-VENT-bridge (`say-as: as-written`)
+  - **SQS** — S-Q-S (`say-as: spell-out`)
+- **Pauses:**
+  - [short, 300ms] opening — Let the opening line settle before continuing.
+  - [long, 1000ms] after-key-takeaway — Hold after the key takeaway before moving on.
+  - [short, 300ms] closing — Brief pause before the transition.
+- **Sync:**
+  - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Slow Zoom Out)
+  - [Overlay] Land the on-screen text as you say it. (Conclusion)
 - **Closing cue:** Slow the final line and let it breathe before the fade to black.
-- **Transition:** That brings us to the end — thanks for watching.
+- **Transition:** That's the release end to end — thanks for watching.
 
 ---
 

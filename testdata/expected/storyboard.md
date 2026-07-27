@@ -51,30 +51,12 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 (short, 9:16)_
 - **Diagrams:**
   -  (flowchart) — Diagram Build; highlight: Webhook, EventBridge, SQS, Worker
 - **Assets:** Architecture Diagram, AWS Icons
-- **Transition:** Cross Dissolve (0.6s)
+- **Transition:** Diagram Morph (0.8s)
 - **Music:** calm, focused
 
 ---
 
-## Scene 3 — Conclusion
-
-- **Objective:** Summarise the takeaways and point to what's next.
-- **Timing:** 10s recommended (7–15s, medium)
-- **Narration:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-- **Visual:** Closing title card recapping key takeaways with a subtle call to action. Assets: Repository Logo, Title Card.
-- **Camera:** Slow Zoom Out — Zoom out to close the video calmly.
-- **Animation:**
-  1. Fade In → scene
-  2. Fade Out → scene — Fade out to the outro.
-- **Overlays:**
-  - [Title] Conclusion
-- **Assets:** Repository Logo, Title Card
-- **Transition:** Diagram Morph (0.8s)
-- **Music:** warm, resolving
-
----
-
-## Scene 4 — Architecture Diagrams
+## Scene 3 — Architecture Diagrams
 
 - **Objective:** Walk through the architecture diagram visually.
 - **Timing:** 10s recommended (7–15s, medium)
@@ -99,8 +81,26 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 (short, 9:16)_
 - **Diagrams:**
   -  (flowchart) — Diagram Build; highlight: Webhook, EventBridge, SQS, Worker
 - **Assets:** Architecture Diagram, AWS Icons
-- **Transition:** Fade (1.0s)
+- **Transition:** Cross Dissolve (0.6s)
 - **Music:** calm, focused
+
+---
+
+## Scene 4 — Conclusion
+
+- **Objective:** Summarise the takeaways and point to what's next.
+- **Timing:** 10s recommended (7–15s, medium)
+- **Narration:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+- **Visual:** Closing title card recapping key takeaways with a subtle call to action. Assets: Repository Logo, Title Card.
+- **Camera:** Slow Zoom Out — Zoom out to close the video calmly.
+- **Animation:**
+  1. Fade In → scene
+  2. Fade Out → scene — Fade out to the outro.
+- **Overlays:**
+  - [Title] Conclusion
+- **Assets:** Repository Logo, Title Card
+- **Transition:** Fade (1.0s)
+- **Music:** warm, resolving
 
 ---
 
@@ -108,6 +108,6 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 (short, 9:16)_
 
 - `0:00` Introduction
 - `0:10` Architecture
-- `0:20` Conclusion
-- `0:30` Architecture Diagrams
+- `0:20` Architecture Diagrams
+- `0:30` Conclusion
 
