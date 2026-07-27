@@ -43,7 +43,9 @@ const (
 	KindArchitectureDiagram Kind = "architecture-diagram"
 )
 
-// Content is a generated asset (Markdown).
+// Content is a generated asset. Its body is carried in Markdown for every
+// artifact; Ext selects the on-disk format so non-Markdown artifacts (e.g. an
+// SVG diagram) are written with the correct extension and content type.
 type Content struct {
 	Kind     Kind   `json:"kind"`
 	Markdown string `json:"markdown"`
@@ -52,6 +54,32 @@ type Content struct {
 	// first-class in the output path (…/releases/<tag>/… vs the dated snapshot
 	// layout), so a release is addressable by tag and re-runs are idempotent.
 	Release string `json:"release,omitempty"`
+	// Ext is the file extension without the dot ("md", "svg"). Empty means "md",
+	// so existing Markdown artifacts need no change.
+	Ext string `json:"ext,omitempty"`
+}
+
+// FileExt returns the artifact's extension, defaulting to "md".
+func (c Content) FileExt() string {
+	if c.Ext == "" {
+		return "md"
+	}
+	return c.Ext
+}
+
+// Filename is the artifact's base filename (<kind>.<ext>).
+func (c Content) Filename() string {
+	return string(c.Kind) + "." + c.FileExt()
+}
+
+// ContentType is the MIME type used when publishing the artifact.
+func (c Content) ContentType() string {
+	switch c.FileExt() {
+	case "svg":
+		return "image/svg+xml"
+	default:
+		return "text/markdown"
+	}
 }
 
 // Generator produces content from a Snapshot via the local model.

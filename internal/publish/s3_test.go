@@ -22,6 +22,25 @@ func (f *fakeS3) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*
 	return &s3.PutObjectOutput{}, nil
 }
 
+func TestS3PublisherHonorsSVGExtension(t *testing.T) {
+	f := &fakeS3{}
+	p := NewS3(f, "my-bucket", "gc", nil)
+
+	err := p.Publish(context.Background(), "acme/widget", []generation.Content{
+		{Kind: "architecture-diagram", Markdown: "<svg/>", Release: "v0.3.0", Ext: "svg"},
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	in := f.puts[0]
+	if got := aws.ToString(in.Key); got != "gc/acme/widget/releases/v0.3.0/architecture-diagram.svg" {
+		t.Errorf("svg key = %q", got)
+	}
+	if got := aws.ToString(in.ContentType); got != "image/svg+xml" {
+		t.Errorf("svg content type = %q, want image/svg+xml", got)
+	}
+}
+
 func TestS3PublisherWritesDatedKeys(t *testing.T) {
 	f := &fakeS3{}
 	p := NewS3(f, "my-bucket", "generated-content", nil)

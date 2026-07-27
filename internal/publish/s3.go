@@ -51,12 +51,12 @@ func (p *S3Publisher) Publish(ctx context.Context, repoFullName string, assets [
 	segs := runSegments(release, date)
 	for _, a := range assets {
 		parts := append([]string{p.prefix, owner, name}, segs...)
-		key := path.Join(append(parts, string(a.Kind)+".md")...)
+		key := path.Join(append(parts, a.Filename())...)
 		_, err := p.api.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:      aws.String(p.bucket),
 			Key:         aws.String(key),
 			Body:        strings.NewReader(a.Markdown),
-			ContentType: aws.String("text/markdown"),
+			ContentType: aws.String(a.ContentType()),
 		})
 		if err != nil {
 			return fmt.Errorf("put %s: %w", key, err)

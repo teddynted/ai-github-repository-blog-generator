@@ -47,10 +47,10 @@ func TestOrchestratorRunsEveryStageOffline(t *testing.T) {
 	if !s.Manifest.Offline {
 		t.Error("nil model should mark the run offline")
 	}
-	// 12 stages M3..M14; all should succeed given a rich context + well-formed blog
-	// (the AWS diagram spec grounds on the sample's CloudFormation/AWS evidence).
-	if len(s.Manifest.Stages) != 12 {
-		t.Fatalf("want 12 stages, got %d", len(s.Manifest.Stages))
+	// 13 stages M3..M15; all should succeed given a rich context + well-formed blog
+	// (the AWS diagram spec + SVG ground on the sample's CloudFormation/AWS/Mermaid).
+	if len(s.Manifest.Stages) != 13 {
+		t.Fatalf("want 13 stages, got %d", len(s.Manifest.Stages))
 	}
 	if s.Manifest.Failed != 0 {
 		var failed []string
@@ -61,8 +61,8 @@ func TestOrchestratorRunsEveryStageOffline(t *testing.T) {
 		}
 		t.Fatalf("expected all stages to pass, %d failed: %v", s.Manifest.Failed, failed)
 	}
-	if s.Manifest.Produced != 12 || len(s.Artifacts()) != 12 {
-		t.Errorf("produced=%d artifacts=%d, want 12", s.Manifest.Produced, len(s.Artifacts()))
+	if s.Manifest.Produced != 13 || len(s.Artifacts()) != 13 {
+		t.Errorf("produced=%d artifacts=%d, want 13", s.Manifest.Produced, len(s.Artifacts()))
 	}
 	// Milestones are present, in order, and each artifact has content + a filename.
 	for i, st := range s.Manifest.Stages {
@@ -104,9 +104,9 @@ func TestOrchestratorIsFaultTolerant(t *testing.T) {
 	if !storyboardFailed {
 		t.Error("storyboard failure should be recorded with an error message")
 	}
-	// Every stage is still attempted (12 records) even after a mid-chain failure.
-	if len(s.Manifest.Stages) != 12 {
-		t.Errorf("all 12 stages should be attempted, got %d", len(s.Manifest.Stages))
+	// Every stage is still attempted (13 records) even after a mid-chain failure.
+	if len(s.Manifest.Stages) != 13 {
+		t.Errorf("all 13 stages should be attempted, got %d", len(s.Manifest.Stages))
 	}
 }
 

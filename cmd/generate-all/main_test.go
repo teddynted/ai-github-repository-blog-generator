@@ -56,11 +56,11 @@ func TestRunGeneratesAllArtifactsOffline(t *testing.T) {
 	if m.Repository != "acme/demo" || m.Release != "v1.0.0" {
 		t.Errorf("manifest identity wrong: %+v", m)
 	}
-	if len(m.Stages) != 12 {
-		t.Errorf("want 12 stages, got %d", len(m.Stages))
+	if len(m.Stages) != 13 {
+		t.Errorf("want 13 stages, got %d", len(m.Stages))
 	}
-	if m.Produced != 12 || m.Failed != 0 {
-		t.Errorf("want produced=12 failed=0, got produced=%d skipped=%d failed=%d", m.Produced, m.Skipped, m.Failed)
+	if m.Produced != 13 || m.Failed != 0 {
+		t.Errorf("want produced=13 failed=0, got produced=%d skipped=%d failed=%d", m.Produced, m.Skipped, m.Failed)
 	}
 
 	// Every produced stage's artifact file exists and is non-empty.

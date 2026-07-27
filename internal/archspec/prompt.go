@@ -44,7 +44,8 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("- Primary Engineering Topic\n")
 	fmt.Fprintf(&b, "- Repository: %s\n", rctx.Repository.FullName)
 	fmt.Fprintf(&b, "- Milestone: %s\n", firstNonEmpty(rctx.Release.Tag, rctx.Release.Name))
-	fmt.Fprintf(&b, "- Diagram Version: %s\n\n", DiagramVersion)
+	fmt.Fprintf(&b, "- Diagram Version: %s\n", DiagramVersion)
+	b.WriteString("- Output Formats: SVG\n\n")
 	b.WriteString("## Components\n")
 	b.WriteString("List every component the evidence supports. For each, provide: Name; Type (e.g. compute, storage, messaging, serverless, networking, IAM, external); AWS Service (or External System); Purpose (why it exists); Relationships (adjacent components, inputs, outputs, dependencies); Repository Evidence (the specific template/resource/file that proves it exists).\n\n")
 	b.WriteString("## Connections\n")
@@ -56,7 +57,7 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("## Failure Handling\n")
 	b.WriteString("Retries; dead-letter queues; fallbacks; timeouts; monitoring. Only what the evidence supports; omit categories with no evidence.\n\n")
 	b.WriteString("## Rendering Notes\n")
-	b.WriteString("Notes a deterministic renderer needs to lay this out as AWS Architecture Icons: suggested grouping (e.g. VPC boundary, account boundary), left-to-right vs top-down flow, and which components are primary vs supporting. Be concrete enough that no further interpretation is required.\n\n")
+	b.WriteString("Notes a deterministic renderer needs to lay this out as an SVG using AWS Architecture Icons: suggested grouping (e.g. VPC boundary, account boundary), left-to-right vs top-down flow, which components are primary vs supporting, and a suggested SVG canvas/viewBox aspect ratio. Be concrete enough that no further interpretation is required.\n\n")
 
 	b.WriteString("CRITICAL RULES:\n")
 	b.WriteString("- Do NOT output an SVG, XML, Graphviz/DOT, Mermaid, or any rendered or diagram-markup form. Output ONLY the Markdown specification above.\n")
