@@ -26,7 +26,8 @@ func assembleOffline(pkg ReleasePackage) string {
 	}
 	fmt.Fprintf(&b, "- Repository: %s\n", rctx.Repository.FullName)
 	fmt.Fprintf(&b, "- Milestone: %s\n", firstNonEmpty(rctx.Release.Tag, rctx.Release.Name))
-	fmt.Fprintf(&b, "- Diagram Version: %s\n\n", DiagramVersion)
+	fmt.Fprintf(&b, "- Diagram Version: %s\n", DiagramVersion)
+	b.WriteString("- Output Formats: SVG\n\n")
 
 	// --- Components ---
 	b.WriteString("## Components\n")
@@ -120,6 +121,7 @@ func assembleOffline(pkg ReleasePackage) string {
 	}
 	b.WriteString("- Lay the diagram out left-to-right following the operational flow.\n")
 	b.WriteString("- Treat serverless/compute resources as primary components and storage/messaging/IAM as supporting components.\n")
+	b.WriteString("- Render as SVG with a landscape viewBox (roughly 3:2); scale icons uniformly.\n")
 
 	return b.String()
 }

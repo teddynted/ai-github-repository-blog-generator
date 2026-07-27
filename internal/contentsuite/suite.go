@@ -19,6 +19,7 @@ package contentsuite
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/seo"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/shorts"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboard"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/svgdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/tiktok"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/visualassets"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/voiceover"
@@ -78,6 +80,8 @@ type Artifact struct {
 	Filename string `json:"filename"`
 	Kind     string `json:"kind"`
 	Markdown string `json:"-"`
+	// Ext is the file extension without the dot ("md", "svg"). Empty means "md".
+	Ext string `json:"ext,omitempty"`
 }
 
 // Suite is the complete set of artifacts from one release.
@@ -278,7 +282,81 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		return spec.Markdown(), err
 	}))
 
+	// --- M15 Architecture diagram (SVG) ---
+	// A deterministic, self-contained SVG rendering of the repository's
+	// architecture diagrams (the Mermaid flows the blog embeds, or a grounded
+	// CFN/service graph). Skipped when the release has no diagrammable evidence.
+	s.record(o.runExt("architecture-diagram", 15, "13-architecture-diagram.svg", "svg", func() (string, error) {
+		graphs := diagramGraphs(rctx)
+		if len(graphs) == 0 {
+			return "", errNoDiagram
+		}
+		return svgdiagram.RenderDocument(diagramTitle(rctx, s.Blog), graphs), nil
+	}))
+
 	return s
+}
+
+// errNoDiagram signals the release has nothing diagrammable, so the SVG stage
+// skips gracefully rather than emitting an empty image.
+var errNoDiagram = errors.New("contentsuite: no diagrammable architecture evidence")
+
+// maxSVGDiagrams caps how many diagram panels the SVG embeds (mirrors the blog's
+// two-diagram ceiling).
+const maxSVGDiagrams = 2
+
+// diagramGraphs derives the diagram panels from repository evidence, most
+// specific first: the repository's Mermaid diagrams (real nodes + edges), else a
+// grounded graph of CloudFormation resources, else the detected AWS services.
+// It never fabricates connections.
+func diagramGraphs(rctx *rc.ReleaseContext) []svgdiagram.Graph {
+	if len(rctx.Mermaid) > 0 {
+		var graphs []svgdiagram.Graph
+		for i, d := range rctx.Mermaid {
+			if i >= maxSVGDiagrams {
+				break
+			}
+			g := svgdiagram.Graph{Title: firstNonEmptyStr(d.Summary, fmt.Sprintf("Diagram %d", i+1))}
+			for _, n := range d.Nodes {
+				g.Nodes = append(g.Nodes, svgdiagram.Node{ID: n, Label: n})
+			}
+			for _, e := range d.Edges {
+				g.Edges = append(g.Edges, svgdiagram.Edge{From: e.From, To: e.To, Label: e.Label})
+			}
+			graphs = append(graphs, g)
+		}
+		return graphs
+	}
+	if len(rctx.CloudFormation.Resources) > 0 {
+		g := svgdiagram.Graph{Title: "AWS Architecture"}
+		for _, r := range rctx.CloudFormation.Resources {
+			g.Nodes = append(g.Nodes, svgdiagram.Node{ID: r.LogicalID, Label: firstNonEmptyStr(r.Service, r.LogicalID), Group: r.Category})
+		}
+		return []svgdiagram.Graph{g}
+	}
+	if len(rctx.Architecture.AWSServices) > 0 {
+		g := svgdiagram.Graph{Title: "AWS Services"}
+		for _, s := range rctx.Architecture.AWSServices {
+			g.Nodes = append(g.Nodes, svgdiagram.Node{ID: s, Label: s})
+		}
+		return []svgdiagram.Graph{g}
+	}
+	return nil
+}
+
+// diagramTitle is the SVG document title, anchored to the article topic.
+func diagramTitle(rctx *rc.ReleaseContext, blog releasegen.BlogPost) string {
+	name := firstNonEmptyStr(blog.Title, rctx.Repository.Name, rctx.Repository.FullName)
+	return name + " — Architecture"
+}
+
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // stageOutcome is the computed result of one stage, before it is recorded into
@@ -288,6 +366,7 @@ type stageOutcome struct {
 	name      string
 	milestone int
 	filename  string
+	ext       string
 	status    StageStatus
 	err       error
 	md        string
@@ -313,12 +392,21 @@ func (o *Orchestrator) run(name string, milestone int, filename string, fn func(
 	return stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: md}
 }
 
+// runExt is run() for a stage whose artifact is not Markdown (e.g. an SVG); it
+// stamps the file extension onto the outcome.
+func (o *Orchestrator) runExt(name string, milestone int, filename, ext string, fn func() (string, error)) stageOutcome {
+	out := o.run(name, milestone, filename, fn)
+	out.ext = ext
+	return out
+}
+
 // isSkip reports whether an error is a grounded "nothing worthy to generate"
 // refusal — a graceful skip rather than a failure. New generators that add such a
 // sentinel are registered here.
 func isSkip(err error) bool {
 	return errors.Is(err, architecture.ErrNoInfrastructure) ||
 		errors.Is(err, archspec.ErrNoEvidence) ||
+		errors.Is(err, errNoDiagram) ||
 		errors.Is(err, shorts.ErrNoMoments) ||
 		errors.Is(err, tiktok.ErrNoTopics)
 }
@@ -337,7 +425,7 @@ func (s *Suite) record(o stageOutcome) {
 	case StageOK:
 		s.Manifest.Produced++
 		if o.filename != "" {
-			s.artifacts = append(s.artifacts, Artifact{Filename: o.filename, Kind: o.name, Markdown: o.md})
+			s.artifacts = append(s.artifacts, Artifact{Filename: o.filename, Kind: o.name, Markdown: o.md, Ext: o.ext})
 		}
 	case StageSkipped:
 		s.Manifest.Skipped++

@@ -211,7 +211,7 @@ func (p *Pipeline) generateSuite(ctx context.Context, rctx *rc.ReleaseContext) (
 	suite := p.Suite.Run(ctx, rctx, nil)
 	out := make([]generation.Content, 0, len(suite.Artifacts()))
 	for _, a := range suite.Artifacts() {
-		out = append(out, generation.Content{Kind: generation.Kind(a.Kind), Markdown: a.Markdown, Release: rctx.Release.Tag})
+		out = append(out, generation.Content{Kind: generation.Kind(a.Kind), Markdown: a.Markdown, Release: rctx.Release.Tag, Ext: a.Ext})
 	}
 	var issues []string
 	for _, st := range suite.Manifest.Stages {

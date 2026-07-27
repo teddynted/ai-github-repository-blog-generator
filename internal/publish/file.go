@@ -34,7 +34,7 @@ func (p *FilePublisher) Publish(_ context.Context, repoFullName string, assets [
 		return fmt.Errorf("create output dir: %w", err)
 	}
 	for _, a := range assets {
-		path := filepath.Join(dir, string(a.Kind)+".md")
+		path := filepath.Join(dir, a.Filename())
 		if err := os.WriteFile(path, []byte(a.Markdown), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
 		}

@@ -79,9 +79,9 @@ func TestEndToEndFromSampleRelease(t *testing.T) {
 
 	suite := (&contentsuite.Orchestrator{}).Run(context.Background(), rctx, &blog)
 
-	// 1. Manifest: all 12 stages, in canonical milestone order, none failed.
-	if len(suite.Manifest.Stages) != 12 {
-		t.Fatalf("want 12 stages, got %d", len(suite.Manifest.Stages))
+	// 1. Manifest: all 13 stages, in canonical milestone order, none failed.
+	if len(suite.Manifest.Stages) != 13 {
+		t.Fatalf("want 13 stages, got %d", len(suite.Manifest.Stages))
 	}
 	for i, st := range suite.Manifest.Stages {
 		if st.Milestone != i+3 {
@@ -98,8 +98,8 @@ func TestEndToEndFromSampleRelease(t *testing.T) {
 		t.Errorf("no stage should fail on the sample release; failed: %v", bad)
 	}
 	// The rich sample release grounds every stage → a full run.
-	if suite.Manifest.Produced != 12 {
-		t.Errorf("sample release should produce all 12 artifacts, got %d (skipped %d)", suite.Manifest.Produced, suite.Manifest.Skipped)
+	if suite.Manifest.Produced != 13 {
+		t.Errorf("sample release should produce all 13 artifacts, got %d (skipped %d)", suite.Manifest.Produced, suite.Manifest.Skipped)
 	}
 
 	// 2. Grounding (acceptance): every artifact references the actual release.
