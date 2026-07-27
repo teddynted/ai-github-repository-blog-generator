@@ -263,8 +263,25 @@ var blogSections = []string{
 
 // assembleBlog wraps the model body with deterministic front matter, an H1
 // title, and (when present and not already embedded) an architecture-diagrams
-// section built from the context's real Mermaid diagrams.
+// section built from the context's real Mermaid diagrams. It is defensive about
+// the model's output: it sanitises the title, strips any stray front matter or
+// H1 the model emitted (so they cannot duplicate the deterministic ones), and
+// places the diagram appendix inside the article rather than after the
+// Conclusion.
 func assembleBlog(title, meta string, tags []string, body string, rctx *rc.ReleaseContext) string {
+	title = sanitizeTitle(title)
+	if title == "" {
+		title = firstNonEmptyStr(rctx.Repository.Name, rctx.Repository.FullName, "Untitled")
+	}
+	body = stripStrayHeader(strings.TrimSpace(body))
+
+	// Attach at most two architecture diagrams from the release's real Mermaid
+	// diagrams (never dump every diagram), and place them BEFORE the Conclusion
+	// so the article does not end on a diagram appendix.
+	if len(rctx.Mermaid) > 0 && !strings.Contains(body, "```mermaid") {
+		body = insertBeforeConclusion(body, diagramSection(rctx))
+	}
+
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "title: %q\n", title)
@@ -273,28 +290,64 @@ func assembleBlog(title, meta string, tags []string, body string, rctx *rc.Relea
 	b.WriteString("---\n\n")
 	fmt.Fprintf(&b, "# %s\n\n", title)
 	b.WriteString(body)
+	return strings.TrimRight(b.String(), "\n") + "\n"
+}
 
-	// Attach at most two architecture diagrams, chosen from the release's real
-	// Mermaid diagrams — never dump every diagram extracted from the repository.
-	if len(rctx.Mermaid) > 0 && !strings.Contains(body, "```mermaid") {
-		diagrams := rctx.Mermaid
-		if len(diagrams) > maxBlogDiagrams {
-			diagrams = diagrams[:maxBlogDiagrams]
-		}
-		b.WriteString("\n\n## Architecture Diagrams\n\n")
-		b.WriteString("The following diagrams are taken directly from the repository's documentation.\n")
-		for _, d := range diagrams {
-			if strings.TrimSpace(d.Source) != "" {
-				fmt.Fprintf(&b, "\n_%s (%s)_\n\n", d.Summary, d.Source)
-			} else {
-				fmt.Fprintf(&b, "\n_%s_\n\n", d.Summary)
-			}
-			b.WriteString("```mermaid\n")
-			b.WriteString(renderMermaid(d))
-			b.WriteString("\n```\n")
+// stripStrayHeader removes a leading YAML front-matter block and/or a leading H1
+// that the model may have emitted despite being told not to, so they do not
+// duplicate the ones assembleBlog adds deterministically.
+func stripStrayHeader(body string) string {
+	body = strings.TrimLeft(body, "\n")
+	if strings.HasPrefix(body, "---\n") {
+		if end := strings.Index(body[4:], "\n---"); end >= 0 {
+			body = strings.TrimLeft(body[4+end+len("\n---"):], "\n")
 		}
 	}
-	return strings.TrimRight(b.String(), "\n") + "\n"
+	if strings.HasPrefix(body, "# ") {
+		if nl := strings.IndexByte(body, '\n'); nl >= 0 {
+			body = strings.TrimLeft(body[nl+1:], "\n")
+		} else {
+			body = ""
+		}
+	}
+	return body
+}
+
+// diagramSection renders the architecture-diagram appendix from the release's
+// real Mermaid diagrams (capped at maxBlogDiagrams).
+func diagramSection(rctx *rc.ReleaseContext) string {
+	diagrams := rctx.Mermaid
+	if len(diagrams) > maxBlogDiagrams {
+		diagrams = diagrams[:maxBlogDiagrams]
+	}
+	var b strings.Builder
+	b.WriteString("## Architecture Diagrams\n\n")
+	b.WriteString("The following diagrams are taken directly from the repository's documentation.\n")
+	for _, d := range diagrams {
+		if strings.TrimSpace(d.Source) != "" {
+			fmt.Fprintf(&b, "\n_%s (%s)_\n\n", d.Summary, d.Source)
+		} else {
+			fmt.Fprintf(&b, "\n_%s_\n\n", d.Summary)
+		}
+		b.WriteString("```mermaid\n")
+		b.WriteString(renderMermaid(d))
+		b.WriteString("\n```\n")
+	}
+	return b.String()
+}
+
+// insertBeforeConclusion splices section in just before the article's Conclusion
+// heading (the last one), so a diagram appendix never trails after the
+// conclusion. When there is no Conclusion, it appends.
+func insertBeforeConclusion(body, section string) string {
+	if strings.TrimSpace(section) == "" {
+		return body
+	}
+	marker := "\n## Conclusion"
+	if i := strings.LastIndex(body, marker); i >= 0 {
+		return strings.TrimRight(body[:i], "\n") + "\n\n" + strings.TrimRight(section, "\n") + "\n" + body[i:]
+	}
+	return strings.TrimRight(body, "\n") + "\n\n" + section
 }
 
 // renderMermaid reconstructs a minimal, valid Mermaid diagram from the parsed
@@ -346,10 +399,26 @@ func planField(plan string, re *regexp.Regexp) string {
 // Either way the title carries no version — the release is the trigger, not the
 // topic.
 func timelessTitle(plan string, rctx *rc.ReleaseContext) string {
-	if t := planField(plan, planTitleRe); t != "" {
+	if t := sanitizeTitle(planField(plan, planTitleRe)); t != "" {
 		return t
 	}
 	return blogTitle(rctx)
+}
+
+// sanitizeTitle strips Markdown emphasis/heading markers and surrounding quotes
+// from a title so the assembled H1 and front matter can never be degenerate —
+// e.g. a model returning "**", "# **Title**", or a `code` title. It returns ""
+// when nothing meaningful survives, so callers fall back to a deterministic
+// title instead of emitting "# **".
+func sanitizeTitle(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(strings.TrimLeft(s, "#")) // stray heading markers
+	s = strings.Trim(s, "*_`\"'")                   // surrounding emphasis / quotes
+	s = strings.TrimSpace(s)
+	if strings.Trim(s, "*_`~#>|-—–. \t") == "" {
+		return "" // only punctuation/emphasis left — degenerate
+	}
+	return collapseWhitespace(s)
 }
 
 // timelessDescription returns the SEO meta description. It prefers the timeless
@@ -366,7 +435,9 @@ func timelessDescription(plan string, rctx *rc.ReleaseContext) string {
 // because the article's value must outlast the release that triggered it.
 func blogTitle(rctx *rc.ReleaseContext) string {
 	if len(rctx.ContentIntelligence.BlogTitles) > 0 {
-		return rctx.ContentIntelligence.BlogTitles[0]
+		if t := sanitizeTitle(rctx.ContentIntelligence.BlogTitles[0]); t != "" {
+			return t
+		}
 	}
 	name := rctx.Repository.Name
 	if name == "" {

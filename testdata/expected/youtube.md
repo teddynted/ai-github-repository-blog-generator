@@ -46,27 +46,14 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 **Callouts:**
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
-- **Transition:** Now that we've walked the architecture, let's wrap up.
+- **Transition:** Now that we've walked the architecture, let's step through the architecture.
 
 ---
 
-## Chapter 3 — Conclusion
+## Chapter 3 — Architecture Diagrams
 
 - **Timestamp:** `00:35–00:45` (target 10s; 5–25s)
 - **Storyboard scenes:** 3 · **Voice-over scenes:** 3
-
-### Narration
-
-> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-- **Transition:** From here, let's step through the architecture.
-
----
-
-## Chapter 4 — Architecture Diagrams
-
-- **Timestamp:** `00:45–00:55` (target 10s; 5–25s)
-- **Storyboard scenes:** 4 · **Voice-over scenes:** 4
 
 ### Narration
 
@@ -79,7 +66,20 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
 - 💬 **Engage:** Pause here and try to predict how the components talk to each other before I reveal it.
-- **Transition:** That brings us to the end — thanks for watching.
+- **Transition:** Now that we've walked the architecture, let's wrap up.
+
+---
+
+## Chapter 4 — Conclusion
+
+- **Timestamp:** `00:45–00:55` (target 10s; 5–25s)
+- **Storyboard scenes:** 4 · **Voice-over scenes:** 4
+
+### Narration
+
+> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+
+- **Transition:** That's the release end to end — thanks for watching.
 
 ---
 
@@ -120,8 +120,8 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
   - `00:00` Intro / Hook
   - `00:15` Introduction
   - `00:25` Architecture
-  - `00:35` Conclusion
-  - `00:45` Architecture Diagrams
+  - `00:35` Architecture Diagrams
+  - `00:45` Conclusion
   - `00:45` Conclusion
 - **Pinned comment:** 📌 acme/widget v1.0.0 — everything in this video is generated from the repository's own Release Context. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
 
@@ -134,8 +134,8 @@ Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ing
 00:00 Intro / Hook
 00:15 Introduction
 00:25 Architecture
-00:35 Conclusion
-00:45 Architecture Diagrams
+00:35 Architecture Diagrams
+00:45 Conclusion
 00:45 Conclusion
 
 🔗 Repository: https://github.com/acme/widget

@@ -199,6 +199,65 @@ func TestMetaDescriptionLongIsTruncated(t *testing.T) {
 	}
 }
 
+func TestSanitizeTitle(t *testing.T) {
+	cases := map[string]string{
+		"**":                       "",
+		"# **":                     "",
+		"**Designing on AWS**":     "Designing on AWS",
+		"# Designing on AWS":       "Designing on AWS",
+		"`code title`":             "code title",
+		"\"Quoted Title\"":         "Quoted Title",
+		"Designing an AI Platform": "Designing an AI Platform",
+		"   Padded   Title   ":     "Padded Title",
+	}
+	for in, want := range cases {
+		if got := sanitizeTitle(in); got != want {
+			t.Errorf("sanitizeTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAssembleBlogHandlesDegenerateTitle(t *testing.T) {
+	rctx := blogContext() // Repository.Name = "widget"
+	md := assembleBlog("**", "desc padded to a reasonable length for the SEO window here", []string{"aws"}, "## Introduction\n\nBody.\n\n## Conclusion\n\nEnd.", rctx)
+	if strings.Contains(md, "# **") || strings.Contains(md, `title: "**"`) {
+		t.Errorf("degenerate title leaked into output:\n%s", md[:120])
+	}
+	if !strings.Contains(md, "# widget") {
+		t.Errorf("expected fallback title from repo name, got:\n%s", md[:160])
+	}
+}
+
+func TestAssembleBlogStripsStrayHeader(t *testing.T) {
+	// The model disobeys and emits its own front matter + H1; assembleBlog must
+	// strip them so they do not duplicate the deterministic ones.
+	body := "---\ntitle: \"Model Title\"\ntags: [x]\n---\n\n# Model H1\n\n## Introduction\n\nBody.\n\n## Conclusion\n\nEnd."
+	md := assembleBlog("Real Title", "desc padded to a reasonable length for the SEO window here now", []string{"aws"}, body, blogContext())
+	if strings.Count(md, "---\n") != 2 { // exactly one front-matter block (open+close)
+		t.Errorf("stray front matter not stripped:\n%s", md)
+	}
+	if strings.Contains(md, "# Model H1") || strings.Contains(md, "Model Title") {
+		t.Errorf("stray model header leaked:\n%s", md)
+	}
+	if !strings.Contains(md, "# Real Title") {
+		t.Error("deterministic H1 missing")
+	}
+}
+
+func TestAssembleBlogPlacesDiagramsBeforeConclusion(t *testing.T) {
+	rctx := blogContext() // has one Mermaid diagram, no inline mermaid in body
+	body := "## Introduction\n\nIntro.\n\n## Conclusion\n\nFinal words."
+	md := assembleBlog("Title", "desc padded to a reasonable length for the SEO window right here", []string{"aws"}, body, rctx)
+	dIdx := strings.Index(md, "## Architecture Diagrams")
+	cIdx := strings.LastIndex(md, "## Conclusion")
+	if dIdx < 0 {
+		t.Fatal("diagram section not embedded")
+	}
+	if dIdx > cIdx {
+		t.Errorf("diagram section is AFTER the Conclusion (misplaced): diagrams@%d, conclusion@%d", dIdx, cIdx)
+	}
+}
+
 func TestBlogTagsNormalized(t *testing.T) {
 	tags := blogTags(blogContext())
 	for _, tag := range tags {
