@@ -36,7 +36,6 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	if g.Model == nil {
 		return BlogPost{}, fmt.Errorf("generator has no model configured")
 	}
-	title := blogTitle(rctx)
 	meta := metaDescription(rctx)
 	tags := blogTags(rctx)
 
@@ -50,6 +49,11 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 		g.Logger.Warn("blog planning failed; writing without a plan",
 			"release", rctx.Release.Tag, "error", planErr.Error())
 	}
+
+	// The release is the TRIGGER, not the topic — so the title is timeless and
+	// topic-based. Prefer the one the plan proposed; fall back to a deterministic
+	// non-release title. No version number in the title.
+	title := timelessTitle(plan, rctx)
 
 	// Stage 5: write the article, section by section, guided by the plan and
 	// grounded strictly in the context.
@@ -93,14 +97,16 @@ func (g *Generator) planArticle(ctx context.Context, rctx *rc.ReleaseContext) (s
 func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 	ground := safeTruncate(contextBlock(rctx), g.promptBudget())
 	var b strings.Builder
-	b.WriteString("You are a senior AWS/cloud engineer preparing to write an engineering blog post about a software release. Do NOT write the article yet — produce a grounded PLAN.\n\n")
-	b.WriteString("Work through these stages using ONLY the Release Context below. Where there is no evidence for something, skip it — never guess, infer motivations, or describe planned work as done.\n\n")
+	b.WriteString("You are a senior AWS/cloud engineer preparing to write a TIMELESS engineering blog post about a repository's technical design. Do NOT write the article yet — produce a grounded PLAN.\n\n")
+	b.WriteString("The release is only the TRIGGER for the article, never its subject. Plan an article about the repository's engineering that stays valuable long after the release, and would make sense to a reader who never saw it.\n")
+	b.WriteString("Treat the Release Context below as the Engineering Brief — the source of truth. Use ONLY what it contains; where there is no evidence for something, skip it — never guess, infer motivations, or describe planned work as done.\n\n")
 	b.WriteString("STAGE 1 — Repository analysis: the repository's purpose and maturity, the current and previous milestones, the release scope, and what actually changed (files, packages; documentation vs code vs infrastructure vs AI/AWS; the code-vs-documentation ratio).\n")
 	b.WriteString("STAGE 2 — Engineering analysis: for each important change, what problem it solves, why it was needed, what it enables next, its trade-offs, the AWS services involved, and its effect on scalability, maintainability, cost, and reliability. Keep a point ONLY if the context supports it.\n")
 	b.WriteString("STAGE 3 — Architecture analysis: only architecture that EXISTS in the context. If diagrams are present, choose AT MOST TWO that best explain this release; otherwise none.\n")
 	b.WriteString("STAGE 4 — Article plan: the single main engineering theme (the problem solved — not \"four commits\"), the supporting themes, the key AWS services, the target audience, SEO keywords, and concrete reader takeaways.\n\n")
 	b.WriteString("OUTPUT a concise, structured plan (not prose, not the article):\n")
-	b.WriteString("- THEME: one sentence naming the engineering problem this release addresses.\n")
+	b.WriteString("- TITLE: one timeless, topic-based article title about the engineering — in the style of \"Designing an Event-Driven AI Agent Platform on AWS\". It names the system and the engineering problem, NOT the release. No version number, no \"release\"/\"update\"/\"changelog\", no date.\n")
+	b.WriteString("- THEME: one sentence naming the engineering problem this repository solves.\n")
 	b.WriteString("- SUPPORTING THEMES / AWS SERVICES / AUDIENCE / SEO KEYWORDS / TAKEAWAYS: short, evidence-backed lists.\n")
 	b.WriteString("- OUTLINE: for each of these sections, 1–3 grounded bullet points it will make, or the single word OMIT when the context offers nothing: ")
 	b.WriteString(strings.Join(blogSections, ", "))
@@ -126,15 +132,17 @@ func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) s
 		b.WriteString(s)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nThe release version only identifies WHAT changed; the article explains WHY it matters. Every paragraph should answer at least one of: why does this matter, how does it work, why was this approach chosen, what are the trade-offs, how would another engineer build something similar.\n\n")
+	b.WriteString("\nThis is a TIMELESS engineering article. The GitHub release is only the TRIGGER that prompted it — it is NOT the topic. Write about the system's design so the article is still valuable to an engineer who reads it years from now and never saw the release. Every paragraph should answer at least one of: why does this matter, how does it work, why was this approach chosen, what are the trade-offs, how would another engineer build something similar.\n\n")
 	b.WriteString("HARD RULES:\n")
+	b.WriteString("- Do NOT revolve the article around a release. Never write \"In this release\", \"This release delivers\", \"This update\", \"the latest version\", \"Version vX.Y.Z introduces\", or similar. Do NOT put version numbers or dates in the body — the version lives only in the front-matter metadata, which is added separately.\n")
 	b.WriteString("- Ground EVERY claim in the PLAN and the Release Context. Never fabricate facts, motivations, architecture, implementation, AWS services, or design decisions.\n")
 	b.WriteString("- Never use \"likely\", \"probably\", \"presumably\", \"appears to\", \"it seems\", \"the team wanted\", or \"this was created because\" unless the context states it. Omit unknowns silently.\n")
 	b.WriteString("- Do NOT narrate the changelog or reference commits unless strictly necessary. Explain engineering, not a commit list.\n")
 	b.WriteString("- No AI filler and no adjectives that add no information (\"exciting\", \"powerful\", \"showcases innovation\", \"revolutionises\"). Concise language only.\n")
 	b.WriteString("- Describe only architecture that exists in the context; never present planned work as implemented.\n")
 	b.WriteString("- Do NOT write YAML front matter, an H1 title, or Mermaid diagrams — those are added separately. Start at \"## Introduction\".\n")
-	b.WriteString("- Use fenced code blocks for commands or configuration cited from the context. Use proper Unicode punctuation; never emit mojibake.\n\n")
+	b.WriteString("- Use fenced code blocks for commands or configuration cited from the context. Use proper Unicode punctuation; never emit mojibake.\n")
+	b.WriteString("- This article is the source that downstream generators (LinkedIn, X thread, video scripts, SEO metadata) transform. Write for engineers, not social media: clear section boundaries, consistent terminology, and each concept explained once. Do NOT add calls to action, hashtags, or engagement hooks.\n\n")
 	if strings.TrimSpace(plan) != "" {
 		b.WriteString("=== PLAN (follow this) ===\n")
 		b.WriteString(plan)
@@ -153,14 +161,14 @@ var blogSections = []string{
 	"Introduction",
 	"Background",
 	"Engineering Problem",
-	"What Changed",
+	"Solution Overview",
 	"Architecture",
 	"Implementation Details",
 	"Engineering Decisions",
 	"Repository Changes",
 	"Benefits",
 	"Tradeoffs",
-	"How Developers Can Apply This",
+	"Applying the Pattern",
 	"What's Next",
 	"Conclusion",
 }
@@ -229,6 +237,24 @@ func renderMermaid(d rc.MermaidDiagram) string {
 	return b.String()
 }
 
+// planTitleRe extracts a "TITLE: ..." line from the article plan.
+var planTitleRe = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?TITLE(?:\*\*)?:\s*(.+?)\s*$`)
+
+// timelessTitle returns the article title. It prefers the timeless, topic-based
+// title the plan proposed; failing that, a deterministic non-release fallback.
+// Either way the title carries no version — the release is the trigger, not the
+// topic.
+func timelessTitle(plan string, rctx *rc.ReleaseContext) string {
+	if m := planTitleRe.FindStringSubmatch(plan); m != nil {
+		if t := strings.TrimSpace(strings.Trim(m[1], "\"'`")); t != "" {
+			return t
+		}
+	}
+	return blogTitle(rctx)
+}
+
+// blogTitle is the deterministic fallback title. It is timeless — no version —
+// because the article's value must outlast the release that triggered it.
 func blogTitle(rctx *rc.ReleaseContext) string {
 	if len(rctx.ContentIntelligence.BlogTitles) > 0 {
 		return rctx.ContentIntelligence.BlogTitles[0]
@@ -237,7 +263,7 @@ func blogTitle(rctx *rc.ReleaseContext) string {
 	if name == "" {
 		name = rctx.Repository.FullName
 	}
-	return fmt.Sprintf("Inside %s %s: What Changed and Why It Matters", name, rctx.Release.Tag)
+	return fmt.Sprintf("%s: Architecture and Engineering Design", name)
 }
 
 // SEO meta-description length window (in characters/runes).
@@ -357,7 +383,7 @@ func blogTags(rctx *rc.ReleaseContext) []string {
 		raw = append(raw, t.Name)
 	}
 	raw = append(raw, rctx.ContentIntelligence.SEOKeywords...)
-	raw = append(raw, "release-notes", "software-architecture")
+	raw = append(raw, "software-architecture", "cloud-computing")
 
 	seen := map[string]bool{}
 	var tags []string
