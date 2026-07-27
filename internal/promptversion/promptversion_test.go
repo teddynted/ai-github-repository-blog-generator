@@ -3,8 +3,8 @@ package promptversion
 import "testing"
 
 func TestForKnownAndUnknown(t *testing.T) {
-	if got := For("blog"); got != "blog@6" {
-		t.Errorf("blog = %q, want blog@6", got)
+	if got := For("blog"); got != "blog@7" {
+		t.Errorf("blog = %q, want blog@7", got)
 	}
 	if got := For("architecture-diagram-spec"); got != "architecture-diagram-spec@1" {
 		t.Errorf("diagram-spec = %q", got)
