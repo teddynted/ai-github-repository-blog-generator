@@ -12,7 +12,7 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      6, // timeless plan-then-write redesign
+	"blog":                      9, // repository-first: no AWS tutorial, repo terminology, no invented stats
 	"architecture":              2,
 	"linkedin":                  2,
 	"x-thread":                  2,

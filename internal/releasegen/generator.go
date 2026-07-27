@@ -61,6 +61,12 @@ type Generator struct {
 	Model          Model
 	MaxPromptBytes int
 	Logger         *slog.Logger
+	// MaxBlogAttempts bounds how many times Blog regenerates the article when the
+	// output fails content validation (invented counts, generic ledes, missing
+	// sections, …). The prompt lowers the violation rate; this loop rejects the
+	// residual failures and keeps the first clean draft, falling back to the best
+	// draft after the last attempt. 0 uses defaultBlogAttempts.
+	MaxBlogAttempts int
 }
 
 // spec is the varying part of a per-format prompt.

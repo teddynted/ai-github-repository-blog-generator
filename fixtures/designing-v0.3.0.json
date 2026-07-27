@@ -1,0 +1,1418 @@
+{
+  "schemaVersion": "2.0.0",
+  "contextId": "6e21b643-6311-42d5-aa24-0f9172e2ab9d",
+  "generatedAt": "2026-07-27T15:06:07Z",
+  "repository": {
+    "owner": "teddynted",
+    "name": "designing-an-ai-agent-platform-on-aws",
+    "fullName": "teddynted/designing-an-ai-agent-platform-on-aws",
+    "description": "AI Agent platform on AWS overall architecture, design goals, AWS services, component interactions, data flow, deployment strategy, and technology choices.",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "language": "Go",
+    "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws",
+    "summary": "teddynted/designing-an-ai-agent-platform-on-aws is a project that aI Agent platform on AWS overall architecture, design goals, AWS services, component interactions, data flow, deployment strategy, and technology choices written primarily in Go."
+  },
+  "release": {
+    "tag": "v0.3.0",
+    "name": "v0.3.0",
+    "publishedAt": "2026-07-10T17:17:08Z",
+    "author": "github-actions[bot]",
+    "body": "This release documents 4 changes.\n\n## What's Changed\n\n### 📚 Documentation\n\n- Embed the AWS architecture diagram in the README ([3b0d60a](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/3b0d60a73a63776f8a06dd834320bb5a71d320a7))\n- Add an AWS service-view architecture diagram (SVG) ([289ec8a](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/289ec8ad626f842824ff1c39dea9a897411cb96b))\n- Milestone 1 — initial architecture (documentation only) ([37ae7ed](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/37ae7edb1b989360931f4cbbcc7aa2e5aa4a8317))\n- **changelog:** Add v0.2.0 [skip ci] ([4426af4](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/4426af4dde4133708ca687b9794f0578f6190213))\n\n### Contributors\n\n- Teddy Kekana (3 commits)\n- github-actions[bot] (1 commit)\n\nCompare changes:\nhttps://github.com/teddynted/designing-an-ai-agent-platform-on-aws/compare/v0.2.0...v0.3.0\n",
+    "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/tag/v0.3.0",
+    "preRelease": false,
+    "previousTag": "v0.2.0",
+    "assets": [
+      {
+        "name": "checksums.txt",
+        "size": 473,
+        "contentType": "text/plain; charset=utf-8",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.3.0/checksums.txt"
+      },
+      {
+        "name": "release_v0.3.0_darwin_amd64",
+        "size": 8205456,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.3.0/release_v0.3.0_darwin_amd64"
+      },
+      {
+        "name": "release_v0.3.0_darwin_arm64",
+        "size": 7683282,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.3.0/release_v0.3.0_darwin_arm64"
+      },
+      {
+        "name": "release_v0.3.0_linux_amd64",
+        "size": 8057016,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.3.0/release_v0.3.0_linux_amd64"
+      },
+      {
+        "name": "release_v0.3.0_linux_arm64",
+        "size": 7471288,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.3.0/release_v0.3.0_linux_arm64"
+      },
+      {
+        "name": "release_v0.3.0_windows_amd64.exe",
+        "size": 8307200,
+        "contentType": "application/x-msdownload",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.3.0/release_v0.3.0_windows_amd64.exe"
+      }
+    ],
+    "summary": "Release v0.3.0 published 2026-07-10T17:17:08Z by github-actions[bot]. This release documents 4 changes.."
+  },
+  "documentation": {
+    "purpose": "\u003e Status: planning.",
+    "businessProblem": "Automating high-quality technical content generation from repositories, under explicit developer control.",
+    "architecturePatterns": [
+      "Event-driven architecture",
+      "Serverless",
+      "Infrastructure as Code",
+      "Least-privilege security"
+    ],
+    "deploymentStrategy": "Infrastructure as Code with AWS CloudFormation, deployed via GitHub Actions (OIDC).",
+    "developmentWorkflow": "Trunk-based development with Conventional Commits and automated release management.",
+    "documents": [
+      {
+        "path": "CHANGELOG.md",
+        "title": "Changelog",
+        "kind": "other",
+        "headings": [
+          "0.2.0 - 2026-07-10",
+          "📚 Documentation",
+          "0.1.0 - 2026-07-10",
+          "🚀 Features",
+          "🔧 Continuous Integration"
+        ]
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "title": "Contributing",
+        "kind": "other",
+        "headings": [
+          "Getting set up",
+          "Commit messages",
+          "Types",
+          "Writing the description",
+          "Breaking changes",
+          "Code",
+          "Tests",
+          "Golden files",
+          "Pull requests",
+          "How a change becomes a release"
+        ]
+      },
+      {
+        "path": "README.md",
+        "title": "Designing an AI Agent Platform on AWS",
+        "kind": "readme",
+        "headings": [
+          "Contents",
+          "Project Overview",
+          "Vision",
+          "Goals",
+          "What exists today",
+          "Key Features (Planned)",
+          "High-Level Architecture Overview",
+          "Full architecture (Milestone 1)",
+          "Technology Stack",
+          "Repository Scope",
+          "This repository will own",
+          "This repository will not own",
+          "The boundary, drawn",
+          "Related Repositories",
+          "Roadmap",
+          "Phase 0 — Foundation",
+          "Phase 1 — Infrastructure",
+          "Phase 2 — Workloads",
+          "Phase 3 — Inference and routing",
+          "Phase 4 — Agent behaviour and automation",
+          "Phase 5 — Production readiness",
+          "Phase 6 — Beyond",
+          "Planned Technical Blog Series",
+          "Posts",
+          "Future Enhancements"
+        ]
+      },
+      {
+        "path": "RELEASE_MANAGEMENT.md",
+        "title": "Release Management",
+        "kind": "other",
+        "headings": [
+          "Semantic Versioning",
+          "The version lifecycle",
+          "The release lifecycle",
+          "Who is responsible for what",
+          "Why the changelog is written after the tag",
+          "CLI reference",
+          "Cutting a release",
+          "Dry runs",
+          "After the tag",
+          "Customising the notes",
+          "Pre-releases",
+          "Troubleshooting",
+          "The push failed and the tag exists locally",
+          "A bad version was pushed",
+          "The changelog job cannot push",
+          "Release notes are empty"
+        ]
+      },
+      {
+        "path": "docs/architecture.md",
+        "title": "Architecture",
+        "kind": "architecture",
+        "headings": [
+          "The dependency rule",
+          "Package responsibilities",
+          "Key design decisions",
+          "Extending the system"
+        ]
+      },
+      {
+        "path": "docs/architecture/diagrams.md",
+        "title": "Architecture Diagrams — Milestone 1",
+        "kind": "architecture",
+        "headings": [
+          "AWS Architecture Diagram",
+          "Conventions",
+          "Diagram 1 — High-Level Platform Architecture",
+          "Diagram 2 — Event Flow",
+          "Diagram 3 — Component Interaction",
+          "Diagram 4 — Deployment Boundaries",
+          "Consistency note"
+        ]
+      },
+      {
+        "path": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+        "title": "Designing an AI Agent Platform on AWS",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Introduction",
+          "The problem",
+          "Why an AI agent platform is useful",
+          "Why AWS",
+          "High-level goals",
+          "Design Goals",
+          "High-Level Architecture",
+          "AWS Services",
+          "Amazon EventBridge",
+          "AWS Lambda",
+          "Amazon CloudWatch",
+          "EC2 Spot Instances",
+          "AWS IAM",
+          "Amazon VPC",
+          "Security Groups",
+          "AWS CloudFormation",
+          "Amazon Bedrock",
+          "Non-AWS Components",
+          "n8n",
+          "OpenClaw",
+          "Ollama",
+          "Component Responsibilities",
+          "Data Flow",
+          "Event Flow"
+        ]
+      }
+    ]
+  },
+  "repositoryStructure": {
+    "directories": [
+      {
+        "path": ".github/",
+        "responsibility": "GitHub configuration and CI/CD workflows",
+        "fileCount": 2
+      },
+      {
+        "path": "cmd/",
+        "responsibility": "Executable entry points (main packages)",
+        "fileCount": 23
+      },
+      {
+        "path": "docs/",
+        "responsibility": "Project documentation",
+        "fileCount": 4
+      },
+      {
+        "path": "internal/",
+        "responsibility": "Private application and business logic packages",
+        "fileCount": 29
+      }
+    ],
+    "overview": "A standard-go project of 65 files organized into 4 top-level directories (.github, cmd, docs, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "fileCount": 65,
+    "layout": "standard-go"
+  },
+  "architecture": {
+    "overview": "An event-driven, AWS-native system built from 2 major components on . A standard-go project of 65 files organized into 4 top-level directories (.github, cmd, docs, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "components": [
+      {
+        "name": "CLI / worker binaries",
+        "responsibility": "Instance worker and operational CLIs",
+        "kind": "compute"
+      },
+      {
+        "name": "Domain packages",
+        "responsibility": "Business logic behind small, testable ports",
+        "kind": "library"
+      }
+    ],
+    "security": "Security is enforced through HMAC-verified webhooks.",
+    "insights": [
+      "15 architecture diagram(s) document the system, aiding onboarding and technical writing."
+    ]
+  },
+  "commits": [
+    {
+      "sha": "4426af4dde4133708ca687b9794f0578f6190213",
+      "subject": "docs(changelog): add v0.2.0 [skip ci]",
+      "author": "github-actions[bot]",
+      "date": "2026-07-10T16:09:32Z",
+      "type": "docs",
+      "scope": "changelog",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "37ae7edb1b989360931f4cbbcc7aa2e5aa4a8317",
+      "subject": "docs: Milestone 1 — initial architecture (documentation only)",
+      "author": "Teddy Kekana",
+      "date": "2026-07-10T16:38:08Z",
+      "type": "docs",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "289ec8ad626f842824ff1c39dea9a897411cb96b",
+      "subject": "docs: add an AWS service-view architecture diagram (SVG)",
+      "author": "Teddy Kekana",
+      "date": "2026-07-10T17:05:37Z",
+      "type": "docs",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "3b0d60a73a63776f8a06dd834320bb5a71d320a7",
+      "subject": "docs: embed the AWS architecture diagram in the README",
+      "author": "Teddy Kekana",
+      "date": "2026-07-10T17:08:48Z",
+      "type": "docs",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    }
+  ],
+  "commitStats": {
+    "total": 6,
+    "analyzed": 4,
+    "ignored": 2,
+    "conventional": 4,
+    "breaking": 0,
+    "byCategory": {
+      "Documentation": 4
+    },
+    "contributors": [
+      "Teddy Kekana",
+      "github-actions[bot]"
+    ]
+  },
+  "changedFiles": [
+    {
+      "path": "CHANGELOG.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 8
+    },
+    {
+      "path": "README.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 38,
+      "deletions": 5
+    },
+    {
+      "path": "docs/architecture/aws-architecture.svg",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 194
+    },
+    {
+      "path": "docs/architecture/diagrams.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 333
+    },
+    {
+      "path": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 721
+    }
+  ],
+  "fileStats": {
+    "total": 5,
+    "additions": 1294,
+    "deletions": 5,
+    "byCategory": {
+      "Documentation": 5
+    },
+    "summary": "5 files changed (+1294/-5): 5 Documentation."
+  },
+  "technologies": [
+    {
+      "name": "GitHub Actions",
+      "category": "Deployment",
+      "confidence": "high",
+      "evidence": ".github/workflows"
+    },
+    {
+      "name": "Go",
+      "category": "Language",
+      "confidence": "high",
+      "evidence": "46 source files"
+    },
+    {
+      "name": "Go modules",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "go.mod"
+    },
+    {
+      "name": "Make",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "Makefile"
+    }
+  ],
+  "cloudformation": {
+    "counts": {
+      "resources": 0,
+      "parameters": 0,
+      "outputs": 0,
+      "iam": 0,
+      "serverless": 0,
+      "compute": 0,
+      "storage": 0,
+      "networking": 0,
+      "messaging": 0
+    },
+    "summary": "No CloudFormation templates were found."
+  },
+  "mermaid": [
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "api",
+        "bedrock",
+        "claude",
+        "claw",
+        "gh",
+        "n8n",
+        "ollama",
+        "queue",
+        "router",
+        "store",
+        "user"
+      ],
+      "edges": [
+        {
+          "from": "user",
+          "to": "api"
+        },
+        {
+          "from": "gh",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "store"
+        },
+        {
+          "from": "claw",
+          "to": "router"
+        },
+        {
+          "from": "n8n",
+          "to": "router"
+        },
+        {
+          "from": "router",
+          "to": "ollama"
+        },
+        {
+          "from": "router",
+          "to": "bedrock"
+        },
+        {
+          "from": "router",
+          "to": "claude"
+        },
+        {
+          "from": "claw",
+          "to": "gh"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 11 nodes and 12 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "components",
+        "platform"
+      ],
+      "edges": [
+        {
+          "from": "platform",
+          "to": "components"
+        },
+        {
+          "from": "components",
+          "to": "platform"
+        }
+      ],
+      "nodeCount": 2,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 2 nodes and 2 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "m11",
+        "m12",
+        "m15",
+        "m16",
+        "m2",
+        "m20",
+        "m3",
+        "m5",
+        "m6",
+        "m7",
+        "m8",
+        "mcp",
+        "p0",
+        "p1"
+      ],
+      "edges": [
+        {
+          "from": "m2",
+          "to": "m3"
+        },
+        {
+          "from": "m5",
+          "to": "m6"
+        },
+        {
+          "from": "m7",
+          "to": "m8"
+        },
+        {
+          "from": "m11",
+          "to": "m12"
+        },
+        {
+          "from": "m15",
+          "to": "m16"
+        },
+        {
+          "from": "m20",
+          "to": "mcp"
+        },
+        {
+          "from": "p0",
+          "to": "p1"
+        }
+      ],
+      "nodeCount": 14,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 14 nodes and 7 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "actions",
+        "api",
+        "cl",
+        "cut",
+        "dev",
+        "ghpkg",
+        "gitpkg",
+        "post",
+        "rel",
+        "repo",
+        "sv"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "cut"
+        },
+        {
+          "from": "actions",
+          "to": "post"
+        },
+        {
+          "from": "cut",
+          "to": "rel"
+        },
+        {
+          "from": "post",
+          "to": "rel"
+        },
+        {
+          "from": "post",
+          "to": "ghpkg"
+        },
+        {
+          "from": "rel",
+          "to": "sv"
+        },
+        {
+          "from": "rel",
+          "to": "cl"
+        },
+        {
+          "from": "rel",
+          "to": "gitpkg"
+        },
+        {
+          "from": "cl",
+          "to": "sv"
+        },
+        {
+          "from": "gitpkg",
+          "to": "repo"
+        },
+        {
+          "from": "ghpkg",
+          "to": "api"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 11 nodes and 11 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "sequence",
+      "nodes": [
+        "CI",
+        "CLI",
+        "Dev",
+        "GH",
+        "Repo"
+      ],
+      "edges": [
+        {
+          "from": "Dev",
+          "to": "CLI",
+          "label": "go run ./cmd/release minor"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "validate repository, branch, clean tree"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "fetch tags, find the latest version"
+        },
+        {
+          "from": "CLI",
+          "to": "CLI",
+          "label": "next = bump(latest, minor)"
+        },
+        {
+          "from": "CLI",
+          "to": "Dev",
+          "label": "show the plan, actions, and statistics"
+        },
+        {
+          "from": "Dev",
+          "to": "CLI",
+          "label": "confirm"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "create the annotated tag v1.3.0"
+        },
+        {
+          "from": "CLI",
+          "to": "GH",
+          "label": "push refs/tags/v1.3.0"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "make dist"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "release publish --tag v1.3.0"
+        },
+        {
+          "from": "CI",
+          "to": "GH",
+          "label": "create the GitHub Release, upload binaries"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "release changelog --tag v1.3.0 --write"
+        },
+        {
+          "from": "CI",
+          "to": "GH",
+          "label": "commit CHANGELOG.md to the default branch"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 5 nodes and 13 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "flowchart",
+      "nodes": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "MAJOR",
+        "MINOR",
+        "NONE",
+        "PATCH",
+        "PRE",
+        "RC",
+        "RC2",
+        "STABLE"
+      ],
+      "edges": [
+        {
+          "from": "A",
+          "to": "B"
+        },
+        {
+          "from": "B",
+          "to": "MAJOR"
+        },
+        {
+          "from": "B",
+          "to": "C"
+        },
+        {
+          "from": "C",
+          "to": "MINOR"
+        },
+        {
+          "from": "C",
+          "to": "D"
+        },
+        {
+          "from": "D",
+          "to": "PATCH"
+        },
+        {
+          "from": "D",
+          "to": "NONE"
+        },
+        {
+          "from": "MAJOR",
+          "to": "PRE"
+        },
+        {
+          "from": "MINOR",
+          "to": "PRE"
+        },
+        {
+          "from": "PATCH",
+          "to": "PRE"
+        },
+        {
+          "from": "PRE",
+          "to": "STABLE"
+        },
+        {
+          "from": "PRE",
+          "to": "RC"
+        },
+        {
+          "from": "RC",
+          "to": "RC2"
+        },
+        {
+          "from": "RC2",
+          "to": "STABLE"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 14,
+      "summary": "flowchart diagram with 12 nodes and 14 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "state",
+      "nodes": [
+        "Documented",
+        "Planned",
+        "Published",
+        "Pushed",
+        "Rejected",
+        "Tagged",
+        "Unreleased",
+        "Validated"
+      ],
+      "edges": [
+        {
+          "from": "Unreleased",
+          "to": "Validated"
+        },
+        {
+          "from": "Validated",
+          "to": "Planned"
+        },
+        {
+          "from": "Planned",
+          "to": "Tagged"
+        },
+        {
+          "from": "Tagged",
+          "to": "Pushed"
+        },
+        {
+          "from": "Pushed",
+          "to": "Published"
+        },
+        {
+          "from": "Published",
+          "to": "Documented"
+        },
+        {
+          "from": "Unreleased",
+          "to": "Rejected"
+        },
+        {
+          "from": "Planned",
+          "to": "Rejected"
+        },
+        {
+          "from": "Rejected",
+          "to": "Unreleased"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 9,
+      "summary": "state diagram with 8 nodes and 9 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "flowchart",
+      "nodes": [
+        "ci",
+        "clibox",
+        "human"
+      ],
+      "edges": [
+        {
+          "from": "human",
+          "to": "clibox"
+        },
+        {
+          "from": "clibox",
+          "to": "ci"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "ext"
+      ],
+      "edges": [
+        {
+          "from": "L1",
+          "to": "L2"
+        },
+        {
+          "from": "L2",
+          "to": "L3"
+        },
+        {
+          "from": "L4",
+          "to": "L3"
+        },
+        {
+          "from": "L4",
+          "to": "ext"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "cl",
+        "cm1",
+        "cm2",
+        "gh",
+        "gt",
+        "rl",
+        "sv"
+      ],
+      "edges": [
+        {
+          "from": "cm1",
+          "to": "rl"
+        },
+        {
+          "from": "cm2",
+          "to": "rl"
+        },
+        {
+          "from": "cm2",
+          "to": "gh"
+        },
+        {
+          "from": "rl",
+          "to": "sv"
+        },
+        {
+          "from": "rl",
+          "to": "cl"
+        },
+        {
+          "from": "rl",
+          "to": "gt"
+        },
+        {
+          "from": "cl",
+          "to": "sv"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 7 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "agentplane",
+        "bedrock",
+        "claw",
+        "control",
+        "dev",
+        "eb",
+        "gh",
+        "inference",
+        "lam",
+        "n8n",
+        "obs",
+        "ollama",
+        "out"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "gh",
+          "label": "\"push, issue, PR\""
+        },
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"model request\""
+        },
+        {
+          "from": "ollama",
+          "to": "bedrock",
+          "label": "\"fallback on\u003cbr/\u003einterruption\""
+        },
+        {
+          "from": "claw",
+          "to": "out"
+        },
+        {
+          "from": "n8n",
+          "to": "gh",
+          "label": "\"publish\""
+        },
+        {
+          "from": "control",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "agentplane",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "inference",
+          "to": "obs",
+          "label": "telemetry"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "claw",
+        "dlq",
+        "eb",
+        "gh",
+        "lam",
+        "model",
+        "prout",
+        "pub",
+        "queue",
+        "store"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"signed webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam",
+          "label": "\"matched\""
+        },
+        {
+          "from": "lam",
+          "to": "queue",
+          "label": "\"valid\""
+        },
+        {
+          "from": "lam",
+          "to": "dlq",
+          "label": "\"invalid /\u003cbr/\u003eunverified\""
+        },
+        {
+          "from": "queue",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "model"
+        },
+        {
+          "from": "model",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "store",
+          "label": "\"success\""
+        },
+        {
+          "from": "claw",
+          "to": "queue",
+          "label": "\"retry with backoff\""
+        },
+        {
+          "from": "claw",
+          "to": "dlq",
+          "label": "\"exhausted retries\""
+        },
+        {
+          "from": "store",
+          "to": "pub"
+        },
+        {
+          "from": "pub",
+          "to": "prout"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 10 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "claw",
+        "cw",
+        "eb",
+        "efs",
+        "gh",
+        "iam",
+        "lam",
+        "n8n",
+        "ollama",
+        "s3"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhooks \u0026 API\""
+        },
+        {
+          "from": "gh",
+          "to": "n8n",
+          "label": "\"commits \u0026 PRs\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw",
+          "label": "\"invoke / dispatch\""
+        },
+        {
+          "from": "claw",
+          "to": "n8n",
+          "label": "\"orchestrate\""
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"primary inference\""
+        },
+        {
+          "from": "claw",
+          "to": "bedrock",
+          "label": "\"fallback inference\""
+        },
+        {
+          "from": "claw",
+          "to": "efs",
+          "label": "\"workspace\""
+        },
+        {
+          "from": "claw",
+          "to": "s3",
+          "label": "\"artifacts\""
+        },
+        {
+          "from": "n8n",
+          "to": "efs",
+          "label": "\"workflow state\""
+        },
+        {
+          "from": "iam",
+          "to": "lam",
+          "label": "\"scopes permissions\""
+        },
+        {
+          "from": "iam",
+          "to": "claw",
+          "label": "\"scopes permissions\""
+        },
+        {
+          "from": "claw",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "n8n",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "ollama",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "lam",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 16,
+      "summary": "flowchart diagram with 11 nodes and 16 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "claw",
+        "cw",
+        "eb",
+        "efs",
+        "ghext",
+        "internet",
+        "lam",
+        "n8n",
+        "nat",
+        "ollama",
+        "private",
+        "s3"
+      ],
+      "edges": [
+        {
+          "from": "internet",
+          "to": "ghext"
+        },
+        {
+          "from": "ghext",
+          "to": "eb",
+          "label": "\"webhook (HTTPS)\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw",
+          "label": "\"dispatch\""
+        },
+        {
+          "from": "claw",
+          "to": "ollama"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "efs"
+        },
+        {
+          "from": "private",
+          "to": "nat",
+          "label": "\"outbound only\""
+        },
+        {
+          "from": "nat",
+          "to": "internet",
+          "label": "\"model API, git push\""
+        },
+        {
+          "from": "claw",
+          "to": "bedrock",
+          "label": "\"VPC endpoint\""
+        },
+        {
+          "from": "claw",
+          "to": "s3",
+          "label": "\"VPC endpoint\""
+        },
+        {
+          "from": "private",
+          "to": "cw",
+          "label": "logs"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+      "type": "flowchart",
+      "nodes": [
+        "agentplane",
+        "bedrock",
+        "claw",
+        "control",
+        "dev",
+        "eb",
+        "gh",
+        "inference",
+        "lam",
+        "n8n",
+        "obs",
+        "ollama",
+        "out"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "gh",
+          "label": "\"push, issue, PR\""
+        },
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"model request\""
+        },
+        {
+          "from": "ollama",
+          "to": "bedrock",
+          "label": "\"fallback on interruption\""
+        },
+        {
+          "from": "claw",
+          "to": "out"
+        },
+        {
+          "from": "n8n",
+          "to": "gh",
+          "label": "\"publish\""
+        },
+        {
+          "from": "control",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "agentplane",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "inference",
+          "to": "obs",
+          "label": "telemetry"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    }
+  ],
+  "changelog": {
+    "found": false
+  },
+  "implementation": {
+    "howItWorks": "An event-driven, AWS-native system built from 2 major components on . A standard-go project of 65 files organized into 4 top-level directories (.github, cmd, docs, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "documentationImprovements": [
+      "docs(changelog): add v0.2.0 [skip ci]",
+      "docs: Milestone 1 — initial architecture (documentation only)",
+      "docs: add an AWS service-view architecture diagram (SVG)",
+      "docs: embed the AWS architecture diagram in the README"
+    ],
+    "whyItMatters": "Release v0.3.0 hardens the platform with 0 fixes and maintenance changes, improving reliability and developer experience."
+  },
+  "contentIntelligence": {
+    "summary": "designing-an-ai-agent-platform-on-aws release v0.3.0 delivers 4 analyzed changes (0 features, 0 fixes) across 5 files. Release v0.3.0 hardens the platform with 0 fixes and maintenance changes, improving reliability and developer experience.",
+    "architectureHighlights": [
+      "15 architecture diagram(s) document the system, aiding onboarding and technical writing.",
+      "Architectural patterns: Event-driven architecture, Serverless, Infrastructure as Code, Least-privilege security."
+    ],
+    "implementationComplexity": "low",
+    "developerValue": "Developers benefit from better documentation.",
+    "businessValue": "A more reliable, maintainable platform reduces operational risk and total cost of ownership.",
+    "targetAudience": "Software engineers and technical leaders.",
+    "seoKeywords": [
+      "agent",
+      "ai",
+      "an",
+      "aws",
+      "changelog",
+      "designing",
+      "event-driven architecture",
+      "github actions",
+      "go",
+      "go modules",
+      "infrastructure as code",
+      "least-privilege security",
+      "make",
+      "on",
+      "platform",
+      "release notes",
+      "serverless",
+      "software architecture"
+    ],
+    "blogTitles": [
+      "Inside designing-an-ai-agent-platform-on-aws v0.3.0: What Changed and Why It Matters",
+      "Shipping v0.3.0: An Event-Driven, AWS-Native Release Walkthrough",
+      "From Commits to Content: How designing-an-ai-agent-platform-on-aws Turns a Release into Insight"
+    ],
+    "articleOutline": [
+      "Introduction — what this release is about",
+      "Context — the problem and the architecture it fits into",
+      "What changed — features, fixes, and improvements",
+      "How it works — architecture diagrams and data flow",
+      "Implementation highlights — notable engineering decisions",
+      "Impact — developer and business value",
+      "What's next — future enhancements"
+    ],
+    "linkedInPost": "🚀 designing-an-ai-agent-platform-on-aws v0.3.0 is out.\n\nRelease v0.3.0 hardens the platform with 0 fixes and maintenance changes, improving reliability and developer experience.\n\n0 features, 0 fixes, 5 files touched. Built event-driven on AWS with Infrastructure as Code.\n\n#golang #aws #serverless #devops #opensource",
+    "youTubeShortsTopic": "How we shipped v0.3.0: designing-an-ai-agent-platform-on-aws in 60 seconds",
+    "tikTokTopic": "Dev log: what changed in designing-an-ai-agent-platform-on-aws v0.3.0",
+    "futureEnhancements": [
+      "Generate the technical blog post from this Release Context (next milestone).",
+      "Integrate Amazon Bedrock to refine the heuristic content intelligence.",
+      "Persist each Release Context and diff successive releases for trend analysis."
+    ]
+  },
+  "warnings": [
+    "no CHANGELOG entry found for v0.3.0",
+    "no CloudFormation templates found"
+  ]
+}

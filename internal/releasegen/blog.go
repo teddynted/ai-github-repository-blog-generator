@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
 
@@ -36,7 +37,6 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	if g.Model == nil {
 		return BlogPost{}, fmt.Errorf("generator has no model configured")
 	}
-	meta := metaDescription(rctx)
 	tags := blogTags(rctx)
 
 	// Stage 1–4: reason about the repository, the engineering, and the
@@ -55,18 +55,93 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	// non-release title. No version number in the title.
 	title := timelessTitle(plan, rctx)
 
-	// Stage 5: write the article, section by section, guided by the plan and
-	// grounded strictly in the context.
-	body, err := g.Model.Generate(ctx, g.articlePrompt(rctx, title, plan))
+	// The meta description is timeless too: prefer the one the plan proposed, else
+	// the deterministic fallback. Both pass through the SEO length window.
+	meta := timelessDescription(plan, rctx)
+
+	// Stage 5: write the article, guided by the plan and grounded strictly in the
+	// context — then validate and regenerate on failure (the prompt lowers the
+	// violation rate; this loop rejects the residual failures).
+	md, err := g.writeValidatedArticle(ctx, rctx, title, meta, tags, plan)
 	if err != nil {
-		return BlogPost{}, fmt.Errorf("generate blog: %w", err)
+		return BlogPost{}, err
 	}
-	md := assembleBlog(title, meta, tags, strings.TrimSpace(body), rctx)
 
 	if g.Logger != nil {
 		g.logBlog(rctx, len(md))
 	}
 	return BlogPost{Title: title, MetaDescription: meta, Tags: tags, Markdown: md, WordCount: wordCount(md)}, nil
+}
+
+// defaultBlogAttempts is the number of article drafts Blog will try before
+// accepting the best one it produced. 4 balances a higher clean rate against
+// the per-attempt Claude cost for the stubborn count/lede patterns.
+const defaultBlogAttempts = 4
+
+// correctionBlock turns a failed draft's validation errors into a corrective
+// instruction appended to the next attempt's prompt, so the model is told
+// exactly which sentences to eliminate instead of resampling blindly.
+func correctionBlock(report contentcheck.Report) string {
+	var b strings.Builder
+	b.WriteString("\n\nYOUR PREVIOUS DRAFT WAS REJECTED. Rewrite the ENTIRE article and eliminate EACH of these specific problems — do not merely soften them:\n")
+	for _, iss := range report.Issues {
+		if iss.Severity == contentcheck.SeverityError {
+			b.WriteString("- ")
+			b.WriteString(iss.Message)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// writeValidatedArticle generates the article, assembles the full blog, and
+// validates it; on failure it regenerates (up to MaxBlogAttempts, relying on the
+// model's sampling variance to produce a different draft). It returns the first
+// draft that passes content validation, or — after the last attempt — the draft
+// with the fewest validation errors. A model error is fatal only when no draft
+// has been produced yet.
+func (g *Generator) writeValidatedArticle(ctx context.Context, rctx *rc.ReleaseContext, title, meta string, tags []string, plan string) (string, error) {
+	attempts := g.MaxBlogAttempts
+	if attempts <= 0 {
+		attempts = defaultBlogAttempts
+	}
+	basePrompt := g.articlePrompt(rctx, title, plan)
+	prompt := basePrompt
+
+	bestMD := ""
+	bestErrs := int(^uint(0) >> 1) // max int
+	for i := 0; i < attempts; i++ {
+		body, err := g.Model.Generate(ctx, prompt)
+		if err != nil {
+			if bestMD == "" {
+				return "", fmt.Errorf("generate blog: %w", err)
+			}
+			break // keep the best draft produced so far
+		}
+		md := assembleBlog(title, meta, tags, strings.TrimSpace(body), rctx)
+		report := contentcheck.Validate("blog", md)
+		if report.OK() {
+			if i > 0 && g.Logger != nil {
+				g.Logger.Info("blog passed validation after retry", "release", rctx.Release.Tag, "attempt", i+1)
+			}
+			return md, nil
+		}
+		if n := report.Errors(); n < bestErrs {
+			bestErrs, bestMD = n, md
+		}
+		if g.Logger != nil {
+			g.Logger.Warn("blog draft failed validation; regenerating",
+				"release", rctx.Release.Tag, "attempt", i+1, "of", attempts, "errors", report.Errors())
+		}
+		// Reflection: tell the next attempt exactly what to fix, rather than
+		// resampling blindly — the specific violations are a far stronger signal.
+		prompt = basePrompt + correctionBlock(report)
+	}
+	if g.Logger != nil {
+		g.Logger.Warn("blog validation not clean after all attempts; using best draft",
+			"release", rctx.Release.Tag, "attempts", attempts, "residualErrors", bestErrs)
+	}
+	return bestMD, nil
 }
 
 // blogPrompt builds the section-structured, strictly-grounded prompt. Front
@@ -99,13 +174,15 @@ func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 	var b strings.Builder
 	b.WriteString("You are a senior AWS/cloud engineer preparing to write a TIMELESS engineering blog post about a repository's technical design. Do NOT write the article yet — produce a grounded PLAN.\n\n")
 	b.WriteString("The release is only the TRIGGER for the article, never its subject. Plan an article about the repository's engineering that stays valuable long after the release, and would make sense to a reader who never saw it.\n")
-	b.WriteString("Treat the Release Context below as the Engineering Brief — the source of truth. Use ONLY what it contains; where there is no evidence for something, skip it — never guess, infer motivations, or describe planned work as done.\n\n")
+	b.WriteString("Treat the Release Context below as the Engineering Brief — the source of truth. Use ONLY what it contains; where there is no evidence for something, skip it — never guess, infer motivations, or describe planned work as done.\n")
+	b.WriteString("Plan an article about THIS repository, not a generic AWS/Go/event-driven topic — each planned point must trace to a repository artifact. Capture the repository's OWN terminology verbatim, and never invent counts or statistics (files, packages, diagrams, components); describe relationships instead.\n\n")
 	b.WriteString("STAGE 1 — Repository analysis: the repository's purpose and maturity, the current and previous milestones, the release scope, and what actually changed (files, packages; documentation vs code vs infrastructure vs AI/AWS; the code-vs-documentation ratio).\n")
 	b.WriteString("STAGE 2 — Engineering analysis: for each important change, what problem it solves, why it was needed, what it enables next, its trade-offs, the AWS services involved, and its effect on scalability, maintainability, cost, and reliability. Keep a point ONLY if the context supports it.\n")
-	b.WriteString("STAGE 3 — Architecture analysis: only architecture that EXISTS in the context. If diagrams are present, choose AT MOST TWO that best explain this release; otherwise none.\n")
+	b.WriteString("STAGE 3 — Architecture analysis: identify the architecture that EXISTS in the context, then plan AT MOST TWO diagrams designed to explain the article's engineering topic — not copied verbatim from the repository. Plan no diagram when one would not aid understanding.\n")
 	b.WriteString("STAGE 4 — Article plan: the single main engineering theme (the problem solved — not \"four commits\"), the supporting themes, the key AWS services, the target audience, SEO keywords, and concrete reader takeaways.\n\n")
-	b.WriteString("OUTPUT a concise, structured plan (not prose, not the article):\n")
+	b.WriteString("OUTPUT a concise, structured plan (not prose, not the article). Write each field on its own line in the exact form \"FIELD: value\" as plain text — do NOT use Markdown headings (no \"#\", no \"##\") for these fields. The FIRST line MUST begin literally with \"TITLE:\".\n")
 	b.WriteString("- TITLE: one timeless, topic-based article title about the engineering — in the style of \"Designing an Event-Driven AI Agent Platform on AWS\". It names the system and the engineering problem, NOT the release. No version number, no \"release\"/\"update\"/\"changelog\", no date.\n")
+	b.WriteString("- DESCRIPTION: one timeless meta description (roughly 150–160 characters) summarising the article's engineering topic for search results. No version number, no \"release\"/\"update\", no date.\n")
 	b.WriteString("- THEME: one sentence naming the engineering problem this repository solves.\n")
 	b.WriteString("- SUPPORTING THEMES / AWS SERVICES / AUDIENCE / SEO KEYWORDS / TAKEAWAYS: short, evidence-backed lists.\n")
 	b.WriteString("- OUTLINE: for each of these sections, 1–3 grounded bullet points it will make, or the single word OMIT when the context offers nothing: ")
@@ -123,7 +200,7 @@ func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) string {
 	ground := safeTruncate(contextBlock(rctx), g.promptBudget())
 	var b strings.Builder
-	b.WriteString("You are a senior AWS/cloud engineer writing a publication-quality engineering blog post — the register of the AWS Builders' Library, Stripe, Cloudflare, or Netflix engineering blogs. It is NOT marketing copy, NOT documentation, and NOT a changelog. Teach the reader; do not praise the project.\n\n")
+	b.WriteString("You are a Staff Software Engineer / Senior AWS Engineer writing a publication-quality engineering article that DOCUMENTS THIS repository's design and engineering decisions — the register of the AWS Builders' Library, Stripe Engineering, the Cloudflare Blog, and the Netflix and Uber engineering blogs. THIS repository is the sole source of truth; the article must be impossible to write without access to it. It is NOT marketing copy, NOT a changelog, and NOT a generic AWS/Go/event-driven tutorial. Write in the third person about the system; teach the reader about THIS repository's engineering; do not praise the project.\n\n")
 	b.WriteString("Write roughly 1,500–2,500 words in GitHub-flavoured Markdown, executing the PLAN below. The working title is: ")
 	b.WriteString(title)
 	b.WriteString("\n\nUse these second-level (##) sections, in order, omitting any the PLAN marked OMIT:\n")
@@ -132,17 +209,28 @@ func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) s
 		b.WriteString(s)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nThis is a TIMELESS engineering article. The GitHub release is only the TRIGGER that prompted it — it is NOT the topic. Write about the system's design so the article is still valuable to an engineer who reads it years from now and never saw the release. Every paragraph should answer at least one of: why does this matter, how does it work, why was this approach chosen, what are the trade-offs, how would another engineer build something similar.\n\n")
+	b.WriteString("\nThis is a TIMELESS engineering article. The GitHub release is only the TRIGGER that prompted it — it is NOT the topic. Write about the system's design so the article is still valuable to an engineer who reads it years from now and never saw the release. Every paragraph should answer at least one of: what problem existed, why was it difficult, why does this matter, how does it work, why was this approach chosen and not another, what are the trade-offs (cost, security, performance, operational, scalability, maintainability, and failure modes), and how would another engineer build something similar.\n\n")
 	b.WriteString("HARD RULES:\n")
 	b.WriteString("- Do NOT revolve the article around a release. Never write \"In this release\", \"This release delivers\", \"This update\", \"the latest version\", \"Version vX.Y.Z introduces\", or similar. Do NOT put version numbers or dates in the body — the version lives only in the front-matter metadata, which is added separately.\n")
 	b.WriteString("- Ground EVERY claim in the PLAN and the Release Context. Never fabricate facts, motivations, architecture, implementation, AWS services, or design decisions.\n")
+	b.WriteString("- Write in the third person. NEVER use first-person or invented narrative — no \"I built\", \"When I started\", \"I wanted\", \"I've built enough systems\", \"we decided\", \"we chose\", \"the team\", or personal anecdotes. State observable facts about the repository — e.g. \"The repository adopts a documentation-first architecture\", not \"When I started building this platform\".\n")
+	b.WriteString("- Explain THIS repository's specific engineering decisions where the evidence supports them (why a component exists, why local and managed inference are combined, why a queue decouples the pipeline, why the infrastructure is defined as code). Where the context does not state a motivation, describe what exists and omit the why. Every major section must answer \"what engineering decision does this repository implement?\", not \"how does AWS work?\".\n")
+	b.WriteString("- Do NOT teach AWS. The audience already understands Lambda, EventBridge, SQS, DynamoDB, IAM, CloudFormation, Go, and GitHub Actions — do not explain how these services work unless this repository uses them in an unusual way. Explain WHY this repository uses them and how it wires them together.\n")
+	b.WriteString("- Use the repository's OWN terminology verbatim (its milestones and the routing, provider-abstraction, orchestration, content-generator, and Release Context concepts exactly as they appear in the context). Do not rename repository concepts to generic alternatives.\n")
+	b.WriteString("- Never state raw counts — of files, directories, packages, diagrams, components, or services — EVEN when the context provides them; counts go stale. Describe the role or relationship instead. FORBIDDEN verbatim: \"organizes 65 files across four top-level directories\", \"employs 15 architecture diagrams\", \"has four top-level directories\". WRITE INSTEAD: \"separates infrastructure definitions from business logic and deployment entry points\".\n")
+	b.WriteString("- Do NOT teach or describe technologies in the abstract ANYWHERE in the article — not in the Introduction, not in the Background, not in any section. FORBIDDEN sentence patterns: \"Event-driven architectures decouple…\", \"AWS provides services — Lambda…\", \"Go offers…\", \"Serverless is popular…\". Every section must be about THIS repository's problem, context, and decisions — never a primer on AWS, Go, or event-driven architecture. Open each section with the repository's constraint or decision, never a generic industry statement.\n")
 	b.WriteString("- Never use \"likely\", \"probably\", \"presumably\", \"appears to\", \"it seems\", \"the team wanted\", or \"this was created because\" unless the context states it. Omit unknowns silently.\n")
 	b.WriteString("- Do NOT narrate the changelog or reference commits unless strictly necessary. Explain engineering, not a commit list.\n")
-	b.WriteString("- No AI filler and no adjectives that add no information (\"exciting\", \"powerful\", \"showcases innovation\", \"revolutionises\"). Concise language only.\n")
+	b.WriteString("- No AI filler, marketing language, or empty adjectives. Forbidden: \"exciting\", \"powerful\", \"revolutionary\", \"game-changing\", \"innovative\", \"next-generation\", \"cutting-edge\", \"state-of-the-art\", \"world-class\", \"future-proof\", \"marks a milestone\", \"showcases\", \"demonstrates commitment\". Concise, factual language only.\n")
+	b.WriteString("- Vary sentence and paragraph structure. Do NOT use formulaic scaffolding such as \"The immediate benefit...\", \"The second benefit...\", or \"The obvious trade-off...\". Write as an experienced engineer documenting a real system.\n")
 	b.WriteString("- Describe only architecture that exists in the context; never present planned work as implemented.\n")
-	b.WriteString("- Do NOT write YAML front matter, an H1 title, or Mermaid diagrams — those are added separately. Start at \"## Introduction\".\n")
+	b.WriteString("- Include AT MOST TWO Mermaid diagrams, only where a diagram genuinely clarifies the engineering. Design each diagram for this article's topic — never paste a diagram verbatim from the repository. Omit diagrams entirely when they would not aid understanding.\n")
+	b.WriteString("- In \"What's Next\", do NOT list roadmap items or future milestones. Explain what engineering this implementation now ENABLES: the architectural foundation it establishes and the capabilities it makes possible.\n")
+	b.WriteString("- Never truncate. Every section must contain complete, meaningful content — never stop mid-heading or leave a section empty.\n")
+	b.WriteString("- Do NOT write YAML front matter or an H1 title — those are added separately. Start at \"## Introduction\".\n")
 	b.WriteString("- Use fenced code blocks for commands or configuration cited from the context. Use proper Unicode punctuation; never emit mojibake.\n")
 	b.WriteString("- This article is the source that downstream generators (LinkedIn, X thread, video scripts, SEO metadata) transform. Write for engineers, not social media: clear section boundaries, consistent terminology, and each concept explained once. Do NOT add calls to action, hashtags, or engagement hooks.\n\n")
+	b.WriteString("Before returning, verify: could this article be reused for a DIFFERENT repository by only changing the name? If yes, it is too generic — rewrite it. Does every major section reference THIS repository's implementation? Does it explain repository decisions rather than teach AWS? Third-person engineering voice; no invented personal stories, motivations, or statistics; not a release announcement; every claim grounded in the Release Context; at most two topic-specific Mermaid diagrams; complete sections; valid UTF-8 with no mojibake; a Staff Engineer would recognise it as repository documentation, not AI output. If any check fails, rewrite the article before returning it.\n\n")
 	if strings.TrimSpace(plan) != "" {
 		b.WriteString("=== PLAN (follow this) ===\n")
 		b.WriteString(plan)
@@ -237,20 +325,41 @@ func renderMermaid(d rc.MermaidDiagram) string {
 	return b.String()
 }
 
-// planTitleRe extracts a "TITLE: ..." line from the article plan.
-var planTitleRe = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?TITLE(?:\*\*)?:\s*(.+?)\s*$`)
+// planTitleRe / planDescriptionRe extract the "TITLE: …" / "DESCRIPTION: …"
+// lines the plan emits (plain text, optionally bulleted or bolded).
+var (
+	planTitleRe       = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?TITLE(?:\*\*)?:\s*(.+?)\s*$`)
+	planDescriptionRe = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?DESCRIPTION(?:\*\*)?:\s*(.+?)\s*$`)
+)
+
+// planField returns the first value of a "FIELD: value" line the plan emitted,
+// stripped of surrounding quotes; "" when absent.
+func planField(plan string, re *regexp.Regexp) string {
+	if m := re.FindStringSubmatch(plan); m != nil {
+		return strings.TrimSpace(strings.Trim(m[1], "\"'`"))
+	}
+	return ""
+}
 
 // timelessTitle returns the article title. It prefers the timeless, topic-based
 // title the plan proposed; failing that, a deterministic non-release fallback.
 // Either way the title carries no version — the release is the trigger, not the
 // topic.
 func timelessTitle(plan string, rctx *rc.ReleaseContext) string {
-	if m := planTitleRe.FindStringSubmatch(plan); m != nil {
-		if t := strings.TrimSpace(strings.Trim(m[1], "\"'`")); t != "" {
-			return t
-		}
+	if t := planField(plan, planTitleRe); t != "" {
+		return t
 	}
 	return blogTitle(rctx)
+}
+
+// timelessDescription returns the SEO meta description. It prefers the timeless
+// description the plan proposed (run through the same length window as the
+// deterministic path); failing that, the deterministic fallback.
+func timelessDescription(plan string, rctx *rc.ReleaseContext) string {
+	if d := planField(plan, planDescriptionRe); d != "" {
+		return fitDescription(d, rctx)
+	}
+	return metaDescription(rctx)
 }
 
 // blogTitle is the deterministic fallback title. It is timeless — no version —
@@ -278,7 +387,14 @@ const (
 // services, technologies, and factual descriptions of what the article covers)
 // until it clears the floor — never with invented facts.
 func metaDescription(rctx *rc.ReleaseContext) string {
-	s := collapseWhitespace(firstNonEmptyStr(rctx.ContentIntelligence.Summary, rctx.Release.Summary))
+	return fitDescription(firstNonEmptyStr(rctx.ContentIntelligence.Summary, rctx.Release.Summary), rctx)
+}
+
+// fitDescription takes a seed description and returns one whose length is always
+// within [metaMin, metaMax]: it pads a short seed with grounded enrichments and
+// clamps a long one. Shared by the plan-derived and deterministic descriptions.
+func fitDescription(seed string, rctx *rc.ReleaseContext) string {
+	s := collapseWhitespace(seed)
 	for _, clause := range metaEnrichments(rctx) {
 		if runeLen(s) >= metaMin {
 			break

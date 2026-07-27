@@ -45,6 +45,53 @@ func TestBlogValidatorCatchesRegressions(t *testing.T) {
 	}
 }
 
+func TestBlogCatchesInventedCounts(t *testing.T) {
+	// The exact leaks observed in live generation must now fail deterministically.
+	for _, bad := range []string{
+		"The repository organizes 65 files across the codebase.",
+		"The system employs 15 architecture diagrams.",
+		"The repository contains four top-level directories.",
+		"It splits logic into three packages.",
+	} {
+		if Validate("blog", goodBlog+"\n"+bad).OK() {
+			t.Errorf("invented count not caught: %q", bad)
+		}
+	}
+	// Anaphoric references to a known number of things must NOT false-positive.
+	for _, ok := range []string{
+		"The two components scale separately without coordinating deployment.",
+		"The repository separates orchestration from inference.",
+	} {
+		if !Validate("blog", goodBlog+"\n"+ok).OK() {
+			t.Errorf("false positive on legitimate sentence: %q", ok)
+		}
+	}
+}
+
+func TestBlogCatchesGenericLedes(t *testing.T) {
+	for _, bad := range []string{
+		"Event-driven architectures decouple producers from consumers.",
+		"AWS provides services for compute, routing, and storage.",
+		"Go offers advantages for building distributed systems.",
+		"Serverless architectures are popular for good reason.",
+	} {
+		if Validate("blog", goodBlog+"\n"+bad).OK() {
+			t.Errorf("generic lede not caught: %q", bad)
+		}
+	}
+	// Grounded sentences that merely START with a lede stem must PASS — the ban
+	// is on ungrounded/teaching sentences, not any mention of the pattern.
+	for _, ok := range []string{
+		"The repository routes events through EventBridge to an SQS buffer.",
+		"Event-driven architecture enables the platform to scale ingestion independently.",
+		"AWS provides the managed services the pipeline relies on for inference.",
+	} {
+		if !Validate("blog", goodBlog+"\n"+ok).OK() {
+			t.Errorf("false positive on grounded sentence: %q", ok)
+		}
+	}
+}
+
 func TestGenericEmptyFails(t *testing.T) {
 	if Validate("linkedin", "   ").OK() {
 		t.Error("empty content should fail")

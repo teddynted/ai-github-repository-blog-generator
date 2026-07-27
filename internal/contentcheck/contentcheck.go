@@ -105,6 +105,44 @@ var hallucinationMarkers = []string{
 
 var mermaidFence = regexp.MustCompile("(?s)```mermaid.*?```")
 
+// inventedCountRe catches stated counts of repository structure (e.g. "65 files",
+// "15 diagrams", "four top-level directories") — stale statistics the article
+// must replace with relationships. It targets high-signal structural nouns and
+// deliberately excludes "components"/"services" (too easily anaphoric, e.g. "the
+// two components scale separately").
+var inventedCountRe = regexp.MustCompile(`(?i)\b(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+([a-z][a-z-]*\s+)?(files?|directories|folders|packages|modules|diagrams)\b`)
+
+// genericLedeRe catches abstract technology-teaching stems the article should
+// not use — it must document THIS repository, not explain AWS/Go/event-driven
+// architecture in general. Whether a match is a violation depends on grounding
+// (see ungroundedGenericLedes).
+var genericLedeRe = regexp.MustCompile(`(?i)(event-driven architectures?\s+(decouple|enable|have become|are\b|provide)|\baws provides\s+(services|a |managed|the )|\bgo offers\b|serverless\s+(architectures?\s+)?(is|are)\s+popular|serverless\s+(architectures?\s+)?(have|has)\s+become)`)
+
+// groundingRe marks a sentence as being about THIS system rather than teaching a
+// technology in the abstract. A generic-lede stem is only a violation when its
+// sentence lacks such a reference (e.g. "Event-driven architectures decouple
+// producers from consumers." is flagged, but "Event-driven architecture enables
+// the platform to scale independently." is not).
+var groundingRe = regexp.MustCompile(`(?i)\b(repositor|platform|pipeline|\bworker|codebase|orchestrat|inference|content\s+generat|release\s+context|provider\s+abstraction|the\s+system\b|the\s+service\b|the\s+application\b|the\s+module\b)`)
+
+// sentenceSplit approximates sentence/line boundaries for grounding analysis.
+var sentenceSplit = regexp.MustCompile(`(?:[.!?]\s+|\n+)`)
+
+// ungroundedGenericLedes returns generic-lede stems that appear in a sentence
+// with no grounding reference to this system — the true violations.
+func ungroundedGenericLedes(c string) []string {
+	var out []string
+	for _, s := range sentenceSplit.Split(c, -1) {
+		if !genericLedeRe.MatchString(s) || groundingRe.MatchString(s) {
+			continue
+		}
+		if m := genericLedeRe.FindString(s); m != "" {
+			out = append(out, m)
+		}
+	}
+	return dedupeMatches(out)
+}
+
 // Validate runs the generic checks plus any kind-specific rules and returns a
 // report. kind is a content kind ("blog", "seo-metadata", "linkedin", …).
 func Validate(kind, content string) Report {
@@ -165,6 +203,16 @@ func blog(r *Report, c string) {
 	if n := len(mermaidFence.FindAllString(c, -1)); n > 2 {
 		r.err("too many Mermaid diagrams: %d (max 2)", n)
 	}
+	// Invented structural counts — stale statistics; describe relationships instead.
+	for _, m := range dedupeMatches(inventedCountRe.FindAllString(c, -1)) {
+		r.err("invented repository count %q — describe the relationship, not the number", strings.TrimSpace(m))
+	}
+	// Generic technology-teaching ledes — only when ungrounded (not tied to this
+	// system); a grounded sentence that names the platform/repository is fine.
+	for _, m := range ungroundedGenericLedes(c) {
+		r.err("ungrounded generic technology lede %q — write about this repository, not AWS/Go in general", strings.TrimSpace(m))
+	}
+
 	// Release-centric phrasing (the article must be timeless).
 	lc := strings.ToLower(c)
 	for _, p := range []string{"in this release", "this release delivers", "this update introduces"} {
@@ -173,6 +221,22 @@ func blog(r *Report, c string) {
 		}
 	}
 	hedges(r, lc)
+}
+
+// dedupeMatches lowercases, trims, and de-duplicates regex matches so a repeated
+// violation is reported once.
+func dedupeMatches(matches []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range matches {
+		k := strings.ToLower(strings.TrimSpace(m))
+		if k == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, m)
+	}
+	return out
 }
 
 func architecture(r *Report, c string) {
