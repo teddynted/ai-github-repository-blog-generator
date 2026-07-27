@@ -69,6 +69,27 @@ func TestS3PublisherHonorsSVGExtension(t *testing.T) {
 	}
 }
 
+func TestS3PublishLatestWritesLatestPrefix(t *testing.T) {
+	f := &fakeS3{}
+	p := NewS3(f, "b", "gc", nil)
+
+	err := p.PublishLatest(context.Background(), "acme/widget", []generation.Content{
+		{Kind: generation.KindBlog, Markdown: "x", Release: "v0.3.0"},
+		{Kind: "latest", Markdown: "{}", Ext: "json"},
+	})
+	if err != nil {
+		t.Fatalf("PublishLatest: %v", err)
+	}
+	keys := map[string]bool{}
+	for _, in := range f.puts {
+		keys[aws.ToString(in.Key)] = true
+	}
+	// The tag never appears — latest/ is tag-agnostic.
+	if !keys["gc/acme/widget/latest/blog.md"] || !keys["gc/acme/widget/latest/latest.json"] {
+		t.Errorf("latest keys = %v", keys)
+	}
+}
+
 func TestS3PublisherWritesDatedKeys(t *testing.T) {
 	f := &fakeS3{}
 	p := NewS3(f, "my-bucket", "generated-content", nil)

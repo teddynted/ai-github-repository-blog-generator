@@ -84,8 +84,8 @@ Only semantics S3 does not already store (omit size/ETag/Last-Modified/Content-T
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Infra: versioning, SSE-KMS, lifecycle, TLS-only policy, worker KMS IAM | **done** |
-| 2 | Publish `metadata.json` with provenance (provider/model/promptVersion/sha256/versionId) | planned |
-| 3 | `latest/` promotion of approved releases | planned |
+| 2 | Publish `metadata.json` with provenance (provider/model/promptVersion/sha256/versionId) | **done** |
+| 3 | `latest/` promotion of approved releases (content + metadata + `latest.json`) | **done** |
 | 4 | Operator CLI: `history`, `compare`, `rollback`, `promote-latest` | planned |
 | 5 | `experiments/` namespace + prompt-version registry | planned |
 

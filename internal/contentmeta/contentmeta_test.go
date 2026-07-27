@@ -107,6 +107,28 @@ func TestContentIsValidJSONArtifact(t *testing.T) {
 	}
 }
 
+func TestBuildLatestPointer(t *testing.T) {
+	l := BuildLatest("v0.3.0", "gid-1", []string{"blog.md", "architecture-diagram.svg"},
+		func() time.Time { return time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC) })
+	if l.Release != "v0.3.0" || l.GenerationID != "gid-1" || l.PromotedAt != "2026-07-27T12:00:00Z" || len(l.Artifacts) != 2 {
+		t.Errorf("pointer = %+v", l)
+	}
+	c, err := l.Content()
+	if err != nil {
+		t.Fatalf("Content: %v", err)
+	}
+	if c.Kind != LatestKind || c.Ext != LatestExt {
+		t.Errorf("envelope = %+v", c)
+	}
+	var round LatestPointer
+	if err := json.Unmarshal([]byte(c.Markdown), &round); err != nil {
+		t.Fatalf("latest.json invalid: %v", err)
+	}
+	if round.Release != "v0.3.0" {
+		t.Errorf("round release = %q", round.Release)
+	}
+}
+
 func TestNewGenerationIDUniqueAndSortable(t *testing.T) {
 	a := NewGenerationID()
 	b := NewGenerationID()

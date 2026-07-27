@@ -85,6 +85,30 @@ func (p *S3Publisher) PublishWithResults(ctx context.Context, repoFullName strin
 	return results, nil
 }
 
+// PublishLatest writes the assets to the repository's stable "latest" prefix
+// (<prefix>/<owner>/<name>/latest/<kind>.<ext>), overwriting the previous
+// latest so downstream consumers can read the newest approved release without
+// knowing its tag. Versioning keeps every prior "latest" recoverable.
+func (p *S3Publisher) PublishLatest(ctx context.Context, repoFullName string, assets []generation.Content) error {
+	owner, name, ok := strings.Cut(repoFullName, "/")
+	if !ok || owner == "" || name == "" {
+		return apperror.New(apperror.CodeInvalidInput, "invalid repository name")
+	}
+	for _, a := range assets {
+		key := path.Join(p.prefix, owner, name, "latest", a.Filename())
+		_, err := p.api.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:      aws.String(p.bucket),
+			Key:         aws.String(key),
+			Body:        strings.NewReader(a.Markdown),
+			ContentType: aws.String(a.ContentType()),
+		})
+		if err != nil {
+			return fmt.Errorf("put %s: %w", key, err)
+		}
+	}
+	return nil
+}
+
 func (p *S3Publisher) now() time.Time {
 	if p.Now != nil {
 		return p.Now()

@@ -26,7 +26,47 @@ const SchemaVersion = "1.0.0"
 const (
 	Kind = "metadata"
 	Ext  = "json"
+	// LatestKind/LatestExt name the pointer written into the repository's latest/
+	// area identifying which release currently fills it.
+	LatestKind = "latest"
+	LatestExt  = "json"
 )
+
+// LatestPointer identifies the release that currently populates the repository's
+// latest/ area, so a consumer reading latest/ knows its provenance.
+type LatestPointer struct {
+	Release      string   `json:"release"`
+	GenerationID string   `json:"generationId,omitempty"`
+	PromotedAt   string   `json:"promotedAt"`
+	Artifacts    []string `json:"artifacts"`
+}
+
+// BuildLatest assembles the latest/ pointer for a promoted release. filenames
+// are the artifact basenames now living under latest/ (metadata/latest excluded).
+func BuildLatest(releaseTag, generationID string, filenames []string, now func() time.Time) LatestPointer {
+	if now == nil {
+		now = time.Now
+	}
+	arts := make([]string, 0, len(filenames))
+	for _, f := range filenames {
+		arts = append(arts, f)
+	}
+	return LatestPointer{
+		Release:      releaseTag,
+		GenerationID: generationID,
+		PromotedAt:   now().UTC().Format(time.RFC3339),
+		Artifacts:    arts,
+	}
+}
+
+// Content renders the pointer as a publishable latest.json.
+func (l LatestPointer) Content() (generation.Content, error) {
+	b, err := json.MarshalIndent(l, "", "  ")
+	if err != nil {
+		return generation.Content{}, err
+	}
+	return generation.Content{Kind: LatestKind, Markdown: string(b) + "\n", Ext: LatestExt}, nil
+}
 
 // ArtifactMeta is the provenance of one published artifact.
 type ArtifactMeta struct {

@@ -20,6 +20,10 @@ var (
 	_ Generator = (*releasegen.Generator)(nil)
 	_ Reviewer  = review.Reviewer{}
 	_ Publisher = (*publish.FilePublisher)(nil)
+	// The real publishers satisfy the optional versioned + latest ports.
+	_ resultPublisher = (*publish.S3Publisher)(nil)
+	_ latestPublisher = (*publish.S3Publisher)(nil)
+	_ latestPublisher = (*publish.FilePublisher)(nil)
 )
 
 type fakeModel struct{ reply func(string) (string, error) }
@@ -56,12 +60,18 @@ func (f fakeReviewer) Review(_ context.Context, assets []generation.Content) ([]
 type fakePublisher struct {
 	repo   string
 	assets []generation.Content // every asset across all Publish calls (content + metadata)
+	latest []generation.Content // every asset promoted to latest/
 	err    error
 }
 
 func (f *fakePublisher) Publish(_ context.Context, repo string, assets []generation.Content) error {
 	f.repo = repo
 	f.assets = append(f.assets, assets...)
+	return f.err
+}
+
+func (f *fakePublisher) PublishLatest(_ context.Context, _ string, assets []generation.Content) error {
+	f.latest = append(f.latest, assets...)
 	return f.err
 }
 
@@ -152,6 +162,23 @@ func TestPipelineHappyPath(t *testing.T) {
 	// A metadata.json manifest must be published alongside the content.
 	if _, ok := pub.metadataAsset(); !ok {
 		t.Error("metadata.json was not published")
+	}
+	// The release must be promoted to latest/: the content, plus a latest.json
+	// pointer naming the release.
+	var haveLatestBlog, haveLatestPointer bool
+	for _, a := range pub.latest {
+		switch string(a.Kind) {
+		case "blog":
+			haveLatestBlog = true
+		case contentmeta.LatestKind:
+			haveLatestPointer = true
+			if !strings.Contains(a.Markdown, "v0.2.0") {
+				t.Errorf("latest.json does not name the release: %q", a.Markdown)
+			}
+		}
+	}
+	if !haveLatestBlog || !haveLatestPointer {
+		t.Errorf("latest not promoted (blog=%v pointer=%v)", haveLatestBlog, haveLatestPointer)
 	}
 	if note.calls != 1 || !strings.Contains(note.subject, "published") {
 		t.Errorf("notify = %d / %q", note.calls, note.subject)
