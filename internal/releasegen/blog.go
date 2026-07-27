@@ -40,7 +40,20 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	meta := metaDescription(rctx)
 	tags := blogTags(rctx)
 
-	body, err := g.Model.Generate(ctx, g.blogPrompt(rctx, title))
+	// Stage 1–4: reason about the repository, the engineering, and the
+	// architecture, then plan the article — BEFORE writing a word. The reasoning
+	// happens in its own model turn so the writer executes a grounded narrative
+	// instead of narrating the release. The plan is internal and non-fatal: if it
+	// fails, the writer still works from the context alone.
+	plan, planErr := g.planArticle(ctx, rctx)
+	if planErr != nil && g.Logger != nil {
+		g.Logger.Warn("blog planning failed; writing without a plan",
+			"release", rctx.Release.Tag, "error", planErr.Error())
+	}
+
+	// Stage 5: write the article, section by section, guided by the plan and
+	// grounded strictly in the context.
+	body, err := g.Model.Generate(ctx, g.articlePrompt(rctx, title, plan))
 	if err != nil {
 		return BlogPost{}, fmt.Errorf("generate blog: %w", err)
 	}
@@ -55,34 +68,78 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 // blogPrompt builds the section-structured, strictly-grounded prompt. Front
 // matter and diagrams are added deterministically afterwards, so the model is
 // told to produce only the article body (from Introduction onward).
-func (g *Generator) blogPrompt(rctx *rc.ReleaseContext, title string) string {
-	max := g.MaxPromptBytes
-	if max <= 0 {
-		max = DefaultMaxPromptBytes
+// promptBudget bounds the grounding block in each prompt.
+func (g *Generator) promptBudget() int {
+	if g.MaxPromptBytes > 0 {
+		return g.MaxPromptBytes
 	}
-	ground := safeTruncate(contextBlock(rctx), max)
+	return DefaultMaxPromptBytes
+}
 
+// planArticle runs Stages 1–4 (repository, engineering, and architecture
+// analysis, then article planning) as a distinct model turn and returns a
+// concise, grounded plan the writer follows. Reasoning-before-writing is the
+// change that turns release-note narration into an engineering narrative.
+func (g *Generator) planArticle(ctx context.Context, rctx *rc.ReleaseContext) (string, error) {
+	out, err := g.Model.Generate(ctx, g.planPrompt(rctx))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// planPrompt asks the model to analyse and plan — NOT to write the article.
+// Every stage is evidence-only: unsupported points are skipped, never guessed.
+func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
+	ground := safeTruncate(contextBlock(rctx), g.promptBudget())
 	var b strings.Builder
-	b.WriteString("You are a senior software engineer writing a publication-quality engineering blog post for experienced software, cloud, platform, and AI engineers.\n")
-	b.WriteString("This is NOT marketing copy, NOT documentation, and NOT a changelog. Write to educate engineers, in the register of the AWS Builders' Library, Stripe, Cloudflare, or Netflix engineering blogs — professional, technical, confident, clear.\n\n")
-	b.WriteString("Write roughly 1,500–2,500 words in GitHub-flavoured Markdown. The working title is: ")
+	b.WriteString("You are a senior AWS/cloud engineer preparing to write an engineering blog post about a software release. Do NOT write the article yet — produce a grounded PLAN.\n\n")
+	b.WriteString("Work through these stages using ONLY the Release Context below. Where there is no evidence for something, skip it — never guess, infer motivations, or describe planned work as done.\n\n")
+	b.WriteString("STAGE 1 — Repository analysis: the repository's purpose and maturity, the current and previous milestones, the release scope, and what actually changed (files, packages; documentation vs code vs infrastructure vs AI/AWS; the code-vs-documentation ratio).\n")
+	b.WriteString("STAGE 2 — Engineering analysis: for each important change, what problem it solves, why it was needed, what it enables next, its trade-offs, the AWS services involved, and its effect on scalability, maintainability, cost, and reliability. Keep a point ONLY if the context supports it.\n")
+	b.WriteString("STAGE 3 — Architecture analysis: only architecture that EXISTS in the context. If diagrams are present, choose AT MOST TWO that best explain this release; otherwise none.\n")
+	b.WriteString("STAGE 4 — Article plan: the single main engineering theme (the problem solved — not \"four commits\"), the supporting themes, the key AWS services, the target audience, SEO keywords, and concrete reader takeaways.\n\n")
+	b.WriteString("OUTPUT a concise, structured plan (not prose, not the article):\n")
+	b.WriteString("- THEME: one sentence naming the engineering problem this release addresses.\n")
+	b.WriteString("- SUPPORTING THEMES / AWS SERVICES / AUDIENCE / SEO KEYWORDS / TAKEAWAYS: short, evidence-backed lists.\n")
+	b.WriteString("- OUTLINE: for each of these sections, 1–3 grounded bullet points it will make, or the single word OMIT when the context offers nothing: ")
+	b.WriteString(strings.Join(blogSections, ", "))
+	b.WriteString(".\n\n")
+	b.WriteString("=== RELEASE CONTEXT ===\n")
+	b.WriteString(ground)
+	b.WriteString("\n=== END RELEASE CONTEXT ===\n")
+	return b.String()
+}
+
+// articlePrompt is Stage 5: write the article from the plan, grounded strictly
+// in the context. Front matter, the H1, and diagrams are added deterministically
+// afterwards, so the model produces only the body from "## Introduction" onward.
+func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) string {
+	ground := safeTruncate(contextBlock(rctx), g.promptBudget())
+	var b strings.Builder
+	b.WriteString("You are a senior AWS/cloud engineer writing a publication-quality engineering blog post — the register of the AWS Builders' Library, Stripe, Cloudflare, or Netflix engineering blogs. It is NOT marketing copy, NOT documentation, and NOT a changelog. Teach the reader; do not praise the project.\n\n")
+	b.WriteString("Write roughly 1,500–2,500 words in GitHub-flavoured Markdown, executing the PLAN below. The working title is: ")
 	b.WriteString(title)
-	b.WriteString("\n\nUse these second-level (##) sections, in order, including only those the context supports (omit a section rather than pad it):\n")
+	b.WriteString("\n\nUse these second-level (##) sections, in order, omitting any the PLAN marked OMIT:\n")
 	for _, s := range blogSections {
 		b.WriteString("- ")
 		b.WriteString(s)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nHARD RULES:\n")
-	b.WriteString("- Ground EVERY claim in the Release Context below. Never invent facts, versions, features, code, AWS resources, or motivations.\n")
-	b.WriteString("- Never speculate. Do not write phrases like \"probably\", \"this likely\", \"we wanted\", \"when I started this project\", or \"this was created because\". If something is not in the context, omit it silently — do not mention that it is missing.\n")
-	b.WriteString("- Do NOT narrate the changelog or list commits (\"commit abc added X\"). Explain what the release ACCOMPLISHES and how it works.\n")
-	b.WriteString("- No AI filler or marketing: never write \"this marks an exciting milestone\", \"demonstrates the power\", \"showcases innovation\", \"highlights the importance\", or \"revolutionises\".\n")
-	b.WriteString("- Show engineering depth: architecture, system design, event flow, AWS services, design decisions, trade-offs, scalability, maintainability, developer experience, and extensibility — only where the context supports them.\n")
-	b.WriteString("- Only discuss files or directories that are actually relevant to this release; do not describe the whole repository.\n")
-	b.WriteString("- \"What's Next\": briefly introduce the next milestone or future direction using ONLY the future work / roadmap present in the context. Do not invent implementation details.\n")
+	b.WriteString("\nThe release version only identifies WHAT changed; the article explains WHY it matters. Every paragraph should answer at least one of: why does this matter, how does it work, why was this approach chosen, what are the trade-offs, how would another engineer build something similar.\n\n")
+	b.WriteString("HARD RULES:\n")
+	b.WriteString("- Ground EVERY claim in the PLAN and the Release Context. Never fabricate facts, motivations, architecture, implementation, AWS services, or design decisions.\n")
+	b.WriteString("- Never use \"likely\", \"probably\", \"presumably\", \"appears to\", \"it seems\", \"the team wanted\", or \"this was created because\" unless the context states it. Omit unknowns silently.\n")
+	b.WriteString("- Do NOT narrate the changelog or reference commits unless strictly necessary. Explain engineering, not a commit list.\n")
+	b.WriteString("- No AI filler and no adjectives that add no information (\"exciting\", \"powerful\", \"showcases innovation\", \"revolutionises\"). Concise language only.\n")
+	b.WriteString("- Describe only architecture that exists in the context; never present planned work as implemented.\n")
 	b.WriteString("- Do NOT write YAML front matter, an H1 title, or Mermaid diagrams — those are added separately. Start at \"## Introduction\".\n")
-	b.WriteString("- Use fenced code blocks for any commands or configuration you cite from the context. Use proper Unicode punctuation (straight quotes and real em dashes); never emit mojibake.\n\n")
+	b.WriteString("- Use fenced code blocks for commands or configuration cited from the context. Use proper Unicode punctuation; never emit mojibake.\n\n")
+	if strings.TrimSpace(plan) != "" {
+		b.WriteString("=== PLAN (follow this) ===\n")
+		b.WriteString(plan)
+		b.WriteString("\n=== END PLAN ===\n\n")
+	}
 	b.WriteString("=== RELEASE CONTEXT ===\n")
 	b.WriteString(ground)
 	b.WriteString("\n=== END RELEASE CONTEXT ===\n")
@@ -95,15 +152,15 @@ func (g *Generator) blogPrompt(rctx *rc.ReleaseContext, title string) string {
 var blogSections = []string{
 	"Introduction",
 	"Background",
-	"Problem Being Solved",
-	"What's New in this Release",
+	"Engineering Problem",
+	"What Changed",
 	"Architecture",
 	"Implementation Details",
 	"Engineering Decisions",
 	"Repository Changes",
 	"Benefits",
 	"Tradeoffs",
-	"How Developers Can Use or Extend It",
+	"How Developers Can Apply This",
 	"What's Next",
 	"Conclusion",
 }
