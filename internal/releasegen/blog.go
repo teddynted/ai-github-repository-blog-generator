@@ -77,6 +77,22 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 // accepting the best one it produced.
 const defaultBlogAttempts = 3
 
+// correctionBlock turns a failed draft's validation errors into a corrective
+// instruction appended to the next attempt's prompt, so the model is told
+// exactly which sentences to eliminate instead of resampling blindly.
+func correctionBlock(report contentcheck.Report) string {
+	var b strings.Builder
+	b.WriteString("\n\nYOUR PREVIOUS DRAFT WAS REJECTED. Rewrite the ENTIRE article and eliminate EACH of these specific problems — do not merely soften them:\n")
+	for _, iss := range report.Issues {
+		if iss.Severity == contentcheck.SeverityError {
+			b.WriteString("- ")
+			b.WriteString(iss.Message)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
 // writeValidatedArticle generates the article, assembles the full blog, and
 // validates it; on failure it regenerates (up to MaxBlogAttempts, relying on the
 // model's sampling variance to produce a different draft). It returns the first
@@ -88,7 +104,8 @@ func (g *Generator) writeValidatedArticle(ctx context.Context, rctx *rc.ReleaseC
 	if attempts <= 0 {
 		attempts = defaultBlogAttempts
 	}
-	prompt := g.articlePrompt(rctx, title, plan)
+	basePrompt := g.articlePrompt(rctx, title, plan)
+	prompt := basePrompt
 
 	bestMD := ""
 	bestErrs := int(^uint(0) >> 1) // max int
@@ -115,6 +132,9 @@ func (g *Generator) writeValidatedArticle(ctx context.Context, rctx *rc.ReleaseC
 			g.Logger.Warn("blog draft failed validation; regenerating",
 				"release", rctx.Release.Tag, "attempt", i+1, "of", attempts, "errors", report.Errors())
 		}
+		// Reflection: tell the next attempt exactly what to fix, rather than
+		// resampling blindly — the specific violations are a far stronger signal.
+		prompt = basePrompt + correctionBlock(report)
 	}
 	if g.Logger != nil {
 		g.Logger.Warn("blog validation not clean after all attempts; using best draft",
