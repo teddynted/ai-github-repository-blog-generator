@@ -93,7 +93,9 @@ func TestBlogPlanThenWritePrompts(t *testing.T) {
 	plan := fm.prompts[0]
 	for _, want := range []string{
 		"Do NOT write the article yet", "STAGE 1", "STAGE 2", "STAGE 3", "STAGE 4",
-		"THEME", "OUTLINE", "acme/widget", "v0.2.0", // grounding
+		"THEME", "OUTLINE", "TITLE", // timeless title requested in the plan
+		"only the TRIGGER",      // release is trigger, not topic
+		"acme/widget", "v0.2.0", // grounding
 	} {
 		if !strings.Contains(plan, want) {
 			t.Errorf("plan prompt missing %q", want)
@@ -102,11 +104,12 @@ func TestBlogPlanThenWritePrompts(t *testing.T) {
 
 	article := fm.prompts[1]
 	for _, want := range []string{
-		"Introduction", "Engineering Problem", "What Changed", "Engineering Decisions",
-		"Tradeoffs", "How Developers Can Apply This", "What's Next", "Conclusion",
+		"Introduction", "Engineering Problem", "Solution Overview", "Engineering Decisions",
+		"Tradeoffs", "Applying the Pattern", "What's Next", "Conclusion",
 		"Never fabricate", "Omit unknowns silently", "1,500–2,500 words",
 		"Do NOT write YAML front matter",
-		"acme/widget", "v0.2.0", "add release context builder", // grounding
+		"TIMELESS engineering article", "This release delivers", // timeless framing + forbidden phrase
+		"acme/widget", "add release context builder", // grounding
 	} {
 		if !strings.Contains(article, want) {
 			t.Errorf("article prompt missing %q", want)
