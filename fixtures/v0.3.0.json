@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0.0",
+  "contextId": "sample-widget-v1.0.0",
+  "generatedAt": "2026-01-01T00:00:00Z",
+  "repository": {
+    "owner": "acme",
+    "name": "widget",
+    "fullName": "acme/widget",
+    "description": "An event-driven serverless widget-processing platform on AWS.",
+    "topics": ["aws", "serverless", "go", "event-driven"],
+    "license": "MIT",
+    "defaultBranch": "main",
+    "language": "Go",
+    "url": "https://github.com/acme/widget",
+    "summary": "A small, production-grade Go service that processes widget events through an EventBridge + SQS pipeline on scheduled EC2 compute."
+  },
+  "release": {
+    "tag": "v1.0.0",
+    "name": "Widget v1.0.0 — first production release",
+    "publishedAt": "2026-01-01T00:00:00Z",
+    "author": "acme-bot",
+    "body": "First production release of Widget. Adds an EventBridge-driven ingestion pipeline, an SQS durable buffer, a hardened EC2 worker, and CloudFormation infrastructure. Breaking: the legacy polling endpoint is removed.",
+    "url": "https://github.com/acme/widget/releases/tag/v1.0.0",
+    "preRelease": false,
+    "previousTag": "v0.9.0",
+    "summary": "Widget v1.0.0 delivers the first production-ready event-driven pipeline."
+  },
+  "architecture": {
+    "overview": "Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.",
+    "components": [
+      { "name": "webhook-handler", "kind": "AWS Lambda", "responsibility": "Validate and publish inbound events" },
+      { "name": "worker", "kind": "EC2", "responsibility": "Drain SQS and process widgets" }
+    ],
+    "deploymentTopology": "Single-region, single public subnet; serverless front door, scheduled EC2 compute.",
+    "awsServices": ["AWS Lambda", "Amazon EventBridge", "Amazon SQS", "Amazon EC2", "AWS CloudFormation", "Amazon CloudWatch"],
+    "eventDrivenFlows": ["webhook → EventBridge → SQS → EC2 worker"],
+    "scalability": "SQS absorbs bursts; the worker processes within a scheduled window.",
+    "reliability": "SQS provides durable buffering and retries; a dead-letter queue captures poison messages.",
+    "security": "IMDSv2 enforced, least-privilege IAM, secrets in AWS Secrets Manager, HMAC-verified webhooks."
+  },
+  "commits": [
+    { "sha": "a1b2c3d", "subject": "add EventBridge ingestion pipeline", "type": "feat", "category": "Features", "conventional": true },
+    { "sha": "b2c3d4e", "subject": "add SQS durable buffer with DLQ", "type": "feat", "category": "Features", "conventional": true },
+    { "sha": "c3d4e5f", "subject": "harden the EC2 worker (IMDSv2, auditd)", "type": "feat", "category": "Features", "conventional": true },
+    { "sha": "d4e5f6a", "subject": "remove legacy polling endpoint", "type": "feat", "breaking": true, "category": "Features", "conventional": true },
+    { "sha": "e5f6a7b", "subject": "fix race in the SQS drainer", "type": "fix", "category": "Bug Fixes", "conventional": true }
+  ],
+  "commitStats": {
+    "analyzed": 5,
+    "byCategory": { "Features": 4, "Bug Fixes": 1 },
+    "breaking": 1
+  },
+  "changedFiles": [
+    { "path": "internal/ingest/eventbridge.go", "status": "added" },
+    { "path": "internal/buffer/sqs.go", "status": "added" },
+    { "path": "infrastructure/pipeline.yaml", "status": "added" },
+    { "path": "cmd/worker/main.go", "status": "modified" }
+  ],
+  "fileStats": { "added": 3, "modified": 1, "removed": 0 },
+  "technologies": [
+    { "name": "Go" },
+    { "name": "AWS Lambda" },
+    { "name": "Amazon SQS" },
+    { "name": "Amazon EventBridge" },
+    { "name": "AWS CloudFormation" }
+  ],
+  "cloudformation": {
+    "templates": ["infrastructure/pipeline.yaml"],
+    "resources": [
+      { "logicalId": "EventBus", "type": "AWS::Events::EventBus", "service": "Amazon EventBridge", "category": "Messaging" },
+      { "logicalId": "Queue", "type": "AWS::SQS::Queue", "service": "Amazon SQS", "category": "Messaging" },
+      { "logicalId": "DeadLetterQueue", "type": "AWS::SQS::Queue", "service": "Amazon SQS", "category": "Messaging" },
+      { "logicalId": "WorkerInstance", "type": "AWS::EC2::Instance", "service": "Amazon EC2", "category": "Compute" }
+    ],
+    "parameters": ["OperatorCidr", "InstanceType"],
+    "outputs": ["QueueUrl", "EventBusName"],
+    "services": ["Amazon EventBridge", "Amazon SQS", "Amazon EC2"],
+    "summary": "One stack defines the EventBridge bus, the SQS queue + DLQ, and the EC2 worker."
+  },
+  "mermaid": [
+    {
+      "type": "flowchart",
+      "nodes": ["Webhook", "EventBridge", "SQS", "Worker"],
+      "nodeCount": 4,
+      "edgeCount": 3,
+      "summary": "Webhook publishes to EventBridge, which buffers in SQS, drained by the EC2 worker."
+    }
+  ],
+  "changelog": {
+    "hasChangelog": true,
+    "summary": "v1.0.0 adds the ingestion pipeline, SQS buffer, hardened worker, and removes the legacy polling endpoint."
+  },
+  "implementation": {
+    "summary": "The ingestion Lambda validates and publishes events to EventBridge; a rule routes them to SQS; the scheduled EC2 worker drains and processes them, with a DLQ for failures.",
+    "highlights": ["EventBridge ingestion", "SQS durable buffer + DLQ", "hardened EC2 worker"]
+  },
+  "contentIntelligence": {
+    "summary": "Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.",
+    "blogTitles": ["Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS"],
+    "keywords": ["aws", "serverless", "eventbridge", "sqs", "go", "event-driven"],
+    "estimatedVideoLength": "6m"
+  }
+}

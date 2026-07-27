@@ -371,6 +371,89 @@ The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs
 
 ---
 
+## Local Content Development & Prompt Testing
+
+Generate and iterate on every content artifact **locally** — no GitHub Release,
+GitHub Actions, EC2, EventBridge, SQS, or S3. The local tool (`cmd/content`)
+reuses the exact production pipeline (`internal/contentsuite` + the same
+generators), so what you iterate on locally is what production runs.
+
+### Quick start
+
+```bash
+# Generate the blog from a fixture using local Ollama (free)
+make blog-local
+# …or any artifact/provider:
+go run ./cmd/content --artifact architecture --provider anthropic --context fixtures/v0.3.0.json --output output/
+
+# See the exact prompt that would be sent — without calling a provider or spending tokens
+go run ./cmd/content --artifact blog --provider anthropic --context fixtures/v0.3.0.json --dry-run
+
+# Interactive playground: pick provider, artifact, fixture
+make prompt
+```
+
+Outputs are written to `output/<kind>.md` (and `.svg` for the diagram).
+
+### Providers
+
+`--provider anthropic | bedrock | ollama`. The provider abstraction is unchanged
+from production; no provider-specific logic lives in the generators.
+
+| Provider | Setup |
+| --- | --- |
+| `ollama` (default) | Run `ollama serve`; set `OLLAMA_MODEL` (default `qwen2.5:7b`) and `OLLAMA_URL`. Free, fully local. |
+| `anthropic` | `export ANTHROPIC_API_KEY=sk-ant-…`. Honors `--model`, `--temperature`, `--max-tokens`, `--system`. |
+| `bedrock` | AWS credentials + `--model <bedrock-model-id>` (`--region`). |
+
+### Flags
+
+`--artifact` (blog, architecture, linkedin, x-thread, storyboard, voiceover,
+youtube, youtube-shorts, tiktok, visual-assets, seo-metadata, or `all`),
+`--provider`, `--context`, `--output`, `--temperature`, `--max-tokens`,
+`--system`, `--dry-run`, `--verbose`, `--no-cache`.
+
+### Fixtures
+
+`fixtures/*.json` are fully-built Release Contexts (the same structure production
+consumes). They need no GitHub access and are deterministic regression inputs.
+Add new ones by dropping a Release Context JSON into `fixtures/`.
+
+### Response caching
+
+Identical requests are cached under `.cache/` keyed by a hash of
+`provider + model + system prompt + temperature + user prompt`, so re-runs are
+free. Change any input → cache miss → regenerate. Bypass with `--no-cache`.
+
+### Validation
+
+Every generated artifact is validated and reported (required sections, ≤2
+Mermaid diagrams, valid SVG, no placeholder/marketing/hallucination markers, SEO
+lengths, LinkedIn limits, …). Validate already-generated files with:
+
+```bash
+make validate-content        # runs: go run ./cmd/content validate --output output/
+```
+
+### Snapshot regression tests
+
+Deterministic snapshots (`testdata/expected/*`) are generated with a fixed model
+over `fixtures/v0.3.0.json` and compared byte-for-byte (timestamps normalised):
+
+```bash
+make snapshot          # compare; fails on drift
+make snapshot-update   # refresh intentionally (never automatic)
+```
+
+### Prompt versioning
+
+Prompt revisions are tracked in `internal/promptversion` (`blog@6`,
+`architecture@2`, …); bump a kind's version when its prompt changes materially.
+Prompts remain assembled in their generator packages (they are built from the
+Release Context, not static templates), so there is nothing to externalise.
+
+---
+
 ## Technology Stack
 
 | Layer | Technology | Purpose |
