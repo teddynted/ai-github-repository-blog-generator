@@ -283,6 +283,15 @@ func firstNStr(list []string, n int) []string {
 
 var tagSanitizeRe = regexp.MustCompile(`[^a-z0-9]+`)
 
+// tagStopwords are meaningless publishing tags to drop (the spec forbids tags
+// like "an", "the", "project", "repository").
+var tagStopwords = map[string]bool{
+	"a": true, "an": true, "the": true, "and": true, "or": true, "of": true,
+	"to": true, "in": true, "on": true, "is": true, "it": true, "by": true,
+	"as": true, "at": true, "be": true, "project": true, "repository": true,
+	"repo": true, "code": true, "app": true,
+}
+
 // blogTags derives suggested publishing tags from the detected technologies and
 // SEO keywords, normalized for platforms like Dev.to / Medium.
 func blogTags(rctx *rc.ReleaseContext) []string {
@@ -298,7 +307,7 @@ func blogTags(rctx *rc.ReleaseContext) []string {
 	for _, r := range raw {
 		tag := tagSanitizeRe.ReplaceAllString(strings.ToLower(r), "-")
 		tag = strings.Trim(tag, "-")
-		if tag == "" || len(tag) < 2 || seen[tag] {
+		if tag == "" || len(tag) < 2 || seen[tag] || tagStopwords[tag] {
 			continue
 		}
 		seen[tag] = true

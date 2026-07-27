@@ -168,3 +168,16 @@ func TestBlogCapsArchitectureDiagramsAtTwo(t *testing.T) {
 		t.Error("a diagram beyond the cap was embedded")
 	}
 }
+
+func TestBlogTagsDropStopwords(t *testing.T) {
+	c := sampleContext()
+	c.ContentIntelligence.SEOKeywords = []string{"an", "the", "project", "aws", "golang"}
+	tags := blogTags(c)
+	for _, junk := range []string{"an", "the", "project"} {
+		for _, tag := range tags {
+			if tag == junk {
+				t.Errorf("stopword %q was not filtered from tags: %v", junk, tags)
+			}
+		}
+	}
+}

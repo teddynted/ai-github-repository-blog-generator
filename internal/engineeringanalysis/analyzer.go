@@ -35,7 +35,12 @@ const DefaultMaxFactsBytes = 16000
 
 // Analyzer extracts a structured EngineeringContext from a ReleaseContext.
 type Analyzer struct {
-	Model         Model
+	Model Model
+	// Fallback, when set, is retried once if the primary model returns an empty
+	// analysis. The local model is cheap but sometimes produces no structured
+	// output (e.g. a small model on a thin release); a stronger model then
+	// salvages the analysis so the downstream writer has real material. Optional.
+	Fallback      Model
 	MaxFactsBytes int
 	Logger        *slog.Logger
 }
@@ -62,6 +67,23 @@ func (a *Analyzer) Analyze(ctx context.Context, rctx *rc.ReleaseContext) (*rc.En
 	if err != nil {
 		return nil, fmt.Errorf("engineeringanalysis: %w", err)
 	}
+
+	// If the primary model produced nothing usable, retry once on the fallback
+	// model (a stronger/managed model) so the writer is not left grounding on an
+	// empty analysis. A fallback error or a still-empty result is non-fatal — the
+	// original (empty) analysis is kept and the run proceeds on the factual context.
+	usedFallback := false
+	if ec.IsZero() && a.Fallback != nil {
+		if raw2, ferr := a.Fallback.Generate(ctx, prompt); ferr == nil {
+			if ec2, perr := parse(raw2); perr == nil && !ec2.IsZero() {
+				ec = ec2
+				usedFallback = true
+			}
+		} else if a.Logger != nil {
+			a.Logger.Warn("engineeringanalysis: fallback model failed", slog.String("error", ferr.Error()))
+		}
+	}
+
 	// Stamp the release identity from the authoritative context, not the model,
 	// so the analysis is always correctly attributed even if the model omits it.
 	ec.Release = rc.ReleaseRef{Version: rctx.Release.Tag, Name: rctx.Release.Name}
@@ -74,6 +96,7 @@ func (a *Analyzer) Analyze(ctx context.Context, rctx *rc.ReleaseContext) (*rc.En
 			slog.Int("tradeoffs", len(ec.Tradeoffs)),
 			slog.Int("awsServices", len(ec.AWSServices)),
 			slog.Bool("empty", ec.IsZero()),
+			slog.Bool("usedFallback", usedFallback),
 		)
 	}
 	return ec, nil
