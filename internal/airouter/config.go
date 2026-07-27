@@ -18,7 +18,7 @@ const (
 var AllKinds = []string{
 	"blog", "storyboard", "voiceover", "architecture", "youtube",
 	"youtube-shorts", "tiktok", "visual-assets", "seo-metadata",
-	"linkedin", "x-thread",
+	"linkedin", "x-thread", "architecture-diagram-spec",
 }
 
 // DefaultRules is the recommended hybrid policy: premium model for the
@@ -27,10 +27,11 @@ var AllKinds = []string{
 // the default provider, so this map stays small and intent-revealing.
 func DefaultRules() map[string]string {
 	return map[string]string{
-		"blog":         ProviderClaude, // flagship long-form article
-		"architecture": ProviderClaude, // technical reasoning + trade-offs
-		"linkedin":     ProviderClaude, // professional public communication
-		"x-thread":     ProviderClaude, // audience engagement
+		"blog":                      ProviderClaude, // flagship long-form article
+		"architecture":              ProviderClaude, // technical reasoning + trade-offs
+		"linkedin":                  ProviderClaude, // professional public communication
+		"x-thread":                  ProviderClaude, // audience engagement
+		"architecture-diagram-spec": ProviderClaude, // AWS diagram design (engineering, not rendering)
 		// storyboard, voiceover, youtube, youtube-shorts, tiktok, visual-assets,
 		// seo-metadata → default provider (Ollama): structured / repetitive / cheap.
 	}

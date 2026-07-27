@@ -47,9 +47,10 @@ func TestOrchestratorRunsEveryStageOffline(t *testing.T) {
 	if !s.Manifest.Offline {
 		t.Error("nil model should mark the run offline")
 	}
-	// 11 stages M3..M13; all should succeed given a rich context + well-formed blog.
-	if len(s.Manifest.Stages) != 11 {
-		t.Fatalf("want 11 stages, got %d", len(s.Manifest.Stages))
+	// 12 stages M3..M14; all should succeed given a rich context + well-formed blog
+	// (the AWS diagram spec grounds on the sample's CloudFormation/AWS evidence).
+	if len(s.Manifest.Stages) != 12 {
+		t.Fatalf("want 12 stages, got %d", len(s.Manifest.Stages))
 	}
 	if s.Manifest.Failed != 0 {
 		var failed []string
@@ -60,8 +61,8 @@ func TestOrchestratorRunsEveryStageOffline(t *testing.T) {
 		}
 		t.Fatalf("expected all stages to pass, %d failed: %v", s.Manifest.Failed, failed)
 	}
-	if s.Manifest.Produced != 11 || len(s.Artifacts()) != 11 {
-		t.Errorf("produced=%d artifacts=%d, want 11", s.Manifest.Produced, len(s.Artifacts()))
+	if s.Manifest.Produced != 12 || len(s.Artifacts()) != 12 {
+		t.Errorf("produced=%d artifacts=%d, want 12", s.Manifest.Produced, len(s.Artifacts()))
 	}
 	// Milestones are present, in order, and each artifact has content + a filename.
 	for i, st := range s.Manifest.Stages {
@@ -103,9 +104,9 @@ func TestOrchestratorIsFaultTolerant(t *testing.T) {
 	if !storyboardFailed {
 		t.Error("storyboard failure should be recorded with an error message")
 	}
-	// Every stage is still attempted (11 records) even after a mid-chain failure.
-	if len(s.Manifest.Stages) != 11 {
-		t.Errorf("all 11 stages should be attempted, got %d", len(s.Manifest.Stages))
+	// Every stage is still attempted (12 records) even after a mid-chain failure.
+	if len(s.Manifest.Stages) != 12 {
+		t.Errorf("all 12 stages should be attempted, got %d", len(s.Manifest.Stages))
 	}
 }
 
@@ -118,21 +119,26 @@ func TestOrchestratorSkipsArchitectureWithoutInfra(t *testing.T) {
 	o := &Orchestrator{}
 	s := o.Run(context.Background(), ctx, wellFormedBlog())
 
-	var archSkipped bool
+	// Both infra-dependent stages skip gracefully without groundable evidence:
+	// the architecture diagram and the AWS diagram specification.
+	skipped := map[string]bool{}
 	for _, st := range s.Manifest.Stages {
-		if st.Name == "architecture" {
-			archSkipped = st.Status == StageSkipped
+		if st.Status == StageSkipped {
+			skipped[st.Name] = true
 		}
 	}
-	if !archSkipped {
+	if !skipped["architecture"] {
 		t.Error("architecture should be SKIPPED (not failed) when there is no infrastructure")
 	}
-	if s.Manifest.Skipped != 1 {
-		t.Errorf("skipped count = %d, want 1", s.Manifest.Skipped)
+	if !skipped["architecture-diagram-spec"] {
+		t.Error("architecture-diagram-spec should be SKIPPED when there is no AWS evidence")
+	}
+	if s.Manifest.Skipped != 2 {
+		t.Errorf("skipped count = %d, want 2", s.Manifest.Skipped)
 	}
 	// The rest still produced — a skip never aborts the run.
 	if s.Manifest.Produced < 10 {
-		t.Errorf("produced = %d, want >= 10 despite the skip", s.Manifest.Produced)
+		t.Errorf("produced = %d, want >= 10 despite the skips", s.Manifest.Produced)
 	}
 }
 
