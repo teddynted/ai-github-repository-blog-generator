@@ -31,7 +31,7 @@ func TestDefaultPolicyRoutesHighValueToClaudeRestToOllama(t *testing.T) {
 	r := New(m, DefaultRules(), ProviderOllama, ProviderOllama, nil)
 
 	// High-value → Claude.
-	for _, k := range []string{"blog", "architecture", "linkedin", "x-thread"} {
+	for _, k := range []string{"blog", "architecture", "linkedin", "x-thread", "architecture-diagram-spec"} {
 		if got, _ := r.ModelFor(k).Generate(context.Background(), "p"); got != "claude-out" {
 			t.Errorf("%s routed to %q, want claude", k, got)
 		}

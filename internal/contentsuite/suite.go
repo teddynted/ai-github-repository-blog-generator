@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/archspec"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/linkedin"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
@@ -93,6 +94,7 @@ type Suite struct {
 	Architecture architecture.ArchitectureCollection
 	LinkedIn     linkedin.LinkedInCollection
 	XThread      xthread.XThreadCollection
+	DiagramSpec  archspec.Spec
 	artifacts    []Artifact
 }
 
@@ -264,6 +266,18 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	s.record(liOut)
 	s.record(xtOut)
 
+	// --- M14 AWS Architecture Diagram Specification (context + blog topic) ---
+	// A separate, renderer-facing artifact (NOT appended to the blog): a
+	// repository-grounded spec a downstream pipeline turns into an AWS diagram.
+	// Skipped gracefully when the repository has no groundable AWS evidence.
+	s.record(o.run("architecture-diagram-spec", 14, "12-architecture-diagram-spec.md", func() (string, error) {
+		spec, err := (&archspec.Generator{Model: o.model("architecture-diagram-spec"), Logger: o.Logger}).Spec(ctx, archspec.ReleasePackage{
+			Context: rctx, Blog: s.Blog,
+		})
+		s.DiagramSpec = spec
+		return spec.Markdown(), err
+	}))
+
 	return s
 }
 
@@ -304,6 +318,7 @@ func (o *Orchestrator) run(name string, milestone int, filename string, fn func(
 // sentinel are registered here.
 func isSkip(err error) bool {
 	return errors.Is(err, architecture.ErrNoInfrastructure) ||
+		errors.Is(err, archspec.ErrNoEvidence) ||
 		errors.Is(err, shorts.ErrNoMoments) ||
 		errors.Is(err, tiktok.ErrNoTopics)
 }
