@@ -82,23 +82,39 @@ func TestBlogDoesNotDuplicateMermaid(t *testing.T) {
 	}
 }
 
-func TestBlogPromptStructureAndGrounding(t *testing.T) {
+func TestBlogPlanThenWritePrompts(t *testing.T) {
 	fm := &fakeModel{}
 	_, _ = (&Generator{Model: fm}).Blog(context.Background(), blogContext())
-	p := fm.prompts[0]
+
+	// Two model turns: Stage 1–4 plan, then Stage 5 article.
+	if len(fm.prompts) != 2 {
+		t.Fatalf("expected 2 model calls (plan + write), got %d", len(fm.prompts))
+	}
+	plan := fm.prompts[0]
 	for _, want := range []string{
-		"Introduction", "Architecture", "Engineering Decisions", "Tradeoffs",
-		"How Developers Can Use or Extend It", "What's Next", "Conclusion",
-		"Never invent", "omit it silently", "Do NOT narrate the changelog", "1,500–2,500 words",
-		"acme/widget", "v0.2.0", "add release context builder", // grounding
+		"Do NOT write the article yet", "STAGE 1", "STAGE 2", "STAGE 3", "STAGE 4",
+		"THEME", "OUTLINE", "acme/widget", "v0.2.0", // grounding
 	} {
-		if !strings.Contains(p, want) {
-			t.Errorf("prompt missing %q", want)
+		if !strings.Contains(plan, want) {
+			t.Errorf("plan prompt missing %q", want)
 		}
 	}
-	// The model must not be asked to write front matter or the H1.
-	if !strings.Contains(p, "Do NOT write YAML front matter") {
-		t.Error("prompt should forbid front matter / H1 in the body")
+
+	article := fm.prompts[1]
+	for _, want := range []string{
+		"Introduction", "Engineering Problem", "What Changed", "Engineering Decisions",
+		"Tradeoffs", "How Developers Can Apply This", "What's Next", "Conclusion",
+		"Never fabricate", "Omit unknowns silently", "1,500–2,500 words",
+		"Do NOT write YAML front matter",
+		"acme/widget", "v0.2.0", "add release context builder", // grounding
+	} {
+		if !strings.Contains(article, want) {
+			t.Errorf("article prompt missing %q", want)
+		}
+	}
+	// The plan must be threaded into the writing prompt.
+	if !strings.Contains(article, "PLAN (follow this)") {
+		t.Error("article prompt should embed the plan")
 	}
 }
 
