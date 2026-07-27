@@ -11,6 +11,27 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 )
 
+func TestFilePublishLatestWritesLatestDir(t *testing.T) {
+	dir := t.TempDir()
+	p := &FilePublisher{Dir: dir}
+
+	err := p.PublishLatest(context.Background(), "acme/widget", []generation.Content{
+		{Kind: generation.KindBlog, Markdown: "latest post", Release: "v0.3.0"},
+		{Kind: "latest", Markdown: "{}", Ext: "json"},
+	})
+	if err != nil {
+		t.Fatalf("PublishLatest: %v", err)
+	}
+	base := filepath.Join(dir, "acme", "widget", "latest")
+	blog, err := os.ReadFile(filepath.Join(base, "blog.md"))
+	if err != nil || string(blog) != "latest post" {
+		t.Errorf("latest/blog.md = %q err=%v", blog, err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "latest.json")); err != nil {
+		t.Errorf("latest/latest.json missing: %v", err)
+	}
+}
+
 func TestFilePublisherWritesDatedAssets(t *testing.T) {
 	dir := t.TempDir()
 	p := &FilePublisher{Dir: dir, Now: func() time.Time { return time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC) }}

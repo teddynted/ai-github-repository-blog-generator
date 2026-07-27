@@ -82,6 +82,10 @@ type Artifact struct {
 	Markdown string `json:"-"`
 	// Ext is the file extension without the dot ("md", "svg"). Empty means "md".
 	Ext string `json:"ext,omitempty"`
+	// Provenance — the provider/model/prompt that produced this artifact.
+	Provider      string `json:"provider,omitempty"`
+	Model         string `json:"model,omitempty"`
+	PromptVersion string `json:"promptVersion,omitempty"`
 }
 
 // Suite is the complete set of artifacts from one release.
@@ -114,7 +118,11 @@ type Orchestrator struct {
 	// premium model for high-value artifacts, local model for commodity ones. The
 	// argument is the stage name ("blog", "architecture", "seo-metadata", …). When
 	// nil, Model is used for every stage — fully backward compatible.
-	ModelFor       func(kind string) releasegen.Model
+	ModelFor func(kind string) releasegen.Model
+	// Provenance, when set, reports how a stage's artifact was produced
+	// (provider, model, prompt version) for the release metadata. Optional; when
+	// nil, artifacts carry no provenance.
+	Provenance     func(kind string) (provider, model, promptVersion string)
 	Logger         *slog.Logger
 	MaxShorts      int
 	MaxVideos      int
@@ -150,7 +158,11 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	// --- M3 Blog (foundational) ---
 	if blog != nil {
 		s.Blog = *blog
-		s.record(stageOutcome{name: "blog", milestone: 3, filename: "01-blog.md", status: StageOK, md: s.Blog.Markdown})
+		blogOut := stageOutcome{name: "blog", milestone: 3, filename: "01-blog.md", status: StageOK, md: s.Blog.Markdown}
+		if o.Provenance != nil {
+			blogOut.provider, blogOut.model, blogOut.promptVersion = o.Provenance("blog")
+		}
+		s.record(blogOut)
 	} else {
 		s.record(o.run("blog", 3, "01-blog.md", func() (string, error) {
 			b, err := (&releasegen.Generator{Model: o.model("blog")}).Blog(ctx, rctx)
@@ -363,13 +375,16 @@ func firstNonEmptyStr(vals ...string) string {
 // the manifest. Separating computation from recording lets independent stages run
 // concurrently while the manifest and artifact list stay in canonical order.
 type stageOutcome struct {
-	name      string
-	milestone int
-	filename  string
-	ext       string
-	status    StageStatus
-	err       error
-	md        string
+	name          string
+	milestone     int
+	filename      string
+	ext           string
+	provider      string
+	model         string
+	promptVersion string
+	status        StageStatus
+	err           error
+	md            string
 }
 
 // run executes one generator and returns its outcome WITHOUT touching shared
@@ -389,7 +404,11 @@ func (o *Orchestrator) run(name string, milestone int, filename string, fn func(
 		}
 		return stageOutcome{name: name, milestone: milestone, status: status, err: err}
 	}
-	return stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: md}
+	out := stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: md}
+	if o.Provenance != nil {
+		out.provider, out.model, out.promptVersion = o.Provenance(name)
+	}
+	return out
 }
 
 // runExt is run() for a stage whose artifact is not Markdown (e.g. an SVG); it
@@ -425,7 +444,10 @@ func (s *Suite) record(o stageOutcome) {
 	case StageOK:
 		s.Manifest.Produced++
 		if o.filename != "" {
-			s.artifacts = append(s.artifacts, Artifact{Filename: o.filename, Kind: o.name, Markdown: o.md, Ext: o.ext})
+			s.artifacts = append(s.artifacts, Artifact{
+				Filename: o.filename, Kind: o.name, Markdown: o.md, Ext: o.ext,
+				Provider: o.provider, Model: o.model, PromptVersion: o.promptVersion,
+			})
 		}
 	case StageSkipped:
 		s.Manifest.Skipped++

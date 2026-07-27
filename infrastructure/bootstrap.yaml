@@ -61,30 +61,141 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  # Customer-managed KMS key for the generated-content bucket (SSE-KMS). A CMK
+  # (vs SSE-S3) gives key-level access control and CloudTrail visibility of key
+  # use. The key policy delegates to IAM (account root), so principals are
+  # granted use through their own IAM policies — no cross-stack role references.
+  ContentBucketKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub "SSE-KMS for ${ProjectName} generated content"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableIAMPolicies
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+
+  ContentBucketKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${ProjectName}-content"
+      TargetKeyId: !Ref ContentBucketKey
+
   # Dedicated bucket for generated content (blog, release-summary, …), kept
   # separate from the CI artifacts bucket so it carries its own retention. The
   # worker (compute stack) publishes here under OUTPUT_S3_PREFIX (default
   # generated-content/). Created here rather than in the compute stack because
   # the deploy role is not granted s3:CreateBucket; the name is deterministic so
   # the compute stack references it without a cross-stack import.
+  #
+  # Versioning is enabled so every generation is immutable and re-runs of the
+  # same release tag never destroy prior output (they create a new object
+  # version), which is the backbone for history, comparison, and rollback.
   ContentBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt ContentBucketKey.Arn
+            BucketKeyEnabled: true
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          # Reclaim storage from abandoned multipart uploads (relevant once large
+          # binary artifacts — video/audio/png — are published).
+          - Id: abort-incomplete-mpu
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          # Bound the audit window: expire superseded (noncurrent) versions after
+          # a year, but always keep at least the 20 most recent generations of an
+          # object regardless of age.
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 365
+              NewerNoncurrentVersions: 20
       Tags:
         - Key: Project
           Value: !Ref ProjectName
+
+  # Enforce TLS-only access to the content bucket (parity with the artifacts
+  # bucket). The worker/SDK already uses HTTPS, so this only blocks plaintext.
+  ContentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ContentBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ContentBucket.Arn
+              - !Sub "${ContentBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # Operator role for the content-admin CLI (history / compare / rollback /
+  # promote-latest). It can READ and COPY content — deliberately separate from
+  # the worker, which stays write-only. Trusts the account root so an admin can
+  # delegate assume-role; scope it to specific principals in production.
+  ContentOperatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-content-operator"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: content-admin
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadWriteContentObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub "${ContentBucket.Arn}/*"
+              - Sid: ListContentVersions
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                Resource: !GetAtt ContentBucket.Arn
+              - Sid: UseContentKey
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !GetAtt ContentBucketKey.Arn
 
   ArtifactsBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -252,6 +363,14 @@ Outputs:
   ContentBucketName:
     Description: Dedicated bucket the worker publishes generated content to.
     Value: !Ref ContentBucket
+  ContentBucketKeyArn:
+    Description: KMS key ARN encrypting the generated-content bucket.
+    Value: !GetAtt ContentBucketKey.Arn
+    Export:
+      Name: !Sub "${ProjectName}-content-bucket-key-arn"
+  ContentOperatorRoleArn:
+    Description: Assume this role to run the content-admin CLI (read/rollback).
+    Value: !GetAtt ContentOperatorRole.Arn
   DeployRoleArn:
     Description: Set this as the AWS_DEPLOY_ROLE_ARN repository secret.
     Value: !GetAtt DeployRole.Arn

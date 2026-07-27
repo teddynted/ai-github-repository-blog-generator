@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentmeta"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/publish"
@@ -19,6 +20,10 @@ var (
 	_ Generator = (*releasegen.Generator)(nil)
 	_ Reviewer  = review.Reviewer{}
 	_ Publisher = (*publish.FilePublisher)(nil)
+	// The real publishers satisfy the optional versioned + latest ports.
+	_ resultPublisher = (*publish.S3Publisher)(nil)
+	_ latestPublisher = (*publish.S3Publisher)(nil)
+	_ latestPublisher = (*publish.FilePublisher)(nil)
 )
 
 type fakeModel struct{ reply func(string) (string, error) }
@@ -54,13 +59,42 @@ func (f fakeReviewer) Review(_ context.Context, assets []generation.Content) ([]
 
 type fakePublisher struct {
 	repo   string
-	assets []generation.Content
+	assets []generation.Content // every asset across all Publish calls (content + metadata)
+	latest []generation.Content // every asset promoted to latest/
 	err    error
 }
 
 func (f *fakePublisher) Publish(_ context.Context, repo string, assets []generation.Content) error {
-	f.repo, f.assets = repo, assets
+	f.repo = repo
+	f.assets = append(f.assets, assets...)
 	return f.err
+}
+
+func (f *fakePublisher) PublishLatest(_ context.Context, _ string, assets []generation.Content) error {
+	f.latest = append(f.latest, assets...)
+	return f.err
+}
+
+// content returns the published content artifacts (excluding the metadata.json
+// manifest, which the pipeline publishes as a separate batch).
+func (f *fakePublisher) content() []generation.Content {
+	var out []generation.Content
+	for _, a := range f.assets {
+		if string(a.Kind) != contentmeta.Kind {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// metadataAsset returns the published metadata.json artifact, if any.
+func (f *fakePublisher) metadataAsset() (generation.Content, bool) {
+	for _, a := range f.assets {
+		if string(a.Kind) == contentmeta.Kind {
+			return a, true
+		}
+	}
+	return generation.Content{}, false
 }
 
 type fakeNotifier struct {
@@ -109,12 +143,12 @@ func TestPipelineHappyPath(t *testing.T) {
 	if res.Generated != 2 || res.Published != 2 || res.Rejected != 0 {
 		t.Errorf("result = %+v", res)
 	}
-	if pub.repo != "acme/widget" || len(pub.assets) != 2 {
-		t.Errorf("published = %s / %d assets", pub.repo, len(pub.assets))
+	if pub.repo != "acme/widget" || len(pub.content()) != 2 {
+		t.Errorf("published = %s / %d content assets", pub.repo, len(pub.content()))
 	}
 	// The blog asset must carry the assembled front matter + title.
 	var haveBlog bool
-	for _, a := range pub.assets {
+	for _, a := range pub.content() {
 		if a.Kind == "blog" {
 			haveBlog = true
 			if !strings.Contains(a.Markdown, "# Inside widget v0.2.0") {
@@ -125,8 +159,59 @@ func TestPipelineHappyPath(t *testing.T) {
 	if !haveBlog {
 		t.Error("blog asset missing")
 	}
+	// A metadata.json manifest must be published alongside the content.
+	if _, ok := pub.metadataAsset(); !ok {
+		t.Error("metadata.json was not published")
+	}
+	// The release must be promoted to latest/: the content, plus a latest.json
+	// pointer naming the release.
+	var haveLatestBlog, haveLatestPointer bool
+	for _, a := range pub.latest {
+		switch string(a.Kind) {
+		case "blog":
+			haveLatestBlog = true
+		case contentmeta.LatestKind:
+			haveLatestPointer = true
+			if !strings.Contains(a.Markdown, "v0.2.0") {
+				t.Errorf("latest.json does not name the release: %q", a.Markdown)
+			}
+		}
+	}
+	if !haveLatestBlog || !haveLatestPointer {
+		t.Errorf("latest not promoted (blog=%v pointer=%v)", haveLatestBlog, haveLatestPointer)
+	}
 	if note.calls != 1 || !strings.Contains(note.subject, "published") {
 		t.Errorf("notify = %d / %q", note.calls, note.subject)
+	}
+}
+
+func TestPipelineExperimentRun(t *testing.T) {
+	pub := &fakePublisher{}
+	p := newPipeline(fakeReviewer{passAll: true}, pub, &fakeNotifier{})
+	p.ExperimentID = "prompt-v7_claude"
+
+	res, err := p.Run(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v0.2.0"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Published == 0 {
+		t.Fatal("experiment run should still publish")
+	}
+	// Every published artifact carries the experiment id (so it routes into
+	// experiments/), including the metadata.json manifest.
+	for _, a := range pub.assets {
+		if a.ExperimentID != "prompt-v7_claude" {
+			t.Errorf("asset %q missing experiment id: %q", a.Kind, a.ExperimentID)
+		}
+	}
+	// The metadata manifest records the experiment.
+	m, ok := pub.metadataAsset()
+	if !ok || !strings.Contains(m.Markdown, "prompt-v7_claude") {
+		t.Error("metadata.json does not record the experiment")
+	}
+	// An experiment must NOT be promoted to latest/.
+	if len(pub.latest) != 0 {
+		t.Errorf("experiment must not promote to latest, got %d assets", len(pub.latest))
 	}
 }
 
@@ -159,7 +244,7 @@ func TestPipelineFullSuite(t *testing.T) {
 	// The published set spans multimedia stages — proof the suite flowed through
 	// the SAME review/publish stages, not just the written formats.
 	kinds := map[generation.Kind]bool{}
-	for _, a := range pub.assets {
+	for _, a := range pub.content() {
 		kinds[a.Kind] = true
 	}
 	for _, want := range []generation.Kind{"blog", "storyboard", "youtube", "linkedin"} {

@@ -274,6 +274,19 @@ Resources:
                   - HasOutputBucket
                   - !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
                   - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
+              # The content bucket uses SSE-KMS, so publishing requires a data
+              # key. Scope the grant to the S3 service in this account/region
+              # (never direct KMS use) rather than a cross-stack key-ARN import,
+              # so the permission is order-independent and stays least-privilege.
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
+                    kms:CallerAccount: !Ref AWS::AccountId
               # Download the worker binary from the artifacts bucket at boot.
               - !If
                 - HasWorkerCode
