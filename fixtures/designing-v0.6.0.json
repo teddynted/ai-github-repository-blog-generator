@@ -1,0 +1,3974 @@
+{
+  "schemaVersion": "2.0.0",
+  "contextId": "c87cd19b-f665-4aaa-b156-9793a640a47b",
+  "generatedAt": "2026-07-27T21:21:18+02:00",
+  "repository": {
+    "owner": "teddynted",
+    "name": "designing-an-ai-agent-platform-on-aws",
+    "fullName": "teddynted/designing-an-ai-agent-platform-on-aws",
+    "description": "AI Agent platform on AWS overall architecture, design goals, AWS services, component interactions, data flow, deployment strategy, and technology choices.",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "language": "Go",
+    "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws",
+    "summary": "teddynted/designing-an-ai-agent-platform-on-aws is a project that aI Agent platform on AWS overall architecture, design goals, AWS services, component interactions, data flow, deployment strategy, and technology choices written primarily in Go."
+  },
+  "release": {
+    "tag": "v0.6.0",
+    "name": "v0.6.0",
+    "publishedAt": "2026-07-14T13:13:39Z",
+    "author": "github-actions[bot]",
+    "body": "This release introduces 2 new features and documents 4 changes.\n\n## What's Changed\n\n### 🚀 Features\n\n- **infra:** Boot from a custom AMI, and collapse UserData to configuration ([c156e1d](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/c156e1df2f0fa906016f9098e1628f369b0f87a4))\n- **infra:** Build versioned custom AMIs ([49c3f8a](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/49c3f8a5e123f609a9c7c1a92d3b53b1de7b0c02))\n\n### 📚 Documentation\n\n- **architecture:** Hand-authored SVG of the platform as built ([98c27b9](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/98c27b925f0a4cd254a833e70bfa2321cf0dd3f4))\n- **architecture:** Add a living \"as built\" diagram, and mark the rest as snapshots ([c7a96aa](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/c7a96aa85aef5901936e8d8db294ec3340f1b7e2))\n- Milestone 4 — optimizing Spot startup with custom AMIs ([e7cd6d5](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/e7cd6d565e1a66fb0991cb28995a5a94d095f6f8))\n- **changelog:** Add v0.5.0 [skip ci] ([74d16c4](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/74d16c4211cfd16154fe49b29feea268a8594cac))\n\n### 📦 Build System\n\n- **infra:** The AMI lifecycle, and a drift check for the drain agent ([e99b2e2](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/e99b2e2f1ba163a5716388f60a2b308588be73d3))\n\n### Contributors\n\n- Teddy Kekana (6 commits)\n- github-actions[bot] (1 commit)\n\nCompare changes:\nhttps://github.com/teddynted/designing-an-ai-agent-platform-on-aws/compare/v0.5.0...v0.6.0\n",
+    "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/tag/v0.6.0",
+    "preRelease": false,
+    "previousTag": "v0.5.0",
+    "assets": [
+      {
+        "name": "checksums.txt",
+        "size": 473,
+        "contentType": "text/plain; charset=utf-8",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.6.0/checksums.txt"
+      },
+      {
+        "name": "release_v0.6.0_darwin_amd64",
+        "size": 8205456,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.6.0/release_v0.6.0_darwin_amd64"
+      },
+      {
+        "name": "release_v0.6.0_darwin_arm64",
+        "size": 7683282,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.6.0/release_v0.6.0_darwin_arm64"
+      },
+      {
+        "name": "release_v0.6.0_linux_amd64",
+        "size": 8057016,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.6.0/release_v0.6.0_linux_amd64"
+      },
+      {
+        "name": "release_v0.6.0_linux_arm64",
+        "size": 7471288,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.6.0/release_v0.6.0_linux_arm64"
+      },
+      {
+        "name": "release_v0.6.0_windows_amd64.exe",
+        "size": 8307200,
+        "contentType": "application/x-msdownload",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.6.0/release_v0.6.0_windows_amd64.exe"
+      }
+    ],
+    "summary": "Release v0.6.0 published 2026-07-14T13:13:39Z by github-actions[bot]. This release introduces 2 new features and documents 4 changes.."
+  },
+  "documentation": {
+    "purpose": "\u003e Status: building.",
+    "businessProblem": "Automating high-quality technical content generation from repositories, under explicit developer control.",
+    "architecturePatterns": [
+      "Event-driven architecture",
+      "Serverless",
+      "Infrastructure as Code",
+      "Least-privilege security"
+    ],
+    "deploymentStrategy": "Infrastructure as Code with AWS CloudFormation, deployed via GitHub Actions (OIDC).",
+    "developmentWorkflow": "Trunk-based development with Conventional Commits and automated release management.",
+    "documents": [
+      {
+        "path": "CHANGELOG.md",
+        "title": "Changelog",
+        "kind": "other",
+        "headings": [
+          "0.5.0 - 2026-07-13",
+          "🚀 Features",
+          "🐛 Bug Fixes",
+          "📚 Documentation",
+          "📦 Build System",
+          "0.4.0 - 2026-07-11",
+          "🚀 Features",
+          "🐛 Bug Fixes",
+          "♻️ Refactoring",
+          "📚 Documentation",
+          "🔧 Continuous Integration",
+          "🧹 Chores",
+          "Other Changes",
+          "0.3.0 - 2026-07-10",
+          "📚 Documentation",
+          "0.2.0 - 2026-07-10",
+          "📚 Documentation",
+          "0.1.0 - 2026-07-10",
+          "🚀 Features",
+          "🔧 Continuous Integration"
+        ]
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "title": "Contributing",
+        "kind": "other",
+        "headings": [
+          "Getting set up",
+          "Commit messages",
+          "Types",
+          "Writing the description",
+          "Breaking changes",
+          "Code",
+          "Tests",
+          "Golden files",
+          "Pull requests",
+          "How a change becomes a release"
+        ]
+      },
+      {
+        "path": "README.md",
+        "title": "Designing an AI Agent Platform on AWS",
+        "kind": "readme",
+        "headings": [
+          "Contents",
+          "Project Overview",
+          "Vision",
+          "Goals",
+          "What exists today",
+          "Key Features (Planned)",
+          "High-Level Architecture Overview",
+          "Full architecture (Milestone 1)",
+          "What is actually deployed (Milestones 2–4)",
+          "Cost optimization with EC2 Spot",
+          "The idea",
+          "The one thing to understand",
+          "Architecture",
+          "The interruption workflow",
+          "Event flow",
+          "Deploy it",
+          "When *not* to use Spot",
+          "Screenshots",
+          "Future improvements",
+          "Startup optimization with custom AMIs",
+          "The measured result",
+          "Why this matters on Spot specifically",
+          "UserData, before and after",
+          "The AMI lifecycle",
+          "What is baked, and what is never baked"
+        ]
+      },
+      {
+        "path": "RELEASE_MANAGEMENT.md",
+        "title": "Release Management",
+        "kind": "other",
+        "headings": [
+          "Semantic Versioning",
+          "The version lifecycle",
+          "The release lifecycle",
+          "Who is responsible for what",
+          "Why the changelog is written after the tag",
+          "CLI reference",
+          "Cutting a release",
+          "Dry runs",
+          "After the tag",
+          "Customising the notes",
+          "Pre-releases",
+          "Troubleshooting",
+          "The push failed and the tag exists locally",
+          "A bad version was pushed",
+          "The changelog job cannot push",
+          "Release notes are empty"
+        ]
+      },
+      {
+        "path": "docs/architecture.md",
+        "title": "Architecture",
+        "kind": "architecture",
+        "headings": [
+          "The dependency rule",
+          "Package responsibilities",
+          "Key design decisions",
+          "Extending the system"
+        ]
+      },
+      {
+        "path": "docs/architecture/ami-diagrams.md",
+        "title": "Custom AMI Diagrams — Milestone 4",
+        "kind": "architecture",
+        "headings": [
+          "1. Traditional EC2 launch flow",
+          "2. Custom AMI launch flow",
+          "3. AMI creation workflow",
+          "4. Deployment workflow",
+          "5. Immutable infrastructure lifecycle"
+        ]
+      },
+      {
+        "path": "docs/architecture/current-architecture.md",
+        "title": "The Platform As Built",
+        "kind": "architecture",
+        "headings": [
+          "1. Runtime architecture",
+          "2. The stacks, and the one thing that is not a stack",
+          "3. The life of one instance",
+          "4. What each milestone added",
+          "What is not built",
+          "Keeping this file current"
+        ]
+      },
+      {
+        "path": "docs/architecture/diagrams.md",
+        "title": "Architecture Diagrams — Milestone 1",
+        "kind": "architecture",
+        "headings": [
+          "AWS Architecture Diagram",
+          "Conventions",
+          "Diagram 1 — High-Level Platform Architecture",
+          "Diagram 2 — Event Flow",
+          "Diagram 3 — Component Interaction",
+          "Diagram 4 — Deployment Boundaries",
+          "Consistency note"
+        ]
+      },
+      {
+        "path": "docs/architecture/infrastructure-diagrams.md",
+        "title": "Infrastructure Diagrams — Milestone 2",
+        "kind": "architecture",
+        "headings": [
+          "1. Infrastructure Overview",
+          "2. Network Topology",
+          "3. CloudFormation Resource Relationships",
+          "4. Infrastructure Deployment Flow",
+          "Consistency note"
+        ]
+      },
+      {
+        "path": "docs/architecture/spot-diagrams.md",
+        "title": "Spot Interruption Diagrams — Milestone 3",
+        "kind": "architecture",
+        "headings": [
+          "1. The two halves of interruption handling",
+          "2. The interruption timeline",
+          "3. Event routing",
+          "4. Does this workload belong on Spot?",
+          "5. What the discount buys, and what it costs"
+        ]
+      },
+      {
+        "path": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+        "title": "Designing an AI Agent Platform on AWS",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Introduction",
+          "The problem",
+          "Why an AI agent platform is useful",
+          "Why AWS",
+          "High-level goals",
+          "Design Goals",
+          "High-Level Architecture",
+          "AWS Services",
+          "Amazon EventBridge",
+          "AWS Lambda",
+          "Amazon CloudWatch",
+          "EC2 Spot Instances",
+          "AWS IAM",
+          "Amazon VPC",
+          "Security Groups",
+          "AWS CloudFormation",
+          "Amazon Bedrock",
+          "Non-AWS Components",
+          "n8n",
+          "OpenClaw",
+          "Ollama",
+          "Component Responsibilities",
+          "Data Flow",
+          "Event Flow"
+        ]
+      },
+      {
+        "path": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+        "title": "Optimizing EC2 Spot Instance Startup with Custom AMIs",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Why startup time matters more for AI",
+          "The trouble with installing at boot",
+          "What a custom AMI actually is",
+          "Architecture",
+          "Why the build is a script, not CloudFormation",
+          "What to bake, and what never to bake",
+          "Building the image",
+          "The two-phase build, and why it has to be",
+          "The CloudFormation",
+          "UserData, before and after",
+          "The numbers",
+          "The number the platform actually gets",
+          "What the build costs, on the other side of the ledger",
+          "A number that was a lie",
+          "Immutable infrastructure",
+          "Versioning and rollback",
+          "Security: an AMI is a filesystem you might share",
+          "The one that is silent",
+          "Cost",
+          "Common pitfalls",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/provisioning-an-ai-agent-platform-with-cloudformation.md",
+        "title": "Provisioning an AI Agent Platform with CloudFormation",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Introduction",
+          "Why Infrastructure as Code",
+          "Why CloudFormation",
+          "Infrastructure Overview",
+          "Network Design",
+          "IAM Design",
+          "EC2 Spot Strategy",
+          "Ephemeral Compute Philosophy",
+          "Why EBS Is Disposable",
+          "Why S3 Is Used for Durable Storage",
+          "Monitoring",
+          "Security",
+          "Cost Optimization",
+          "Deployment Walkthrough",
+          "Lessons Learned",
+          "Future Roadmap"
+        ]
+      },
+      {
+        "path": "docs/blog/reducing-ai-infrastructure-costs-with-ec2-spot-instances.md",
+        "title": "Reducing AI Infrastructure Costs with EC2 Spot Instances",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Why AI infrastructure is expensive",
+          "What EC2 Spot Instances are",
+          "The Spot pricing model",
+          "One-time vs persistent requests",
+          "Why AI workloads fit Spot",
+          "Architecture",
+          "The mistake: a Lambda cannot save your work",
+          "The drain agent",
+          "The bug that only appears when it matters",
+          "Event-driven interruption handling",
+          "Two traps in the event wiring",
+          "The CloudFormation",
+          "The Lambda handlers",
+          "IAM: scoping the unscopeable",
+          "What it costs, and what it saves",
+          "When not to use Spot",
+          "Common pitfalls",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "infra/AMI.md",
+        "title": "Custom AMIs",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "Why this matters on Spot",
+          "What is baked, and what is not",
+          "Architecture",
+          "Why the build is a script and not CloudFormation",
+          "The build is two phases, and it has to be",
+          "Building an AMI",
+          "What ends up in the image",
+          "Deploying onto an AMI",
+          "Versioning",
+          "Rollback",
+          "Immutable infrastructure",
+          "Startup comparison",
+          "Why UserData gets simpler, and why that matters",
+          "Security: what must never be in an AMI",
+          "The cloud-init trap",
+          "Cost",
+          "Maintenance",
+          "AI workloads",
+          "Cleanup",
+          "Troubleshooting"
+        ]
+      },
+      {
+        "path": "infra/README.md",
+        "title": "Infrastructure — Milestones 2, 3 and 4",
+        "kind": "readme",
+        "headings": [
+          "What this provisions",
+          "Architecture",
+          "Repository layout",
+          "Deploy order",
+          "Prerequisites",
+          "Deploy",
+          "Continuous integration \u0026 deployment",
+          "One-time deploy setup",
+          "A reminder on first push",
+          "Parameters",
+          "Cost",
+          "Security overview",
+          "Troubleshooting",
+          "Validation \u0026 limitations",
+          "Instance scheduler (optional add-on)",
+          "Custom AMIs (Milestone 4)",
+          "Spot interruption handling (Milestone 3)",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "infra/SCHEDULER.md",
+        "title": "Instance Scheduler",
+        "kind": "other",
+        "headings": [
+          "Architecture",
+          "How it works",
+          "Deployment",
+          "CloudFormation parameters",
+          "Required IAM permissions",
+          "Scheduling",
+          "Timezone",
+          "Modifying the schedule",
+          "Manual start and stop",
+          "Cost considerations",
+          "Troubleshooting",
+          "Example CloudWatch logs",
+          "Example EventBridge Scheduler configuration"
+        ]
+      },
+      {
+        "path": "infra/SPOT.md",
+        "title": "EC2 Spot Instances",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "The one thing to understand first",
+          "Architecture",
+          "Why the rules are on the *default* bus",
+          "Why the handlers filter by tag",
+          "The events",
+          "What a warning looks like",
+          "What the platform re-publishes",
+          "The drain agent",
+          "Deployment",
+          "Parameters",
+          "08-spot.yaml",
+          "03-compute.yaml (the Spot-relevant ones)",
+          "IAM",
+          "Logging",
+          "Metrics",
+          "Testing an interruption",
+          "Cost",
+          "One-time vs persistent requests",
+          "When not to use Spot",
+          "AI workloads on Spot",
+          "Cleanup",
+          "Troubleshooting",
+          "No Spot capacity"
+        ]
+      }
+    ]
+  },
+  "repositoryStructure": {
+    "directories": [
+      {
+        "path": ".githooks/",
+        "responsibility": "Project directory",
+        "fileCount": 1
+      },
+      {
+        "path": ".github/",
+        "responsibility": "GitHub configuration and CI/CD workflows",
+        "fileCount": 4
+      },
+      {
+        "path": "cmd/",
+        "responsibility": "Executable entry points (main packages)",
+        "fileCount": 23
+      },
+      {
+        "path": "docs/",
+        "responsibility": "Project documentation",
+        "fileCount": 14
+      },
+      {
+        "path": "infra/",
+        "responsibility": "Project directory",
+        "fileCount": 34
+      },
+      {
+        "path": "internal/",
+        "responsibility": "Private application and business logic packages",
+        "fileCount": 29
+      }
+    ],
+    "overview": "A standard-go project of 112 files organized into 6 top-level directories (.githooks, .github, cmd, docs, infra, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "fileCount": 112,
+    "layout": "standard-go"
+  },
+  "architecture": {
+    "overview": "An event-driven, AWS-native system built from 4 major components on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge, Amazon EventBridge Scheduler. A standard-go project of 112 files organized into 6 top-level directories (.githooks, .github, cmd, docs, infra, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "components": [
+      {
+        "name": "CLI / worker binaries",
+        "responsibility": "Instance worker and operational CLIs",
+        "kind": "compute"
+      },
+      {
+        "name": "Domain packages",
+        "responsibility": "Business logic behind small, testable ports",
+        "kind": "library"
+      },
+      {
+        "name": "Event bus \u0026 queue",
+        "responsibility": "Durable, decoupled event delivery",
+        "kind": "queue"
+      },
+      {
+        "name": "Managed storage",
+        "responsibility": "State, metadata, and secrets",
+        "kind": "store"
+      }
+    ],
+    "deploymentTopology": "A modular, multi-stack CloudFormation deployment: 13 serverless, 2 compute, 2 storage, and 8 networking resources, with least-privilege IAM (6 roles/policies).",
+    "awsServices": [
+      "AWS IAM",
+      "AWS Lambda",
+      "Amazon CloudWatch",
+      "Amazon EC2",
+      "Amazon EventBridge",
+      "Amazon EventBridge Scheduler",
+      "Amazon S3"
+    ],
+    "eventDrivenFlows": [
+      "EventBridge Scheduler → Lambda → EC2 start/stop"
+    ],
+    "scalability": "Stateless Lambda entry points scale horizontally with request volume.",
+    "reliability": "Reliability comes from managed, self-healing Lambda execution.",
+    "security": "Security is enforced through least-privilege IAM roles, HMAC-verified webhooks.",
+    "insights": [
+      "The pipeline is fully event-driven: EventBridge Scheduler → Lambda → EC2 start/stop.",
+      "It blends serverless ingestion with an on-demand compute host, bounding cost while keeping the front door always available.",
+      "44 architecture diagram(s) document the system, aiding onboarding and technical writing."
+    ]
+  },
+  "commits": [
+    {
+      "sha": "74d16c4211cfd16154fe49b29feea268a8594cac",
+      "subject": "docs(changelog): add v0.5.0 [skip ci]",
+      "author": "github-actions[bot]",
+      "date": "2026-07-13T18:01:46Z",
+      "type": "docs",
+      "scope": "changelog",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "49c3f8a5e123f609a9c7c1a92d3b53b1de7b0c02",
+      "subject": "feat(infra): build versioned custom AMIs",
+      "author": "Teddy Kekana",
+      "date": "2026-07-14T12:44:32Z",
+      "type": "feat",
+      "scope": "infra",
+      "category": "Infrastructure",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "c156e1df2f0fa906016f9098e1628f369b0f87a4",
+      "subject": "feat(infra): boot from a custom AMI, and collapse UserData to configuration",
+      "author": "Teddy Kekana",
+      "date": "2026-07-14T12:44:32Z",
+      "type": "feat",
+      "scope": "infra",
+      "category": "Infrastructure",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "e99b2e2f1ba163a5716388f60a2b308588be73d3",
+      "subject": "build(infra): the AMI lifecycle, and a drift check for the drain agent",
+      "author": "Teddy Kekana",
+      "date": "2026-07-14T12:45:10Z",
+      "type": "build",
+      "scope": "infra",
+      "category": "Infrastructure",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "e7cd6d565e1a66fb0991cb28995a5a94d095f6f8",
+      "subject": "docs: Milestone 4 — optimizing Spot startup with custom AMIs",
+      "author": "Teddy Kekana",
+      "date": "2026-07-14T12:45:10Z",
+      "type": "docs",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "c7a96aa85aef5901936e8d8db294ec3340f1b7e2",
+      "subject": "docs(architecture): add a living \"as built\" diagram, and mark the rest as snapshots",
+      "author": "Teddy Kekana",
+      "date": "2026-07-14T12:54:11Z",
+      "type": "docs",
+      "scope": "architecture",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "98c27b925f0a4cd254a833e70bfa2321cf0dd3f4",
+      "subject": "docs(architecture): hand-authored SVG of the platform as built",
+      "author": "Teddy Kekana",
+      "date": "2026-07-14T13:03:59Z",
+      "type": "docs",
+      "scope": "architecture",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    }
+  ],
+  "commitStats": {
+    "total": 9,
+    "analyzed": 7,
+    "ignored": 2,
+    "conventional": 7,
+    "breaking": 0,
+    "byCategory": {
+      "Documentation": 4,
+      "Infrastructure": 3
+    },
+    "contributors": [
+      "Teddy Kekana",
+      "github-actions[bot]"
+    ]
+  },
+  "changedFiles": [
+    {
+      "path": ".github/workflows/ami.yml",
+      "category": "CI/CD",
+      "status": "added",
+      "additions": 99
+    },
+    {
+      "path": ".github/workflows/infra.yml",
+      "category": "CI/CD",
+      "status": "modified",
+      "additions": 26
+    },
+    {
+      "path": "CHANGELOG.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 22
+    },
+    {
+      "path": "README.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 188,
+      "deletions": 15
+    },
+    {
+      "path": "docs/architecture/ami-diagrams.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 210
+    },
+    {
+      "path": "docs/architecture/current-architecture.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 233
+    },
+    {
+      "path": "docs/architecture/diagrams.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 8,
+      "deletions": 3
+    },
+    {
+      "path": "docs/architecture/infrastructure-diagrams.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 23,
+      "deletions": 2
+    },
+    {
+      "path": "docs/architecture/platform-as-built.svg",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 222
+    },
+    {
+      "path": "docs/architecture/spot-diagrams.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 4
+    },
+    {
+      "path": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 720
+    },
+    {
+      "path": "infra/AMI.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 569
+    },
+    {
+      "path": "infra/Makefile",
+      "category": "Configuration",
+      "status": "modified",
+      "additions": 76,
+      "deletions": 2
+    },
+    {
+      "path": "infra/README.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 116,
+      "deletions": 10
+    },
+    {
+      "path": "infra/cloudformation/02-iam.yaml",
+      "category": "Infrastructure",
+      "status": "modified",
+      "additions": 11
+    },
+    {
+      "path": "infra/cloudformation/03-compute.yaml",
+      "category": "Infrastructure",
+      "status": "modified",
+      "additions": 268,
+      "deletions": 159
+    },
+    {
+      "path": "infra/scripts/ami/cleanup.sh",
+      "category": "Other",
+      "status": "added",
+      "additions": 83
+    },
+    {
+      "path": "infra/scripts/ami/provision.sh",
+      "category": "Other",
+      "status": "added",
+      "additions": 255
+    },
+    {
+      "path": "infra/scripts/ami/spot-drain.service",
+      "category": "Other",
+      "status": "added",
+      "additions": 20
+    },
+    {
+      "path": "infra/scripts/ami/spot-drain.sh",
+      "category": "Other",
+      "status": "added",
+      "additions": 92
+    },
+    {
+      "path": "infra/scripts/build-ami.sh",
+      "category": "Other",
+      "status": "added",
+      "additions": 279
+    },
+    {
+      "path": "infra/scripts/deploy-role-policy.json",
+      "category": "Configuration",
+      "status": "modified",
+      "additions": 30
+    },
+    {
+      "path": "infra/scripts/drain-sync.py",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 107
+    },
+    {
+      "path": "infra/scripts/startup-benchmark.sh",
+      "category": "Other",
+      "status": "added",
+      "additions": 179
+    }
+  ],
+  "fileStats": {
+    "total": 24,
+    "additions": 3840,
+    "deletions": 191,
+    "byCategory": {
+      "Application Code": 1,
+      "CI/CD": 2,
+      "Configuration": 2,
+      "Documentation": 11,
+      "Infrastructure": 2,
+      "Other": 6
+    },
+    "summary": "24 files changed (+3840/-191): 11 Documentation, 6 Other, 2 CI/CD, 2 Configuration, 2 Infrastructure, 1 Application Code."
+  },
+  "technologies": [
+    {
+      "name": "AWS IAM",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "AWS Lambda",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon CloudWatch",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon EC2",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon EventBridge",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon EventBridge Scheduler",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon S3",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "GitHub Actions",
+      "category": "Deployment",
+      "confidence": "high",
+      "evidence": ".github/workflows"
+    },
+    {
+      "name": "AWS Lambda (Go runtime)",
+      "category": "Framework",
+      "confidence": "high",
+      "evidence": "go.mod dependency"
+    },
+    {
+      "name": "Go",
+      "category": "Language",
+      "confidence": "high",
+      "evidence": "55 source files"
+    },
+    {
+      "name": "Python",
+      "category": "Language",
+      "confidence": "medium",
+      "evidence": "1 source file"
+    },
+    {
+      "name": "AWS SDK for Go v2",
+      "category": "Library",
+      "confidence": "high",
+      "evidence": "go.mod dependency"
+    },
+    {
+      "name": "Go modules",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "go.mod"
+    },
+    {
+      "name": "Make",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "Makefile"
+    }
+  ],
+  "cloudformation": {
+    "templates": [
+      "infra/cloudformation/01-network.yaml",
+      "infra/cloudformation/02-iam.yaml",
+      "infra/cloudformation/03-compute.yaml",
+      "infra/cloudformation/04-storage.yaml",
+      "infra/cloudformation/05-events.yaml",
+      "infra/cloudformation/06-observability.yaml",
+      "infra/cloudformation/07-scheduler.yaml",
+      "infra/cloudformation/08-spot.yaml"
+    ],
+    "resources": [
+      {
+        "logicalId": "AIPlatformInstance",
+        "type": "AWS::EC2::Instance",
+        "service": "EC2",
+        "template": "03-compute.yaml",
+        "category": "Compute"
+      },
+      {
+        "logicalId": "AgentLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "06-observability.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "ArtifactBucket",
+        "type": "AWS::S3::Bucket",
+        "service": "S3",
+        "template": "04-storage.yaml",
+        "category": "Storage"
+      },
+      {
+        "logicalId": "ArtifactBucketPolicy",
+        "type": "AWS::S3::BucketPolicy",
+        "service": "S3",
+        "template": "04-storage.yaml",
+        "category": "Storage"
+      },
+      {
+        "logicalId": "DefaultPublicRoute",
+        "type": "AWS::EC2::Route",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "DispatchFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "05-events.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "DispatchFunctionInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "05-events.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "DispatchFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "05-events.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "EventBus",
+        "type": "AWS::Events::EventBus",
+        "service": "Events",
+        "template": "05-events.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InstanceLaunchedInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InstanceLaunchedRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InstanceProfile",
+        "type": "AWS::IAM::InstanceProfile",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "InstanceRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "InstanceSecurityGroup",
+        "type": "AWS::EC2::SecurityGroup",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "InstanceStoppedInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InstanceStoppedRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InstanceTerminatedInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InstanceTerminatedRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InternetGateway",
+        "type": "AWS::EC2::InternetGateway",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "InternetGatewayAttachment",
+        "type": "AWS::EC2::VPCGatewayAttachment",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "InterruptionFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InterruptionFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "08-spot.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "InterruptionWarningInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InterruptionWarningRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "LambdaExecutionRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "LambdaRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "07-scheduler.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "LaunchTemplate",
+        "type": "AWS::EC2::LaunchTemplate",
+        "service": "EC2",
+        "template": "03-compute.yaml",
+        "category": "Compute"
+      },
+      {
+        "logicalId": "PlatformEventRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "05-events.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "PlatformLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "06-observability.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "PublicRouteTable",
+        "type": "AWS::EC2::RouteTable",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "PublicSubnet",
+        "type": "AWS::EC2::Subnet",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "PublicSubnetRouteTableAssociation",
+        "type": "AWS::EC2::SubnetRouteTableAssociation",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "RebalanceInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "RebalanceRecommendationRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "SchedulerRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "07-scheduler.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "SpotLambdaRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "08-spot.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "StartFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StartFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "07-scheduler.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "StartScheduleRule",
+        "type": "AWS::Scheduler::Schedule",
+        "service": "Scheduler",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StateChangeFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StateChangeFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "08-spot.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "StopFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StopFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "07-scheduler.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "StopScheduleRule",
+        "type": "AWS::Scheduler::Schedule",
+        "service": "Scheduler",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "Vpc",
+        "type": "AWS::EC2::VPC",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      }
+    ],
+    "parameters": [
+      "AmiId",
+      "DrainPollSeconds",
+      "DrainUnits",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "InstanceId",
+      "InstanceType",
+      "InterruptionCodeKey",
+      "LambdaCodeBucket",
+      "LambdaCodeBucket",
+      "LambdaTimeoutSeconds",
+      "LambdaTimeoutSeconds",
+      "LatestAmiId",
+      "LogRetentionDays",
+      "LogRetentionDays",
+      "LogRetentionDays",
+      "LogRetentionDays",
+      "NoncurrentVersionExpirationDays",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "PublicSubnetCidr",
+      "PurchaseOption",
+      "RebalanceRuleState",
+      "RootVolumeSize",
+      "ScheduleTimezone",
+      "SecurityGroupId",
+      "SpotInterruptionBehavior",
+      "SpotMaxPrice",
+      "SshKeyName",
+      "StartCodeKey",
+      "StartSchedule",
+      "StateChangeCodeKey",
+      "StopCodeKey",
+      "StopSchedule",
+      "SubnetId",
+      "VpcCidr"
+    ],
+    "outputs": [
+      "AgentLogGroupName",
+      "ArtifactBucketArn",
+      "ArtifactBucketName",
+      "BootPath",
+      "DispatchFunctionArn",
+      "DrainLog",
+      "EventBusArn",
+      "EventBusName",
+      "ImageId",
+      "InstanceAvailabilityZone",
+      "InstanceId",
+      "InstancePrivateIp",
+      "InstanceProfileArn",
+      "InstanceProfileName",
+      "InstanceRoleArn",
+      "InstanceSecurityGroupId",
+      "InterruptionFunctionArn",
+      "InterruptionLogGroup",
+      "LambdaExecutionRoleArn",
+      "MetricNamespace",
+      "PlatformLogGroupName",
+      "PublicSubnetId",
+      "PurchaseOption",
+      "StartFunctionArn",
+      "StartScheduleName",
+      "StateChangeFunctionArn",
+      "StopFunctionArn",
+      "StopScheduleName",
+      "VpcCidr",
+      "VpcId"
+    ],
+    "counts": {
+      "resources": 45,
+      "parameters": 48,
+      "outputs": 30,
+      "iam": 6,
+      "serverless": 13,
+      "compute": 2,
+      "storage": 2,
+      "networking": 8,
+      "messaging": 7
+    },
+    "services": [
+      "EC2",
+      "Events",
+      "IAM",
+      "Lambda",
+      "Logs",
+      "S3",
+      "Scheduler"
+    ],
+    "summary": "8 CloudFormation template(s) define 45 resources across EC2, Events, IAM, Lambda, Logs, S3, Scheduler (13 serverless, 2 compute, 2 storage, 8 networking, 6 IAM, 7 messaging), with 48 parameters and 30 outputs."
+  },
+  "mermaid": [
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "api",
+        "bedrock",
+        "claude",
+        "claw",
+        "gh",
+        "n8n",
+        "ollama",
+        "queue",
+        "router",
+        "store",
+        "user"
+      ],
+      "edges": [
+        {
+          "from": "user",
+          "to": "api"
+        },
+        {
+          "from": "gh",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "store"
+        },
+        {
+          "from": "claw",
+          "to": "router"
+        },
+        {
+          "from": "n8n",
+          "to": "router"
+        },
+        {
+          "from": "router",
+          "to": "ollama"
+        },
+        {
+          "from": "router",
+          "to": "bedrock"
+        },
+        {
+          "from": "router",
+          "to": "claude"
+        },
+        {
+          "from": "claw",
+          "to": "gh"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 11 nodes and 12 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "reclaim",
+        "rules",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "\"event\""
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save\""
+        },
+        {
+          "from": "default",
+          "to": "rules"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "after",
+        "b1",
+        "b2",
+        "before",
+        "fail"
+      ],
+      "edges": [
+        {
+          "from": "b1",
+          "to": "b2"
+        },
+        {
+          "from": "before",
+          "to": "after",
+          "label": "\"move the work to build time\""
+        },
+        {
+          "from": "b2",
+          "to": "fail"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 3,
+      "summary": "flowchart diagram with 5 nodes and 3 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "components",
+        "platform"
+      ],
+      "edges": [
+        {
+          "from": "platform",
+          "to": "components"
+        },
+        {
+          "from": "components",
+          "to": "platform"
+        }
+      ],
+      "nodeCount": 2,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 2 nodes and 2 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "m11",
+        "m12",
+        "m15",
+        "m16",
+        "m2",
+        "m20",
+        "m3",
+        "m5",
+        "m6",
+        "m7",
+        "m8",
+        "mcp",
+        "p0",
+        "p1"
+      ],
+      "edges": [
+        {
+          "from": "m2",
+          "to": "m3"
+        },
+        {
+          "from": "m5",
+          "to": "m6"
+        },
+        {
+          "from": "m7",
+          "to": "m8"
+        },
+        {
+          "from": "m11",
+          "to": "m12"
+        },
+        {
+          "from": "m15",
+          "to": "m16"
+        },
+        {
+          "from": "m20",
+          "to": "mcp"
+        },
+        {
+          "from": "p0",
+          "to": "p1"
+        }
+      ],
+      "nodeCount": 14,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 14 nodes and 7 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "actions",
+        "api",
+        "cl",
+        "cut",
+        "dev",
+        "ghpkg",
+        "gitpkg",
+        "post",
+        "rel",
+        "repo",
+        "sv"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "cut"
+        },
+        {
+          "from": "actions",
+          "to": "post"
+        },
+        {
+          "from": "cut",
+          "to": "rel"
+        },
+        {
+          "from": "post",
+          "to": "rel"
+        },
+        {
+          "from": "post",
+          "to": "ghpkg"
+        },
+        {
+          "from": "rel",
+          "to": "sv"
+        },
+        {
+          "from": "rel",
+          "to": "cl"
+        },
+        {
+          "from": "rel",
+          "to": "gitpkg"
+        },
+        {
+          "from": "cl",
+          "to": "sv"
+        },
+        {
+          "from": "gitpkg",
+          "to": "repo"
+        },
+        {
+          "from": "ghpkg",
+          "to": "api"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 11 nodes and 11 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "sequence",
+      "nodes": [
+        "CI",
+        "CLI",
+        "Dev",
+        "GH",
+        "Repo"
+      ],
+      "edges": [
+        {
+          "from": "Dev",
+          "to": "CLI",
+          "label": "go run ./cmd/release minor"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "validate repository, branch, clean tree"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "fetch tags, find the latest version"
+        },
+        {
+          "from": "CLI",
+          "to": "CLI",
+          "label": "next = bump(latest, minor)"
+        },
+        {
+          "from": "CLI",
+          "to": "Dev",
+          "label": "show the plan, actions, and statistics"
+        },
+        {
+          "from": "Dev",
+          "to": "CLI",
+          "label": "confirm"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "create the annotated tag v1.3.0"
+        },
+        {
+          "from": "CLI",
+          "to": "GH",
+          "label": "push refs/tags/v1.3.0"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "make dist"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "release publish --tag v1.3.0"
+        },
+        {
+          "from": "CI",
+          "to": "GH",
+          "label": "create the GitHub Release, upload binaries"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "release changelog --tag v1.3.0 --write"
+        },
+        {
+          "from": "CI",
+          "to": "GH",
+          "label": "commit CHANGELOG.md to the default branch"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 5 nodes and 13 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "flowchart",
+      "nodes": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "MAJOR",
+        "MINOR",
+        "NONE",
+        "PATCH",
+        "PRE",
+        "RC",
+        "RC2",
+        "STABLE"
+      ],
+      "edges": [
+        {
+          "from": "A",
+          "to": "B"
+        },
+        {
+          "from": "B",
+          "to": "MAJOR"
+        },
+        {
+          "from": "B",
+          "to": "C"
+        },
+        {
+          "from": "C",
+          "to": "MINOR"
+        },
+        {
+          "from": "C",
+          "to": "D"
+        },
+        {
+          "from": "D",
+          "to": "PATCH"
+        },
+        {
+          "from": "D",
+          "to": "NONE"
+        },
+        {
+          "from": "MAJOR",
+          "to": "PRE"
+        },
+        {
+          "from": "MINOR",
+          "to": "PRE"
+        },
+        {
+          "from": "PATCH",
+          "to": "PRE"
+        },
+        {
+          "from": "PRE",
+          "to": "STABLE"
+        },
+        {
+          "from": "PRE",
+          "to": "RC"
+        },
+        {
+          "from": "RC",
+          "to": "RC2"
+        },
+        {
+          "from": "RC2",
+          "to": "STABLE"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 14,
+      "summary": "flowchart diagram with 12 nodes and 14 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "state",
+      "nodes": [
+        "Documented",
+        "Planned",
+        "Published",
+        "Pushed",
+        "Rejected",
+        "Tagged",
+        "Unreleased",
+        "Validated"
+      ],
+      "edges": [
+        {
+          "from": "Unreleased",
+          "to": "Validated"
+        },
+        {
+          "from": "Validated",
+          "to": "Planned"
+        },
+        {
+          "from": "Planned",
+          "to": "Tagged"
+        },
+        {
+          "from": "Tagged",
+          "to": "Pushed"
+        },
+        {
+          "from": "Pushed",
+          "to": "Published"
+        },
+        {
+          "from": "Published",
+          "to": "Documented"
+        },
+        {
+          "from": "Unreleased",
+          "to": "Rejected"
+        },
+        {
+          "from": "Planned",
+          "to": "Rejected"
+        },
+        {
+          "from": "Rejected",
+          "to": "Unreleased"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 9,
+      "summary": "state diagram with 8 nodes and 9 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "flowchart",
+      "nodes": [
+        "ci",
+        "clibox",
+        "human"
+      ],
+      "edges": [
+        {
+          "from": "human",
+          "to": "clibox"
+        },
+        {
+          "from": "clibox",
+          "to": "ci"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "ext"
+      ],
+      "edges": [
+        {
+          "from": "L1",
+          "to": "L2"
+        },
+        {
+          "from": "L2",
+          "to": "L3"
+        },
+        {
+          "from": "L4",
+          "to": "L3"
+        },
+        {
+          "from": "L4",
+          "to": "ext"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "cl",
+        "cm1",
+        "cm2",
+        "gh",
+        "gt",
+        "rl",
+        "sv"
+      ],
+      "edges": [
+        {
+          "from": "cm1",
+          "to": "rl"
+        },
+        {
+          "from": "cm2",
+          "to": "rl"
+        },
+        {
+          "from": "cm2",
+          "to": "gh"
+        },
+        {
+          "from": "rl",
+          "to": "sv"
+        },
+        {
+          "from": "rl",
+          "to": "cl"
+        },
+        {
+          "from": "rl",
+          "to": "gt"
+        },
+        {
+          "from": "cl",
+          "to": "sv"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 7 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "boot",
+        "cfgt",
+        "ci",
+        "fail",
+        "launch",
+        "pkg",
+        "ready",
+        "spot",
+        "ud",
+        "upd",
+        "waste"
+      ],
+      "edges": [
+        {
+          "from": "launch",
+          "to": "boot"
+        },
+        {
+          "from": "boot",
+          "to": "ci"
+        },
+        {
+          "from": "ci",
+          "to": "ud"
+        },
+        {
+          "from": "upd",
+          "to": "pkg"
+        },
+        {
+          "from": "ud",
+          "to": "waste"
+        },
+        {
+          "from": "waste",
+          "to": "cfgt"
+        },
+        {
+          "from": "cfgt",
+          "to": "ready"
+        },
+        {
+          "from": "waste",
+          "to": "fail"
+        },
+        {
+          "from": "waste",
+          "to": "spot"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 11 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "boot",
+        "cfg",
+        "ci",
+        "drain",
+        "env",
+        "launch",
+        "note",
+        "ud"
+      ],
+      "edges": [
+        {
+          "from": "launch",
+          "to": "boot"
+        },
+        {
+          "from": "boot",
+          "to": "ci"
+        },
+        {
+          "from": "ci",
+          "to": "ud"
+        },
+        {
+          "from": "env",
+          "to": "drain"
+        },
+        {
+          "from": "ud",
+          "to": "cfg"
+        },
+        {
+          "from": "boot",
+          "to": "note"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 8 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "Dev",
+        "EC2",
+        "S3",
+        "SSM"
+      ],
+      "edges": [
+        {
+          "from": "Dev",
+          "to": "Dev",
+          "label": "resolve next version (1.0.0 → 1.0.1)"
+        },
+        {
+          "from": "Dev",
+          "to": "Dev",
+          "label": "refuse if that version already exists"
+        },
+        {
+          "from": "Dev",
+          "to": "S3",
+          "label": "upload provision.sh, cleanup.sh, drain agent"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "run-instances (stock AL2023)"
+        },
+        {
+          "from": "B",
+          "to": "S3",
+          "label": "fetch the scripts"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "dnf update; docker, go, node, python, CW agent"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "install the drain agent (code, not config)"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "write /etc/ami-manifest.json"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "touch ami-build.done"
+        },
+        {
+          "from": "Dev",
+          "to": "SSM",
+          "label": "done? failed? where are you?"
+        },
+        {
+          "from": "SSM",
+          "to": "Dev",
+          "label": "last line of the build log"
+        },
+        {
+          "from": "Dev",
+          "to": "SSM",
+          "label": "run cleanup.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "strip credentials, SSH keys, machine-id, SSM registration"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "cloud-init clean  ← or UserData never runs again"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "shutdown -h now"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "wait instance-stopped ← the real success signal"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "create-image (quiesced filesystem)"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "tag AMI + snapshot (Project, Component, Version)"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "terminate the builder (on every exit path)"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 19,
+      "summary": "sequence diagram with 5 nodes and 19 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "build",
+        "cfn",
+        "resolve",
+        "roll"
+      ],
+      "edges": [
+        {
+          "from": "build",
+          "to": "ami"
+        },
+        {
+          "from": "ami",
+          "to": "resolve"
+        },
+        {
+          "from": "ami",
+          "to": "roll"
+        },
+        {
+          "from": "roll",
+          "to": "cfn"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "back",
+        "build",
+        "drift",
+        "need",
+        "ok",
+        "prod",
+        "ssh"
+      ],
+      "edges": [
+        {
+          "from": "need",
+          "to": "build"
+        },
+        {
+          "from": "ok",
+          "to": "prod",
+          "label": "yes"
+        },
+        {
+          "from": "ok",
+          "to": "back",
+          "label": "no"
+        },
+        {
+          "from": "back",
+          "to": "need"
+        },
+        {
+          "from": "ssh",
+          "to": "need",
+          "label": "\"NEVER\""
+        },
+        {
+          "from": "ssh",
+          "to": "drift"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 7 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "cw",
+        "defbus",
+        "ebs",
+        "ec2",
+        "igw",
+        "l1",
+        "platbus",
+        "rules",
+        "s3",
+        "ssm",
+        "subnet"
+      ],
+      "edges": [
+        {
+          "from": "ec2",
+          "to": "ebs"
+        },
+        {
+          "from": "subnet",
+          "to": "igw"
+        },
+        {
+          "from": "ssm",
+          "to": "ec2"
+        },
+        {
+          "from": "ami",
+          "to": "ec2",
+          "label": "\"launched from\""
+        },
+        {
+          "from": "ec2",
+          "to": "s3",
+          "label": "\"artifacts + drained work\""
+        },
+        {
+          "from": "ec2",
+          "to": "cw",
+          "label": "\"boot log · drain log\""
+        },
+        {
+          "from": "defbus",
+          "to": "rules"
+        },
+        {
+          "from": "l1",
+          "to": "platbus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 12 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "build",
+        "c",
+        "e",
+        "i",
+        "img",
+        "n",
+        "s",
+        "sch",
+        "sp"
+      ],
+      "edges": [
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "sp"
+        },
+        {
+          "from": "s",
+          "to": "sp",
+          "label": "\"lambda zips\""
+        },
+        {
+          "from": "s",
+          "to": "sch",
+          "label": "\"lambda zips\""
+        },
+        {
+          "from": "build",
+          "to": "img"
+        },
+        {
+          "from": "img",
+          "to": "c",
+          "label": "\"AmiId parameter\""
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 9 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "sequence",
+      "nodes": [
+        "EB",
+        "EC2",
+        "I",
+        "L",
+        "Ops",
+        "S3"
+      ],
+      "edges": [
+        {
+          "from": "Ops",
+          "to": "EC2",
+          "label": "build + tag AMI (~4.5 min, ~$0.01)"
+        },
+        {
+          "from": "Ops",
+          "to": "EC2",
+          "label": "deploy compute (AmiId = the new image)"
+        },
+        {
+          "from": "EC2",
+          "to": "I",
+          "label": "launch Spot instance"
+        },
+        {
+          "from": "I",
+          "to": "I",
+          "label": "boot in 6.2s — configure only, nothing to install"
+        },
+        {
+          "from": "EC2",
+          "to": "I",
+          "label": "interruption notice (IMDS) · ~120s left"
+        },
+        {
+          "from": "EC2",
+          "to": "EB",
+          "label": "EC2 Spot Instance Interruption Warning"
+        },
+        {
+          "from": "I",
+          "to": "I",
+          "label": "stop the workload units"
+        },
+        {
+          "from": "I",
+          "to": "S3",
+          "label": "sync artifacts + interruption marker"
+        },
+        {
+          "from": "EB",
+          "to": "L",
+          "label": "invoke"
+        },
+        {
+          "from": "L",
+          "to": "L",
+          "label": "is it ours? (tag check)"
+        },
+        {
+          "from": "L",
+          "to": "EB",
+          "label": "re-publish on the platform bus"
+        },
+        {
+          "from": "L",
+          "to": "EC2",
+          "label": "count it (CloudWatch metric)"
+        },
+        {
+          "from": "EC2",
+          "to": "I",
+          "label": "terminated"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 6 nodes and 13 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "m1",
+        "m2",
+        "m3",
+        "m4",
+        "m5"
+      ],
+      "edges": [
+        {
+          "from": "m1",
+          "to": "m2"
+        },
+        {
+          "from": "m2",
+          "to": "m3"
+        },
+        {
+          "from": "m3",
+          "to": "m4"
+        },
+        {
+          "from": "m4",
+          "to": "m5"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "agentplane",
+        "bedrock",
+        "claw",
+        "control",
+        "dev",
+        "eb",
+        "gh",
+        "inference",
+        "lam",
+        "n8n",
+        "obs",
+        "ollama",
+        "out"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "gh",
+          "label": "\"push, issue, PR\""
+        },
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"model request\""
+        },
+        {
+          "from": "ollama",
+          "to": "bedrock",
+          "label": "\"fallback on\u003cbr/\u003einterruption\""
+        },
+        {
+          "from": "claw",
+          "to": "out"
+        },
+        {
+          "from": "n8n",
+          "to": "gh",
+          "label": "\"publish\""
+        },
+        {
+          "from": "control",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "agentplane",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "inference",
+          "to": "obs",
+          "label": "telemetry"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "claw",
+        "dlq",
+        "eb",
+        "gh",
+        "lam",
+        "model",
+        "prout",
+        "pub",
+        "queue",
+        "store"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"signed webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam",
+          "label": "\"matched\""
+        },
+        {
+          "from": "lam",
+          "to": "queue",
+          "label": "\"valid\""
+        },
+        {
+          "from": "lam",
+          "to": "dlq",
+          "label": "\"invalid /\u003cbr/\u003eunverified\""
+        },
+        {
+          "from": "queue",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "model"
+        },
+        {
+          "from": "model",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "store",
+          "label": "\"success\""
+        },
+        {
+          "from": "claw",
+          "to": "queue",
+          "label": "\"retry with backoff\""
+        },
+        {
+          "from": "claw",
+          "to": "dlq",
+          "label": "\"exhausted retries\""
+        },
+        {
+          "from": "store",
+          "to": "pub"
+        },
+        {
+          "from": "pub",
+          "to": "prout"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 10 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "claw",
+        "cw",
+        "eb",
+        "efs",
+        "gh",
+        "iam",
+        "lam",
+        "n8n",
+        "ollama",
+        "s3"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhooks \u0026 API\""
+        },
+        {
+          "from": "gh",
+          "to": "n8n",
+          "label": "\"commits \u0026 PRs\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw",
+          "label": "\"invoke / dispatch\""
+        },
+        {
+          "from": "claw",
+          "to": "n8n",
+          "label": "\"orchestrate\""
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"primary inference\""
+        },
+        {
+          "from": "claw",
+          "to": "bedrock",
+          "label": "\"fallback inference\""
+        },
+        {
+          "from": "claw",
+          "to": "efs",
+          "label": "\"workspace\""
+        },
+        {
+          "from": "claw",
+          "to": "s3",
+          "label": "\"artifacts\""
+        },
+        {
+          "from": "n8n",
+          "to": "efs",
+          "label": "\"workflow state\""
+        },
+        {
+          "from": "iam",
+          "to": "lam",
+          "label": "\"scopes permissions\""
+        },
+        {
+          "from": "iam",
+          "to": "claw",
+          "label": "\"scopes permissions\""
+        },
+        {
+          "from": "claw",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "n8n",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "ollama",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "lam",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 16,
+      "summary": "flowchart diagram with 11 nodes and 16 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "claw",
+        "cw",
+        "eb",
+        "efs",
+        "ghext",
+        "internet",
+        "lam",
+        "n8n",
+        "nat",
+        "ollama",
+        "private",
+        "s3"
+      ],
+      "edges": [
+        {
+          "from": "internet",
+          "to": "ghext"
+        },
+        {
+          "from": "ghext",
+          "to": "eb",
+          "label": "\"webhook (HTTPS)\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw",
+          "label": "\"dispatch\""
+        },
+        {
+          "from": "claw",
+          "to": "ollama"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "efs"
+        },
+        {
+          "from": "private",
+          "to": "nat",
+          "label": "\"outbound only\""
+        },
+        {
+          "from": "nat",
+          "to": "internet",
+          "label": "\"model API, git push\""
+        },
+        {
+          "from": "claw",
+          "to": "bedrock",
+          "label": "\"VPC endpoint\""
+        },
+        {
+          "from": "claw",
+          "to": "s3",
+          "label": "\"VPC endpoint\""
+        },
+        {
+          "from": "private",
+          "to": "cw",
+          "label": "logs"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/infrastructure-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "cfn",
+        "comp",
+        "evt",
+        "iam",
+        "net",
+        "obs",
+        "sto"
+      ],
+      "edges": [
+        {
+          "from": "cfn",
+          "to": "net"
+        },
+        {
+          "from": "cfn",
+          "to": "iam"
+        },
+        {
+          "from": "cfn",
+          "to": "comp"
+        },
+        {
+          "from": "cfn",
+          "to": "sto"
+        },
+        {
+          "from": "cfn",
+          "to": "evt"
+        },
+        {
+          "from": "cfn",
+          "to": "obs"
+        },
+        {
+          "from": "comp",
+          "to": "net",
+          "label": "imports subnet, SG,\u003cbr/\u003einstance profile"
+        },
+        {
+          "from": "comp",
+          "to": "iam",
+          "label": "imports"
+        },
+        {
+          "from": "evt",
+          "to": "iam",
+          "label": "imports Lambda role"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 7 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/infrastructure-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "deploy",
+        "dev",
+        "e",
+        "i",
+        "n",
+        "o",
+        "ready",
+        "s"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "deploy"
+        },
+        {
+          "from": "deploy",
+          "to": "n"
+        },
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "c"
+        },
+        {
+          "from": "c",
+          "to": "s"
+        },
+        {
+          "from": "s",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "o"
+        },
+        {
+          "from": "o",
+          "to": "ready"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "reclaim",
+        "rules",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "\"event\""
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop the workload\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save the output\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"3 · leave a marker\""
+        },
+        {
+          "from": "default",
+          "to": "rules"
+        },
+        {
+          "from": "rules",
+          "to": "l1"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 10 nodes and 11 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "AWS",
+        "Agent",
+        "CW",
+        "EB",
+        "IMDS",
+        "L",
+        "S3",
+        "Work"
+      ],
+      "edges": [
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "404 — nothing to do"
+        },
+        {
+          "from": "AWS",
+          "to": "IMDS",
+          "label": "notice (T+0s · ~120s left)"
+        },
+        {
+          "from": "AWS",
+          "to": "EB",
+          "label": "EC2 Spot Instance Interruption Warning"
+        },
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "{\"action\":\"terminate\"}"
+        },
+        {
+          "from": "Agent",
+          "to": "Work",
+          "label": "systemctl stop"
+        },
+        {
+          "from": "Work",
+          "to": "Agent",
+          "label": "stopped (nothing is writing now)"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "sync artifacts/"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "put interruption.json"
+        },
+        {
+          "from": "EB",
+          "to": "L",
+          "label": "invoke"
+        },
+        {
+          "from": "L",
+          "to": "AWS",
+          "label": "DescribeInstances (is this ours?)"
+        },
+        {
+          "from": "L",
+          "to": "CW",
+          "label": "PutMetricData InterruptionWarnings"
+        },
+        {
+          "from": "L",
+          "to": "EB",
+          "label": "PutEvents → platform bus"
+        },
+        {
+          "from": "AWS",
+          "to": "Work",
+          "label": "instance terminated (T+120s)"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 15,
+      "summary": "sequence diagram with 8 nodes and 15 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "e1",
+        "e2",
+        "e3",
+        "e4",
+        "e5",
+        "l1",
+        "l2",
+        "m1",
+        "m3"
+      ],
+      "edges": [
+        {
+          "from": "e1",
+          "to": "l1"
+        },
+        {
+          "from": "e2",
+          "to": "l1"
+        },
+        {
+          "from": "e3",
+          "to": "l2"
+        },
+        {
+          "from": "e4",
+          "to": "l2"
+        },
+        {
+          "from": "e5",
+          "to": "l2"
+        },
+        {
+          "from": "l1",
+          "to": "m1",
+          "label": "\"owned?\""
+        },
+        {
+          "from": "l2",
+          "to": "m3",
+          "label": "\"owned?\""
+        },
+        {
+          "from": "l1",
+          "to": "bus"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 10 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "drain",
+        "fallback",
+        "od1",
+        "od2",
+        "od3",
+        "spot1",
+        "spot2",
+        "start",
+        "state",
+        "user"
+      ],
+      "edges": [
+        {
+          "from": "start",
+          "to": "state"
+        },
+        {
+          "from": "state",
+          "to": "od1",
+          "label": "yes"
+        },
+        {
+          "from": "state",
+          "to": "drain",
+          "label": "no"
+        },
+        {
+          "from": "drain",
+          "to": "od2",
+          "label": "no"
+        },
+        {
+          "from": "drain",
+          "to": "user",
+          "label": "yes"
+        },
+        {
+          "from": "user",
+          "to": "fallback",
+          "label": "yes"
+        },
+        {
+          "from": "fallback",
+          "to": "od3",
+          "label": "no"
+        },
+        {
+          "from": "fallback",
+          "to": "spot1",
+          "label": "yes"
+        },
+        {
+          "from": "user",
+          "to": "spot2",
+          "label": "no"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "od",
+        "pay",
+        "sp"
+      ],
+      "edges": [
+        {
+          "from": "od",
+          "to": "sp",
+          "label": "\"–70%\""
+        },
+        {
+          "from": "sp",
+          "to": "pay"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+      "type": "flowchart",
+      "nodes": [
+        "agentplane",
+        "bedrock",
+        "claw",
+        "control",
+        "dev",
+        "eb",
+        "gh",
+        "inference",
+        "lam",
+        "n8n",
+        "obs",
+        "ollama",
+        "out"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "gh",
+          "label": "\"push, issue, PR\""
+        },
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"model request\""
+        },
+        {
+          "from": "ollama",
+          "to": "bedrock",
+          "label": "\"fallback on interruption\""
+        },
+        {
+          "from": "claw",
+          "to": "out"
+        },
+        {
+          "from": "n8n",
+          "to": "gh",
+          "label": "\"publish\""
+        },
+        {
+          "from": "control",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "agentplane",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "inference",
+          "to": "obs",
+          "label": "telemetry"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "base",
+        "builder",
+        "cfn"
+      ],
+      "edges": [
+        {
+          "from": "base",
+          "to": "builder"
+        },
+        {
+          "from": "ami",
+          "to": "cfn",
+          "label": "\"AmiId parameter\""
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 4 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "EC2",
+        "S",
+        "SSM"
+      ],
+      "edges": [
+        {
+          "from": "S",
+          "to": "B",
+          "label": "UserData → provision.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "install everything; write the manifest"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "touch ami-build.done"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "done? failed? where are you?"
+        },
+        {
+          "from": "SSM",
+          "to": "S",
+          "label": "the last line of the build log"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "run cleanup.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "strip credentials, keys, machine-id, SSM registration"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "cloud-init clean → shutdown"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "wait instance-stopped ← the real success signal"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "create-image, tag, terminate the builder"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 10,
+      "summary": "sequence diagram with 4 nodes and 10 relationships."
+    },
+    {
+      "source": "docs/blog/provisioning-an-ai-agent-platform-with-cloudformation.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "deploy",
+        "dev",
+        "e",
+        "i",
+        "n",
+        "o",
+        "ready",
+        "s"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "deploy"
+        },
+        {
+          "from": "deploy",
+          "to": "n"
+        },
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "c"
+        },
+        {
+          "from": "c",
+          "to": "s"
+        },
+        {
+          "from": "s",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "o"
+        },
+        {
+          "from": "o",
+          "to": "ready"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/blog/reducing-ai-infrastructure-costs-with-ec2-spot-instances.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "reclaim",
+        "rules",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "\"event\""
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save\""
+        },
+        {
+          "from": "default",
+          "to": "rules"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "infra/AMI.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "base",
+        "builder",
+        "cfn",
+        "cw",
+        "spot"
+      ],
+      "edges": [
+        {
+          "from": "base",
+          "to": "builder"
+        },
+        {
+          "from": "ami",
+          "to": "cfn",
+          "label": "\"AmiId parameter\""
+        },
+        {
+          "from": "spot",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 3,
+      "summary": "flowchart diagram with 6 nodes and 3 relationships."
+    },
+    {
+      "source": "infra/AMI.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "EC2",
+        "S",
+        "SSM"
+      ],
+      "edges": [
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "run-instances (On-Demand, stock AL2023)"
+        },
+        {
+          "from": "S",
+          "to": "B",
+          "label": "UserData → fetch scripts from S3, run provision.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "write /etc/ami-manifest.json"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "touch /var/lib/ami-build.done"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "is it done? failed? where is it?"
+        },
+        {
+          "from": "SSM",
+          "to": "S",
+          "label": "last line of the build log"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "run cleanup.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "strip credentials, SSH keys, machine-id,\u003cbr/\u003eSSM registration, cloud-init state"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "shutdown -h now"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "wait instance-stopped ← the real success signal"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "create-image (from a quiesced filesystem)"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "tag the AMI and its snapshot"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "terminate the builder"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 4 nodes and 13 relationships."
+    },
+    {
+      "source": "infra/AMI.md",
+      "type": "flowchart",
+      "nodes": [
+        "back",
+        "build",
+        "change",
+        "keep",
+        "never",
+        "ok",
+        "roll",
+        "test"
+      ],
+      "edges": [
+        {
+          "from": "change",
+          "to": "build"
+        },
+        {
+          "from": "build",
+          "to": "test"
+        },
+        {
+          "from": "test",
+          "to": "ok"
+        },
+        {
+          "from": "ok",
+          "to": "roll",
+          "label": "yes"
+        },
+        {
+          "from": "ok",
+          "to": "back",
+          "label": "no"
+        },
+        {
+          "from": "roll",
+          "to": "keep"
+        },
+        {
+          "from": "never",
+          "to": "change",
+          "label": "\"never\""
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 8 nodes and 7 relationships."
+    },
+    {
+      "source": "infra/README.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "e",
+        "i",
+        "n",
+        "s",
+        "sp"
+      ],
+      "edges": [
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "sp"
+        },
+        {
+          "from": "s",
+          "to": "sp",
+          "label": "\"lambda zips\""
+        },
+        {
+          "from": "c",
+          "to": "n",
+          "label": "imports"
+        },
+        {
+          "from": "c",
+          "to": "i",
+          "label": "imports"
+        },
+        {
+          "from": "e",
+          "to": "i",
+          "label": "imports"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 6 nodes and 7 relationships."
+    },
+    {
+      "source": "infra/SCHEDULER.md",
+      "type": "flowchart",
+      "nodes": [
+        "cw",
+        "ec2",
+        "l1",
+        "l2",
+        "s1",
+        "s2"
+      ],
+      "edges": [
+        {
+          "from": "s1",
+          "to": "l1",
+          "label": "\"invoke (SchedulerRole)\""
+        },
+        {
+          "from": "s2",
+          "to": "l2",
+          "label": "\"invoke (SchedulerRole)\""
+        },
+        {
+          "from": "l1",
+          "to": "ec2",
+          "label": "\"StartInstances (LambdaRole)\""
+        },
+        {
+          "from": "l2",
+          "to": "ec2",
+          "label": "\"StopInstances (LambdaRole)\""
+        },
+        {
+          "from": "l1",
+          "to": "cw",
+          "label": "structured JSON logs"
+        },
+        {
+          "from": "l2",
+          "to": "cw",
+          "label": "structured JSON logs"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 6 nodes and 6 relationships."
+    },
+    {
+      "source": "infra/SPOT.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "l2",
+        "r1",
+        "r3",
+        "reclaim",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "event"
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save artifacts\""
+        },
+        {
+          "from": "default",
+          "to": "r1"
+        },
+        {
+          "from": "r1",
+          "to": "l1"
+        },
+        {
+          "from": "r3",
+          "to": "l2"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"republish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 12 nodes and 11 relationships."
+    },
+    {
+      "source": "infra/SPOT.md",
+      "type": "sequence",
+      "nodes": [
+        "AWS",
+        "Agent",
+        "IMDS",
+        "S3",
+        "Work"
+      ],
+      "edges": [
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "404 (healthy — no interruption)"
+        },
+        {
+          "from": "AWS",
+          "to": "IMDS",
+          "label": "interruption notice (T+0, ~120s left)"
+        },
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "{\"action\":\"terminate\",\"time\":\"...\"}"
+        },
+        {
+          "from": "Agent",
+          "to": "Work",
+          "label": "systemctl stop (each DRAIN_UNITS)"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "sync /var/lib/aiap/artifacts → drain/\u003cid\u003e/artifacts/"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "put drain/\u003cid\u003e/interruption.json (the marker)"
+        },
+        {
+          "from": "AWS",
+          "to": "AWS",
+          "label": "instance reclaimed (~T+120s)"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 9,
+      "summary": "sequence diagram with 5 nodes and 9 relationships."
+    }
+  ],
+  "changelog": {
+    "found": false
+  },
+  "implementation": {
+    "howItWorks": "An event-driven, AWS-native system built from 4 major components on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge, Amazon EventBridge Scheduler. A standard-go project of 112 files organized into 6 top-level directories (.githooks, .github, cmd, docs, infra, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "infrastructureImprovements": [
+      "8 CloudFormation template(s) define 45 resources across EC2, Events, IAM, Lambda, Logs, S3, Scheduler (13 serverless, 2 compute, 2 storage, 8 networking, 6 IAM, 7 messaging), with 48 parameters and 30 outputs.",
+      "feat(infra): build versioned custom AMIs",
+      "feat(infra): boot from a custom AMI, and collapse UserData to configuration",
+      "build(infra): the AMI lifecycle, and a drift check for the drain agent"
+    ],
+    "documentationImprovements": [
+      "docs(changelog): add v0.5.0 [skip ci]",
+      "docs: Milestone 4 — optimizing Spot startup with custom AMIs",
+      "docs(architecture): add a living \"as built\" diagram, and mark the rest as snapshots",
+      "docs(architecture): hand-authored SVG of the platform as built"
+    ],
+    "whyItMatters": "Release v0.6.0 hardens the platform with 0 fixes and maintenance changes, improving reliability and developer experience."
+  },
+  "contentIntelligence": {
+    "summary": "designing-an-ai-agent-platform-on-aws release v0.6.0 delivers 7 analyzed changes (0 features, 0 fixes) across 24 files. Release v0.6.0 hardens the platform with 0 fixes and maintenance changes, improving reliability and developer experience.",
+    "infrastructureHighlights": [
+      "8 CloudFormation template(s) define 45 resources across EC2, Events, IAM, Lambda, Logs, S3, Scheduler (13 serverless, 2 compute, 2 storage, 8 networking, 6 IAM, 7 messaging), with 48 parameters and 30 outputs.",
+      "AWS services in use: AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge, Amazon EventBridge Scheduler, Amazon S3.",
+      "A modular, multi-stack CloudFormation deployment: 13 serverless, 2 compute, 2 storage, and 8 networking resources, with least-privilege IAM (6 roles/policies)."
+    ],
+    "architectureHighlights": [
+      "The pipeline is fully event-driven: EventBridge Scheduler → Lambda → EC2 start/stop.",
+      "It blends serverless ingestion with an on-demand compute host, bounding cost while keeping the front door always available.",
+      "44 architecture diagram(s) document the system, aiding onboarding and technical writing.",
+      "Architectural patterns: Event-driven architecture, Serverless, Infrastructure as Code, Least-privilege security."
+    ],
+    "implementationComplexity": "medium",
+    "developerValue": "Developers benefit from better documentation.",
+    "businessValue": "A more reliable, maintainable platform reduces operational risk and total cost of ownership.",
+    "targetAudience": "Software engineers, cloud/DevOps engineers, and technical leaders building AWS-native, event-driven systems.",
+    "seoKeywords": [
+      "agent",
+      "ai",
+      "amazon cloudwatch",
+      "amazon ec2",
+      "amazon eventbridge",
+      "amazon eventbridge scheduler",
+      "amazon s3",
+      "an",
+      "aws",
+      "aws iam",
+      "aws lambda",
+      "aws lambda (go runtime)",
+      "aws sdk for go v2",
+      "changelog",
+      "designing",
+      "event-driven architecture",
+      "github actions",
+      "go",
+      "go modules",
+      "infrastructure as code"
+    ],
+    "blogTitles": [
+      "Inside designing-an-ai-agent-platform-on-aws v0.6.0: What Changed and Why It Matters",
+      "Shipping v0.6.0: An Event-Driven, AWS-Native Release Walkthrough",
+      "From Commits to Content: How designing-an-ai-agent-platform-on-aws Turns a Release into Insight"
+    ],
+    "articleOutline": [
+      "Introduction — what this release is about",
+      "Context — the problem and the architecture it fits into",
+      "What changed — features, fixes, and improvements",
+      "Infrastructure — the CloudFormation topology and AWS services",
+      "How it works — architecture diagrams and data flow",
+      "Implementation highlights — notable engineering decisions",
+      "Impact — developer and business value",
+      "What's next — future enhancements"
+    ],
+    "linkedInPost": "🚀 designing-an-ai-agent-platform-on-aws v0.6.0 is out.\n\nRelease v0.6.0 hardens the platform with 0 fixes and maintenance changes, improving reliability and developer experience.\n\n0 features, 0 fixes, 24 files touched. Built event-driven on AWS with Infrastructure as Code.\n\n#golang #aws #serverless #devops #opensource",
+    "youTubeShortsTopic": "How we shipped v0.6.0: designing-an-ai-agent-platform-on-aws in 60 seconds",
+    "tikTokTopic": "Dev log: what changed in designing-an-ai-agent-platform-on-aws v0.6.0",
+    "futureEnhancements": [
+      "Generate the technical blog post from this Release Context (next milestone).",
+      "Integrate Amazon Bedrock to refine the heuristic content intelligence.",
+      "Persist each Release Context and diff successive releases for trend analysis."
+    ]
+  },
+  "warnings": [
+    "no CHANGELOG entry found for v0.6.0"
+  ]
+}
