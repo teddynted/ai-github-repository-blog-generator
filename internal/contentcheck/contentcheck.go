@@ -105,6 +105,18 @@ var hallucinationMarkers = []string{
 
 var mermaidFence = regexp.MustCompile("(?s)```mermaid.*?```")
 
+// inventedCountRe catches stated counts of repository structure (e.g. "65 files",
+// "15 diagrams", "four top-level directories") — stale statistics the article
+// must replace with relationships. It targets high-signal structural nouns and
+// deliberately excludes "components"/"services" (too easily anaphoric, e.g. "the
+// two components scale separately").
+var inventedCountRe = regexp.MustCompile(`(?i)\b(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+([a-z][a-z-]*\s+)?(files?|directories|folders|packages|modules|diagrams)\b`)
+
+// genericLedeRe catches abstract technology-teaching sentences the article must
+// not contain — it should document THIS repository, not explain AWS/Go/event-
+// driven architecture in general.
+var genericLedeRe = regexp.MustCompile(`(?i)(event-driven architectures?\s+(decouple|enable|have become|are\b|provide)|\baws provides\s+(services|a |managed|the )|\bgo offers\b|serverless\s+(architectures?\s+)?(is|are)\s+popular|serverless\s+(architectures?\s+)?(have|has)\s+become)`)
+
 // Validate runs the generic checks plus any kind-specific rules and returns a
 // report. kind is a content kind ("blog", "seo-metadata", "linkedin", …).
 func Validate(kind, content string) Report {
@@ -165,6 +177,15 @@ func blog(r *Report, c string) {
 	if n := len(mermaidFence.FindAllString(c, -1)); n > 2 {
 		r.err("too many Mermaid diagrams: %d (max 2)", n)
 	}
+	// Invented structural counts — stale statistics; describe relationships instead.
+	for _, m := range dedupeMatches(inventedCountRe.FindAllString(c, -1)) {
+		r.err("invented repository count %q — describe the relationship, not the number", strings.TrimSpace(m))
+	}
+	// Generic technology-teaching ledes — the article must document THIS repository.
+	for _, m := range dedupeMatches(genericLedeRe.FindAllString(c, -1)) {
+		r.err("generic technology lede %q — write about this repository, not AWS/Go in general", strings.TrimSpace(m))
+	}
+
 	// Release-centric phrasing (the article must be timeless).
 	lc := strings.ToLower(c)
 	for _, p := range []string{"in this release", "this release delivers", "this update introduces"} {
@@ -173,6 +194,22 @@ func blog(r *Report, c string) {
 		}
 	}
 	hedges(r, lc)
+}
+
+// dedupeMatches lowercases, trims, and de-duplicates regex matches so a repeated
+// violation is reported once.
+func dedupeMatches(matches []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range matches {
+		k := strings.ToLower(strings.TrimSpace(m))
+		if k == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, m)
+	}
+	return out
 }
 
 func architecture(r *Report, c string) {
