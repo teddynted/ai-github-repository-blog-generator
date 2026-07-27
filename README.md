@@ -397,14 +397,21 @@ Outputs are written to `output/<kind>.md` (and `.svg` for the diagram).
 
 ### Providers
 
-`--provider anthropic | bedrock | ollama`. The provider abstraction is unchanged
-from production; no provider-specific logic lives in the generators.
+`--provider anthropic | bedrock | ollama | claude-code`. The provider
+abstraction is unchanged from production; no provider-specific logic lives in the
+generators.
 
-| Provider | Setup |
-| --- | --- |
-| `ollama` (default) | Run `ollama serve`; set `OLLAMA_MODEL` (default `qwen2.5:7b`) and `OLLAMA_URL`. Free, fully local. |
-| `anthropic` | `export ANTHROPIC_API_KEY=sk-ant-…`. Honors `--model`, `--temperature`, `--max-tokens`, `--system`. |
-| `bedrock` | AWS credentials + `--model <bedrock-model-id>` (`--region`). |
+| Provider | Setup | Cost |
+| --- | --- | --- |
+| `claude-code` | Uses your Claude Code subscription via `claude -p` (no API key). Local dev only — the worker never uses it. | Subscription, **no Anthropic API credits** |
+| `ollama` (default) | Run `ollama serve`; set `OLLAMA_MODEL` (default `qwen2.5:7b`) and `OLLAMA_URL`. | Free, fully local |
+| `anthropic` | `export ANTHROPIC_API_KEY=sk-ant-…`. Honors `--model`, `--temperature`, `--max-tokens`, `--system`. | Anthropic API credits |
+| `bedrock` | AWS credentials + `--model <bedrock-model-id>` (`--region`). | AWS/Bedrock |
+
+To iterate on prompts without spending API credits, use `--provider claude-code`
+(subscription), `--provider ollama` (free/local), or `--dry-run` (no model call
+at all). Keep the cache on (omit `--no-cache`) so repeated identical runs replay
+from `.cache/`.
 
 ### Flags
 
