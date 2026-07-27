@@ -77,6 +77,19 @@ func TestBuildRecordsProvenanceAndVersions(t *testing.T) {
 	}
 }
 
+func TestBuildRecordsExperiment(t *testing.T) {
+	opts := fixedOpts()
+	opts.ExperimentID = "prompt-v7_claude"
+	m := Build(sampleContext(), []generation.Content{{Kind: "blog", Markdown: "x"}}, nil, opts)
+	if m.ExperimentID != "prompt-v7_claude" {
+		t.Errorf("experiment = %q", m.ExperimentID)
+	}
+	c, _ := m.Content()
+	if c.ExperimentID != "prompt-v7_claude" {
+		t.Errorf("content experiment = %q (must route the manifest into experiments/)", c.ExperimentID)
+	}
+}
+
 func TestBuildOmitsVersionWhenNoResults(t *testing.T) {
 	// Filesystem publishing reports no versions — the manifest simply omits them.
 	assets := []generation.Content{{Kind: "blog", Markdown: "x", Provider: "claude"}}

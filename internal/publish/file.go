@@ -26,7 +26,7 @@ type FilePublisher struct {
 
 // Publish writes each asset as a Markdown file and returns the first error.
 func (p *FilePublisher) Publish(_ context.Context, repoFullName string, assets []generation.Content) error {
-	dir, err := p.targetDir(repoFullName, batchRelease(assets))
+	dir, err := p.targetDir(repoFullName, batchRelease(assets), batchExperiment(assets))
 	if err != nil {
 		return err
 	}
@@ -74,13 +74,13 @@ func (p *FilePublisher) PublishLatest(_ context.Context, repoFullName string, as
 // traversal from an unexpected repository name. A release run is first-class
 // (<dir>/<owner>/<name>/releases/<tag>); a snapshot keeps the dated layout
 // (<dir>/<owner>/<name>/<date>).
-func (p *FilePublisher) targetDir(repoFullName, release string) (string, error) {
+func (p *FilePublisher) targetDir(repoFullName, release, experiment string) (string, error) {
 	owner, name, ok := strings.Cut(repoFullName, "/")
 	if !ok || owner == "" || name == "" || strings.Contains(repoFullName, "..") {
 		return "", apperror.New(apperror.CodeInvalidInput, "invalid repository name")
 	}
 	date := p.now().UTC().Format("2006-01-02")
-	parts := append([]string{p.Dir, owner, name}, runSegments(release, date)...)
+	parts := append([]string{p.Dir, owner, name}, runSegments(release, experiment, date)...)
 	return filepath.Join(parts...), nil
 }
 

@@ -106,6 +106,11 @@ type Pipeline struct {
 	// GeneratorVersion identifies the worker build (e.g. its commit SHA) and is
 	// recorded in the release metadata for reproducibility. Optional.
 	GeneratorVersion string
+	// ExperimentID, when set, marks the run as an experiment: artifacts publish
+	// into releases/<tag>/experiments/<id>/ (coexisting with canonical output),
+	// the metadata records the experiment, and the release is NOT promoted to
+	// latest/ (experiments never become the served content). Optional.
+	ExperimentID string
 }
 
 // Result summarizes a run.
@@ -161,6 +166,13 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 	}
 
 	assets, genErrs := p.generate(ctx, rctx)
+	// Mark every artifact with the experiment id (if any) so the publisher routes
+	// them into the experiments/ namespace and the metadata records the run.
+	if p.ExperimentID != "" {
+		for i := range assets {
+			assets[i].ExperimentID = p.ExperimentID
+		}
+	}
 	res.Generated = len(assets)
 	if len(assets) == 0 {
 		p.notify(ctx, res, false, genErrs)
@@ -192,7 +204,10 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 	// area. Both are best-effort: a failure here must never fail a run whose
 	// content already published.
 	metaContent, meta := p.publishMetadata(ctx, rctx, passed, putResults)
-	p.promoteLatest(ctx, rctx, passed, metaContent, meta.GenerationID)
+	// An experiment never becomes the served content, so it is not promoted.
+	if p.ExperimentID == "" {
+		p.promoteLatest(ctx, rctx, passed, metaContent, meta.GenerationID)
+	}
 
 	p.log("release content published",
 		slog.String("repository", res.Repository), slog.String("release", res.Release),
@@ -207,7 +222,7 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 // best-effort: the content is already published, so a metadata error is logged,
 // not fatal.
 func (p *Pipeline) publishMetadata(ctx context.Context, rctx *rc.ReleaseContext, assets []generation.Content, results []generation.PutResult) (generation.Content, contentmeta.Metadata) {
-	meta := contentmeta.Build(rctx, assets, results, contentmeta.Options{GeneratorVersion: p.GeneratorVersion})
+	meta := contentmeta.Build(rctx, assets, results, contentmeta.Options{GeneratorVersion: p.GeneratorVersion, ExperimentID: p.ExperimentID})
 	c, err := meta.Content()
 	if err != nil {
 		p.log("release metadata build failed", slog.String("release", rctx.Release.Tag), slog.String("error", err.Error()))

@@ -51,7 +51,10 @@ eval-report/json) are just new files in the same folder — no layout change.
 - **`metadata.json`** gives opaque version IDs *meaning* (which prompt/provider/model
   produced each generation).
 - **`experiments/{experimentId}/`** is the one place application-level naming is used,
-  for deliberate side-by-side A/B runs that linear versioning can't express.
+  for deliberate side-by-side A/B runs that linear versioning can't express. Set the
+  `EXPERIMENT_ID` env var on the worker to route a run into
+  `releases/<tag>/experiments/<id>/`; the metadata records the experiment and the
+  run is **not** promoted to `latest/`, so the canonical output is untouched.
 
 ## Metadata (`metadata.json`, Phase 2)
 
@@ -98,7 +101,7 @@ live key, creating a new current version equal to the old one.
 | 2 | Publish `metadata.json` with provenance (provider/model/promptVersion/sha256/versionId) | **done** |
 | 3 | `latest/` promotion of approved releases (content + metadata + `latest.json`) | **done** |
 | 4 | Operator CLI (`content-admin`) + `content-operator` IAM role | **done** |
-| 5 | `experiments/` namespace + prompt-version registry | planned |
+| 5 | `experiments/` namespace (EXPERIMENT_ID) + prompt-version registry | **done** |
 
 Existing `releases/{tag}/{kind}.{ext}` keys are unchanged throughout, so downstream
-consumers keep working and only gain new capabilities.
+consumers keep working and only gain new capabilities. The full redesign is complete.

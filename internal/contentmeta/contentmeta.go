@@ -84,6 +84,7 @@ type Metadata struct {
 	Owner            string                  `json:"owner"`
 	Repository       string                  `json:"repository"`
 	ReleaseTag       string                  `json:"releaseTag"`
+	ExperimentID     string                  `json:"experimentId,omitempty"`
 	GitCommit        string                  `json:"gitCommit,omitempty"`
 	GeneratedAt      string                  `json:"generatedAt"`
 	GeneratorVersion string                  `json:"generatorVersion,omitempty"`
@@ -93,6 +94,7 @@ type Metadata struct {
 // Options carries run-level facts the builder cannot derive from the assets.
 type Options struct {
 	GeneratorVersion string
+	ExperimentID     string
 	// Now and NewID are injectable for deterministic tests; nil uses the defaults.
 	Now   func() time.Time
 	NewID func() string
@@ -139,6 +141,7 @@ func Build(rctx *rc.ReleaseContext, assets []generation.Content, results []gener
 		Owner:            rctx.Repository.Owner,
 		Repository:       rctx.Repository.FullName,
 		ReleaseTag:       rctx.Release.Tag,
+		ExperimentID:     opts.ExperimentID,
 		GitCommit:        releaseCommit(rctx),
 		GeneratedAt:      now().UTC().Format(time.RFC3339),
 		GeneratorVersion: opts.GeneratorVersion,
@@ -153,7 +156,7 @@ func (m Metadata) Content() (generation.Content, error) {
 	if err != nil {
 		return generation.Content{}, err
 	}
-	return generation.Content{Kind: Kind, Markdown: string(b) + "\n", Release: m.ReleaseTag, Ext: Ext}, nil
+	return generation.Content{Kind: Kind, Markdown: string(b) + "\n", Release: m.ReleaseTag, Ext: Ext, ExperimentID: m.ExperimentID}, nil
 }
 
 // releaseCommit returns the newest analysed commit SHA as a best-effort release

@@ -185,6 +185,36 @@ func TestPipelineHappyPath(t *testing.T) {
 	}
 }
 
+func TestPipelineExperimentRun(t *testing.T) {
+	pub := &fakePublisher{}
+	p := newPipeline(fakeReviewer{passAll: true}, pub, &fakeNotifier{})
+	p.ExperimentID = "prompt-v7_claude"
+
+	res, err := p.Run(context.Background(), rc.Request{Owner: "acme", Repository: "widget", ReleaseTag: "v0.2.0"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Published == 0 {
+		t.Fatal("experiment run should still publish")
+	}
+	// Every published artifact carries the experiment id (so it routes into
+	// experiments/), including the metadata.json manifest.
+	for _, a := range pub.assets {
+		if a.ExperimentID != "prompt-v7_claude" {
+			t.Errorf("asset %q missing experiment id: %q", a.Kind, a.ExperimentID)
+		}
+	}
+	// The metadata manifest records the experiment.
+	m, ok := pub.metadataAsset()
+	if !ok || !strings.Contains(m.Markdown, "prompt-v7_claude") {
+		t.Error("metadata.json does not record the experiment")
+	}
+	// An experiment must NOT be promoted to latest/.
+	if len(pub.latest) != 0 {
+		t.Errorf("experiment must not promote to latest, got %d assets", len(pub.latest))
+	}
+}
+
 func TestPipelineFullSuite(t *testing.T) {
 	pub := &fakePublisher{}
 	note := &fakeNotifier{}

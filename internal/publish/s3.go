@@ -57,7 +57,7 @@ func (p *S3Publisher) PublishWithResults(ctx context.Context, repoFullName strin
 	}
 	date := p.now().UTC().Format("2006-01-02")
 	release := batchRelease(assets)
-	segs := runSegments(release, date)
+	segs := runSegments(release, batchExperiment(assets), date)
 	results := make([]generation.PutResult, 0, len(assets))
 	for _, a := range assets {
 		parts := append([]string{p.prefix, owner, name}, segs...)

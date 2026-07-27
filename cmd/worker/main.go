@@ -239,6 +239,7 @@ func main() {
 		Generator:        &releasegen.Generator{Model: routed("blog"), Logger: a.Logger},
 		Suite:            &contentsuite.Orchestrator{Model: analysisModel, ModelFor: routed, Provenance: provenance, Logger: a.Logger},
 		GeneratorVersion: os.Getenv("WORKER_VERSION"),
+		ExperimentID:     os.Getenv("EXPERIMENT_ID"),
 		Reviewer:         review.Reviewer{},
 		Publisher:        publisher,
 		Logger:           a.Logger,

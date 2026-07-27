@@ -57,6 +57,10 @@ type Content struct {
 	// Ext is the file extension without the dot ("md", "svg"). Empty means "md",
 	// so existing Markdown artifacts need no change.
 	Ext string `json:"ext,omitempty"`
+	// ExperimentID, when set, routes this artifact into a release's experiments/
+	// namespace (releases/<tag>/experiments/<id>/…) so an A/B run coexists with
+	// the canonical output instead of overwriting it. Empty = canonical output.
+	ExperimentID string `json:"experimentId,omitempty"`
 
 	// Provenance — how this artifact was produced. Recorded in the release
 	// metadata.json for reproducibility and provider/prompt comparison. Empty for

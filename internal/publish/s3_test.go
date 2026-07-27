@@ -90,6 +90,22 @@ func TestS3PublishLatestWritesLatestPrefix(t *testing.T) {
 	}
 }
 
+func TestS3PublisherRoutesExperiments(t *testing.T) {
+	f := &fakeS3{}
+	p := NewS3(f, "b", "gc", nil)
+
+	err := p.Publish(context.Background(), "acme/widget", []generation.Content{
+		{Kind: generation.KindBlog, Markdown: "x", Release: "v0.3.0", ExperimentID: "prompt-v7_claude"},
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	got := aws.ToString(f.puts[0].Key)
+	if got != "gc/acme/widget/releases/v0.3.0/experiments/prompt-v7_claude/blog.md" {
+		t.Errorf("experiment key = %q", got)
+	}
+}
+
 func TestS3PublisherWritesDatedKeys(t *testing.T) {
 	f := &fakeS3{}
 	p := NewS3(f, "my-bucket", "generated-content", nil)
