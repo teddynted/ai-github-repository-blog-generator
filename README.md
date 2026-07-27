@@ -426,6 +426,20 @@ youtube, youtube-shorts, tiktok, visual-assets, seo-metadata, or `all`),
 consumes). They need no GitHub access and are deterministic regression inputs.
 Add new ones by dropping a Release Context JSON into `fixtures/`.
 
+### Versioned local output
+
+Each run keeps `output/<kind>.md` as the latest for convenience **and** archives
+the full run under `output/history/<timestamp>/` — so no draft is lost between
+prompt iterations (the local counterpart to S3 object versioning in production).
+Diff any two generations:
+
+```bash
+diff output/history/20260127-193312-a4f1/blog.md output/blog.md
+```
+
+Disable archiving with `--no-history`. `output/` (including `history/`) is
+git-ignored.
+
 ### Response caching
 
 Identical requests are cached under `.cache/` keyed by a hash of
