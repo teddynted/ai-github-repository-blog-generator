@@ -12,7 +12,7 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      7, // staff-engineer voice: third-person, anti-hallucination, generated diagrams
+	"blog":                      8, // staff voice + parseable TITLE/DESCRIPTION plan fields
 	"architecture":              2,
 	"linkedin":                  2,
 	"x-thread":                  2,

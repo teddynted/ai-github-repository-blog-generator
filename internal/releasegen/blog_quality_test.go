@@ -143,6 +143,33 @@ func TestPlanPromptEncouragesTimelessTopicTitle(t *testing.T) {
 	}
 }
 
+// TestTimelessDescriptionPrefersPlanAndDropsRelease guards the SEO description:
+// it must use the timeless description the plan proposes (not the release-centric
+// ContentIntelligence summary), stay within the length window, and carry no
+// version — and fall back cleanly when the plan proposes none.
+func TestTimelessDescriptionPrefersPlanAndDropsRelease(t *testing.T) {
+	c := sampleContext()
+	c.ContentIntelligence.Summary = "Release v0.2.0 delivers 4 analyzed changes across 5 files."
+	c.Release.Tag = "v0.2.0"
+
+	plan := "TITLE: Designing an Event-Driven Platform on AWS\nDESCRIPTION: How the platform decouples event ingestion from processing with a durable queue and scheduled compute.\nTHEME: …"
+	got := timelessDescription(plan, c)
+	if n := runeLen(got); n < metaMin || n > metaMax {
+		t.Errorf("description length = %d, want %d–%d: %q", n, metaMin, metaMax, got)
+	}
+	if versionRe.MatchString(got) || containsFold(got, "release") {
+		t.Errorf("description is not timeless: %q", got)
+	}
+	if !containsFold(got, "decouples event ingestion") {
+		t.Errorf("description did not use the plan's proposal: %q", got)
+	}
+
+	// With no plan description, it falls back to the deterministic path.
+	if fb := timelessDescription("TITLE: X\nTHEME: y", c); fb == "" {
+		t.Error("fallback description should be non-empty")
+	}
+}
+
 // ---- Test 2: Repository grounding ----------------------------------------
 
 // TestBlogPromptMandatesRepositoryGrounding guards the anti-hallucination

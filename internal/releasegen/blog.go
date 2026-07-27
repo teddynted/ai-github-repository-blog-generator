@@ -36,7 +36,6 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	if g.Model == nil {
 		return BlogPost{}, fmt.Errorf("generator has no model configured")
 	}
-	meta := metaDescription(rctx)
 	tags := blogTags(rctx)
 
 	// Stage 1–4: reason about the repository, the engineering, and the
@@ -54,6 +53,10 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	// topic-based. Prefer the one the plan proposed; fall back to a deterministic
 	// non-release title. No version number in the title.
 	title := timelessTitle(plan, rctx)
+
+	// The meta description is timeless too: prefer the one the plan proposed, else
+	// the deterministic fallback. Both pass through the SEO length window.
+	meta := timelessDescription(plan, rctx)
 
 	// Stage 5: write the article, section by section, guided by the plan and
 	// grounded strictly in the context.
@@ -106,6 +109,7 @@ func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 	b.WriteString("STAGE 4 — Article plan: the single main engineering theme (the problem solved — not \"four commits\"), the supporting themes, the key AWS services, the target audience, SEO keywords, and concrete reader takeaways.\n\n")
 	b.WriteString("OUTPUT a concise, structured plan (not prose, not the article). Write each field on its own line in the exact form \"FIELD: value\" as plain text — do NOT use Markdown headings (no \"#\", no \"##\") for these fields. The FIRST line MUST begin literally with \"TITLE:\".\n")
 	b.WriteString("- TITLE: one timeless, topic-based article title about the engineering — in the style of \"Designing an Event-Driven AI Agent Platform on AWS\". It names the system and the engineering problem, NOT the release. No version number, no \"release\"/\"update\"/\"changelog\", no date.\n")
+	b.WriteString("- DESCRIPTION: one timeless meta description (roughly 150–160 characters) summarising the article's engineering topic for search results. No version number, no \"release\"/\"update\", no date.\n")
 	b.WriteString("- THEME: one sentence naming the engineering problem this repository solves.\n")
 	b.WriteString("- SUPPORTING THEMES / AWS SERVICES / AUDIENCE / SEO KEYWORDS / TAKEAWAYS: short, evidence-backed lists.\n")
 	b.WriteString("- OUTLINE: for each of these sections, 1–3 grounded bullet points it will make, or the single word OMIT when the context offers nothing: ")
@@ -244,20 +248,41 @@ func renderMermaid(d rc.MermaidDiagram) string {
 	return b.String()
 }
 
-// planTitleRe extracts a "TITLE: ..." line from the article plan.
-var planTitleRe = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?TITLE(?:\*\*)?:\s*(.+?)\s*$`)
+// planTitleRe / planDescriptionRe extract the "TITLE: …" / "DESCRIPTION: …"
+// lines the plan emits (plain text, optionally bulleted or bolded).
+var (
+	planTitleRe       = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?TITLE(?:\*\*)?:\s*(.+?)\s*$`)
+	planDescriptionRe = regexp.MustCompile(`(?mi)^\s*(?:[-*]\s*)?(?:\*\*)?DESCRIPTION(?:\*\*)?:\s*(.+?)\s*$`)
+)
+
+// planField returns the first value of a "FIELD: value" line the plan emitted,
+// stripped of surrounding quotes; "" when absent.
+func planField(plan string, re *regexp.Regexp) string {
+	if m := re.FindStringSubmatch(plan); m != nil {
+		return strings.TrimSpace(strings.Trim(m[1], "\"'`"))
+	}
+	return ""
+}
 
 // timelessTitle returns the article title. It prefers the timeless, topic-based
 // title the plan proposed; failing that, a deterministic non-release fallback.
 // Either way the title carries no version — the release is the trigger, not the
 // topic.
 func timelessTitle(plan string, rctx *rc.ReleaseContext) string {
-	if m := planTitleRe.FindStringSubmatch(plan); m != nil {
-		if t := strings.TrimSpace(strings.Trim(m[1], "\"'`")); t != "" {
-			return t
-		}
+	if t := planField(plan, planTitleRe); t != "" {
+		return t
 	}
 	return blogTitle(rctx)
+}
+
+// timelessDescription returns the SEO meta description. It prefers the timeless
+// description the plan proposed (run through the same length window as the
+// deterministic path); failing that, the deterministic fallback.
+func timelessDescription(plan string, rctx *rc.ReleaseContext) string {
+	if d := planField(plan, planDescriptionRe); d != "" {
+		return fitDescription(d, rctx)
+	}
+	return metaDescription(rctx)
 }
 
 // blogTitle is the deterministic fallback title. It is timeless — no version —
@@ -285,7 +310,14 @@ const (
 // services, technologies, and factual descriptions of what the article covers)
 // until it clears the floor — never with invented facts.
 func metaDescription(rctx *rc.ReleaseContext) string {
-	s := collapseWhitespace(firstNonEmptyStr(rctx.ContentIntelligence.Summary, rctx.Release.Summary))
+	return fitDescription(firstNonEmptyStr(rctx.ContentIntelligence.Summary, rctx.Release.Summary), rctx)
+}
+
+// fitDescription takes a seed description and returns one whose length is always
+// within [metaMin, metaMax]: it pads a short seed with grounded enrichments and
+// clamps a long one. Shared by the plan-derived and deterministic descriptions.
+func fitDescription(seed string, rctx *rc.ReleaseContext) string {
+	s := collapseWhitespace(seed)
 	for _, clause := range metaEnrichments(rctx) {
 		if runeLen(s) >= metaMin {
 			break
