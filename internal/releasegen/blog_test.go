@@ -258,6 +258,69 @@ func TestAssembleBlogPlacesDiagramsBeforeConclusion(t *testing.T) {
 	}
 }
 
+func TestStripConversationalScaffolding(t *testing.T) {
+	// Lines that ARE scaffolding and must be stripped when leading/trailing.
+	strip := []string{
+		"Here is the article, executing the PLAN.",
+		"Sure, here's the blog post you asked for:",
+		"Below is the revised markdown.",
+		"I'll deliver it inline instead.",
+		"I've written the article below.",
+		"Let me know if you'd like any changes.",
+		"If you'd like, I can save this to a file.",
+		"Feel free to adjust the tone.",
+		"(The write to output/ wasn't permitted, so I'm delivering it inline.)",
+		"---",
+		"***",
+	}
+	for _, s := range strip {
+		body := s + "\n\n## Introduction\n\nReal content.\n\n## Conclusion\n\nEnd."
+		got := stripConversationalScaffolding(body)
+		if strings.Contains(got, strings.TrimSpace(s)) && strings.TrimSpace(s) != "" {
+			t.Errorf("leading scaffolding not stripped: %q\n--- got ---\n%s", s, got)
+		}
+		if !strings.HasPrefix(got, "## Introduction") {
+			t.Errorf("body should start at the first real heading after stripping %q, got:\n%s", s, got)
+		}
+	}
+
+	// Real article prose that must NEVER be mistaken for scaffolding.
+	keep := []string{
+		"The platform runs on version 2 of the API.",
+		"Here the orchestrator dispatches work to two providers.",      // "Here" but not "here is <deliverable>"
+		"This is the core of the design: a single seam.",               // "This is the core", not "this is the article"
+		"Writing to S3 was denied when the IAM policy was too narrow.", // domain sentence about a write being denied
+		"Let me count the ways this scales.",                           // "Let me" but no deliverable verb
+	}
+	for _, s := range keep {
+		body := s + "\n\n## Introduction\n\nReal content."
+		got := stripConversationalScaffolding(body)
+		if !strings.HasPrefix(got, s) {
+			t.Errorf("real content wrongly stripped as scaffolding: %q\n--- got ---\n%s", s, got)
+		}
+	}
+}
+
+func TestAssembleBlogStripsConversationalScaffolding(t *testing.T) {
+	// The exact shape observed leaking from an agentic provider: a preamble and a
+	// trailing save-offer wrapping the article, with horizontal rules as fences.
+	body := "Here is the article, executing the PLAN. (The write to `output/` wasn't permitted, so I'm delivering it inline.)\n\n" +
+		"---\n\n" +
+		"## Introduction\n\nReal grounded content.\n\n## Conclusion\n\nThe end.\n\n" +
+		"---\n\n" +
+		"If you'd like, I can save this to a file — let me know the path."
+	md := assembleBlog("Real Title", "desc padded to a reasonable length for the SEO window here today", []string{"aws"}, body, blogContext())
+
+	for _, bad := range []string{"executing the PLAN", "delivering it inline", "wasn't permitted", "I can save this", "let me know the path"} {
+		if strings.Contains(md, bad) {
+			t.Errorf("chat scaffolding leaked into assembled blog: %q\n%s", bad, md)
+		}
+	}
+	if !strings.Contains(md, "## Introduction") || !strings.Contains(md, "Real grounded content.") {
+		t.Errorf("real content was damaged by scaffolding stripping:\n%s", md)
+	}
+}
+
 func TestBlogTagsNormalized(t *testing.T) {
 	tags := blogTags(blogContext())
 	for _, tag := range tags {
