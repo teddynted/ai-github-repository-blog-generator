@@ -82,9 +82,56 @@ func TestBlogDoesNotDuplicateMermaid(t *testing.T) {
 	}
 }
 
+func TestBlogRetriesUntilValid(t *testing.T) {
+	articleAttempts := 0
+	fm := &fakeModel{reply: func(p string) (string, error) {
+		if strings.Contains(p, "produce a grounded PLAN") {
+			return "TITLE: Designing an Event-Driven Platform\nDESCRIPTION: How the platform decouples ingestion from processing.\nTHEME: x", nil
+		}
+		articleAttempts++
+		if articleAttempts == 1 {
+			// Invalid: a generic technology lede + no Conclusion.
+			return "## Introduction\n\nEvent-driven architectures decouple producers from consumers.", nil
+		}
+		// Valid: grounded, complete.
+		return "## Introduction\n\nThe repository routes events through a durable queue.\n\n## Conclusion\n\nThe pattern holds.", nil
+	}}
+
+	post, err := (&Generator{Model: fm, MaxBlogAttempts: 3}).Blog(context.Background(), blogContext())
+	if err != nil {
+		t.Fatalf("Blog: %v", err)
+	}
+	if articleAttempts != 2 {
+		t.Errorf("expected 2 article attempts (1 invalid, 1 valid), got %d", articleAttempts)
+	}
+	if !strings.Contains(post.Markdown, "routes events through a durable queue") ||
+		strings.Contains(post.Markdown, "Event-driven architectures decouple") {
+		t.Error("Blog returned the invalid draft instead of the clean retry")
+	}
+}
+
+func TestBlogFallsBackToBestDraft(t *testing.T) {
+	// Every draft is invalid (missing Conclusion) — Blog must still return the
+	// best-effort draft without erroring.
+	fm := &fakeModel{reply: func(p string) (string, error) {
+		if strings.Contains(p, "produce a grounded PLAN") {
+			return "TITLE: X\nTHEME: y", nil
+		}
+		return "## Introduction\n\nThe repository decouples ingestion from processing.", nil
+	}}
+	post, err := (&Generator{Model: fm, MaxBlogAttempts: 3}).Blog(context.Background(), blogContext())
+	if err != nil {
+		t.Fatalf("Blog: %v", err)
+	}
+	if post.Markdown == "" || !strings.Contains(post.Markdown, "## Introduction") {
+		t.Error("expected a best-effort draft even when all attempts fail validation")
+	}
+}
+
 func TestBlogPlanThenWritePrompts(t *testing.T) {
 	fm := &fakeModel{}
-	_, _ = (&Generator{Model: fm}).Blog(context.Background(), blogContext())
+	// One attempt: this test checks the plan/article prompt content, not retries.
+	_, _ = (&Generator{Model: fm, MaxBlogAttempts: 1}).Blog(context.Background(), blogContext())
 
 	// Two model turns: Stage 1–4 plan, then Stage 5 article.
 	if len(fm.prompts) != 2 {

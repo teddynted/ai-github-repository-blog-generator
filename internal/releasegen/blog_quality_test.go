@@ -33,7 +33,8 @@ import (
 func buildBlogPrompts(t *testing.T, rctx *rc.ReleaseContext) (plan, article string) {
 	t.Helper()
 	fm := &fakeModel{}
-	if _, err := (&Generator{Model: fm}).Blog(context.Background(), rctx); err != nil {
+	// One attempt: these guards inspect prompt CONTENT, not the retry loop.
+	if _, err := (&Generator{Model: fm, MaxBlogAttempts: 1}).Blog(context.Background(), rctx); err != nil {
 		t.Fatalf("Blog: %v", err)
 	}
 	if len(fm.prompts) != 2 {

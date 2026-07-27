@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
 
@@ -58,18 +59,68 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 	// the deterministic fallback. Both pass through the SEO length window.
 	meta := timelessDescription(plan, rctx)
 
-	// Stage 5: write the article, section by section, guided by the plan and
-	// grounded strictly in the context.
-	body, err := g.Model.Generate(ctx, g.articlePrompt(rctx, title, plan))
+	// Stage 5: write the article, guided by the plan and grounded strictly in the
+	// context — then validate and regenerate on failure (the prompt lowers the
+	// violation rate; this loop rejects the residual failures).
+	md, err := g.writeValidatedArticle(ctx, rctx, title, meta, tags, plan)
 	if err != nil {
-		return BlogPost{}, fmt.Errorf("generate blog: %w", err)
+		return BlogPost{}, err
 	}
-	md := assembleBlog(title, meta, tags, strings.TrimSpace(body), rctx)
 
 	if g.Logger != nil {
 		g.logBlog(rctx, len(md))
 	}
 	return BlogPost{Title: title, MetaDescription: meta, Tags: tags, Markdown: md, WordCount: wordCount(md)}, nil
+}
+
+// defaultBlogAttempts is the number of article drafts Blog will try before
+// accepting the best one it produced.
+const defaultBlogAttempts = 3
+
+// writeValidatedArticle generates the article, assembles the full blog, and
+// validates it; on failure it regenerates (up to MaxBlogAttempts, relying on the
+// model's sampling variance to produce a different draft). It returns the first
+// draft that passes content validation, or — after the last attempt — the draft
+// with the fewest validation errors. A model error is fatal only when no draft
+// has been produced yet.
+func (g *Generator) writeValidatedArticle(ctx context.Context, rctx *rc.ReleaseContext, title, meta string, tags []string, plan string) (string, error) {
+	attempts := g.MaxBlogAttempts
+	if attempts <= 0 {
+		attempts = defaultBlogAttempts
+	}
+	prompt := g.articlePrompt(rctx, title, plan)
+
+	bestMD := ""
+	bestErrs := int(^uint(0) >> 1) // max int
+	for i := 0; i < attempts; i++ {
+		body, err := g.Model.Generate(ctx, prompt)
+		if err != nil {
+			if bestMD == "" {
+				return "", fmt.Errorf("generate blog: %w", err)
+			}
+			break // keep the best draft produced so far
+		}
+		md := assembleBlog(title, meta, tags, strings.TrimSpace(body), rctx)
+		report := contentcheck.Validate("blog", md)
+		if report.OK() {
+			if i > 0 && g.Logger != nil {
+				g.Logger.Info("blog passed validation after retry", "release", rctx.Release.Tag, "attempt", i+1)
+			}
+			return md, nil
+		}
+		if n := report.Errors(); n < bestErrs {
+			bestErrs, bestMD = n, md
+		}
+		if g.Logger != nil {
+			g.Logger.Warn("blog draft failed validation; regenerating",
+				"release", rctx.Release.Tag, "attempt", i+1, "of", attempts, "errors", report.Errors())
+		}
+	}
+	if g.Logger != nil {
+		g.Logger.Warn("blog validation not clean after all attempts; using best draft",
+			"release", rctx.Release.Tag, "attempts", attempts, "residualErrors", bestErrs)
+	}
+	return bestMD, nil
 }
 
 // blogPrompt builds the section-structured, strictly-grounded prompt. Front
