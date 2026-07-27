@@ -112,10 +112,36 @@ var mermaidFence = regexp.MustCompile("(?s)```mermaid.*?```")
 // two components scale separately").
 var inventedCountRe = regexp.MustCompile(`(?i)\b(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+([a-z][a-z-]*\s+)?(files?|directories|folders|packages|modules|diagrams)\b`)
 
-// genericLedeRe catches abstract technology-teaching sentences the article must
-// not contain — it should document THIS repository, not explain AWS/Go/event-
-// driven architecture in general.
+// genericLedeRe catches abstract technology-teaching stems the article should
+// not use — it must document THIS repository, not explain AWS/Go/event-driven
+// architecture in general. Whether a match is a violation depends on grounding
+// (see ungroundedGenericLedes).
 var genericLedeRe = regexp.MustCompile(`(?i)(event-driven architectures?\s+(decouple|enable|have become|are\b|provide)|\baws provides\s+(services|a |managed|the )|\bgo offers\b|serverless\s+(architectures?\s+)?(is|are)\s+popular|serverless\s+(architectures?\s+)?(have|has)\s+become)`)
+
+// groundingRe marks a sentence as being about THIS system rather than teaching a
+// technology in the abstract. A generic-lede stem is only a violation when its
+// sentence lacks such a reference (e.g. "Event-driven architectures decouple
+// producers from consumers." is flagged, but "Event-driven architecture enables
+// the platform to scale independently." is not).
+var groundingRe = regexp.MustCompile(`(?i)\b(repositor|platform|pipeline|\bworker|codebase|orchestrat|inference|content\s+generat|release\s+context|provider\s+abstraction|the\s+system\b|the\s+service\b|the\s+application\b|the\s+module\b)`)
+
+// sentenceSplit approximates sentence/line boundaries for grounding analysis.
+var sentenceSplit = regexp.MustCompile(`(?:[.!?]\s+|\n+)`)
+
+// ungroundedGenericLedes returns generic-lede stems that appear in a sentence
+// with no grounding reference to this system — the true violations.
+func ungroundedGenericLedes(c string) []string {
+	var out []string
+	for _, s := range sentenceSplit.Split(c, -1) {
+		if !genericLedeRe.MatchString(s) || groundingRe.MatchString(s) {
+			continue
+		}
+		if m := genericLedeRe.FindString(s); m != "" {
+			out = append(out, m)
+		}
+	}
+	return dedupeMatches(out)
+}
 
 // Validate runs the generic checks plus any kind-specific rules and returns a
 // report. kind is a content kind ("blog", "seo-metadata", "linkedin", …).
@@ -181,9 +207,10 @@ func blog(r *Report, c string) {
 	for _, m := range dedupeMatches(inventedCountRe.FindAllString(c, -1)) {
 		r.err("invented repository count %q — describe the relationship, not the number", strings.TrimSpace(m))
 	}
-	// Generic technology-teaching ledes — the article must document THIS repository.
-	for _, m := range dedupeMatches(genericLedeRe.FindAllString(c, -1)) {
-		r.err("generic technology lede %q — write about this repository, not AWS/Go in general", strings.TrimSpace(m))
+	// Generic technology-teaching ledes — only when ungrounded (not tied to this
+	// system); a grounded sentence that names the platform/repository is fine.
+	for _, m := range ungroundedGenericLedes(c) {
+		r.err("ungrounded generic technology lede %q — write about this repository, not AWS/Go in general", strings.TrimSpace(m))
 	}
 
 	// Release-centric phrasing (the article must be timeless).

@@ -79,10 +79,16 @@ func TestBlogCatchesGenericLedes(t *testing.T) {
 			t.Errorf("generic lede not caught: %q", bad)
 		}
 	}
-	// A repository-grounded sentence that names AWS must still pass.
-	ok := "The repository routes events through EventBridge to an SQS buffer."
-	if !Validate("blog", goodBlog+"\n"+ok).OK() {
-		t.Errorf("false positive on grounded sentence: %q", ok)
+	// Grounded sentences that merely START with a lede stem must PASS — the ban
+	// is on ungrounded/teaching sentences, not any mention of the pattern.
+	for _, ok := range []string{
+		"The repository routes events through EventBridge to an SQS buffer.",
+		"Event-driven architecture enables the platform to scale ingestion independently.",
+		"AWS provides the managed services the pipeline relies on for inference.",
+	} {
+		if !Validate("blog", goodBlog+"\n"+ok).OK() {
+			t.Errorf("false positive on grounded sentence: %q", ok)
+		}
 	}
 }
 
