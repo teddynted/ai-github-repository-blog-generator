@@ -74,8 +74,9 @@ func (g *Generator) Blog(ctx context.Context, rctx *rc.ReleaseContext) (BlogPost
 }
 
 // defaultBlogAttempts is the number of article drafts Blog will try before
-// accepting the best one it produced.
-const defaultBlogAttempts = 3
+// accepting the best one it produced. 4 balances a higher clean rate against
+// the per-attempt Claude cost for the stubborn count/lede patterns.
+const defaultBlogAttempts = 4
 
 // correctionBlock turns a failed draft's validation errors into a corrective
 // instruction appended to the next attempt's prompt, so the model is told
