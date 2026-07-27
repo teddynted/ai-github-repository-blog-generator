@@ -57,6 +57,24 @@ type Content struct {
 	// Ext is the file extension without the dot ("md", "svg"). Empty means "md",
 	// so existing Markdown artifacts need no change.
 	Ext string `json:"ext,omitempty"`
+
+	// Provenance — how this artifact was produced. Recorded in the release
+	// metadata.json for reproducibility and provider/prompt comparison. Empty for
+	// artifacts generated without routing (e.g. offline/deterministic).
+	Provider      string `json:"provider,omitempty"`
+	Model         string `json:"model,omitempty"`
+	PromptVersion string `json:"promptVersion,omitempty"`
+}
+
+// PutResult reports where a published artifact landed and, when the destination
+// is a versioned store, its object version. Publishers that can report versions
+// return these so a metadata manifest can pin each artifact to an immutable
+// object version.
+type PutResult struct {
+	Kind      string `json:"kind"`
+	Ext       string `json:"ext,omitempty"`
+	Key       string `json:"key"`
+	VersionID string `json:"versionId,omitempty"`
 }
 
 // FileExt returns the artifact's extension, defaulting to "md".

@@ -42,6 +42,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/promptversion"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/publish"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
@@ -172,6 +173,7 @@ func main() {
 	// Bedrock when configured. A Claude init failure just leaves it unregistered,
 	// so its routes fall through to Ollama.
 	providers := map[string]airouter.Model{airouter.ProviderOllama: analysisModel}
+	claudeModel := "" // the effective Claude model id, for release-metadata provenance
 	switch {
 	case anthropicKey != "":
 		am := a.Config.AnthropicModel
@@ -182,6 +184,7 @@ func main() {
 			a.Logger.Warn("anthropic client init failed; Claude routes degrade to local", "error", cerr.Error())
 		} else {
 			providers[airouter.ProviderClaude] = cl
+			claudeModel = am
 			a.Logger.Info("premium writer registered: claude via anthropic api", "model", am)
 		}
 	case a.Config.BedrockModelID != "":
@@ -189,6 +192,7 @@ func main() {
 			a.Logger.Warn("bedrock claude init failed; Claude routes degrade to local", "error", berr.Error())
 		} else {
 			providers[airouter.ProviderClaude] = claude
+			claudeModel = a.Config.BedrockModelID
 			a.Logger.Info("premium writer registered: claude on bedrock", "model", a.Config.BedrockModelID)
 		}
 	}
@@ -204,6 +208,23 @@ func main() {
 	a.Logger.Info("hybrid ai routing configured",
 		"providers", router.Providers(), "decisions", router.Decisions(airouter.AllKinds))
 	routed := func(kind string) releasegen.Model { return router.ModelFor(kind) }
+
+	// Provenance for the release metadata: which provider/model/prompt produced
+	// each artifact. Routed kinds report their effective provider + model; kinds
+	// with no routed model (the deterministic SVG diagram) report "deterministic".
+	decisions := router.Decisions(airouter.AllKinds)
+	providerModels := map[string]string{
+		airouter.ProviderOllama: a.Config.OllamaModel,
+		airouter.ProviderClaude: claudeModel,
+	}
+	provenance := func(kind string) (provider, model, promptVersion string) {
+		prov, ok := decisions[kind]
+		if !ok {
+			return "deterministic", "", promptversion.For(kind)
+		}
+		return prov, providerModels[prov], promptversion.For(kind)
+	}
+
 	releasePipe := &releasepipeline.Pipeline{
 		Builder: &rc.Builder{
 			Sources: releaseSrc,
@@ -215,11 +236,12 @@ func main() {
 		// → voice-over → YouTube → Shorts → TikTok → visual assets → SEO →
 		// architecture → LinkedIn → X thread), all grounded in the analysis and gated
 		// by the same review/publish stages. A thin release degrades gracefully.
-		Generator: &releasegen.Generator{Model: routed("blog"), Logger: a.Logger},
-		Suite:     &contentsuite.Orchestrator{Model: analysisModel, ModelFor: routed, Logger: a.Logger},
-		Reviewer:  review.Reviewer{},
-		Publisher: publisher,
-		Logger:    a.Logger,
+		Generator:        &releasegen.Generator{Model: routed("blog"), Logger: a.Logger},
+		Suite:            &contentsuite.Orchestrator{Model: analysisModel, ModelFor: routed, Provenance: provenance, Logger: a.Logger},
+		GeneratorVersion: os.Getenv("WORKER_VERSION"),
+		Reviewer:         review.Reviewer{},
+		Publisher:        publisher,
+		Logger:           a.Logger,
 	}
 
 	notifiers := notify.Multi{&notify.LogNotifier{Logger: a.Logger}}

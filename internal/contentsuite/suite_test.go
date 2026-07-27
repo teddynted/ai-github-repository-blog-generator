@@ -81,6 +81,26 @@ func TestOrchestratorRunsEveryStageOffline(t *testing.T) {
 	}
 }
 
+func TestOrchestratorStampsProvenance(t *testing.T) {
+	// The Provenance hook must tag each produced artifact with its
+	// provider/model/prompt version for the release metadata.
+	o := &Orchestrator{
+		Provenance: func(kind string) (string, string, string) {
+			return "test-provider", "test-model", kind + "@1"
+		},
+	}
+	s := o.Run(context.Background(), sampleContext(), wellFormedBlog())
+
+	if len(s.Artifacts()) == 0 {
+		t.Fatal("no artifacts produced")
+	}
+	for _, a := range s.Artifacts() {
+		if a.Provider != "test-provider" || a.Model != "test-model" || a.PromptVersion != a.Kind+"@1" {
+			t.Errorf("artifact %q provenance = {%q,%q,%q}", a.Kind, a.Provider, a.Model, a.PromptVersion)
+		}
+	}
+}
+
 func TestOrchestratorIsFaultTolerant(t *testing.T) {
 	// An empty blog (title only, no body) makes the storyboard stage fail — but the
 	// run must continue and still produce the blog, recording the failure.

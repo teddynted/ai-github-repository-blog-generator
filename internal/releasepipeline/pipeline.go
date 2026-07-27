@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentmeta"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/generation"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
@@ -54,6 +55,14 @@ type Reviewer interface {
 	Review(ctx context.Context, assets []generation.Content) (passed []generation.Content, issues []string)
 }
 
+// resultPublisher is an optional Publisher that reports where each artifact
+// landed, including the object version — enabling a versioned metadata manifest.
+// The S3 publisher implements it; the filesystem publisher does not (versions
+// are simply omitted from the manifest).
+type resultPublisher interface {
+	PublishWithResults(ctx context.Context, repoFullName string, assets []generation.Content) ([]generation.PutResult, error)
+}
+
 // Publisher writes approved assets (satisfied by publish.FilePublisher / S3Publisher).
 type Publisher interface {
 	Publish(ctx context.Context, repoFullName string, assets []generation.Content) error
@@ -87,6 +96,9 @@ type Pipeline struct {
 	Publisher Publisher
 	Notifier  Notifier // optional
 	Logger    *slog.Logger
+	// GeneratorVersion identifies the worker build (e.g. its commit SHA) and is
+	// recorded in the release metadata for reproducibility. Optional.
+	GeneratorVersion string
 }
 
 // Result summarizes a run.
@@ -156,11 +168,22 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 		return res, fmt.Errorf("all %d generated assets failed review", len(assets))
 	}
 
-	if err := p.Publisher.Publish(ctx, rctx.Repository.FullName, passed); err != nil {
+	var putResults []generation.PutResult
+	if rp, ok := p.Publisher.(resultPublisher); ok {
+		putResults, err = rp.PublishWithResults(ctx, rctx.Repository.FullName, passed)
+	} else {
+		err = p.Publisher.Publish(ctx, rctx.Repository.FullName, passed)
+	}
+	if err != nil {
 		p.notify(ctx, res, false, append(res.Issues, err.Error()))
 		return res, fmt.Errorf("publish: %w", err)
 	}
 	res.Published = len(passed)
+
+	// Write the release metadata manifest (provenance + object versions) beside
+	// the artifacts. Best-effort: a metadata failure must never fail a run whose
+	// content already published.
+	p.publishMetadata(ctx, rctx, passed, putResults)
 
 	p.log("release content published",
 		slog.String("repository", res.Repository), slog.String("release", res.Release),
@@ -168,6 +191,27 @@ func (p *Pipeline) Run(ctx context.Context, req rc.Request) (Result, error) {
 		slog.Int("rejected", res.Rejected), slog.Duration("duration", time.Since(start)))
 	p.notify(ctx, res, true, res.Issues)
 	return res, nil
+}
+
+// publishMetadata writes the release metadata.json (generation provenance +
+// per-artifact object versions) beside the published artifacts. It is
+// best-effort: the content is already published, so a metadata error is logged,
+// not fatal.
+func (p *Pipeline) publishMetadata(ctx context.Context, rctx *rc.ReleaseContext, assets []generation.Content, results []generation.PutResult) {
+	meta := contentmeta.Build(rctx, assets, results, contentmeta.Options{GeneratorVersion: p.GeneratorVersion})
+	c, err := meta.Content()
+	if err != nil {
+		p.log("release metadata build failed", slog.String("release", rctx.Release.Tag), slog.String("error", err.Error()))
+		return
+	}
+	if err := p.Publisher.Publish(ctx, rctx.Repository.FullName, []generation.Content{c}); err != nil {
+		p.log("release metadata publish failed", slog.String("release", rctx.Release.Tag), slog.String("error", err.Error()))
+		return
+	}
+	p.log("release metadata published",
+		slog.String("release", rctx.Release.Tag),
+		slog.String("generationId", meta.GenerationID),
+		slog.Int("artifacts", len(meta.Artifacts)))
 }
 
 // generate produces every configured format as generation.Content, using the
@@ -211,7 +255,10 @@ func (p *Pipeline) generateSuite(ctx context.Context, rctx *rc.ReleaseContext) (
 	suite := p.Suite.Run(ctx, rctx, nil)
 	out := make([]generation.Content, 0, len(suite.Artifacts()))
 	for _, a := range suite.Artifacts() {
-		out = append(out, generation.Content{Kind: generation.Kind(a.Kind), Markdown: a.Markdown, Release: rctx.Release.Tag, Ext: a.Ext})
+		out = append(out, generation.Content{
+			Kind: generation.Kind(a.Kind), Markdown: a.Markdown, Release: rctx.Release.Tag, Ext: a.Ext,
+			Provider: a.Provider, Model: a.Model, PromptVersion: a.PromptVersion,
+		})
 	}
 	var issues []string
 	for _, st := range suite.Manifest.Stages {
