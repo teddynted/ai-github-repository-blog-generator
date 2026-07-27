@@ -17,6 +17,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -108,7 +110,7 @@ type options struct {
 	artifact, provider, ctxPath, outDir, system, model, ollamaURL, region string
 	temperature                                                           float64
 	maxTokens                                                             int
-	dryRun, verbose, noCache                                              bool
+	dryRun, verbose, noCache, noHistory                                   bool
 	cacheDir                                                              string
 	timeout                                                               time.Duration
 }
@@ -126,6 +128,7 @@ func generate(args []string) int {
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the prompt(s) that would be sent; do not call a provider or write output")
 	fs.BoolVar(&o.verbose, "verbose", false, "verbose logging")
 	fs.BoolVar(&o.noCache, "no-cache", false, "bypass the local response cache")
+	fs.BoolVar(&o.noHistory, "no-history", false, "do not archive this run under <output>/history/<stamp>/")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
 	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
@@ -196,12 +199,30 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		return 1
 	}
 
+	// Local versioning: keep <kind>.<ext> as the latest for convenience, and
+	// archive every run under output/history/<stamp>/ so no draft is lost between
+	// iterations (the local counterpart to S3 object versioning in production).
+	histDir := ""
+	if !o.noHistory {
+		histDir = filepath.Join(o.outDir, "history", runStamp())
+		if err := os.MkdirAll(histDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "error: create history dir: %v\n", err)
+			return 1
+		}
+	}
+
 	failed := false
 	for _, a := range artifacts {
-		path := filepath.Join(o.outDir, a.kind+"."+a.ext)
-		if err := os.WriteFile(path, []byte(a.markdown), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "error: write %s: %v\n", path, err)
+		filename := a.kind + "." + a.ext
+		if err := os.WriteFile(filepath.Join(o.outDir, filename), []byte(a.markdown), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "error: write %s: %v\n", filename, err)
 			return 1
+		}
+		if histDir != "" {
+			if err := os.WriteFile(filepath.Join(histDir, filename), []byte(a.markdown), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "error: archive %s: %v\n", filename, err)
+				return 1
+			}
 		}
 		report := contentcheck.Validate(a.kind, a.markdown)
 		if !report.OK() {
@@ -212,7 +233,7 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		}
 	}
 
-	logRun(o, artifacts, cache, time.Since(start))
+	logRun(o, artifacts, cache, histDir, time.Since(start))
 	if failed {
 		return 1
 	}
@@ -252,7 +273,7 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 	return out, nil
 }
 
-func logRun(o options, arts []artifact, cache *aicache.Cache, dur time.Duration) {
+func logRun(o options, arts []artifact, cache *aicache.Cache, histDir string, dur time.Duration) {
 	fmt.Fprintf(os.Stderr, "\n──────── run summary ────────\n")
 	fmt.Fprintf(os.Stderr, "provider:   %s%s\n", o.provider, modelSuffix(o))
 	fmt.Fprintf(os.Stderr, "artifact:   %s (%d written)\n", o.artifact, len(arts))
@@ -269,6 +290,9 @@ func logRun(o options, arts []artifact, cache *aicache.Cache, dur time.Duration)
 	}
 	fmt.Fprintf(os.Stderr, "est tokens: ~%d output\n", totalOut)
 	fmt.Fprintf(os.Stderr, "output:     %s/\n", o.outDir)
+	if histDir != "" {
+		fmt.Fprintf(os.Stderr, "versioned:  %s/\n", histDir)
+	}
 	prompts := make([]string, 0, len(arts))
 	for _, a := range arts {
 		prompts = append(prompts, a.kind+"="+promptversion.For(a.kind))
@@ -357,6 +381,14 @@ func extOr(ext string) string {
 		return "md"
 	}
 	return ext
+}
+
+// runStamp is a sortable, unique archive folder name: a UTC timestamp plus a
+// little entropy so two runs in the same second do not collide.
+func runStamp() string {
+	var r [2]byte
+	_, _ = rand.Read(r[:])
+	return time.Now().UTC().Format("20060102-150405") + "-" + hex.EncodeToString(r[:])
 }
 
 func estTokens(s string) int { return len(s) / 4 } // rough 4-chars-per-token estimate
