@@ -274,7 +274,7 @@ func assembleBlog(title, meta string, tags []string, body string, rctx *rc.Relea
 	if title == "" {
 		title = firstNonEmptyStr(rctx.Repository.Name, rctx.Repository.FullName, "Untitled")
 	}
-	body = stripStrayHeader(strings.TrimSpace(body))
+	body = stripConversationalScaffolding(stripStrayHeader(strings.TrimSpace(body)))
 
 	// Attach at most two architecture diagrams from the release's real Mermaid
 	// diagrams (never dump every diagram), and place them BEFORE the Conclusion
@@ -312,6 +312,50 @@ func stripStrayHeader(body string) string {
 		}
 	}
 	return body
+}
+
+// scaffoldingLineRe matches a single line of conversational scaffolding a chat
+// model may wrap around the article — a preamble announcing the deliverable
+// ("Here is the article:", "Sure, here's the blog post…"), an assistant action
+// or offer ("I'll deliver it inline", "Let me know if…", "If you'd like…"), or
+// a narrated file-write refusal. It is deliberately narrow: every alternative
+// references the deliverable, an assistant action, or an offer, so ordinary
+// article sentences are not mistaken for scaffolding. This is the shared,
+// provider-agnostic safeguard — the claude-code CLI is prevented from emitting
+// this at the source, but any provider (Anthropic, Bedrock) routes through here.
+var scaffoldingLineRe = regexp.MustCompile(`(?i)^\s*(?:` +
+	// preamble that announces the deliverable
+	`(?:sure|certainly|of course|absolutely)?[,.!]?\s*(?:here'?s|here is|below is|below you'?ll find|this is)\b[^.]*\b(?:article|post|blog|markdown|draft|revision|version|rewrite|plan)\b` +
+	`|` +
+	// explicit assistant action on the deliverable
+	`(?:i'?ll|i will|i have|i'?ve|let me)\b[^.]*\b(?:write|written|draft(?:ed)?|deliver(?:ed|ing)?|provide[d]?|revis(?:e|ed)|save[d]?|paste[d]?)\b` +
+	`|` +
+	// narrated file-write refusal ("the write to output/ wasn't permitted…")
+	`.*\bwrite\b[^.]*\b(?:was|wasn'?t|were|weren'?t)\b[^.]*\b(?:permitted|denied|declined|allowed|rejected)\b` +
+	`|` +
+	// trailing offers / sign-offs
+	`(?:let me know\b|if you'?d like\b|if you would like\b|feel free to\b|would you like me\b|hope (?:this|it) helps\b|as requested\b|executing the plan\b|delivering it inline\b|i can save this\b)` +
+	`).*$`)
+
+// stripConversationalScaffolding removes chat scaffolding that a model may place
+// before or after the article body: a preamble, a trailing offer, or a bare
+// horizontal rule used to fence the article. It only strips leading/trailing
+// lines that are blank, a lone rule, or match scaffoldingLineRe, and stops at
+// the first real content on each end — so article prose is never touched.
+func stripConversationalScaffolding(body string) string {
+	lines := strings.Split(body, "\n")
+	strip := func(s string) bool {
+		t := strings.TrimSpace(s)
+		return t == "" || t == "---" || t == "***" || t == "___" || scaffoldingLineRe.MatchString(t)
+	}
+	start, end := 0, len(lines)
+	for start < end && strip(lines[start]) {
+		start++
+	}
+	for end > start && strip(lines[end-1]) {
+		end--
+	}
+	return strings.TrimSpace(strings.Join(lines[start:end], "\n"))
 }
 
 // diagramSection renders the architecture-diagram appendix from the release's
