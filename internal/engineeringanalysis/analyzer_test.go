@@ -128,3 +128,34 @@ func TestGroundingBlockRoundTrips(t *testing.T) {
 		t.Error("zero EngineeringContext should render an empty grounding block")
 	}
 }
+
+func TestAnalyzeUsesFallbackWhenPrimaryEmpty(t *testing.T) {
+	primary := &fakeModel{out: `{}`}      // parses, but empty
+	fallback := &fakeModel{out: goodJSON} // populated
+	a := &Analyzer{Model: primary, Fallback: fallback}
+	ec, err := a.Analyze(context.Background(), sampleContext())
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if ec.IsZero() {
+		t.Error("expected the fallback's populated analysis")
+	}
+	if fallback.prompt == "" {
+		t.Error("fallback model was not invoked")
+	}
+	if ec.Release.Version != "v0.3.0" {
+		t.Errorf("release not stamped: %+v", ec.Release)
+	}
+}
+
+func TestAnalyzeSkipsFallbackWhenPrimaryPopulated(t *testing.T) {
+	primary := &fakeModel{out: goodJSON}
+	fallback := &fakeModel{out: goodJSON}
+	a := &Analyzer{Model: primary, Fallback: fallback}
+	if _, err := a.Analyze(context.Background(), sampleContext()); err != nil {
+		t.Fatal(err)
+	}
+	if fallback.prompt != "" {
+		t.Error("fallback must not run when the primary analysis is non-empty")
+	}
+}

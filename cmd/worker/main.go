@@ -210,7 +210,7 @@ func main() {
 			Logger:  a.Logger,
 		},
 		// Stage 2: extract the structured engineering analysis with the local model.
-		Analyzer: &engineeringanalysis.Analyzer{Model: analysisModel, Logger: a.Logger},
+		Analyzer: &engineeringanalysis.Analyzer{Model: analysisModel, Fallback: providers[airouter.ProviderClaude], Logger: a.Logger},
 		// Stage 3: the writer model produces the FULL artifact set (blog → storyboard
 		// → voice-over → YouTube → Shorts → TikTok → visual assets → SEO →
 		// architecture → LinkedIn → X thread), all grounded in the analysis and gated
