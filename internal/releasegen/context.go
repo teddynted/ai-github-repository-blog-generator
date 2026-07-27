@@ -8,6 +8,56 @@ import (
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
 
+// writeArchitectureGraph renders the repository's most informative Mermaid
+// diagrams as a plain component graph (named nodes + directed edges). It is the
+// grounding that lets the writer describe the real architecture — the actual
+// components and how they connect — rather than a generic "two components"
+// summary. It selects the diagrams with the most edges (the richest ones) and
+// caps volume so the grounding block stays compact.
+func writeArchitectureGraph(b *strings.Builder, diagrams []rc.MermaidDiagram) {
+	const maxGraphDiagrams, maxGraphEdges = 2, 24
+	ranked := make([]rc.MermaidDiagram, 0, len(diagrams))
+	for _, d := range diagrams {
+		if len(d.Edges) > 0 {
+			ranked = append(ranked, d)
+		}
+	}
+	if len(ranked) == 0 {
+		return
+	}
+	sort.SliceStable(ranked, func(i, j int) bool { return len(ranked[i].Edges) > len(ranked[j].Edges) })
+
+	b.WriteString("\n## Architecture graph (components and relationships, from the repository's diagrams)\n")
+	for i, d := range ranked {
+		if i >= maxGraphDiagrams {
+			break
+		}
+		src := d.Source
+		if src == "" {
+			src = "diagram"
+		}
+		if s := strings.TrimSpace(d.Summary); s != "" {
+			fmt.Fprintf(b, "%s — %s\n", src, s)
+		} else {
+			fmt.Fprintf(b, "%s\n", src)
+		}
+		if len(d.Nodes) > 0 {
+			fmt.Fprintf(b, "Components: %s\n", strings.Join(d.Nodes, ", "))
+		}
+		edges := d.Edges
+		if len(edges) > maxGraphEdges {
+			edges = edges[:maxGraphEdges]
+		}
+		for _, e := range edges {
+			if e.Label != "" {
+				fmt.Fprintf(b, "  %s -> %s [%s]\n", e.From, e.To, e.Label)
+			} else {
+				fmt.Fprintf(b, "  %s -> %s\n", e.From, e.To)
+			}
+		}
+	}
+}
+
 // contextBlock renders the parts of a ReleaseContext most useful for grounding
 // a content prompt into a compact, readable block. It deliberately favours the
 // curated, high-signal fields (summaries, changelog, implementation,
@@ -81,6 +131,11 @@ func contextBlock(c *rc.ReleaseContext) string {
 		writeList(&b, "Event-driven flows:", c.Architecture.EventDrivenFlows)
 		writeList(&b, "Insights:", c.Architecture.Insights)
 	}
+
+	// The concrete component graph from the repository's own diagrams — so the
+	// writer names the ACTUAL components and relationships (routers, queues,
+	// providers, services) instead of abstracting to "two components".
+	writeArchitectureGraph(&b, c.Mermaid)
 
 	if names := technologyNames(c); len(names) > 0 {
 		line("\n## Technologies")
