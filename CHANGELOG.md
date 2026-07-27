@@ -10,6 +10,53 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.21.1] - 2026-07-27
+
+### Features
+
+- **ami:** match the Packer builder to the CPU worker (t3.xlarge, GPU off)
+- **ami:** match the Packer builder to the CPU worker (t3.xlarge, GPU off)
+- **archspec:** add AWS Architecture Diagram Specification artifact
+- **blog:** generate timeless topic-based articles, not release notes
+- **compute:** add instance metrics, health probe, and per-service log streams
+- **compute:** own a dedicated content bucket instead of reusing artifacts
+- **compute:** ship instance boot + worker + ollama logs to CloudWatch
+- **content-admin:** operator CLI for history/compare/rollback/promote-latest (Phase 4)
+- **contentmeta:** publish per-release metadata.json with provenance (Phase 2)
+- **deploy:** publish generated content to S3 by default
+- **experiments:** experiments/ namespace for A/B runs (Phase 5)
+- **infra:** production storage foundation for generated content (Phase 1)
+- **pipeline:** split content generation into Ollama analysis + Claude writing
+- **publish:** make releases first-class in the output path
+- **publish:** promote approved releases to latest/ (Phase 3)
+- **releasegen:** align the blog prompt with the technical-writer standards
+- **releasegen:** plan-then-write blog generation to kill release-note narration
+- **routing:** hybrid AI routing — Claude for high-value, Ollama for commodity
+- **routing:** wire AI_ROUTING_RULES through compute.yaml + deploy.yml
+- **svgdiagram:** render architecture diagrams to self-contained SVG
+- **writer:** add Anthropic API as a Claude writer provider
+
+### Bug Fixes
+
+- **ami:** install AWS CLI v2 from the official bundle, not the apt package
+- **ami:** isolate Packer templates into subdirs so build-ami stops colliding
+- **ami:** isolate Packer templates into subdirs so build-ami stops colliding
+- **ami:** retry base-tools apt install to survive transient mirror skew
+- **ci:** run build-ami in the production environment so OIDC AssumeRole works
+- **compute:** silence the unused SSM agent
+- **compute:** size the worker root volume to 40GB to match the baked AMI
+- **infra:** allow cross-region Bedrock inference profiles for the writer
+- **infra:** create the content bucket in bootstrap, not compute
+- **ollama:** configurable inference timeout; raise default 5m→15m
+- **pipeline:** salvage empty analysis via fallback + drop junk blog tags
+- **reposource:** clone deep enough to read commit history
+- **worker:** fall back to the local writer when Bedrock invocation fails
+
+### Documentation
+
+- **monitoring:** document the /blog-gen/instance log streams and live tail
+
+
 ## [0.21.0] - 2026-07-24
 
 ### Features
