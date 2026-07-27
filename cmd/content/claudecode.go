@@ -16,10 +16,17 @@ import (
 //
 // The prompt is passed on stdin (blog prompts are several KB — larger than is
 // comfortable on argv), and the completion is read from stdout.
+//
+// File-writing tools are disabled: without them the CLI runs in the repo and
+// tries to Write the artifact to disk, is denied, and narrates that refusal
+// ("the write wasn't permitted, delivering inline…") straight into the article
+// body. We only want the generated text, so we deny those tools and the model
+// returns prose with no chat scaffolding.
 type claudeCodeModel struct{ bin string }
 
 func (m claudeCodeModel) Generate(ctx context.Context, prompt string) (string, error) {
-	cmd := exec.CommandContext(ctx, m.bin, "-p")
+	cmd := exec.CommandContext(ctx, m.bin, "-p",
+		"--disallowedTools", "Write,Edit,NotebookEdit")
 	cmd.Stdin = strings.NewReader(prompt)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
