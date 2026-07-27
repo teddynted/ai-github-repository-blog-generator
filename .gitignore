@@ -19,3 +19,7 @@ coverage.*
 .DS_Store
 .idea/
 .vscode/
+
+# Local content development (cmd/content)
+/output/
+/.cache/

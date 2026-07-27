@@ -10,7 +10,8 @@ DIST     := dist
 
 HOOKS    := scripts/hooks
 
-.PHONY: all fmt fmt-check vet lint test tidy build build-worker build-release release clean check lint-cfn hooks act deploy-scheduler
+.PHONY: all fmt fmt-check vet lint test tidy build build-worker build-release release clean check lint-cfn hooks act deploy-scheduler \
+        content-local blog-local architecture-local linkedin-local prompt validate-content snapshot snapshot-update
 
 all: check
 
@@ -83,6 +84,45 @@ release: build-release
 deploy-scheduler:
 	./scripts/deploy-scheduler.sh
 
+# ── Local content development & prompt testing ────────────────────────────────
+# Override on the command line, e.g.:
+#   make blog-local CONTENT_PROVIDER=anthropic CONTENT_FIXTURE=fixtures/v0.3.0.json
+CONTENT_PROVIDER ?= ollama
+CONTENT_FIXTURE  ?= fixtures/v0.3.0.json
+CONTENT_OUT      ?= output
+
+## content-local: generate every artifact locally from a fixture
+content-local:
+	$(GO) run ./cmd/content --artifact all --provider $(CONTENT_PROVIDER) --context $(CONTENT_FIXTURE) --output $(CONTENT_OUT) --verbose
+
+## blog-local: generate just the blog locally
+blog-local:
+	$(GO) run ./cmd/content --artifact blog --provider $(CONTENT_PROVIDER) --context $(CONTENT_FIXTURE) --output $(CONTENT_OUT) --verbose
+
+## architecture-local: generate the architecture article locally
+architecture-local:
+	$(GO) run ./cmd/content --artifact architecture --provider $(CONTENT_PROVIDER) --context $(CONTENT_FIXTURE) --output $(CONTENT_OUT) --verbose
+
+## linkedin-local: generate the LinkedIn post locally
+linkedin-local:
+	$(GO) run ./cmd/content --artifact linkedin --provider $(CONTENT_PROVIDER) --context $(CONTENT_FIXTURE) --output $(CONTENT_OUT) --verbose
+
+## prompt: interactive prompt playground (choose provider/artifact/fixture)
+prompt:
+	$(GO) run ./cmd/content playground
+
+## validate-content: validate already-generated artifacts in $(CONTENT_OUT)
+validate-content:
+	$(GO) run ./cmd/content validate --output $(CONTENT_OUT)
+
+## snapshot: deterministic content snapshot regression test
+snapshot:
+	$(GO) test ./cmd/content -run TestSnapshots
+
+## snapshot-update: intentionally refresh content snapshots
+snapshot-update:
+	UPDATE_SNAPSHOTS=1 $(GO) test ./cmd/content -run TestSnapshots
+
 ## clean: remove build artifacts
 clean:
-	rm -rf $(DIST)
+	rm -rf $(DIST) $(CONTENT_OUT) .cache
