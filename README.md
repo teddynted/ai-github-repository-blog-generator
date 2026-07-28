@@ -469,15 +469,34 @@ BLOG=output/releases/v0.3.0/blog.md      # the file Stage 2 reads
 go run ./cmd/content --artifact all --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
 ```
 
-…or one artifact at a time (subsequent steps). `--hybrid` routes each kind
-correctly — the premium four to `claude-code`, the transforms to Ollama:
+…or one artifact at a time (subsequent steps). A single `--artifact <kind>` runs
+**only that stage plus its real dependencies** — not the whole suite — and
+`--hybrid` routes each kind correctly (premium → `claude-code`, transforms →
+Ollama). `--from-blog` supplies the blog dependency for free, so the cost of each
+command is just the remaining stages in its chain:
+
+| `--artifact`                | Also runs (dependencies)                                             | Provider mix |
+| --------------------------- | ------------------------------------------------------------------- | ------------ |
+| `architecture-diagram-spec` | — (blog only)                                                       | claude       |
+| `architecture`              | `storyboard`                                                        | claude + Ollama |
+| `storyboard`                | — (blog only)                                                       | Ollama       |
+| `voiceover`                 | `storyboard`                                                        | Ollama       |
+| `youtube`                   | `storyboard`, `voiceover`                                           | Ollama       |
+| `seo-metadata`              | the full `storyboard→voiceover→youtube→…→visual-assets` chain       | Ollama       |
+| `linkedin` / `x-thread`     | almost everything (`architecture` + the full SEO chain)             | claude + Ollama |
+
+> [!NOTE]
+> `architecture` consumes the storyboard's repo/release labels, so it pulls in one
+> Ollama `storyboard` step. `seo-metadata`, `linkedin`, and `x-thread` sit at the
+> end of the dependency graph and expand to most of the suite — for those, prefer
+> `--artifact all` (one storyboard, shared) over separate per-artifact runs.
 
 ```bash
 # blog-only, premium (→ claude-code)
-go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
 go run ./cmd/content --artifact architecture-diagram-spec --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
-go run ./cmd/content --artifact linkedin                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
-go run ./cmd/content --artifact x-thread                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
+go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + storyboard
+go run ./cmd/content --artifact linkedin                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + full chain
+go run ./cmd/content --artifact x-thread                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + full chain
 
 # transforms (→ Ollama; --no-cache exercises the num_predict cap)
 go run ./cmd/content --artifact seo-metadata   --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -130,6 +131,57 @@ type Orchestrator struct {
 	MaxPosts       int
 	MaxThreads     int
 	PostsPerThread int
+	// Only, when non-empty, restricts the run to the named stages plus their
+	// transitive dependencies; every other stage is skipped (not generated, not
+	// recorded). When nil/empty, all stages run — fully backward compatible, so
+	// the cloud pipeline (which never sets it) is unchanged. Used by the local
+	// --from-blog per-artifact workflow so requesting one artifact no longer runs
+	// the entire suite. Unknown stage names contribute only themselves.
+	Only map[string]bool
+}
+
+// stageDeps maps each stage to the stages whose output it consumes, mirroring the
+// data flow in Run (the s.* fields each generator reads). It drives Orchestrator.Only:
+// the minimal set to execute is the requested stages plus this graph's transitive
+// closure. Keep it in sync with Run.
+var stageDeps = map[string][]string{
+	"blog":                      nil,
+	"storyboard":                {"blog"},
+	"voiceover":                 {"storyboard"},
+	"youtube":                   {"voiceover"},
+	"youtube-shorts":            {"youtube"},
+	"tiktok":                    {"youtube-shorts"},
+	"visual-assets":             {"tiktok"},
+	"seo-metadata":              {"visual-assets"},
+	"architecture":              {"storyboard"},
+	"linkedin":                  {"architecture", "seo-metadata"},
+	"x-thread":                  {"architecture", "seo-metadata"},
+	"architecture-diagram-spec": {"blog"},
+	"architecture-diagram":      {"blog"},
+}
+
+// activeStages returns the set of stages to execute. A nil result means "run
+// everything" (Only unset); otherwise it is each requested stage expanded over
+// stageDeps to include its transitive dependencies.
+func (o *Orchestrator) activeStages() map[string]bool {
+	if len(o.Only) == 0 {
+		return nil
+	}
+	active := map[string]bool{}
+	var add func(string)
+	add = func(stage string) {
+		if active[stage] {
+			return
+		}
+		active[stage] = true
+		for _, dep := range stageDeps[stage] {
+			add(dep)
+		}
+	}
+	for stage := range o.Only {
+		add(stage)
+	}
+	return active
 }
 
 // model returns the model for a stage: the router's per-kind choice when
@@ -155,7 +207,20 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		Offline:       o.Model == nil,
 	}}
 
+	// active reports whether a stage should run: nil ⇒ every stage (default);
+	// otherwise the requested stages plus their transitive dependencies (Only).
+	active := o.activeStages()
+	run := func(stage string) bool { return active == nil || active[stage] }
+	if active != nil && o.Logger != nil {
+		o.Logger.Info("stage selection", "requested", sortedKeys(o.Only), "running", sortedKeys(active))
+	}
+
 	// --- M3 Blog (foundational) ---
+	if !run("blog") {
+		// Nothing selected depends on the blog (only possible for unknown stage
+		// names); there is nothing to derive, so return the empty suite.
+		return s
+	}
 	if blog != nil {
 		s.Blog = *blog
 		blogOut := stageOutcome{name: "blog", milestone: 3, filename: "01-blog.md", status: StageOK, md: s.Blog.Markdown}
@@ -172,18 +237,22 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	}
 
 	// --- M4 Storyboard (blog + context) ---
-	s.record(o.run("storyboard", 4, "02-storyboard.md", func() (string, error) {
-		sb, err := (&storyboard.Generator{Model: o.model("storyboard")}).Storyboard(ctx, s.Blog, rctx)
-		s.Storyboard = sb
-		return sb.Markdown(), err
-	}))
+	if run("storyboard") {
+		s.record(o.run("storyboard", 4, "02-storyboard.md", func() (string, error) {
+			sb, err := (&storyboard.Generator{Model: o.model("storyboard")}).Storyboard(ctx, s.Blog, rctx)
+			s.Storyboard = sb
+			return sb.Markdown(), err
+		}))
+	}
 
 	// --- M5 Voice-over (storyboard) ---
-	s.record(o.run("voiceover", 5, "03-voiceover.md", func() (string, error) {
-		vo, err := (&voiceover.Generator{Model: o.model("voiceover")}).VoiceOver(ctx, s.Storyboard)
-		s.VoiceOver = vo
-		return vo.Markdown(), err
-	}))
+	if run("voiceover") {
+		s.record(o.run("voiceover", 5, "03-voiceover.md", func() (string, error) {
+			vo, err := (&voiceover.Generator{Model: o.model("voiceover")}).VoiceOver(ctx, s.Storyboard)
+			s.VoiceOver = vo
+			return vo.Markdown(), err
+		}))
+	}
 
 	// --- M11 Architecture (context+blog+storyboard) runs CONCURRENTLY with the
 	// M6→M10 chain: it depends only on the blog + storyboard (both ready), not on
@@ -191,122 +260,161 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	// SEO) so the manifest/artifact order stays deterministic regardless of timing.
 	var wg sync.WaitGroup
 	var archOut stageOutcome
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		archOut = o.run("architecture", 11, "09-architecture.md", func() (string, error) {
-			col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
+	archActive := run("architecture")
+	if archActive {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			archOut = o.run("architecture", 11, "09-architecture.md", func() (string, error) {
+				col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
+				})
+				s.Architecture = col
+				return col.Markdown(), err
 			})
-			s.Architecture = col
-			return col.Markdown(), err
-		})
-	}()
+		}()
+	}
 
 	// --- M6 YouTube script (context+blog+storyboard+voiceover) ---
-	s.record(o.run("youtube", 6, "04-youtube-script.md", func() (string, error) {
-		sc, err := (&youtube.Generator{Model: o.model("youtube")}).YouTube(ctx, youtube.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver,
-		})
-		s.YouTube = sc
-		return sc.Markdown(), err
-	}))
+	if run("youtube") {
+		s.record(o.run("youtube", 6, "04-youtube-script.md", func() (string, error) {
+			sc, err := (&youtube.Generator{Model: o.model("youtube")}).YouTube(ctx, youtube.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver,
+			})
+			s.YouTube = sc
+			return sc.Markdown(), err
+		}))
+	}
 
 	// --- M7 YouTube Shorts (+youtube) ---
-	s.record(o.run("youtube-shorts", 7, "05-youtube-shorts.md", func() (string, error) {
-		col, err := (&shorts.Generator{Model: o.model("youtube-shorts"), MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-		})
-		s.Shorts = col
-		return col.Markdown(), err
-	}))
+	if run("youtube-shorts") {
+		s.record(o.run("youtube-shorts", 7, "05-youtube-shorts.md", func() (string, error) {
+			col, err := (&shorts.Generator{Model: o.model("youtube-shorts"), MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+			})
+			s.Shorts = col
+			return col.Markdown(), err
+		}))
+	}
 
 	// --- M8 TikTok (+shorts) ---
-	s.record(o.run("tiktok", 8, "06-tiktok.md", func() (string, error) {
-		col, err := (&tiktok.Generator{Model: o.model("tiktok"), MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts,
-		})
-		s.TikTok = col
-		return col.Markdown(), err
-	}))
+	if run("tiktok") {
+		s.record(o.run("tiktok", 8, "06-tiktok.md", func() (string, error) {
+			col, err := (&tiktok.Generator{Model: o.model("tiktok"), MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts,
+			})
+			s.TikTok = col
+			return col.Markdown(), err
+		}))
+	}
 
 	// --- M9 Visual Assets (+tiktok) ---
-	s.record(o.run("visual-assets", 9, "07-visual-assets.md", func() (string, error) {
-		col, err := (&visualassets.Generator{Model: o.model("visual-assets"), MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok,
-		})
-		s.VisualAssets = col
-		return col.Markdown(), err
-	}))
+	if run("visual-assets") {
+		s.record(o.run("visual-assets", 9, "07-visual-assets.md", func() (string, error) {
+			col, err := (&visualassets.Generator{Model: o.model("visual-assets"), MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok,
+			})
+			s.VisualAssets = col
+			return col.Markdown(), err
+		}))
+	}
 
 	// --- M10 SEO metadata (+visual assets) ---
-	s.record(o.run("seo-metadata", 10, "08-seo-metadata.md", func() (string, error) {
-		m, err := (&seo.Generator{Model: o.model("seo-metadata")}).SEO(ctx, seo.ReleasePackage{
-			Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets,
-		})
-		s.SEO = m
-		return m.Markdown(), err
-	}))
+	if run("seo-metadata") {
+		s.record(o.run("seo-metadata", 10, "08-seo-metadata.md", func() (string, error) {
+			m, err := (&seo.Generator{Model: o.model("seo-metadata")}).SEO(ctx, seo.ReleasePackage{
+				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets,
+			})
+			s.SEO = m
+			return m.Markdown(), err
+		}))
+	}
 
 	// Join the architecture branch and record it at its canonical position (11).
 	wg.Wait()
-	s.record(archOut)
+	if archActive {
+		s.record(archOut)
+	}
 
 	// --- M12 LinkedIn and M13 X thread both depend on everything above but NOT on
 	// each other, so they run concurrently; results are recorded in canonical order.
 	var liOut, xtOut stageOutcome
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		liOut = o.run("linkedin", 12, "10-linkedin.md", func() (string, error) {
-			col, err := (&linkedin.Generator{Model: o.model("linkedin"), MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-				Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+	liActive, xtActive := run("linkedin"), run("x-thread")
+	if liActive {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			liOut = o.run("linkedin", 12, "10-linkedin.md", func() (string, error) {
+				col, err := (&linkedin.Generator{Model: o.model("linkedin"), MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+					Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+				})
+				s.LinkedIn = col
+				return col.Markdown(), err
 			})
-			s.LinkedIn = col
-			return col.Markdown(), err
-		})
-	}()
-	go func() {
-		defer wg.Done()
-		xtOut = o.run("x-thread", 13, "11-x-thread.md", func() (string, error) {
-			col, err := (&xthread.Generator{Model: o.model("x-thread"), MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-				Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+		}()
+	}
+	if xtActive {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			xtOut = o.run("x-thread", 13, "11-x-thread.md", func() (string, error) {
+				col, err := (&xthread.Generator{Model: o.model("x-thread"), MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+					Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+				})
+				s.XThread = col
+				return col.Markdown(), err
 			})
-			s.XThread = col
-			return col.Markdown(), err
-		})
-	}()
+		}()
+	}
 	wg.Wait()
-	s.record(liOut)
-	s.record(xtOut)
+	if liActive {
+		s.record(liOut)
+	}
+	if xtActive {
+		s.record(xtOut)
+	}
 
 	// --- M14 AWS Architecture Diagram Specification (context + blog topic) ---
 	// A separate, renderer-facing artifact (NOT appended to the blog): a
 	// repository-grounded spec a downstream pipeline turns into an AWS diagram.
 	// Skipped gracefully when the repository has no groundable AWS evidence.
-	s.record(o.run("architecture-diagram-spec", 14, "12-architecture-diagram-spec.md", func() (string, error) {
-		spec, err := (&archspec.Generator{Model: o.model("architecture-diagram-spec"), Logger: o.Logger}).Spec(ctx, archspec.ReleasePackage{
-			Context: rctx, Blog: s.Blog,
-		})
-		s.DiagramSpec = spec
-		return spec.Markdown(), err
-	}))
+	if run("architecture-diagram-spec") {
+		s.record(o.run("architecture-diagram-spec", 14, "12-architecture-diagram-spec.md", func() (string, error) {
+			spec, err := (&archspec.Generator{Model: o.model("architecture-diagram-spec"), Logger: o.Logger}).Spec(ctx, archspec.ReleasePackage{
+				Context: rctx, Blog: s.Blog,
+			})
+			s.DiagramSpec = spec
+			return spec.Markdown(), err
+		}))
+	}
 
 	// --- M15 Architecture diagram (SVG) ---
 	// A deterministic, self-contained SVG rendering of the repository's
 	// architecture diagrams (the Mermaid flows the blog embeds, or a grounded
 	// CFN/service graph). Skipped when the release has no diagrammable evidence.
-	s.record(o.runExt("architecture-diagram", 15, "13-architecture-diagram.svg", "svg", func() (string, error) {
-		graphs := diagramGraphs(rctx)
-		if len(graphs) == 0 {
-			return "", errNoDiagram
-		}
-		return svgdiagram.RenderDocument(diagramTitle(rctx, s.Blog), graphs), nil
-	}))
+	if run("architecture-diagram") {
+		s.record(o.runExt("architecture-diagram", 15, "13-architecture-diagram.svg", "svg", func() (string, error) {
+			graphs := diagramGraphs(rctx)
+			if len(graphs) == 0 {
+				return "", errNoDiagram
+			}
+			return svgdiagram.RenderDocument(diagramTitle(rctx, s.Blog), graphs), nil
+		}))
+	}
 
 	return s
+}
+
+// sortedKeys returns the map's keys in deterministic order, for stable logging.
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // errNoDiagram signals the release has nothing diagrammable, so the SVG stage

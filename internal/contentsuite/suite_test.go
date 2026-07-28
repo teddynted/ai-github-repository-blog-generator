@@ -177,6 +177,64 @@ func TestOrchestratorGeneratesBlogWhenNilAndModelPresent(t *testing.T) {
 	}
 }
 
+func stageNames(s *Suite) map[string]bool {
+	got := map[string]bool{}
+	for _, st := range s.Manifest.Stages {
+		got[st.Name] = true
+	}
+	return got
+}
+
+func TestOrchestratorOnlyRunsSelectedStagePlusDependencies(t *testing.T) {
+	cases := []struct {
+		name string
+		only string
+		want []string // exact set of stages that should run
+	}{
+		// architecture pulls in blog + storyboard only — not the YouTube chain,
+		// SEO, LinkedIn, X, or the diagram artifacts.
+		{"architecture", "architecture", []string{"blog", "storyboard", "architecture"}},
+		// the diagram spec grounds on the blog alone.
+		{"diagram-spec", "architecture-diagram-spec", []string{"blog", "architecture-diagram-spec"}},
+		// seo sits at the end of the storyboard→voiceover→youtube→…→seo chain.
+		{"seo", "seo-metadata", []string{
+			"blog", "storyboard", "voiceover", "youtube", "youtube-shorts",
+			"tiktok", "visual-assets", "seo-metadata",
+		}},
+		// linkedin consumes architecture + seo, so it expands to nearly everything
+		// except x-thread and the diagram artifacts.
+		{"linkedin", "linkedin", []string{
+			"blog", "storyboard", "voiceover", "youtube", "youtube-shorts",
+			"tiktok", "visual-assets", "seo-metadata", "architecture", "linkedin",
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			o := &Orchestrator{Only: map[string]bool{tc.only: true}}
+			s := o.Run(context.Background(), sampleContext(), wellFormedBlog())
+			got := stageNames(s)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ran %d stages %v, want %d %v", len(got), sortedKeys(got), len(tc.want), tc.want)
+			}
+			for _, w := range tc.want {
+				if !got[w] {
+					t.Errorf("expected stage %q to run; ran %v", w, sortedKeys(got))
+				}
+			}
+			// The requested artifact must actually be produced.
+			var produced bool
+			for _, a := range s.Artifacts() {
+				if a.Kind == tc.only {
+					produced = true
+				}
+			}
+			if !produced {
+				t.Errorf("requested artifact %q was not produced", tc.only)
+			}
+		})
+	}
+}
+
 // fakeModel returns deterministic Markdown so the blog stage succeeds offline-free.
 type fakeModel struct{}
 
