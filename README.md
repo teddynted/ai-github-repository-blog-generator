@@ -500,6 +500,16 @@ for a in seo-metadata storyboard voiceover youtube youtube-shorts tiktok visual-
 done
 ```
 
+…or run the whole two-stage workflow with the ready-made script (Stage 1 blog +
+Stage 2 downstream; defaults to v0.14.0):
+
+```bash
+scripts/generate-content.sh                 # v0.14.0
+RELEASE=v0.11.0 scripts/generate-content.sh # another release
+FAST=1 scripts/generate-content.sh          # one `--artifact all` run (storyboard once)
+FORCE_BLOG=1 scripts/generate-content.sh    # regenerate the blog too
+```
+
 **Notes.**
 
 - `--from-blog` requires `--artifact` ≠ `blog` (there's nothing to derive).
