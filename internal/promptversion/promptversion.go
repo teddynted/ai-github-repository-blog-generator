@@ -12,7 +12,7 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      12, // concise 13-section publication format (Why This Matters … Conclusion); paragraph/sentence concision + summary table
+	"blog":                      13, // quality pass: terminology consistency, control-vs-data plane clarity, no invented orchestration, section flow
 	"architecture":              2,
 	"linkedin":                  2,
 	"x-thread":                  2,
