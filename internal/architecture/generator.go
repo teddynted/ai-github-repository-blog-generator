@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -142,10 +143,10 @@ func platformOverview(pkg ReleasePackage, a analysis) string {
 	if pkg.Context == nil {
 		return ""
 	}
-	overview := firstNonEmpty(
+	overview := sanitizeOverview(firstNonEmpty(
 		strings.TrimSpace(pkg.Context.Architecture.Overview),
 		strings.TrimSpace(pkg.Context.RepositoryStructure.Overview),
-	)
+	))
 	if overview == "" {
 		return ""
 	}
@@ -157,6 +158,26 @@ func platformOverview(pkg ReleasePackage, a analysis) string {
 			joinAndArch(a.Inference.Cloud) + "). " + overview
 	}
 	return overview
+}
+
+// fileCountRe matches a "of N files" clause so it can be stripped — a
+// repository-level architecture document should not embed a file count.
+var fileCountRe = regexp.MustCompile(`(?i)\s*of\s+\d+\s+files?`)
+
+// sanitizeOverview repairs artifacts left by thin/older release contexts: the
+// empty-AWS-service " on ." fragment, an embedded file count, and any resulting
+// double spaces or stray " ." so the overview reads as clean prose.
+func sanitizeOverview(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = strings.ReplaceAll(s, " on .", ".") // empty AWS-service list artifact
+	s = strings.ReplaceAll(s, " on ,", ",")
+	s = fileCountRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, " .", ".")
+	s = strings.ReplaceAll(s, " ,", ",")
+	s = strings.Join(strings.Fields(s), " ") // collapse whitespace
+	return strings.TrimSpace(s)
 }
 
 func collectWarnings(a analysis) []string {

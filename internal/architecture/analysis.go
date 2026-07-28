@@ -8,15 +8,16 @@ import (
 
 // analysis is the grounded infrastructure summary the diagram builders consume.
 type analysis struct {
-	Services   []serviceNode // resolved AWS services (grounded)
-	ByCategory map[string][]string
-	Flows      []string         // event-driven flow descriptions
-	Resources  []rc.CFNResource // CloudFormation resources
-	Templates  []string
-	Dirs       []rc.DirectoryInfo
-	Mermaid    []rc.MermaidDiagram
-	HasCICD    bool
-	Inference  inference // grounded local/cloud AI-inference providers
+	Services    []serviceNode // resolved AWS services (grounded)
+	ByCategory  map[string][]string
+	Flows       []string         // event-driven flow descriptions
+	Resources   []rc.CFNResource // CloudFormation resources
+	Templates   []string
+	Dirs        []rc.DirectoryInfo
+	Mermaid     []rc.MermaidDiagram
+	HasCICD     bool
+	EventDriven bool      // grounded: messaging/event services, flows, or the overview says so
+	Inference   inference // grounded local/cloud AI-inference providers
 }
 
 // serviceNode is a resolved AWS service with its catalogue info.
@@ -85,6 +86,14 @@ func analyze(pkg ReleasePackage) analysis {
 	a.Services = uniqueServices(a.Services)
 
 	a.HasCICD = detectCICD(c)
+	// Event-driven when messaging/event services or flows are present, or when the
+	// context's own architecture prose describes the system as event-driven.
+	prose := strings.ToLower(c.Architecture.Overview + " " + c.Architecture.DeploymentTopology)
+	a.EventDriven = len(a.Flows) > 0 ||
+		len(a.categoryServices("Messaging")) > 0 ||
+		len(a.categoryServices("Integration")) > 0 ||
+		strings.Contains(prose, "event-driven") ||
+		strings.Contains(prose, "event driven")
 	a.Inference = detectInference(pkg, a) // after services are resolved
 	return a
 }
