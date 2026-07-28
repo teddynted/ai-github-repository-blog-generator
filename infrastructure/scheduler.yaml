@@ -157,11 +157,15 @@ Parameters:
     Description: Attach the Lambda to a VPC so it can reach the instance's private n8n/Ollama ports. Required for the app-level checks.
   IdleSubnetIds:
     Type: CommaDelimitedList
-    Default: ""
+    # Placeholder default matches the subnet-id pattern so cfn-lint does not flag
+    # it; it is only ever referenced under IdleWithVpc, so supply real subnet IDs
+    # when IdleUseVpc=true.
+    Default: "subnet-00000000"
     Description: Subnet IDs for the Lambda ENI (only when IdleUseVpc=true).
   IdleSecurityGroupIds:
     Type: CommaDelimitedList
-    Default: ""
+    # Placeholder default (see IdleSubnetIds); supply real SG IDs when IdleUseVpc=true.
+    Default: "sg-00000000"
     Description: Security groups allowing the Lambda to reach the instance on 5678/11434 (only when IdleUseVpc=true).
 
 Conditions:
@@ -469,13 +473,6 @@ Resources:
     Type: AWS::Lambda::Function
     Condition: CreateIdleStop
     DependsOn: IdleStopLogGroup
-    Metadata:
-      # The VpcConfig subnet/SG lists are only referenced under IdleWithVpc; with
-      # IdleUseVpc=false their empty CommaDelimitedList default is never used, but
-      # cfn-lint resolves the Ref statically and flags the empty value (W1030).
-      cfn-lint:
-        config:
-          ignore_checks: [W1030]
     Properties:
       FunctionName: !Sub "${ProjectName}-idle-stop"
       Description: Stops the target EC2 instance after sustained idleness.
