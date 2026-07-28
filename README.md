@@ -393,7 +393,9 @@ go run ./cmd/content --artifact blog --provider anthropic --context fixtures/v0.
 make prompt
 ```
 
-Outputs are written to `output/<kind>.md` (and `.svg` for the diagram).
+Outputs are written to `output/releases/<version>/<kind>.md` (and `.svg` for the
+diagram), where `<version>` is the release tag — each release version gets its
+own folder.
 
 ### Providers
 
@@ -413,12 +415,33 @@ To iterate on prompts without spending API credits, use `--provider claude-code`
 at all). Keep the cache on (omit `--no-cache`) so repeated identical runs replay
 from `.cache/`.
 
+### Hybrid routing (Claude premium + Ollama transforms)
+
+`--hybrid` (best with `--artifact all`) routes each artifact by the same per-kind
+policy the worker uses (`internal/airouter.DefaultRules`): the reasoning-heavy
+assets (blog, architecture, architecture-diagram-spec, linkedin, x-thread) via
+`claude-code`, and the template transforms (storyboard, voiceover, youtube,
+youtube-shorts, tiktok, visual-assets, seo-metadata) via Ollama. Every prompt
+stays in the Go generators, so local hybrid output matches production routing
+with no drift.
+
+```bash
+go run ./cmd/content --artifact all --hybrid --no-history \
+  --context fixtures/designing-v0.3.0.json
+```
+
+The Ollama transform model defaults to `--model` / `OLLAMA_MODEL` / `llama3.2:1b`.
+Each run prints the routing policy up front and logs progress per artifact (with
+a 15s heartbeat during long generations); `--hybrid --dry-run` previews the
+policy without calling any provider.
+
 ### Flags
 
 `--artifact` (blog, architecture, linkedin, x-thread, storyboard, voiceover,
 youtube, youtube-shorts, tiktok, visual-assets, seo-metadata, or `all`),
-`--provider`, `--context`, `--output`, `--temperature`, `--max-tokens`,
-`--system`, `--dry-run`, `--verbose`, `--no-cache`.
+`--provider`, `--hybrid`, `--context`, `--output`, `--model`, `--temperature`,
+`--max-tokens`, `--system`, `--dry-run`, `--no-history`, `--verbose`,
+`--no-cache`.
 
 ### Fixtures
 
@@ -428,17 +451,19 @@ Add new ones by dropping a Release Context JSON into `fixtures/`.
 
 ### Versioned local output
 
-Each run keeps `output/<kind>.md` as the latest for convenience **and** archives
-the full run under `output/history/<timestamp>/` — so no draft is lost between
-prompt iterations (the local counterpart to S3 object versioning in production).
-Diff any two generations:
+Every release version gets its own folder. Each run writes the latest
+`output/releases/<version>/<kind>.md` **and** archives the full run under
+`output/releases/<version>/history/<timestamp>/` — so drafts for different
+releases never mix and no iteration is lost (the local counterpart to S3 object
+versioning in production). Diff any two generations:
 
 ```bash
-diff output/history/20260127-193312-a4f1/blog.md output/blog.md
+diff output/releases/v0.3.0/history/20260127-193312-a4f1/blog.md \
+     output/releases/v0.3.0/blog.md
 ```
 
-Disable archiving with `--no-history`. `output/` (including `history/`) is
-git-ignored.
+Disable archiving with `--no-history` (recommended for fast iteration). `output/`
+is git-ignored (a few sample `blog.md` deliverables are intentionally tracked).
 
 ### Response caching
 
@@ -468,9 +493,16 @@ make snapshot-update   # refresh intentionally (never automatic)
 
 ### Prompt versioning
 
-Prompt revisions are tracked in `internal/promptversion` (`blog@6`,
+Prompt revisions are tracked in `internal/promptversion` (`blog@13`,
 `architecture@2`, …); bump a kind's version when its prompt changes materially.
-Prompts remain assembled in their generator packages (they are built from the
+The blog prompt is currently **`blog@13`** — a concise, 13-section publication
+format (Why This Matters → Conclusion) grounded in the release's own
+architecture graph, with terminology-consistency, readable-service-name, and
+control-vs-data-plane clarity rules, plus a deterministic content gate and a
+regeneration loop. `blog.go` is the single source of truth: encode blog format or
+quality changes there (+ `internal/contentcheck` + a version bump), never as
+hand-edits to output `.md` files, so both local and cloud generations inherit
+them. Prompts remain assembled in their generator packages (built from the
 Release Context, not static templates), so there is nothing to externalise.
 
 ---
