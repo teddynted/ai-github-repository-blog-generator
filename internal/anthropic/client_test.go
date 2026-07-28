@@ -66,7 +66,7 @@ func TestGenerateSendsCorrectRequestAndParsesText(t *testing.T) {
 	if err := json.Unmarshal(d.gotBody, &body); err != nil {
 		t.Fatalf("request body invalid: %v", err)
 	}
-	if body.Model != DefaultModel || body.MaxTokens != 4096 {
+	if body.Model != DefaultModel || body.MaxTokens != 8192 {
 		t.Errorf("model/max = %q/%d", body.Model, body.MaxTokens)
 	}
 	if body.System != "You are the lead engineer." {
