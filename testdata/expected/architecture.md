@@ -1,6 +1,6 @@
 # Architecture Diagrams: acme/widget v1.0.0
 
-_4 diagrams · Event-driven serverless architecture · confidence 92/100_
+_4 diagrams · Event-driven serverless architecture · confidence 91/100_
 
 ## Platform Overview
 
@@ -195,45 +195,36 @@ digraph Architecture {
 
 ---
 
-## widget v1.0.0 — CI/CD & Provisioning
+## widget v1.0.0 — CI/CD & Infrastructure Automation
 
-_From release to provisioned infrastructure_
+_Delivery and infrastructure automation_
 
-**Type:** CI/CD Pipeline · **Complexity:** medium · **Confidence:** 91/100
+**Type:** CI/CD Pipeline · **Complexity:** medium · **Confidence:** 86/100
 
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 ```mermaid
 flowchart LR
-    github["GitHub Release"]
+    github["GitHub"]
     workflow["CI/CD Workflow"]
     cloudformation["AWS CloudFormation"]
-    AWS_Lambda["AWS Lambda"]
     Amazon_EventBridge["Amazon EventBridge"]
     Amazon_SQS["Amazon SQS"]
     Amazon_EC2["Amazon EC2"]
-    AWS_CloudFormation["AWS CloudFormation"]
-    Amazon_CloudWatch["Amazon CloudWatch"]
     github -->|triggers| workflow
     workflow -->|deploys| cloudformation
-    cloudformation -->|provisions| AWS_Lambda
     cloudformation -->|provisions| Amazon_EventBridge
     cloudformation -->|provisions| Amazon_SQS
     cloudformation -->|provisions| Amazon_EC2
-    cloudformation -->|provisions| AWS_CloudFormation
-    cloudformation -->|provisions| Amazon_CloudWatch
     style cloudformation fill:#E7157B,stroke:#232F3E,color:#fff
-    style AWS_Lambda fill:#ED7100,stroke:#232F3E,color:#fff
     style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
     style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
     style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
-    style AWS_CloudFormation fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_CloudWatch fill:#E7157B,stroke:#232F3E,color:#fff
 ```
 
-**AWS services:** AWS CloudFormation, AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, Amazon CloudWatch
+**AWS services:** AWS CloudFormation, Amazon EventBridge, Amazon SQS, Amazon EC2
 
-**Grounded in:** infrastructure/pipeline.yaml, AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
+**Grounded in:** infrastructure/pipeline.yaml
 
 <details><summary>Graphviz (DOT)</summary>
 
@@ -244,24 +235,18 @@ digraph Architecture {
   node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#EEF1F5", color="#232F3E"];
   edge [fontname="Helvetica", color="#546174"];
 
-  github [label="GitHub Release", fillcolor="#EEF1F5", fontcolor="#232F3E"];
+  github [label="GitHub", fillcolor="#EEF1F5", fontcolor="#232F3E"];
   workflow [label="CI/CD Workflow", fillcolor="#EEF1F5", fontcolor="#232F3E"];
   cloudformation [label="AWS CloudFormation", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  AWS_Lambda [label="AWS Lambda", fillcolor="#ED7100", fontcolor="#FFFFFF"];
   Amazon_EventBridge [label="Amazon EventBridge", fillcolor="#E7157B", fontcolor="#FFFFFF"];
   Amazon_SQS [label="Amazon SQS", fillcolor="#E7157B", fontcolor="#FFFFFF"];
   Amazon_EC2 [label="Amazon EC2", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-  AWS_CloudFormation [label="AWS CloudFormation", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_CloudWatch [label="Amazon CloudWatch", fillcolor="#E7157B", fontcolor="#FFFFFF"];
 
   github -> workflow [label="triggers"];
   workflow -> cloudformation [label="deploys"];
-  cloudformation -> AWS_Lambda [label="provisions"];
   cloudformation -> Amazon_EventBridge [label="provisions"];
   cloudformation -> Amazon_SQS [label="provisions"];
   cloudformation -> Amazon_EC2 [label="provisions"];
-  cloudformation -> AWS_CloudFormation [label="provisions"];
-  cloudformation -> Amazon_CloudWatch [label="provisions"];
 }
 ```
 
@@ -283,5 +268,5 @@ digraph Architecture {
 - **Messaging:** Amazon SQS
 - **Integration:** Amazon EventBridge, AWS CloudFormation
 - **Observability:** Amazon CloudWatch
-- **Estimated reading time:** 4 min · **Diagram confidence:** 92/100
+- **Estimated reading time:** 4 min · **Diagram confidence:** 91/100
 

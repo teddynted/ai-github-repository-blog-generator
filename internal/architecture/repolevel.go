@@ -108,10 +108,25 @@ func writeRepoIntelligence(b *strings.Builder, ci Intelligence) {
 	}
 	row("Architecture style", ci.ArchitectureStyle)
 	row("Primary workflow", ci.PrimaryWorkflow)
+	row("Infrastructure complexity", ci.InfrastructureComplexity)
 	row("Local inference", strings.Join(ci.LocalInference, ", "))
 	row("Cloud inference", strings.Join(ci.CloudInference, ", "))
-	row("Infrastructure complexity", ci.InfrastructureComplexity)
 	row("Operational model", ci.OperationalModel)
+	// Grounded service-role rows — only when the service is actually present.
+	row("Shared workspace", ifPresent(ci.CloudServices, "Amazon EFS"))
+	row("Durable artifacts", ifPresent(ci.CloudServices, "Amazon S3"))
+	row("Centralized observability", strings.Join(ci.ObservabilityComponents, ", "))
 	row("Estimated reading time", ci.EstimatedReadingTime)
 	b.WriteString("\n")
+}
+
+// ifPresent returns want if it is in the list, otherwise "" (so the caller omits
+// the row rather than asserting a service that is not grounded).
+func ifPresent(list []string, want string) string {
+	for _, s := range list {
+		if s == want {
+			return want
+		}
+	}
+	return ""
 }

@@ -120,6 +120,35 @@ func (a analysis) categoryServices(cat string) []string {
 	return dedupe(a.ByCategory[cat])
 }
 
+// hasService reports whether a resolved AWS service with the given canonical
+// label is present in the analysis.
+func (a analysis) hasService(label string) bool {
+	for _, s := range a.Services {
+		if s.Label == label {
+			return true
+		}
+	}
+	return false
+}
+
+// cfnServiceNodes returns the services that are actual CloudFormation resources
+// (grounded in the parsed CFN templates), NOT services merely referenced in a
+// diagram. This keeps "CI/CD provisions X" claims honest — a managed service like
+// Amazon Bedrock, mentioned only in a diagram, is never claimed to be provisioned.
+func (a analysis) cfnServiceNodes() []serviceNode {
+	seen := map[string]bool{}
+	var out []serviceNode
+	for _, r := range a.Resources {
+		info, known := lookupService(firstNonEmpty(r.Service, r.Type))
+		if !known || seen[info.Canonical] {
+			continue
+		}
+		seen[info.Canonical] = true
+		out = append(out, serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: true})
+	}
+	return out
+}
+
 // serviceLabels returns all resolved AWS service labels.
 func (a analysis) serviceLabels() []string {
 	var out []string
