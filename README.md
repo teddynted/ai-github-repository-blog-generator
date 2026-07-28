@@ -431,17 +431,43 @@ go run ./cmd/content --artifact all --hybrid --no-history \
 ```
 
 The Ollama transform model defaults to `--model` / `OLLAMA_MODEL` / `llama3.2:1b`.
-Each run prints the routing policy up front and logs progress per artifact (with
-a 15s heartbeat during long generations); `--hybrid --dry-run` previews the
-policy without calling any provider.
+Each run prints the routing policy up front and logs progress per artifact (start
+and finish with elapsed time + output size, plus a 15s heartbeat during long
+generations); `--hybrid --dry-run` previews the policy without calling any
+provider.
+
+### Reuse an existing blog (`--from-blog`)
+
+`blog.md` is the foundation every other artifact derives from, and it's the most
+expensive to generate. `--from-blog <path>` loads an existing `blog.md` and runs
+the suite's **offline path** — it **skips blog regeneration** and derives the
+downstream artifacts from the supplied blog. Iterate the blog once, then
+regenerate everything else cheaply:
+
+```bash
+# derive all downstream artifacts from a saved blog.md
+go run ./cmd/content --artifact all --from-blog output/releases/v0.3.0/blog.md \
+  --hybrid --no-history --context fixtures/designing-v0.3.0.json
+
+# …or just one downstream file
+go run ./cmd/content --artifact seo-metadata --from-blog output/releases/v0.3.0/blog.md \
+  --no-history --context fixtures/designing-v0.3.0.json
+```
+
+`--from-blog` requires `--artifact` ≠ `blog`. Note the suite is a dependency
+graph, not independent transforms: the **blog-only** artifacts (architecture,
+linkedin, x-thread, storyboard, seo-metadata) derive straight from `blog.md`,
+while the **storyboard-derived** ones (voiceover, youtube, youtube-shorts,
+tiktok, visual-assets) internally trigger storyboard first — it just isn't
+written unless you ask for it.
 
 ### Flags
 
 `--artifact` (blog, architecture, linkedin, x-thread, storyboard, voiceover,
 youtube, youtube-shorts, tiktok, visual-assets, seo-metadata, or `all`),
-`--provider`, `--hybrid`, `--context`, `--output`, `--model`, `--temperature`,
-`--max-tokens`, `--system`, `--dry-run`, `--no-history`, `--verbose`,
-`--no-cache`.
+`--provider`, `--hybrid`, `--from-blog`, `--context`, `--output`, `--model`,
+`--temperature`, `--max-tokens`, `--system`, `--dry-run`, `--no-history`,
+`--verbose`, `--no-cache`.
 
 ### Fixtures
 
