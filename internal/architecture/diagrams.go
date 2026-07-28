@@ -35,7 +35,68 @@ func buildDiagrams(pkg ReleasePackage, a analysis) []diagramSpec {
 	add(sequence(pkg, a))
 	add(componentDiagram(pkg, a))
 	add(cicd(pkg, a))
+
+	// When the release grounds a hybrid AI platform (local + cloud inference),
+	// give the key diagrams the curated, publication-ready section titles and split
+	// the logical flow into Local vs AWS subgraphs. Applied only when hybrid, so a
+	// plain infrastructure release keeps its neutral titles and no AI framing.
+	if a.Inference.hybrid() {
+		applyHybridFraming(specs, a)
+	}
 	return specs
+}
+
+// applyHybridFraming rewrites the section titles of the primary diagrams to the
+// curated hybrid-AI names and adds Local/AWS subgraphs to the logical data-flow
+// diagram. It only ever re-labels and groups existing, grounded nodes.
+func applyHybridFraming(specs []diagramSpec, a analysis) {
+	for i := range specs {
+		switch specs[i].Type {
+		case "Data Flow Diagram":
+			specs[i].Title = "Logical Architecture — Hybrid AI Data Flow"
+			specs[i].Subtitle = "Local inference (" + joinAndArch(a.Inference.Local) +
+				") and cloud inference (" + joinAndArch(a.Inference.Cloud) + ")"
+			applyInferenceSubgraphs(&specs[i].Graph)
+		case "High-Level Architecture":
+			specs[i].Title = "Deployment Architecture — AWS Integration"
+		case "Component Diagram":
+			specs[i].Title = "Repository Structure View"
+		}
+	}
+}
+
+// applyInferenceSubgraphs groups a graph's nodes into a self-hosted "Local
+// Infrastructure" subgraph (local-inference runtimes) and an "AWS Cloud" subgraph
+// (catalogued AWS services). Nodes that are neither stay ungrouped. Grouping is
+// layout only — it never adds nodes or edges.
+func applyInferenceSubgraphs(g *graph) {
+	var local, cloud []string
+	for _, n := range g.Nodes {
+		switch {
+		case matchesLocalInference(n.Label):
+			local = append(local, n.ID)
+		case n.Icon != "": // only catalogued AWS services carry an icon
+			cloud = append(cloud, n.ID)
+		}
+	}
+	if len(local) > 0 {
+		g.addGroup("Local Infrastructure", local)
+	}
+	if len(cloud) > 0 {
+		g.addGroup("AWS Cloud", cloud)
+	}
+}
+
+// matchesLocalInference reports whether a node label names a local-inference
+// runtime (Ollama, llama.cpp, …).
+func matchesLocalInference(label string) bool {
+	ll := strings.ToLower(label)
+	for _, k := range localInferenceKeywords {
+		if strings.Contains(ll, k.key) {
+			return true
+		}
+	}
+	return false
 }
 
 // highLevel groups the grounded AWS services by category. Edges are added only

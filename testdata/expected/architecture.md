@@ -2,6 +2,10 @@
 
 _4 diagrams · Event-driven serverless architecture · confidence 92/100_
 
+## Platform Overview
+
+Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
+
 ---
 
 ## widget v1.0.0 — High-Level AWS Architecture
@@ -271,6 +275,8 @@ digraph Architecture {
 
 - **Style:** Event-driven serverless · **Deployment:** Single-region, single public subnet; serverless front door, scheduled EC2 compute.
 - **Infrastructure complexity:** medium
+- **Primary workflow:** Webhook → Amazon EventBridge → Amazon SQS → Amazon EC2
+- **Operational model:** Infrastructure as Code on AWS
 - **Cloud services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
 - **Compute:** Amazon EC2
 - **Serverless:** AWS Lambda

@@ -1,5 +1,7 @@
 package architecture
 
+import "strings"
+
 // planDiagramMeta builds per-diagram metadata from the grounded graph.
 func planDiagramMeta(pkg ReleasePackage, spec diagramSpec, generatedAt string) DiagramMeta {
 	g := spec.Graph
@@ -104,6 +106,10 @@ func planIntelligence(pkg ReleasePackage, a analysis, diagrams []Diagram) Intell
 		ArchitectureStyle:        architectureStyle(a),
 		DeploymentPattern:        deploymentPattern(pkg, a),
 		InfrastructureComplexity: infraComplexity(a),
+		LocalInference:           a.Inference.Local,
+		CloudInference:           a.Inference.Cloud,
+		PrimaryWorkflow:          primaryWorkflow(a),
+		OperationalModel:         operationalModel(a),
 		CloudServices:            a.serviceLabels(),
 		ComputeComponents:        a.categoryServices("Compute"),
 		ServerlessComponents:     a.categoryServices("Serverless"),
@@ -120,6 +126,16 @@ func planIntelligence(pkg ReleasePackage, a analysis, diagrams []Diagram) Intell
 }
 
 func architectureStyle(a analysis) string {
+	base := baseArchitectureStyle(a)
+	// Only label it a hybrid AI platform when both local and cloud inference are
+	// grounded in the context — never for a plain infrastructure repo.
+	if a.Inference.hybrid() {
+		return base + " hybrid AI platform"
+	}
+	return base
+}
+
+func baseArchitectureStyle(a analysis) string {
 	hasServerless := len(a.categoryServices("Serverless")) > 0
 	hasMessaging := len(a.categoryServices("Messaging")) > 0 || len(a.categoryServices("Integration")) > 0
 	switch {
@@ -131,6 +147,33 @@ func architectureStyle(a analysis) string {
 		return "Container / compute-based"
 	default:
 		return "Application"
+	}
+}
+
+// primaryWorkflow renders the release's main event-driven flow as a concise
+// arrow chain (e.g. "GitHub Release → SQS → n8n → AI Router"), grounded in the
+// context's flow descriptions. Empty when no flow is described.
+func primaryWorkflow(a analysis) string {
+	for _, flow := range a.Flows {
+		if steps := flowSteps(flow); len(steps) >= 2 {
+			return strings.Join(steps, " → ")
+		}
+	}
+	return ""
+}
+
+// operationalModel summarizes how the platform runs, grounded in what the context
+// shows: hybrid self-hosted + cloud AI, IaC-provisioned AWS, or unspecified.
+func operationalModel(a analysis) string {
+	switch {
+	case a.Inference.hybrid():
+		return "Self-hosted automation with cloud AI augmentation"
+	case len(a.Templates) > 0:
+		return "Infrastructure as Code on AWS"
+	case len(a.Services) > 0:
+		return "AWS-hosted"
+	default:
+		return ""
 	}
 }
 

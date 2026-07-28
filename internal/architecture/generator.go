@@ -73,6 +73,7 @@ func (g *Generator) Architecture(ctx context.Context, pkg ReleasePackage) (Archi
 
 	collection.Diagrams = diagrams
 	collection.Metadata.DiagramCount = len(diagrams)
+	collection.PlatformOverview = platformOverview(pkg, a)
 	collection.ContentIntelligence = planIntelligence(pkg, a, diagrams)
 	collection.Warnings = collectWarnings(a)
 
@@ -131,6 +132,30 @@ func describePrompt(spec diagramSpec, base string) string {
 			"The diagram shows exactly these AWS services: [%s]. Use ONLY those services and the notes below — "+
 			"do NOT mention any other AWS service, resource, or relationship. Output only the description.\n\nNOTES: %s",
 		spec.Type, spec.Title, services, base)
+}
+
+// platformOverview returns the grounded high-level summary rendered before the
+// diagrams. It uses the context's architecture overview (already grounded prose),
+// falling back to the repository-structure overview; empty when neither exists.
+func platformOverview(pkg ReleasePackage, a analysis) string {
+	if pkg.Context == nil {
+		return ""
+	}
+	overview := firstNonEmpty(
+		strings.TrimSpace(pkg.Context.Architecture.Overview),
+		strings.TrimSpace(pkg.Context.RepositoryStructure.Overview),
+	)
+	if overview == "" {
+		return ""
+	}
+	// When the platform runs hybrid inference, lead with a grounded one-liner that
+	// names the detected providers, then the context overview.
+	if a.Inference.hybrid() {
+		return "A hybrid AI platform combining local inference (" +
+			joinAndArch(a.Inference.Local) + ") with cloud inference (" +
+			joinAndArch(a.Inference.Cloud) + "). " + overview
+	}
+	return overview
 }
 
 func collectWarnings(a analysis) []string {

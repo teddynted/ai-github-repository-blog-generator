@@ -20,8 +20,11 @@ const SchemaVersion = "1.0.0"
 
 // ArchitectureCollection is the full set of diagrams for one release.
 type ArchitectureCollection struct {
-	SchemaVersion       string       `json:"schemaVersion"`
-	Metadata            Metadata     `json:"metadata"`
+	SchemaVersion string   `json:"schemaVersion"`
+	Metadata      Metadata `json:"metadata"`
+	// PlatformOverview is a grounded, high-level prose summary of the platform,
+	// rendered before the diagrams. Empty when the context has no overview.
+	PlatformOverview    string       `json:"platformOverview,omitempty"`
 	Diagrams            []Diagram    `json:"diagrams"`
 	ContentIntelligence Intelligence `json:"contentIntelligence"`
 	Warnings            []string     `json:"warnings,omitempty"`
@@ -79,19 +82,25 @@ type DiagramMeta struct {
 
 // Intelligence is collection-level architecture metadata.
 type Intelligence struct {
-	ArchitectureStyle        string   `json:"architectureStyle"`
-	DeploymentPattern        string   `json:"deploymentPattern"`
-	InfrastructureComplexity string   `json:"infrastructureComplexity"`
-	CloudServices            []string `json:"cloudServices,omitempty"`
-	ComputeComponents        []string `json:"computeComponents,omitempty"`
-	ServerlessComponents     []string `json:"serverlessComponents,omitempty"`
-	StorageComponents        []string `json:"storageComponents,omitempty"`
-	DatabaseComponents       []string `json:"databaseComponents,omitempty"`
-	MessagingComponents      []string `json:"messagingComponents,omitempty"`
-	NetworkingComponents     []string `json:"networkingComponents,omitempty"`
-	SecurityComponents       []string `json:"securityComponents,omitempty"`
-	IntegrationServices      []string `json:"integrationServices,omitempty"`
-	ObservabilityComponents  []string `json:"observabilityComponents,omitempty"`
-	EstimatedReadingTime     string   `json:"estimatedReadingTime"`
-	DiagramConfidence        int      `json:"diagramConfidence"` // 0–100
+	ArchitectureStyle        string `json:"architectureStyle"`
+	DeploymentPattern        string `json:"deploymentPattern"`
+	InfrastructureComplexity string `json:"infrastructureComplexity"`
+	// Hybrid AI signals — populated only when the context grounds both local and
+	// cloud inference; empty otherwise, so non-AI repositories never get AI framing.
+	LocalInference          []string `json:"localInference,omitempty"`
+	CloudInference          []string `json:"cloudInference,omitempty"`
+	PrimaryWorkflow         string   `json:"primaryWorkflow,omitempty"`
+	OperationalModel        string   `json:"operationalModel,omitempty"`
+	CloudServices           []string `json:"cloudServices,omitempty"`
+	ComputeComponents       []string `json:"computeComponents,omitempty"`
+	ServerlessComponents    []string `json:"serverlessComponents,omitempty"`
+	StorageComponents       []string `json:"storageComponents,omitempty"`
+	DatabaseComponents      []string `json:"databaseComponents,omitempty"`
+	MessagingComponents     []string `json:"messagingComponents,omitempty"`
+	NetworkingComponents    []string `json:"networkingComponents,omitempty"`
+	SecurityComponents      []string `json:"securityComponents,omitempty"`
+	IntegrationServices     []string `json:"integrationServices,omitempty"`
+	ObservabilityComponents []string `json:"observabilityComponents,omitempty"`
+	EstimatedReadingTime    string   `json:"estimatedReadingTime"`
+	DiagramConfidence       int      `json:"diagramConfidence"` // 0–100
 }
