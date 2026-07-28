@@ -132,4 +132,9 @@ The router, orchestrator, and generators are untouched.
 - `internal/airouter` — the router + policy + JSON config parser.
 - `internal/contentsuite` — `Orchestrator.ModelFor` selects per stage.
 - `internal/modelfallback` — the per-call fallback wrapper.
-- `cmd/worker/main.go` — registers providers and builds the router.
+- `cmd/worker/main.go` — registers providers and builds the router (production).
+- `cmd/content` (`--hybrid`) — the same policy locally: `claude-code` for the
+  premium kinds, Ollama for the transforms. See the README's
+  [Hybrid routing](../README.md#hybrid-routing-claude-premium--ollama-transforms)
+  section. This reuses `airouter.DefaultRules()`, so local and production routing
+  stay identical.

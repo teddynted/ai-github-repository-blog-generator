@@ -333,6 +333,58 @@ while a green alarm with recent logs means "running fine."
 
 ---
 
+## Idle auto-stop (opt-in alternative to the fixed stop)
+
+The fixed `StopSchedule` stops the instance at a wall-clock time. As an
+alternative, an **idle-detection** Lambda can stop it only when it has actually
+gone quiet — so it survives a late-running job and reclaims daytime idle hours a
+fixed schedule leaves running. It is **independent of the start path** and
+**opt-in** (`EnableIdleStop=false` by default), so enabling it changes nothing
+until you turn it on.
+
+### How it decides
+
+An EventBridge rule invokes the `idle-stop` Lambda on `IdleEvalRate` (default
+`rate(1 hour)`). Each run it stops the instance only when **all** hold for a
+sustained `IdleMinutes` (default 30):
+
+- CPU below `CpuThreshold` (default 5%) across the trailing window,
+- network (NetworkIn + NetworkOut) below threshold,
+- no active n8n execution and no resident Ollama model (app checks — VPC only),
+
+tracked across runs by an `IdleSince` tag on the instance (the Lambda stays
+stateless). Safeguards: a `KEEP_RUNNING=true` tag override, a startup grace so it
+never stops an instance the start Lambda just launched, an optional SNS pre-stop
+notification, and `IdleDryRun` (default **true** — logs the decision without
+stopping; flip to `false` once the logs look right). Every check **fails safe**:
+an unreachable probe or a metrics error counts as busy, so a blip never triggers
+a wrongful stop.
+
+### App-level checks (n8n / Ollama) need a VPC
+
+CPU + network detection works with no networking. To also check n8n
+(`/api/v1/executions?status=running`) and Ollama (`/api/ps`), the Lambda must
+reach the instance's private ports, so it runs in your VPC — supply
+`IdleSubnetIds` + `IdleSecurityGroupIds` (a subnet the instance is in, and an SG
+allowed to reach it on 5678/11434). Without **both**, idle-stop deploys *without*
+the app checks (CPU + network only) rather than failing the stack.
+
+### Enabling it (repo vars → `deploy.yml`)
+
+| Variable | Meaning |
+| --- | --- |
+| `ENABLE_IDLE_STOP` | `true` to create the idle Lambda + hourly rule |
+| `IDLE_DRY_RUN` | keep `true` until the logs look right, then `false` |
+| `IDLE_MINUTES` | sustained idle duration before stopping (default 30) |
+| `IDLE_SUBNET_IDS` / `IDLE_SG_IDS` | enable the VPC app checks (both required) |
+
+When idle-stop is on, set `ScheduleState=DISABLED` (or `ManageSchedules=false`)
+so the fixed `StopSchedule` doesn't also stop the instance. Watch its decisions:
+
+```bash
+aws logs tail /aws/lambda/blog-gen-idle-stop --since 3h
+```
+
 ## Cost considerations
 
 See [Cost Optimisation](./cost-optimization.md) for the platform-wide view.
