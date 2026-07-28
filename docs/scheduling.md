@@ -24,21 +24,27 @@ flowchart LR
   end
 
   R["Scheduler invoke role<br/>(lambda:InvokeFunction)"]
+  IR["EventBridge Rule<br/>rate(1 hour)<br/>(opt-in idle check)"]
 
   subgraph L[AWS Lambda · Go · arm64]
     LS["scheduled-start<br/>EnsureStarted()"]
     LT["scheduled-stop<br/>EnsureStopped()"]
+    LI["idle-stop (opt-in)<br/>stop only when idle"]
   end
 
   EC2["EC2 instance<br/>(by INSTANCE_ID)"]
-  CW["CloudWatch Logs<br/>(structured JSON)"]
+  CW["CloudWatch<br/>logs + metrics"]
 
   S1 -->|assumes| R --> LS
   S2 -->|assumes| R --> LT
+  IR -->|invokes| LI
   LS -->|DescribeInstances<br/>StartInstances| EC2
   LT -->|DescribeInstances<br/>StopInstances| EC2
+  LI -->|GetMetricData<br/>CPU + network| CW
+  LI -->|IdleSince tag +<br/>StopInstances when idle| EC2
   LS --> CW
   LT --> CW
+  LI --> CW
 ```
 
 **Flow:** each EventBridge Schedule fires at its cron time in the configured
@@ -67,10 +73,23 @@ without hardcoding UTC. It also invokes Lambda through an **execution role**
 | `AWS::IAM::Role` × 1 | Scheduler invoke role (`lambda:InvokeFunction` on the two functions only) |
 | `AWS::Logs::LogGroup` × 2 | `/aws/lambda/<project>-scheduled-{start,stop}`, configurable retention |
 
+Opt-in idle auto-stop (created only when `EnableIdleStop=true` — see
+[Idle auto-stop](#idle-auto-stop-opt-in-alternative-to-the-fixed-stop)):
+
+| Resource | Purpose |
+| --- | --- |
+| `AWS::Lambda::Function` × 1 | `idle-stop` (Go, `provided.al2023`, arm64) — stops the instance after sustained idleness |
+| `AWS::Events::Rule` × 1 | Polls the idle check on `IdleEvalRate` (default `rate(1 hour)`) |
+| `AWS::Lambda::Permission` × 1 | Lets EventBridge invoke `idle-stop` |
+| `AWS::IAM::Role` × 1 | `idle-stop` role: Stop/CreateTags/DeleteTags on the instance, `cloudwatch:GetMetricData`, optional `sns:Publish`, optional VPC ENI |
+| `AWS::Logs::LogGroup` × 1 | `/aws/lambda/<project>-idle-stop` |
+
 Go source:
 
 - `lambdas/scheduled-start/main.go`, `lambdas/scheduled-stop/main.go` — thin entry points.
 - `internal/power/power.go` — the idempotent `Switch` use case (unit-tested).
+- `lambdas/idle-stop/main.go` + `internal/idle` (decision logic), `internal/awscloudwatch`
+  (metrics), `internal/idleprobe` (n8n/Ollama checks) — the idle auto-stop path.
 - `internal/awsec2/ec2.go` — the EC2 adapter (`InstanceState`, `StartInstance`, `StopInstance`).
 
 ---

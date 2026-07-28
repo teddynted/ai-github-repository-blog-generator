@@ -98,7 +98,7 @@ flowchart TB
         EB[Amazon EventBridge]
         SQS[(Amazon SQS + DLQ)]
         SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily]
-        PWR[Lambda: scheduled-start / scheduled-stop]
+        PWR[Lambda: scheduled-start / scheduled-stop<br/>+ opt-in idle-stop]
         subgraph EC2["EC2 On-Demand Instance (Ubuntu + Docker Compose)"]
             N8N[n8n Orchestrator]
             OC[OpenClaw]
@@ -144,6 +144,7 @@ flowchart TB
 | Amazon SQS | Durable buffer so no matched event is lost while the instance is outside its window; DLQ |
 | EventBridge Scheduler | Authority for instance power — starts/stops the host on the daily window (18:00–20:00, 7 days a week) |
 | scheduled-start / scheduled-stop (Lambda) | Start/stop the On-Demand instance on the schedule (idempotent) |
+| idle-stop (Lambda, opt-in) | Stop the instance after sustained idleness (CPU/network + n8n/Ollama checks) instead of a fixed time — see [scheduling](./scheduling.md) |
 | EC2 On-Demand Instance | Host running n8n, OpenClaw, Ollama via Docker Compose |
 | OpenClaw | Clone (using the PAT) and analyse the repository |
 | Repository Memory | Per-repo continuity and topic de-duplication |
@@ -209,7 +210,7 @@ flowchart TB
     APIGW --> RL[Registration Lambda]
     LH --> EB[EventBridge]
     EB --> SQS[(SQS)]
-    SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda]
+    SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda<br/>+ opt-in idle-stop]
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
@@ -301,7 +302,7 @@ flowchart LR
     LH -->|match → PutEvents| EB[(EventBridge)]
     LH -->|no match → 200| STOP[Ignored]
     EB --> SQS[(SQS)]
-    SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily] --> PWR[scheduled-start / scheduled-stop]
+    SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily] --> PWR[scheduled-start / scheduled-stop<br/>+ opt-in idle-stop]
     PWR -.->|power| N8N
     SQS --> N8N[n8n]
     GH[(GitHub repo)] -->|clone w/ PAT| OC[OpenClaw]

@@ -35,7 +35,7 @@ flowchart TB
     APIGW --> LH[Webhook Handler Lambda]
     LH -->|trigger match → PutEvents| EB[EventBridge]
     EB --> SQS[(SQS)]
-    SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda]
+    SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda<br/>+ opt-in idle-stop]
     subgraph VPC["VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph PUB["Public subnet 10.0.0.0/24"]
