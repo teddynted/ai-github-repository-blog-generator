@@ -27,7 +27,13 @@ func (col ArchitectureCollection) RepoLevelMarkdown() string {
 	ci := col.ContentIntelligence
 
 	style := firstNonEmpty(ci.ArchitectureStyle, "Application")
-	fmt.Fprintf(&b, "# Architecture Diagrams: %s\n\n", col.Metadata.Repository)
+	// Repository-level title uses the bare repo name (no owner prefix), so it reads
+	// the same whether the context came from a fixture (owner/name) or the tree.
+	repo := col.Metadata.Repository
+	if i := strings.LastIndex(repo, "/"); i >= 0 {
+		repo = repo[i+1:]
+	}
+	fmt.Fprintf(&b, "# Architecture Diagrams: %s\n\n", repo)
 	fmt.Fprintf(&b, "_Repository-level architecture overview · %s_\n\n", style)
 	fmt.Fprintf(&b, "> **Notes:** %s\n\n", repoLevelNotes)
 

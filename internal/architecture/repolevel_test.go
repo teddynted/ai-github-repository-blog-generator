@@ -16,7 +16,7 @@ func TestRepoLevelMarkdownIsVersionIndependent(t *testing.T) {
 	md := col.RepoLevelMarkdown()
 
 	for _, want := range []string{
-		"# Architecture Diagrams: acme/platform",
+		"# Architecture Diagrams: platform", // bare repo name, owner stripped
 		"Repository-level architecture overview",
 		"version-independent",
 		"## Platform Overview",
@@ -33,9 +33,9 @@ func TestRepoLevelMarkdownIsVersionIndependent(t *testing.T) {
 	if strings.Contains(md, "v0.10.0") {
 		t.Errorf("repo-level markdown leaked a release version:\n%s", md)
 	}
-	// The title must not carry a version after the repo name.
-	if strings.Contains(md, "Architecture Diagrams: acme/platform v") {
-		t.Error("title should be repo-only, no version")
+	// The title must carry neither owner prefix nor version.
+	if strings.Contains(md, "acme/platform") || strings.Contains(md, "Architecture Diagrams: platform v") {
+		t.Error("title should be the bare repo name, no owner, no version")
 	}
 }
 

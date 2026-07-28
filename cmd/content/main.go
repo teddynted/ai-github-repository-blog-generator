@@ -143,7 +143,7 @@ func generate(args []string) int {
 	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
 	fs.StringVar(&o.region, "region", envOr("AWS_REGION", "us-east-1"), "AWS region (Bedrock)")
 	fs.DurationVar(&o.timeout, "timeout", 15*time.Minute, "overall timeout")
-	fs.BoolVar(&o.repoLevel, "repo-level", false, "generate a version-independent, repository-level docs/architecture.md from the LOCAL working tree (no --context, no release); deterministic and offline")
+	fs.BoolVar(&o.repoLevel, "repo-level", false, "generate a version-independent, repository-level docs/architecture.md — from the LOCAL working tree (--repo, default) or an existing Release Context fixture (--context); the release version is ignored, never embedded. Deterministic and offline")
 	fs.StringVar(&o.repo, "repo", ".", "repository root to read for --repo-level")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -175,14 +175,22 @@ func generate(args []string) int {
 	return execute(ctx, o, rctx)
 }
 
-// repoLevelRun builds a version-independent Release Context from the local working
-// tree and writes a repository-level docs/architecture.md — deterministic, offline,
-// no provider or release involved.
+// repoLevelRun writes a version-independent, repository-level docs/architecture.md.
+// Its context comes from the local working tree (default) or, when --context is
+// given, from an existing Release Context fixture — in which case the release's
+// version/tag is simply ignored by the repo-level renderer (the context itself is
+// never mutated). Deterministic, offline, no provider involved.
 func repoLevelRun(o options) int {
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
 	defer cancel()
 
-	rctx, err := rc.BuildRepoLevel(ctx, o.repo, "")
+	var rctx *rc.ReleaseContext
+	var err error
+	if o.ctxPath != "" {
+		rctx, err = loadContext(o.ctxPath) // render a version-independent doc from a fixture
+	} else {
+		rctx, err = rc.BuildRepoLevel(ctx, o.repo, "")
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: build repo-level context: %v\n", err)
 		return 1
