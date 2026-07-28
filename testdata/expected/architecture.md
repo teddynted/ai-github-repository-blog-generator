@@ -1,6 +1,6 @@
 # Architecture Diagrams: widget
 
-_Repository-level architecture overview · Event-driven_
+_Repository-level architecture overview · Event-driven platform_
 
 > **Notes:** diagrams are generated from the repository README, documented AWS integrations, automation workflows, and the current project structure. The architecture document is intentionally **version-independent** so it can be reused across releases, branches, and generated documentation workflows.
 
@@ -8,7 +8,7 @@ _Repository-level architecture overview · Event-driven_
 
 ## Platform Overview
 
-Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
+Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. The platform is classified as **event-driven** because external events are ingested and routed through Amazon SQS and Amazon EventBridge for asynchronous processing before orchestration and inference execution.
 
 ---
 
@@ -124,7 +124,7 @@ flowchart LR
 
 | Attribute | Value |
 | --- | --- |
-| **Architecture style** | Event-driven |
+| **Architecture style** | Event-driven platform |
 | **Primary workflow** | Webhook → Amazon EventBridge → Amazon SQS → Amazon EC2 |
 | **Infrastructure complexity** | medium |
 | **Operational model** | Infrastructure as Code on AWS |

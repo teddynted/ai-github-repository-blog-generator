@@ -154,11 +154,35 @@ func platformOverview(pkg ReleasePackage, a analysis) string {
 	// When the platform runs hybrid inference, lead with a grounded one-liner that
 	// names the detected providers, then the context overview.
 	if a.Inference.hybrid() {
-		return "A hybrid AI platform combining local inference (" +
+		overview = "A hybrid AI platform combining local inference (" +
 			joinAndArch(a.Inference.Local) + ") with cloud inference (" +
 			joinAndArch(a.Inference.Cloud) + "). " + overview
 	}
+	// Justify the event-driven classification with the grounded evidence, so the
+	// label is never asserted without a reason.
+	if a.EventDriven {
+		overview += " " + eventDrivenJustification(a)
+	}
 	return overview
+}
+
+// eventDrivenJustification explains WHY the platform is event-driven, naming the
+// grounded eventing services when present, otherwise citing the documented
+// asynchronous workflow.
+func eventDrivenJustification(a analysis) string {
+	// Genuine eventing evidence: messaging services (SQS/SNS) plus EventBridge —
+	// NOT every Integration service (which includes IaC like CloudFormation).
+	evidence := a.categoryServices("Messaging")
+	for _, s := range a.serviceLabels() {
+		if strings.Contains(s, "EventBridge") {
+			evidence = append(evidence, s)
+		}
+	}
+	if evidence = dedupe(evidence); len(evidence) > 0 {
+		return "The platform is classified as **event-driven** because external events are ingested and routed through " +
+			joinAndArch(evidence) + " for asynchronous processing before orchestration and inference execution."
+	}
+	return "The platform is classified as **event-driven** based on its documented asynchronous, event-triggered workflow."
 }
 
 // fileCountRe matches a "of N files" clause so it can be stripped — a
