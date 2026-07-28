@@ -469,21 +469,24 @@ BLOG=output/releases/v0.3.0/blog.md      # the file Stage 2 reads
 go run ./cmd/content --artifact all --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
 ```
 
-…or one artifact at a time (subsequent steps). A single `--artifact <kind>` runs
-**only that stage plus its real dependencies** — not the whole suite — and
+…or one artifact at a time, **in dependency order**. A single `--artifact <kind>`
+runs only that stage plus its real dependencies (not the whole suite), and
 `--hybrid` routes each kind correctly (premium → `claude-code`, transforms →
-Ollama). `--from-blog` supplies the blog dependency for free, so the cost of each
-command is just the remaining stages in its chain:
+Ollama). `--from-blog` supplies the blog dependency for free. Run the commands
+top-to-bottom so each builds on the ones above it:
 
-| `--artifact`                | Also runs (dependencies)                                             | Provider mix |
-| --------------------------- | ------------------------------------------------------------------- | ------------ |
-| `architecture`              | — (blog only)                                                       | **claude only** |
-| `architecture-diagram-spec` | — (blog only)                                                       | **claude only** |
-| `storyboard`                | — (blog only)                                                       | Ollama       |
-| `voiceover`                 | `storyboard`                                                        | Ollama       |
-| `youtube`                   | `storyboard`, `voiceover`                                           | Ollama       |
-| `seo-metadata`              | the full `storyboard→voiceover→youtube→…→visual-assets` chain       | Ollama       |
-| `linkedin` / `x-thread`     | almost everything (`architecture` + the full SEO chain)             | claude + Ollama |
+| # | `--artifact`                | Depends on (also runs)                     | Provider mix    |
+| - | --------------------------- | ------------------------------------------ | --------------- |
+| 1 | `architecture`              | blog                                       | **claude only** |
+| 1 | `architecture-diagram-spec` | blog                                       | **claude only** |
+| 2 | `storyboard`                | blog                                       | Ollama          |
+| 3 | `voiceover`                 | storyboard                                 | Ollama          |
+| 4 | `youtube`                   | voiceover                                  | Ollama          |
+| 5 | `youtube-shorts`            | youtube                                    | Ollama          |
+| 6 | `tiktok`                    | youtube-shorts                             | Ollama          |
+| 7 | `visual-assets`             | tiktok                                     | Ollama          |
+| 8 | `seo-metadata`              | visual-assets (the whole chain above)      | Ollama          |
+| 9 | `linkedin` / `x-thread`     | architecture + seo-metadata (most of all)  | claude + Ollama |
 
 > [!NOTE]
 > `architecture` reads only the storyboard's repo/release labels — which come from
@@ -494,30 +497,38 @@ command is just the remaining stages in its chain:
 > (one shared chain) over separate per-artifact runs.
 
 ```bash
-# blog-only, premium (→ claude-code, no Ollama)
-go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
-go run ./cmd/content --artifact architecture-diagram-spec --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
-go run ./cmd/content --artifact linkedin                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + full chain
-go run ./cmd/content --artifact x-thread                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + full chain
+# 1) blog-only — need nothing but the blog (→ claude-code, no Ollama)
+go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"   # ← blog
+go run ./cmd/content --artifact architecture-diagram-spec --from-blog "$BLOG" --hybrid --no-history --context "$CTX"   # ← blog
 
-# transforms (→ Ollama; --no-cache exercises the num_predict cap)
-go run ./cmd/content --artifact seo-metadata   --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
-go run ./cmd/content --artifact storyboard     --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
-go run ./cmd/content --artifact voiceover      --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
-go run ./cmd/content --artifact youtube        --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
-go run ./cmd/content --artifact youtube-shorts --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
-go run ./cmd/content --artifact tiktok         --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
-go run ./cmd/content --artifact visual-assets  --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+# 2) the storyboard transform chain — each needs the one directly above (→ Ollama)
+go run ./cmd/content --artifact storyboard     --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← blog
+go run ./cmd/content --artifact voiceover      --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← storyboard
+go run ./cmd/content --artifact youtube        --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← voiceover
+go run ./cmd/content --artifact youtube-shorts --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← youtube
+go run ./cmd/content --artifact tiktok         --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← youtube-shorts
+go run ./cmd/content --artifact visual-assets  --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← tiktok
+go run ./cmd/content --artifact seo-metadata   --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"   # ← visual-assets
+
+# 3) final synthesis — need architecture (1) + the whole chain above (→ claude-code + Ollama)
+go run ./cmd/content --artifact linkedin       --from-blog "$BLOG" --hybrid --no-history --context "$CTX"   # ← architecture + seo-metadata
+go run ./cmd/content --artifact x-thread       --from-blog "$BLOG" --hybrid --no-history --context "$CTX"   # ← architecture + seo-metadata
 ```
 
-…or loop the two groups:
+…or loop the chain in the same dependency order:
 
 ```bash
-for a in architecture architecture-diagram-spec linkedin x-thread; do
+# blog-only (Claude, no Ollama)
+for a in architecture architecture-diagram-spec; do
   go run ./cmd/content --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
 done
-for a in seo-metadata storyboard voiceover youtube youtube-shorts tiktok visual-assets; do
+# the linear transform chain, in order (Ollama)
+for a in storyboard voiceover youtube youtube-shorts tiktok visual-assets seo-metadata; do
   go run ./cmd/content --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+done
+# final synthesis (Claude + the chain above)
+for a in linkedin x-thread; do
+  go run ./cmd/content --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
 done
 ```
 
