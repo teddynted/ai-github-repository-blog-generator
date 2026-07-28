@@ -138,9 +138,14 @@ func architectureStyle(a analysis) string {
 func baseArchitectureStyle(a analysis) string {
 	hasServerless := len(a.categoryServices("Serverless")) > 0
 	hasMessaging := len(a.categoryServices("Messaging")) > 0 || len(a.categoryServices("Integration")) > 0
+	// Event-driven when the release describes event flows or uses messaging/event
+	// services — even if no serverless compute is detected.
+	hasEventDriven := hasMessaging || len(a.Flows) > 0
 	switch {
-	case hasServerless && hasMessaging:
+	case hasEventDriven && hasServerless:
 		return "Event-driven serverless"
+	case hasEventDriven:
+		return "Event-driven"
 	case hasServerless:
 		return "Serverless"
 	case len(a.categoryServices("Compute")) > 0:

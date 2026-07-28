@@ -20,7 +20,7 @@ func TestRepoLevelMarkdownIsVersionIndependent(t *testing.T) {
 		"Repository-level architecture overview",
 		"version-independent",
 		"## Platform Overview",
-		"## Hybrid AI Data Flow", // hybrid detected → hybrid title
+		"## Logical Architecture — Hybrid AI Data Flow", // hybrid detected → hybrid title
 		"## Architecture Intelligence",
 		"| **Architecture style** |",
 		"| **Local inference** | Ollama |",
@@ -49,7 +49,7 @@ func TestRepoLevelMarkdownNonHybridTitle(t *testing.T) {
 	if strings.Contains(md, "Hybrid AI Data Flow") {
 		t.Errorf("non-hybrid repo-level doc must not use hybrid title:\n%s", md)
 	}
-	if !strings.Contains(md, "## Logical Data Flow") {
+	if !strings.Contains(md, "## Logical Architecture — Data Flow") {
 		t.Errorf("expected neutral logical title:\n%s", md)
 	}
 }

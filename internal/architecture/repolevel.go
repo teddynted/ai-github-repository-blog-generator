@@ -36,17 +36,19 @@ func (col ArchitectureCollection) RepoLevelMarkdown() string {
 	}
 
 	used := map[int]bool{}
-	logical := col.pick(used, "Data Flow Diagram", "Event-Driven Architecture", "High-Level Architecture", "Sequence Diagram")
-	deployment := col.pick(used, "CI/CD Pipeline", "High-Level Architecture", "Event-Driven Architecture")
+	deployment := col.pick(used, "High-Level Architecture", "Event-Driven Architecture")
+	logical := col.pick(used, "Data Flow Diagram", "Event-Driven Architecture", "Sequence Diagram")
 	component := col.pick(used, "Component Diagram")
+	cicd := col.pick(used, "CI/CD Pipeline")
 
-	logicalTitle := "Logical Data Flow"
+	logicalTitle := "Logical Architecture — Data Flow"
 	if len(ci.LocalInference) > 0 && len(ci.CloudInference) > 0 {
-		logicalTitle = "Hybrid AI Data Flow"
+		logicalTitle = "Logical Architecture — Hybrid AI Data Flow"
 	}
+	writeRepoSection(&b, deployment, "Deployment Architecture — AWS Integration", "Deployment architecture", "Deployment Diagram", "AWS Services Used")
 	writeRepoSection(&b, logical, logicalTitle, "Logical architecture", "Data Flow Diagram", "Key Components")
-	writeRepoSection(&b, deployment, "Deployment Topology", "Deployment architecture", "Deployment Diagram", "Deployment Characteristics")
-	writeRepoSection(&b, component, "Repository Component Structure", "Top-level package layout", "Component Diagram", "Repository Responsibilities")
+	writeRepoSection(&b, component, "Repository Structure View", "Top-level package layout", "Component Diagram", "Repository Responsibilities")
+	writeRepoSection(&b, cicd, "CI/CD & Infrastructure Automation", "Delivery and infrastructure automation", "Deployment Diagram", "Deployment Characteristics")
 
 	writeRepoIntelligence(&b, ci)
 
