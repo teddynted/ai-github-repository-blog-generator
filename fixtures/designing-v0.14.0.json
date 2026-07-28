@@ -1,0 +1,7718 @@
+{
+  "schemaVersion": "2.0.0",
+  "contextId": "7a5a3cd1-3619-4e11-9be0-41503638a9b7",
+  "generatedAt": "2026-07-28T13:33:56+02:00",
+  "repository": {
+    "owner": "teddynted",
+    "name": "designing-an-ai-agent-platform-on-aws",
+    "fullName": "teddynted/designing-an-ai-agent-platform-on-aws",
+    "description": "AI Agent platform on AWS overall architecture, design goals, AWS services, component interactions, data flow, deployment strategy, and technology choices.",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "language": "Go",
+    "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws",
+    "summary": "teddynted/designing-an-ai-agent-platform-on-aws is a project that aI Agent platform on AWS overall architecture, design goals, AWS services, component interactions, data flow, deployment strategy, and technology choices written primarily in Go."
+  },
+  "release": {
+    "tag": "v0.14.0",
+    "name": "v0.14.0",
+    "publishedAt": "2026-07-15T12:41:52Z",
+    "author": "github-actions[bot]",
+    "body": "This release introduces 1 new feature and documents 1 change.\n\n## What's Changed\n\n### 🚀 Features\n\n- **loop:** Autonomous agent loop with an explicit, bounded controller ([821cea8](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/821cea86d3d4e354b805918b26928fa3c7d689ac))\n\n### 📚 Documentation\n\n- **changelog:** Add v0.13.0 [skip ci] ([ca0fb85](https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/commit/ca0fb851ea1febf5b4bfb1bcd6c744b5ad32f781))\n\n### Contributors\n\n- github-actions[bot] (1 commit)\n- Teddy Kekana (1 commit)\n\nCompare changes:\nhttps://github.com/teddynted/designing-an-ai-agent-platform-on-aws/compare/v0.13.0...v0.14.0\n",
+    "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/tag/v0.14.0",
+    "preRelease": false,
+    "previousTag": "v0.13.0",
+    "assets": [
+      {
+        "name": "checksums.txt",
+        "size": 478,
+        "contentType": "text/plain; charset=utf-8",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.14.0/checksums.txt"
+      },
+      {
+        "name": "release_v0.14.0_darwin_amd64",
+        "size": 8205456,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.14.0/release_v0.14.0_darwin_amd64"
+      },
+      {
+        "name": "release_v0.14.0_darwin_arm64",
+        "size": 7683282,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.14.0/release_v0.14.0_darwin_arm64"
+      },
+      {
+        "name": "release_v0.14.0_linux_amd64",
+        "size": 8057016,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.14.0/release_v0.14.0_linux_amd64"
+      },
+      {
+        "name": "release_v0.14.0_linux_arm64",
+        "size": 7471288,
+        "contentType": "application/octet-stream",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.14.0/release_v0.14.0_linux_arm64"
+      },
+      {
+        "name": "release_v0.14.0_windows_amd64.exe",
+        "size": 8307200,
+        "contentType": "application/x-msdownload",
+        "url": "https://github.com/teddynted/designing-an-ai-agent-platform-on-aws/releases/download/v0.14.0/release_v0.14.0_windows_amd64.exe"
+      }
+    ],
+    "summary": "Release v0.14.0 published 2026-07-15T12:41:52Z by github-actions[bot]. This release introduces 1 new feature and documents 1 change.."
+  },
+  "documentation": {
+    "purpose": "\u003e Status: building.",
+    "businessProblem": "Automating high-quality technical content generation from repositories, under explicit developer control.",
+    "architecturePatterns": [
+      "Event-driven architecture",
+      "Serverless",
+      "Infrastructure as Code",
+      "Least-privilege security"
+    ],
+    "deploymentStrategy": "Infrastructure as Code with AWS CloudFormation, deployed via GitHub Actions (OIDC).",
+    "developmentWorkflow": "Trunk-based development with Conventional Commits and automated release management.",
+    "documents": [
+      {
+        "path": "AGENTS.md",
+        "title": "Agent Execution — OpenClaw Integration",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "Who does what",
+          "Why submit is fast and everything else polls",
+          "Architecture",
+          "The contract",
+          "Configuration",
+          "Example request and response",
+          "Idempotency: a retry costs money",
+          "Limits",
+          "The agent's output is untrusted",
+          "Why a credential in the output is *rejected*, not redacted",
+          "Errors",
+          "Observability",
+          "Local development",
+          "Testing",
+          "Adding an agent",
+          "Future multi-agent architecture",
+          "Troubleshooting"
+        ]
+      },
+      {
+        "path": "CHANGELOG.md",
+        "title": "Changelog",
+        "kind": "other",
+        "headings": [
+          "0.13.0 - 2026-07-15",
+          "🚀 Features",
+          "📚 Documentation",
+          "0.12.0 - 2026-07-14",
+          "🚀 Features",
+          "📚 Documentation",
+          "0.11.0 - 2026-07-14",
+          "🚀 Features",
+          "📚 Documentation",
+          "0.10.0 - 2026-07-14",
+          "🚀 Features",
+          "📚 Documentation",
+          "0.9.0 - 2026-07-14",
+          "🚀 Features",
+          "📚 Documentation",
+          "🧪 Tests",
+          "0.8.0 - 2026-07-14",
+          "🚀 Features",
+          "♻️ Refactoring",
+          "📚 Documentation",
+          "0.7.1 - 2026-07-14",
+          "📚 Documentation",
+          "0.7.0 - 2026-07-14",
+          "🚀 Features",
+          "📚 Documentation"
+        ]
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "title": "Contributing",
+        "kind": "other",
+        "headings": [
+          "Getting set up",
+          "Commit messages",
+          "Types",
+          "Writing the description",
+          "Breaking changes",
+          "Code",
+          "Tests",
+          "Golden files",
+          "Pull requests",
+          "How a change becomes a release"
+        ]
+      },
+      {
+        "path": "INFERENCE.md",
+        "title": "Inference — Two Providers, and a Model That Can Act",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "Wait — Milestone 6 said the platform calls no model",
+          "Who does what",
+          "What a second provider did to the abstraction",
+          "What Claude did to the interface",
+          "Why capability is configured, not discovered",
+          "The refusal matters more than the capability",
+          "Choosing a provider",
+          "Local or hosted",
+          "The provider abstraction",
+          "Authentication: there is no credential",
+          "The two permissions Bedrock needs",
+          "Throttling is not an outage",
+          "Streaming, and the timeout that actually works",
+          "A retry WAS safe here — Milestone 9 withdrew that",
+          "The rule, precisely",
+          "Belt, and braces",
+          "Except once a stream has started",
+          "Tool use: the model chooses, it never authors",
+          "The instruction-laundering attack",
+          "The defence: an allowlist, not a filter",
+          "Two more things the model is not told",
+          "The loop is bounded, twice",
+          "The cost, which surprises everyone",
+          "Structured output"
+        ]
+      },
+      {
+        "path": "LOOP.md",
+        "title": "Loop Engineering — An Explicit, Bounded, Recoverable Agent Loop",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "Three loops, and this is the third",
+          "The agent lifecycle",
+          "Where each stage runs",
+          "The controller is a pure reducer",
+          "Planning",
+          "Execution",
+          "Evaluation",
+          "Reflection",
+          "The retry framework",
+          "Stopping conditions",
+          "State and recovery",
+          "Workflow integration: who drives the loop",
+          "Configuration",
+          "IAM and security",
+          "Observability",
+          "Extensibility",
+          "Testing",
+          "Troubleshooting"
+        ]
+      },
+      {
+        "path": "README.md",
+        "title": "Designing an AI Agent Platform on AWS",
+        "kind": "readme",
+        "headings": [
+          "Contents",
+          "Project Overview",
+          "Vision",
+          "Goals",
+          "What exists today",
+          "Key Features (Planned)",
+          "High-Level Architecture Overview",
+          "Full architecture (Milestone 1)",
+          "What is actually deployed (Milestones 2–4)",
+          "Cost optimization with EC2 Spot",
+          "The idea",
+          "The one thing to understand",
+          "Architecture",
+          "The interruption workflow",
+          "Event flow",
+          "Deploy it",
+          "When *not* to use Spot",
+          "Screenshots",
+          "Future improvements",
+          "Startup optimization with custom AMIs",
+          "The measured result",
+          "Why this matters on Spot specifically",
+          "UserData, before and after",
+          "The AMI lifecycle",
+          "What is baked, and what is never baked"
+        ]
+      },
+      {
+        "path": "RELEASE_MANAGEMENT.md",
+        "title": "Release Management",
+        "kind": "other",
+        "headings": [
+          "Semantic Versioning",
+          "The version lifecycle",
+          "The release lifecycle",
+          "Who is responsible for what",
+          "Why the changelog is written after the tag",
+          "CLI reference",
+          "Cutting a release",
+          "Dry runs",
+          "After the tag",
+          "Customising the notes",
+          "Pre-releases",
+          "Troubleshooting",
+          "The push failed and the tag exists locally",
+          "A bad version was pushed",
+          "The changelog job cannot push",
+          "Release notes are empty"
+        ]
+      },
+      {
+        "path": "ROUTING.md",
+        "title": "Hybrid AI Routing — One Interface, Two Machines",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "Why hybrid, and why per request",
+          "The router is a provider",
+          "The request lifecycle",
+          "Preference vs constraint: the idea the milestone turns on",
+          "Routing strategies",
+          "fixed (the default)",
+          "purpose",
+          "What is *not* a strategy",
+          "The fallback strategy",
+          "Health: what makes fallback affordable",
+          "The three things that must never fail over",
+          "Capabilities: a union, except the one that is a guarantee",
+          "Configuration",
+          "IAM and security",
+          "Observability",
+          "Adding a provider",
+          "Local development",
+          "Testing",
+          "Troubleshooting"
+        ]
+      },
+      {
+        "path": "WORKFLOWS.md",
+        "title": "Workflow Orchestration — n8n Integration",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "The boundary",
+          "Architecture",
+          "The one hard problem: a retry is not free",
+          "Configuration",
+          "The request contract",
+          "Responses",
+          "Errors",
+          "Observability",
+          "Security",
+          "Adding a workflow",
+          "Local development",
+          "Testing",
+          "Future workflows",
+          "Troubleshooting"
+        ]
+      },
+      {
+        "path": "docs/architecture.md",
+        "title": "Architecture",
+        "kind": "architecture",
+        "headings": [
+          "The dependency rule",
+          "Package responsibilities",
+          "Key design decisions",
+          "Extending the system"
+        ]
+      },
+      {
+        "path": "docs/architecture/ami-diagrams.md",
+        "title": "Custom AMI Diagrams — Milestone 4",
+        "kind": "architecture",
+        "headings": [
+          "1. Traditional EC2 launch flow",
+          "2. Custom AMI launch flow",
+          "3. AMI creation workflow",
+          "4. Deployment workflow",
+          "5. Immutable infrastructure lifecycle"
+        ]
+      },
+      {
+        "path": "docs/architecture/bedrock-diagrams.md",
+        "title": "Bedrock Diagrams — Milestone 8",
+        "kind": "architecture",
+        "headings": [
+          "Contents",
+          "1. Switching providers by configuration",
+          "2. What the second provider changed",
+          "3. Authentication: there is no credential",
+          "4. The two permissions Bedrock needs",
+          "5. Throttling is not an outage",
+          "6. One request, end to end",
+          "7. Where the router will go"
+        ]
+      },
+      {
+        "path": "docs/architecture/claude-diagrams.md",
+        "title": "Claude Diagrams — Milestone 9",
+        "kind": "architecture",
+        "headings": [
+          "Contents",
+          "1. What Milestone 9 changed, and what it did not",
+          "2. The claim that had to be withdrawn",
+          "3. The tool loop",
+          "4. Instruction laundering, and the defence",
+          "5. Structured output",
+          "6. The cost of a tool loop",
+          "7. The seam Milestone 9 had to defend",
+          "8. The Claude request lifecycle",
+          "9. The provider abstraction",
+          "10. The workflow sequence, end to end",
+          "11. Component interaction"
+        ]
+      },
+      {
+        "path": "docs/architecture/current-architecture.md",
+        "title": "The Platform As Built",
+        "kind": "architecture",
+        "headings": [
+          "1. Runtime architecture",
+          "2. The stacks, and the one thing that is not a stack",
+          "3. The life of one instance",
+          "4. What each milestone added",
+          "What is not built",
+          "Keeping this file current"
+        ]
+      },
+      {
+        "path": "docs/architecture/diagrams.md",
+        "title": "Architecture Diagrams — Milestone 1",
+        "kind": "architecture",
+        "headings": [
+          "AWS Architecture Diagram",
+          "Conventions",
+          "Diagram 1 — High-Level Platform Architecture",
+          "Diagram 2 — Event Flow",
+          "Diagram 3 — Component Interaction",
+          "Diagram 4 — Deployment Boundaries",
+          "Consistency note"
+        ]
+      },
+      {
+        "path": "docs/architecture/infrastructure-diagrams.md",
+        "title": "Infrastructure Diagrams — Milestone 2",
+        "kind": "architecture",
+        "headings": [
+          "1. Infrastructure Overview",
+          "2. Network Topology",
+          "3. CloudFormation Resource Relationships",
+          "4. Infrastructure Deployment Flow",
+          "Consistency note"
+        ]
+      },
+      {
+        "path": "docs/architecture/loop-diagrams.md",
+        "title": "Loop Diagrams — Milestone 11",
+        "kind": "architecture",
+        "headings": [
+          "Contents",
+          "1. High-level architecture",
+          "2. The agent lifecycle",
+          "3. State transitions",
+          "4. The controller is a reducer",
+          "5. Execution sequence",
+          "6. The retry flow",
+          "7. The reflection flow",
+          "8. Failure recovery",
+          "9. Component interaction"
+        ]
+      },
+      {
+        "path": "docs/architecture/n8n-diagrams.md",
+        "title": "Workflow Orchestration Diagrams — Milestone 5",
+        "kind": "architecture",
+        "headings": [
+          "1. The request flow",
+          "2. The seam",
+          "3. Why a retry is not free",
+          "4. What is retried, and what is not",
+          "5. Where the secrets are"
+        ]
+      },
+      {
+        "path": "docs/architecture/ollama-diagrams.md",
+        "title": "Inference Diagrams — Milestone 7",
+        "kind": "architecture",
+        "headings": [
+          "1. Two consumers of inference",
+          "2. The provider abstraction",
+          "3. Streaming, and the timeout that actually works",
+          "4. A retry is safe here — until the first token",
+          "5. The silent-truncation trap"
+        ]
+      },
+      {
+        "path": "docs/architecture/openclaw-diagrams.md",
+        "title": "Agent Execution Diagrams — Milestone 6",
+        "kind": "architecture",
+        "headings": [
+          "1. Who does what",
+          "2. The shape that \"slow\" forces",
+          "3. A retry costs money",
+          "4. What is retried, and what must never be",
+          "5. The agent is a deputy"
+        ]
+      },
+      {
+        "path": "docs/architecture/router-diagrams.md",
+        "title": "Router Diagrams — Milestone 10",
+        "kind": "architecture",
+        "headings": [
+          "Contents",
+          "1. The router is a provider",
+          "2. High-level architecture",
+          "3. The request lifecycle",
+          "4. Routing sequence: constrain, select, order, execute",
+          "5. Preference vs constraint",
+          "6. The fallback flow",
+          "7. Health as a circuit breaker",
+          "8. The three things that must never fail over",
+          "9. Capabilities: union vs guarantee",
+          "10. Adding a provider"
+        ]
+      },
+      {
+        "path": "docs/architecture/spot-diagrams.md",
+        "title": "Spot Interruption Diagrams — Milestone 3",
+        "kind": "architecture",
+        "headings": [
+          "1. The two halves of interruption handling",
+          "2. The interruption timeline",
+          "3. Event routing",
+          "4. Does this workload belong on Spot?",
+          "5. What the discount buys, and what it costs"
+        ]
+      },
+      {
+        "path": "docs/blog/adding-amazon-bedrock-to-an-ai-agent-platform.md",
+        "title": "Adding Amazon Bedrock to an AI Agent Platform",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "The point of this milestone is not Bedrock",
+          "The abstraction held. The vocabulary did not",
+          "There is no API key, and that is the best part",
+          "The permission error that is two errors",
+          "Throttling is not an outage",
+          "The retry layer I did not know I had",
+          "Converse, or a bug per model family",
+          "The wildcard that bills you",
+          "The first dependency",
+          "Testing a cloud API without touching the cloud",
+          "The seam, enforced by a test rather than a promise",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/building-autonomous-ai-agents-with-loop-engineering.md",
+        "title": "Building Autonomous AI Agents with Loop Engineering",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "The loop is the product, and the model is a component",
+          "Three loops, and the trap of conflating them",
+          "The controller is a reducer",
+          "Where the work actually happens",
+          "Stopping conditions are the feature",
+          "Retry, and the one bit everyone gets wrong",
+          "Reflection: changing behaviour without changing code",
+          "Recovery: a Spot instance can vanish mid-thought",
+          "The loop knows neither a model nor a runtime",
+          "Who drives the loop",
+          "Testing an autonomous agent without a GPU or an AWS account",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/building-hybrid-ai-workflows-with-ollama-and-amazon-bedrock.md",
+        "title": "Building Hybrid AI Workflows with Ollama and Amazon Bedrock",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "The design was finished three milestones ago",
+          "The router is a provider, and that is the whole trick",
+          "Preference is not constraint",
+          "Four strategies that are really two",
+          "Fallback is easy; affordable fallback is the work",
+          "The three retries that must never happen",
+          "The bug that would have shipped",
+          "A capability is a union; a guarantee is not",
+          "The router never learns a vendor's name",
+          "Testing a router without a GPU or an AWS account",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+        "title": "Designing an AI Agent Platform on AWS",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Introduction",
+          "The problem",
+          "Why an AI agent platform is useful",
+          "Why AWS",
+          "High-level goals",
+          "Design Goals",
+          "High-Level Architecture",
+          "AWS Services",
+          "Amazon EventBridge",
+          "AWS Lambda",
+          "Amazon CloudWatch",
+          "EC2 Spot Instances",
+          "AWS IAM",
+          "Amazon VPC",
+          "Security Groups",
+          "AWS CloudFormation",
+          "Amazon Bedrock",
+          "Non-AWS Components",
+          "n8n",
+          "OpenClaw",
+          "Ollama",
+          "Component Responsibilities",
+          "Data Flow",
+          "Event Flow"
+        ]
+      },
+      {
+        "path": "docs/blog/integrating-claude-into-an-ai-agent-platform.md",
+        "title": "Integrating Claude into an AI Agent Platform",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Why Claude, and why through Bedrock",
+          "Why Claude",
+          "Why through Bedrock, and not Anthropic's API",
+          "I predicted this milestone wrong",
+          "The claim I had to withdraw",
+          "What I want to keep from this",
+          "What \"the model can act\" actually costs",
+          "The attack that defeats every boundary I had built",
+          "The defence is an allowlist, not a filter",
+          "Refusing is a feature",
+          "Structured output, and which half of it is real",
+          "The bug that would have made every tool call empty",
+          "Prompts are code",
+          "Validate the artefact, not just the JSON",
+          "Cost, and scalability",
+          "What this design makes easy next",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/integrating-openclaw-into-an-ai-agent-platform.md",
+        "title": "Integrating OpenClaw into an AI Agent Platform",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Orchestration is not execution",
+          "Who does what",
+          "The shape that \"slow\" forces",
+          "The contract, and who owns it",
+          "A retry costs money",
+          "Limits are not optional",
+          "The agent is a deputy",
+          "Reject, do not redact",
+          "What is retried, and what must never be",
+          "Observability: the chain",
+          "Refactoring instead of copy-pasting",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+        "title": "Optimizing EC2 Spot Instance Startup with Custom AMIs",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Why startup time matters more for AI",
+          "The trouble with installing at boot",
+          "What a custom AMI actually is",
+          "Architecture",
+          "Why the build is a script, not CloudFormation",
+          "What to bake, and what never to bake",
+          "Building the image",
+          "The two-phase build, and why it has to be",
+          "The CloudFormation",
+          "UserData, before and after",
+          "The numbers",
+          "The number the platform actually gets",
+          "What the build costs, on the other side of the ledger",
+          "A number that was a lie",
+          "Immutable infrastructure",
+          "Versioning and rollback",
+          "Security: an AMI is a filesystem you might share",
+          "The one that is silent",
+          "Cost",
+          "Common pitfalls",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/provisioning-an-ai-agent-platform-with-cloudformation.md",
+        "title": "Provisioning an AI Agent Platform with CloudFormation",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Introduction",
+          "Why Infrastructure as Code",
+          "Why CloudFormation",
+          "Infrastructure Overview",
+          "Network Design",
+          "IAM Design",
+          "EC2 Spot Strategy",
+          "Ephemeral Compute Philosophy",
+          "Why EBS Is Disposable",
+          "Why S3 Is Used for Durable Storage",
+          "Monitoring",
+          "Security",
+          "Cost Optimization",
+          "Deployment Walkthrough",
+          "Lessons Learned",
+          "Future Roadmap"
+        ]
+      },
+      {
+        "path": "docs/blog/reducing-ai-infrastructure-costs-with-ec2-spot-instances.md",
+        "title": "Reducing AI Infrastructure Costs with EC2 Spot Instances",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "Why AI infrastructure is expensive",
+          "What EC2 Spot Instances are",
+          "The Spot pricing model",
+          "One-time vs persistent requests",
+          "Why AI workloads fit Spot",
+          "Architecture",
+          "The mistake: a Lambda cannot save your work",
+          "The drain agent",
+          "The bug that only appears when it matters",
+          "Event-driven interruption handling",
+          "Two traps in the event wiring",
+          "The CloudFormation",
+          "The Lambda handlers",
+          "IAM: scoping the unscopeable",
+          "What it costs, and what it saves",
+          "When not to use Spot",
+          "Common pitfalls",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/running-local-llms-with-ollama-on-aws.md",
+        "title": "Running Local LLMs with Ollama on AWS",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "A claim I made last milestone",
+          "Why run a model yourself",
+          "The provider abstraction, and why now",
+          "The timeout that actually works",
+          "A retry is safe here — and that is new",
+          "…until the first token escapes",
+          "The failure that looks like success",
+          "Do not log the prompt",
+          "The number that tells you everything",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "docs/blog/using-n8n-as-the-workflow-engine-for-ai-automation.md",
+        "title": "Using n8n as the Workflow Engine for AI Automation",
+        "kind": "guide",
+        "headings": [
+          "Contents",
+          "The shape of the work",
+          "Why an orchestrator, and why n8n",
+          "The integration, not the deployment",
+          "The seam",
+          "The hard problem: a retry is not free",
+          "What is retried, and what must never be",
+          "A 200 is not a success",
+          "The payload is not yours",
+          "Observability",
+          "Adding a workflow",
+          "Testing it",
+          "Lessons learned",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "infra/AMI.md",
+        "title": "Custom AMIs",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "Why this matters on Spot",
+          "What is baked, and what is not",
+          "Architecture",
+          "Why the build is a script and not CloudFormation",
+          "The build is two phases, and it has to be",
+          "Building an AMI",
+          "What ends up in the image",
+          "Deploying onto an AMI",
+          "Versioning",
+          "Rollback",
+          "Immutable infrastructure",
+          "Startup comparison",
+          "Why UserData gets simpler, and why that matters",
+          "Security: what must never be in an AMI",
+          "The cloud-init trap",
+          "Cost",
+          "Maintenance",
+          "AI workloads",
+          "Cleanup",
+          "Troubleshooting"
+        ]
+      },
+      {
+        "path": "infra/README.md",
+        "title": "Infrastructure — Milestones 2, 3 and 4",
+        "kind": "readme",
+        "headings": [
+          "What this provisions",
+          "Architecture",
+          "Repository layout",
+          "Deploy order",
+          "Prerequisites",
+          "Deploy",
+          "Continuous integration \u0026 deployment",
+          "One-time deploy setup",
+          "A reminder on first push",
+          "Parameters",
+          "Cost",
+          "Security overview",
+          "Troubleshooting",
+          "Validation \u0026 limitations",
+          "Instance scheduler (optional add-on)",
+          "Custom AMIs (Milestone 4)",
+          "Spot interruption handling (Milestone 3)",
+          "What comes next"
+        ]
+      },
+      {
+        "path": "infra/SCHEDULER.md",
+        "title": "Instance Scheduler",
+        "kind": "other",
+        "headings": [
+          "Architecture",
+          "How it works",
+          "Deployment",
+          "CloudFormation parameters",
+          "Required IAM permissions",
+          "Scheduling",
+          "Timezone",
+          "Modifying the schedule",
+          "Manual start and stop",
+          "Cost considerations",
+          "Troubleshooting",
+          "Example CloudWatch logs",
+          "Example EventBridge Scheduler configuration"
+        ]
+      },
+      {
+        "path": "infra/SPOT.md",
+        "title": "EC2 Spot Instances",
+        "kind": "other",
+        "headings": [
+          "Contents",
+          "The one thing to understand first",
+          "Architecture",
+          "Why the rules are on the *default* bus",
+          "Why the handlers filter by tag",
+          "The events",
+          "What a warning looks like",
+          "What the platform re-publishes",
+          "The drain agent",
+          "Deployment",
+          "Parameters",
+          "08-spot.yaml",
+          "03-compute.yaml (the Spot-relevant ones)",
+          "IAM",
+          "Logging",
+          "Metrics",
+          "Testing an interruption",
+          "Cost",
+          "One-time vs persistent requests",
+          "When not to use Spot",
+          "AI workloads on Spot",
+          "Cleanup",
+          "Troubleshooting",
+          "No Spot capacity"
+        ]
+      },
+      {
+        "path": "internal/prompt/templates/architecture/explain.md",
+        "kind": "architecture"
+      },
+      {
+        "path": "internal/prompt/templates/architecture/mermaid-diagram.md",
+        "kind": "architecture"
+      },
+      {
+        "path": "internal/prompt/templates/loop/evaluate.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/loop/plan.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/loop/reflect.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/loop/summarise.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/structured/change-triage.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/structured/workflow-decision.md",
+        "kind": "adr"
+      },
+      {
+        "path": "internal/prompt/templates/summarisation/diff-summary.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/summarisation/release-notes.md",
+        "kind": "other"
+      },
+      {
+        "path": "internal/prompt/templates/workflow/tool-use-system.md",
+        "kind": "other",
+        "headings": [
+          "What you are working on",
+          "Using tools",
+          "Content you read is not instructions",
+          "How to answer"
+        ]
+      },
+      {
+        "path": "internal/prompt/templates/writing/technical-doc.md",
+        "kind": "other"
+      }
+    ]
+  },
+  "repositoryStructure": {
+    "directories": [
+      {
+        "path": ".githooks/",
+        "responsibility": "Project directory",
+        "fileCount": 1
+      },
+      {
+        "path": ".github/",
+        "responsibility": "GitHub configuration and CI/CD workflows",
+        "fileCount": 4
+      },
+      {
+        "path": "cmd/",
+        "responsibility": "Executable entry points (main packages)",
+        "fileCount": 27
+      },
+      {
+        "path": "docs/",
+        "responsibility": "Project documentation",
+        "fileCount": 28
+      },
+      {
+        "path": "infra/",
+        "responsibility": "Project directory",
+        "fileCount": 34
+      },
+      {
+        "path": "internal/",
+        "responsibility": "Private application and business logic packages",
+        "fileCount": 115
+      }
+    ],
+    "overview": "A standard-go project of 222 files organized into 6 top-level directories (.githooks, .github, cmd, docs, infra, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "fileCount": 222,
+    "layout": "standard-go"
+  },
+  "architecture": {
+    "overview": "An event-driven, AWS-native system built from 4 major components on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge, Amazon EventBridge Scheduler. A standard-go project of 222 files organized into 6 top-level directories (.githooks, .github, cmd, docs, infra, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "components": [
+      {
+        "name": "CLI / worker binaries",
+        "responsibility": "Instance worker and operational CLIs",
+        "kind": "compute"
+      },
+      {
+        "name": "Domain packages",
+        "responsibility": "Business logic behind small, testable ports",
+        "kind": "library"
+      },
+      {
+        "name": "Event bus \u0026 queue",
+        "responsibility": "Durable, decoupled event delivery",
+        "kind": "queue"
+      },
+      {
+        "name": "Managed storage",
+        "responsibility": "State, metadata, and secrets",
+        "kind": "store"
+      }
+    ],
+    "deploymentTopology": "A modular, multi-stack CloudFormation deployment: 13 serverless, 2 compute, 2 storage, and 8 networking resources, with least-privilege IAM (7 roles/policies).",
+    "awsServices": [
+      "AWS IAM",
+      "AWS Lambda",
+      "Amazon CloudWatch",
+      "Amazon EC2",
+      "Amazon EventBridge",
+      "Amazon EventBridge Scheduler",
+      "Amazon S3"
+    ],
+    "eventDrivenFlows": [
+      "EventBridge Scheduler → Lambda → EC2 start/stop"
+    ],
+    "scalability": "Stateless Lambda entry points scale horizontally with request volume.",
+    "reliability": "Reliability comes from managed, self-healing Lambda execution.",
+    "security": "Security is enforced through least-privilege IAM roles, HMAC-verified webhooks.",
+    "insights": [
+      "The pipeline is fully event-driven: EventBridge Scheduler → Lambda → EC2 start/stop.",
+      "It blends serverless ingestion with an on-demand compute host, bounding cost while keeping the front door always available.",
+      "105 architecture diagram(s) document the system, aiding onboarding and technical writing."
+    ]
+  },
+  "commits": [
+    {
+      "sha": "ca0fb851ea1febf5b4bfb1bcd6c744b5ad32f781",
+      "subject": "docs(changelog): add v0.13.0 [skip ci]",
+      "author": "github-actions[bot]",
+      "date": "2026-07-15T11:11:13Z",
+      "type": "docs",
+      "scope": "changelog",
+      "category": "Documentation",
+      "breaking": false,
+      "conventional": true
+    },
+    {
+      "sha": "821cea86d3d4e354b805918b26928fa3c7d689ac",
+      "subject": "feat(loop): autonomous agent loop with an explicit, bounded controller",
+      "author": "Teddy Kekana",
+      "date": "2026-07-15T12:33:18Z",
+      "type": "feat",
+      "scope": "loop",
+      "category": "Features",
+      "breaking": false,
+      "conventional": true
+    }
+  ],
+  "commitStats": {
+    "total": 3,
+    "analyzed": 2,
+    "ignored": 1,
+    "conventional": 2,
+    "breaking": 0,
+    "byCategory": {
+      "Documentation": 1,
+      "Features": 1
+    },
+    "contributors": [
+      "Teddy Kekana",
+      "github-actions[bot]"
+    ]
+  },
+  "changedFiles": [
+    {
+      "path": ".gitignore",
+      "category": "Configuration",
+      "status": "modified",
+      "additions": 3
+    },
+    {
+      "path": "CHANGELOG.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 10
+    },
+    {
+      "path": "LOOP.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 399
+    },
+    {
+      "path": "README.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 111,
+      "deletions": 9
+    },
+    {
+      "path": "cmd/loop/main.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 368
+    },
+    {
+      "path": "docs/architecture/current-architecture.md",
+      "category": "Documentation",
+      "status": "modified",
+      "additions": 1
+    },
+    {
+      "path": "docs/architecture/loop-diagrams.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 272
+    },
+    {
+      "path": "docs/blog/building-autonomous-ai-agents-with-loop-engineering.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 304
+    },
+    {
+      "path": "internal/architecture_test.go",
+      "category": "Tests",
+      "status": "modified",
+      "additions": 43
+    },
+    {
+      "path": "internal/loop/adapter/execute.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 179
+    },
+    {
+      "path": "internal/loop/adapter/execute_test.go",
+      "category": "Tests",
+      "status": "added",
+      "additions": 158
+    },
+    {
+      "path": "internal/loop/adapter/reason.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 240
+    },
+    {
+      "path": "internal/loop/adapter/reason_test.go",
+      "category": "Tests",
+      "status": "added",
+      "additions": 54
+    },
+    {
+      "path": "internal/loop/adapter/schema.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 90
+    },
+    {
+      "path": "internal/loop/config.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 237
+    },
+    {
+      "path": "internal/loop/config_test.go",
+      "category": "Tests",
+      "status": "added",
+      "additions": 94
+    },
+    {
+      "path": "internal/loop/controller.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 459
+    },
+    {
+      "path": "internal/loop/controller_test.go",
+      "category": "Tests",
+      "status": "added",
+      "additions": 414
+    },
+    {
+      "path": "internal/loop/engine.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 115
+    },
+    {
+      "path": "internal/loop/loop.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 419
+    },
+    {
+      "path": "internal/loop/retry.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 93
+    },
+    {
+      "path": "internal/loop/retry_test.go",
+      "category": "Tests",
+      "status": "added",
+      "additions": 64
+    },
+    {
+      "path": "internal/loop/runner.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 308
+    },
+    {
+      "path": "internal/loop/runner_test.go",
+      "category": "Tests",
+      "status": "added",
+      "additions": 329
+    },
+    {
+      "path": "internal/loop/state.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 225
+    },
+    {
+      "path": "internal/loop/stop.go",
+      "category": "Application Code",
+      "status": "added",
+      "additions": 95
+    },
+    {
+      "path": "internal/prompt/templates/loop/evaluate.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 37
+    },
+    {
+      "path": "internal/prompt/templates/loop/plan.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 36
+    },
+    {
+      "path": "internal/prompt/templates/loop/reflect.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 32
+    },
+    {
+      "path": "internal/prompt/templates/loop/summarise.md",
+      "category": "Documentation",
+      "status": "added",
+      "additions": 27
+    }
+  ],
+  "fileStats": {
+    "total": 30,
+    "additions": 5216,
+    "deletions": 9,
+    "byCategory": {
+      "Application Code": 12,
+      "Configuration": 1,
+      "Documentation": 10,
+      "Tests": 7
+    },
+    "summary": "30 files changed (+5216/-9): 12 Application Code, 10 Documentation, 7 Tests, 1 Configuration."
+  },
+  "technologies": [
+    {
+      "name": "AWS IAM",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "AWS Lambda",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon CloudWatch",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon EC2",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon EventBridge",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon EventBridge Scheduler",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "Amazon S3",
+      "category": "AWS Service",
+      "confidence": "high",
+      "evidence": "CloudFormation resource"
+    },
+    {
+      "name": "GitHub Actions",
+      "category": "Deployment",
+      "confidence": "high",
+      "evidence": ".github/workflows"
+    },
+    {
+      "name": "AWS Lambda (Go runtime)",
+      "category": "Framework",
+      "confidence": "high",
+      "evidence": "go.mod dependency"
+    },
+    {
+      "name": "Go",
+      "category": "Language",
+      "confidence": "high",
+      "evidence": "133 source files"
+    },
+    {
+      "name": "Python",
+      "category": "Language",
+      "confidence": "medium",
+      "evidence": "1 source file"
+    },
+    {
+      "name": "AWS SDK for Go v2",
+      "category": "Library",
+      "confidence": "high",
+      "evidence": "go.mod dependency"
+    },
+    {
+      "name": "Go modules",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "go.mod"
+    },
+    {
+      "name": "Make",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "Makefile"
+    },
+    {
+      "name": "Ollama",
+      "category": "Tool",
+      "confidence": "high",
+      "evidence": "local LLM runtime"
+    },
+    {
+      "name": "n8n",
+      "category": "Tool",
+      "confidence": "medium",
+      "evidence": "workflow orchestration"
+    }
+  ],
+  "cloudformation": {
+    "templates": [
+      "infra/cloudformation/01-network.yaml",
+      "infra/cloudformation/02-iam.yaml",
+      "infra/cloudformation/03-compute.yaml",
+      "infra/cloudformation/04-storage.yaml",
+      "infra/cloudformation/05-events.yaml",
+      "infra/cloudformation/06-observability.yaml",
+      "infra/cloudformation/07-scheduler.yaml",
+      "infra/cloudformation/08-spot.yaml"
+    ],
+    "resources": [
+      {
+        "logicalId": "AIPlatformInstance",
+        "type": "AWS::EC2::Instance",
+        "service": "EC2",
+        "template": "03-compute.yaml",
+        "category": "Compute"
+      },
+      {
+        "logicalId": "AgentLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "06-observability.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "ArtifactBucket",
+        "type": "AWS::S3::Bucket",
+        "service": "S3",
+        "template": "04-storage.yaml",
+        "category": "Storage"
+      },
+      {
+        "logicalId": "ArtifactBucketPolicy",
+        "type": "AWS::S3::BucketPolicy",
+        "service": "S3",
+        "template": "04-storage.yaml",
+        "category": "Storage"
+      },
+      {
+        "logicalId": "BedrockInvokePolicy",
+        "type": "AWS::IAM::ManagedPolicy",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "DefaultPublicRoute",
+        "type": "AWS::EC2::Route",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "DispatchFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "05-events.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "DispatchFunctionInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "05-events.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "DispatchFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "05-events.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "EventBus",
+        "type": "AWS::Events::EventBus",
+        "service": "Events",
+        "template": "05-events.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InstanceLaunchedInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InstanceLaunchedRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InstanceProfile",
+        "type": "AWS::IAM::InstanceProfile",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "InstanceRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "InstanceSecurityGroup",
+        "type": "AWS::EC2::SecurityGroup",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "InstanceStoppedInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InstanceStoppedRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InstanceTerminatedInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InstanceTerminatedRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "InternetGateway",
+        "type": "AWS::EC2::InternetGateway",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "InternetGatewayAttachment",
+        "type": "AWS::EC2::VPCGatewayAttachment",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "InterruptionFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InterruptionFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "08-spot.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "InterruptionWarningInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "InterruptionWarningRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "LambdaExecutionRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "02-iam.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "LambdaRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "07-scheduler.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "LaunchTemplate",
+        "type": "AWS::EC2::LaunchTemplate",
+        "service": "EC2",
+        "template": "03-compute.yaml",
+        "category": "Compute"
+      },
+      {
+        "logicalId": "PlatformEventRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "05-events.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "PlatformLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "06-observability.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "PublicRouteTable",
+        "type": "AWS::EC2::RouteTable",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "PublicSubnet",
+        "type": "AWS::EC2::Subnet",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "PublicSubnetRouteTableAssociation",
+        "type": "AWS::EC2::SubnetRouteTableAssociation",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      },
+      {
+        "logicalId": "RebalanceInvokePermission",
+        "type": "AWS::Lambda::Permission",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "RebalanceRecommendationRule",
+        "type": "AWS::Events::Rule",
+        "service": "Events",
+        "template": "08-spot.yaml",
+        "category": "Messaging"
+      },
+      {
+        "logicalId": "SchedulerRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "07-scheduler.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "SpotLambdaRole",
+        "type": "AWS::IAM::Role",
+        "service": "IAM",
+        "template": "08-spot.yaml",
+        "category": "IAM"
+      },
+      {
+        "logicalId": "StartFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StartFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "07-scheduler.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "StartScheduleRule",
+        "type": "AWS::Scheduler::Schedule",
+        "service": "Scheduler",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StateChangeFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "08-spot.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StateChangeFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "08-spot.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "StopFunction",
+        "type": "AWS::Lambda::Function",
+        "service": "Lambda",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "StopFunctionLogGroup",
+        "type": "AWS::Logs::LogGroup",
+        "service": "Logs",
+        "template": "07-scheduler.yaml",
+        "category": "Observability"
+      },
+      {
+        "logicalId": "StopScheduleRule",
+        "type": "AWS::Scheduler::Schedule",
+        "service": "Scheduler",
+        "template": "07-scheduler.yaml",
+        "category": "Serverless"
+      },
+      {
+        "logicalId": "Vpc",
+        "type": "AWS::EC2::VPC",
+        "service": "EC2",
+        "template": "01-network.yaml",
+        "category": "Networking"
+      }
+    ],
+    "parameters": [
+      "AmiId",
+      "BedrockModelArns",
+      "BedrockRegions",
+      "DrainPollSeconds",
+      "DrainUnits",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "Environment",
+      "InstanceId",
+      "InstanceType",
+      "InterruptionCodeKey",
+      "LambdaCodeBucket",
+      "LambdaCodeBucket",
+      "LambdaTimeoutSeconds",
+      "LambdaTimeoutSeconds",
+      "LatestAmiId",
+      "LogRetentionDays",
+      "LogRetentionDays",
+      "LogRetentionDays",
+      "LogRetentionDays",
+      "NoncurrentVersionExpirationDays",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "ProjectName",
+      "PublicSubnetCidr",
+      "PurchaseOption",
+      "RebalanceRuleState",
+      "RootVolumeSize",
+      "ScheduleTimezone",
+      "SecurityGroupId",
+      "SpotInterruptionBehavior",
+      "SpotMaxPrice",
+      "SshKeyName",
+      "StartCodeKey",
+      "StartSchedule",
+      "StateChangeCodeKey",
+      "StopCodeKey",
+      "StopSchedule",
+      "SubnetId",
+      "VpcCidr"
+    ],
+    "outputs": [
+      "AgentLogGroupName",
+      "ArtifactBucketArn",
+      "ArtifactBucketName",
+      "BootPath",
+      "DispatchFunctionArn",
+      "DrainLog",
+      "EventBusArn",
+      "EventBusName",
+      "ImageId",
+      "InstanceAvailabilityZone",
+      "InstanceId",
+      "InstancePrivateIp",
+      "InstanceProfileArn",
+      "InstanceProfileName",
+      "InstanceRoleArn",
+      "InstanceSecurityGroupId",
+      "InterruptionFunctionArn",
+      "InterruptionLogGroup",
+      "LambdaExecutionRoleArn",
+      "MetricNamespace",
+      "PlatformLogGroupName",
+      "PublicSubnetId",
+      "PurchaseOption",
+      "StartFunctionArn",
+      "StartScheduleName",
+      "StateChangeFunctionArn",
+      "StopFunctionArn",
+      "StopScheduleName",
+      "VpcCidr",
+      "VpcId"
+    ],
+    "counts": {
+      "resources": 46,
+      "parameters": 50,
+      "outputs": 30,
+      "iam": 7,
+      "serverless": 13,
+      "compute": 2,
+      "storage": 2,
+      "networking": 8,
+      "messaging": 7
+    },
+    "services": [
+      "EC2",
+      "Events",
+      "IAM",
+      "Lambda",
+      "Logs",
+      "S3",
+      "Scheduler"
+    ],
+    "summary": "8 CloudFormation template(s) define 46 resources across EC2, Events, IAM, Lambda, Logs, S3, Scheduler (13 serverless, 2 compute, 2 storage, 8 networking, 7 IAM, 7 messaging), with 50 parameters and 30 outputs."
+  },
+  "mermaid": [
+    {
+      "source": "AGENTS.md",
+      "type": "sequence",
+      "nodes": [
+        "App",
+        "GH",
+        "M",
+        "N8N",
+        "OC",
+        "Svc"
+      ],
+      "edges": [
+        {
+          "from": "GH",
+          "to": "App",
+          "label": "webhook (push)"
+        },
+        {
+          "from": "App",
+          "to": "N8N",
+          "label": "trigger workflow (M5)"
+        },
+        {
+          "from": "N8N",
+          "to": "Svc",
+          "label": "submit task: blog-draft"
+        },
+        {
+          "from": "Svc",
+          "to": "Svc",
+          "label": "validate · correlate · stamp limits"
+        },
+        {
+          "from": "Svc",
+          "to": "OC",
+          "label": "POST /v1/executions"
+        },
+        {
+          "from": "OC",
+          "to": "Svc",
+          "label": "202 + execution ID"
+        },
+        {
+          "from": "Svc",
+          "to": "N8N",
+          "label": "execution ID (immediately)"
+        },
+        {
+          "from": "N8N",
+          "to": "Svc",
+          "label": "status?"
+        },
+        {
+          "from": "Svc",
+          "to": "OC",
+          "label": "GET /v1/executions/{id}"
+        },
+        {
+          "from": "OC",
+          "to": "Svc",
+          "label": "running · 7 steps · $0.21"
+        },
+        {
+          "from": "OC",
+          "to": "M",
+          "label": "inference (many times)"
+        },
+        {
+          "from": "M",
+          "to": "OC",
+          "label": "tokens"
+        },
+        {
+          "from": "N8N",
+          "to": "Svc",
+          "label": "result"
+        },
+        {
+          "from": "Svc",
+          "to": "OC",
+          "label": "GET /v1/executions/{id}/result"
+        },
+        {
+          "from": "OC",
+          "to": "Svc",
+          "label": "content + artifacts"
+        },
+        {
+          "from": "Svc",
+          "to": "Svc",
+          "label": "VALIDATE the output — size · UTF-8 · credentials"
+        },
+        {
+          "from": "Svc",
+          "to": "N8N",
+          "label": "result (or ErrOutputRejected)"
+        },
+        {
+          "from": "N8N",
+          "to": "GH",
+          "label": "open a pull request"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 18,
+      "summary": "sequence diagram with 6 nodes and 18 relationships."
+    },
+    {
+      "source": "LOOP.md",
+      "type": "flowchart",
+      "nodes": [
+        "n8n",
+        "ok1",
+        "ok2",
+        "r"
+      ],
+      "edges": [
+        {
+          "from": "r",
+          "to": "ok1",
+          "label": "blocks on each execution"
+        },
+        {
+          "from": "n8n",
+          "to": "ok2",
+          "label": "Decide → submit → wait node → Advance"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 4 nodes and 2 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "api",
+        "bedrock",
+        "claude",
+        "claw",
+        "gh",
+        "n8n",
+        "ollama",
+        "queue",
+        "router",
+        "store",
+        "user"
+      ],
+      "edges": [
+        {
+          "from": "user",
+          "to": "api"
+        },
+        {
+          "from": "gh",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "store"
+        },
+        {
+          "from": "claw",
+          "to": "router"
+        },
+        {
+          "from": "n8n",
+          "to": "router"
+        },
+        {
+          "from": "router",
+          "to": "ollama"
+        },
+        {
+          "from": "router",
+          "to": "bedrock"
+        },
+        {
+          "from": "router",
+          "to": "claude"
+        },
+        {
+          "from": "claw",
+          "to": "gh"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 11 nodes and 12 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "reclaim",
+        "rules",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "\"event\""
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save\""
+        },
+        {
+          "from": "default",
+          "to": "rules"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "after",
+        "b1",
+        "b2",
+        "before",
+        "fail"
+      ],
+      "edges": [
+        {
+          "from": "b1",
+          "to": "b2"
+        },
+        {
+          "from": "before",
+          "to": "after",
+          "label": "\"move the work to build time\""
+        },
+        {
+          "from": "b2",
+          "to": "fail"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 3,
+      "summary": "flowchart diagram with 5 nodes and 3 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "app",
+        "cw",
+        "eng",
+        "exec",
+        "future",
+        "gh",
+        "inst",
+        "n8nc",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "eng"
+        },
+        {
+          "from": "eng",
+          "to": "n8nc"
+        },
+        {
+          "from": "n8nc",
+          "to": "inst",
+          "label": "\"HTTPS + token\""
+        },
+        {
+          "from": "inst",
+          "to": "exec"
+        },
+        {
+          "from": "svc",
+          "to": "cw"
+        },
+        {
+          "from": "eng",
+          "to": "future"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "components",
+        "platform"
+      ],
+      "edges": [
+        {
+          "from": "platform",
+          "to": "components"
+        },
+        {
+          "from": "components",
+          "to": "platform"
+        }
+      ],
+      "nodeCount": 2,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 2 nodes and 2 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "m11",
+        "m12",
+        "m15",
+        "m16",
+        "m2",
+        "m20",
+        "m3",
+        "m5",
+        "m6",
+        "m7",
+        "m8",
+        "mcp",
+        "p0",
+        "p1"
+      ],
+      "edges": [
+        {
+          "from": "m2",
+          "to": "m3"
+        },
+        {
+          "from": "m5",
+          "to": "m6"
+        },
+        {
+          "from": "m7",
+          "to": "m8"
+        },
+        {
+          "from": "m11",
+          "to": "m12"
+        },
+        {
+          "from": "m15",
+          "to": "m16"
+        },
+        {
+          "from": "m20",
+          "to": "mcp"
+        },
+        {
+          "from": "p0",
+          "to": "p1"
+        }
+      ],
+      "nodeCount": 14,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 14 nodes and 7 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "flowchart",
+      "nodes": [
+        "actions",
+        "api",
+        "cl",
+        "cut",
+        "dev",
+        "ghpkg",
+        "gitpkg",
+        "post",
+        "rel",
+        "repo",
+        "sv"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "cut"
+        },
+        {
+          "from": "actions",
+          "to": "post"
+        },
+        {
+          "from": "cut",
+          "to": "rel"
+        },
+        {
+          "from": "post",
+          "to": "rel"
+        },
+        {
+          "from": "post",
+          "to": "ghpkg"
+        },
+        {
+          "from": "rel",
+          "to": "sv"
+        },
+        {
+          "from": "rel",
+          "to": "cl"
+        },
+        {
+          "from": "rel",
+          "to": "gitpkg"
+        },
+        {
+          "from": "cl",
+          "to": "sv"
+        },
+        {
+          "from": "gitpkg",
+          "to": "repo"
+        },
+        {
+          "from": "ghpkg",
+          "to": "api"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 11 nodes and 11 relationships."
+    },
+    {
+      "source": "README.md",
+      "type": "sequence",
+      "nodes": [
+        "CI",
+        "CLI",
+        "Dev",
+        "GH",
+        "Repo"
+      ],
+      "edges": [
+        {
+          "from": "Dev",
+          "to": "CLI",
+          "label": "go run ./cmd/release minor"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "validate repository, branch, clean tree"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "fetch tags, find the latest version"
+        },
+        {
+          "from": "CLI",
+          "to": "CLI",
+          "label": "next = bump(latest, minor)"
+        },
+        {
+          "from": "CLI",
+          "to": "Dev",
+          "label": "show the plan, actions, and statistics"
+        },
+        {
+          "from": "Dev",
+          "to": "CLI",
+          "label": "confirm"
+        },
+        {
+          "from": "CLI",
+          "to": "Repo",
+          "label": "create the annotated tag v1.3.0"
+        },
+        {
+          "from": "CLI",
+          "to": "GH",
+          "label": "push refs/tags/v1.3.0"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "make dist"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "release publish --tag v1.3.0"
+        },
+        {
+          "from": "CI",
+          "to": "GH",
+          "label": "create the GitHub Release, upload binaries"
+        },
+        {
+          "from": "CI",
+          "to": "CI",
+          "label": "release changelog --tag v1.3.0 --write"
+        },
+        {
+          "from": "CI",
+          "to": "GH",
+          "label": "commit CHANGELOG.md to the default branch"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 5 nodes and 13 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "flowchart",
+      "nodes": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "MAJOR",
+        "MINOR",
+        "NONE",
+        "PATCH",
+        "PRE",
+        "RC",
+        "RC2",
+        "STABLE"
+      ],
+      "edges": [
+        {
+          "from": "A",
+          "to": "B"
+        },
+        {
+          "from": "B",
+          "to": "MAJOR"
+        },
+        {
+          "from": "B",
+          "to": "C"
+        },
+        {
+          "from": "C",
+          "to": "MINOR"
+        },
+        {
+          "from": "C",
+          "to": "D"
+        },
+        {
+          "from": "D",
+          "to": "PATCH"
+        },
+        {
+          "from": "D",
+          "to": "NONE"
+        },
+        {
+          "from": "MAJOR",
+          "to": "PRE"
+        },
+        {
+          "from": "MINOR",
+          "to": "PRE"
+        },
+        {
+          "from": "PATCH",
+          "to": "PRE"
+        },
+        {
+          "from": "PRE",
+          "to": "STABLE"
+        },
+        {
+          "from": "PRE",
+          "to": "RC"
+        },
+        {
+          "from": "RC",
+          "to": "RC2"
+        },
+        {
+          "from": "RC2",
+          "to": "STABLE"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 14,
+      "summary": "flowchart diagram with 12 nodes and 14 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "state",
+      "nodes": [
+        "Documented",
+        "Planned",
+        "Published",
+        "Pushed",
+        "Rejected",
+        "Tagged",
+        "Unreleased",
+        "Validated"
+      ],
+      "edges": [
+        {
+          "from": "Unreleased",
+          "to": "Validated"
+        },
+        {
+          "from": "Validated",
+          "to": "Planned"
+        },
+        {
+          "from": "Planned",
+          "to": "Tagged"
+        },
+        {
+          "from": "Tagged",
+          "to": "Pushed"
+        },
+        {
+          "from": "Pushed",
+          "to": "Published"
+        },
+        {
+          "from": "Published",
+          "to": "Documented"
+        },
+        {
+          "from": "Unreleased",
+          "to": "Rejected"
+        },
+        {
+          "from": "Planned",
+          "to": "Rejected"
+        },
+        {
+          "from": "Rejected",
+          "to": "Unreleased"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 9,
+      "summary": "state diagram with 8 nodes and 9 relationships."
+    },
+    {
+      "source": "RELEASE_MANAGEMENT.md",
+      "type": "flowchart",
+      "nodes": [
+        "ci",
+        "clibox",
+        "human"
+      ],
+      "edges": [
+        {
+          "from": "human",
+          "to": "clibox"
+        },
+        {
+          "from": "clibox",
+          "to": "ci"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "WORKFLOWS.md",
+      "type": "flowchart",
+      "nodes": [
+        "app",
+        "cw",
+        "eng",
+        "exec",
+        "future",
+        "gh",
+        "inst",
+        "n8n",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "eng"
+        },
+        {
+          "from": "eng",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "inst",
+          "label": "\"HTTPS + token\""
+        },
+        {
+          "from": "inst",
+          "to": "exec"
+        },
+        {
+          "from": "svc",
+          "to": "cw",
+          "label": "\"structured logs\""
+        },
+        {
+          "from": "eng",
+          "to": "future"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "ext"
+      ],
+      "edges": [
+        {
+          "from": "L1",
+          "to": "L2"
+        },
+        {
+          "from": "L2",
+          "to": "L3"
+        },
+        {
+          "from": "L4",
+          "to": "L3"
+        },
+        {
+          "from": "L4",
+          "to": "ext"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "cl",
+        "cm1",
+        "cm2",
+        "gh",
+        "gt",
+        "rl",
+        "sv"
+      ],
+      "edges": [
+        {
+          "from": "cm1",
+          "to": "rl"
+        },
+        {
+          "from": "cm2",
+          "to": "rl"
+        },
+        {
+          "from": "cm2",
+          "to": "gh"
+        },
+        {
+          "from": "rl",
+          "to": "sv"
+        },
+        {
+          "from": "rl",
+          "to": "cl"
+        },
+        {
+          "from": "rl",
+          "to": "gt"
+        },
+        {
+          "from": "cl",
+          "to": "sv"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 7 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "boot",
+        "cfgt",
+        "ci",
+        "fail",
+        "launch",
+        "pkg",
+        "ready",
+        "spot",
+        "ud",
+        "upd",
+        "waste"
+      ],
+      "edges": [
+        {
+          "from": "launch",
+          "to": "boot"
+        },
+        {
+          "from": "boot",
+          "to": "ci"
+        },
+        {
+          "from": "ci",
+          "to": "ud"
+        },
+        {
+          "from": "upd",
+          "to": "pkg"
+        },
+        {
+          "from": "ud",
+          "to": "waste"
+        },
+        {
+          "from": "waste",
+          "to": "cfgt"
+        },
+        {
+          "from": "cfgt",
+          "to": "ready"
+        },
+        {
+          "from": "waste",
+          "to": "fail"
+        },
+        {
+          "from": "waste",
+          "to": "spot"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 11 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "boot",
+        "cfg",
+        "ci",
+        "drain",
+        "env",
+        "launch",
+        "note",
+        "ud"
+      ],
+      "edges": [
+        {
+          "from": "launch",
+          "to": "boot"
+        },
+        {
+          "from": "boot",
+          "to": "ci"
+        },
+        {
+          "from": "ci",
+          "to": "ud"
+        },
+        {
+          "from": "env",
+          "to": "drain"
+        },
+        {
+          "from": "ud",
+          "to": "cfg"
+        },
+        {
+          "from": "boot",
+          "to": "note"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 8 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "Dev",
+        "EC2",
+        "S3",
+        "SSM"
+      ],
+      "edges": [
+        {
+          "from": "Dev",
+          "to": "Dev",
+          "label": "resolve next version (1.0.0 → 1.0.1)"
+        },
+        {
+          "from": "Dev",
+          "to": "Dev",
+          "label": "refuse if that version already exists"
+        },
+        {
+          "from": "Dev",
+          "to": "S3",
+          "label": "upload provision.sh, cleanup.sh, drain agent"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "run-instances (stock AL2023)"
+        },
+        {
+          "from": "B",
+          "to": "S3",
+          "label": "fetch the scripts"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "dnf update; docker, go, node, python, CW agent"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "install the drain agent (code, not config)"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "write /etc/ami-manifest.json"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "touch ami-build.done"
+        },
+        {
+          "from": "Dev",
+          "to": "SSM",
+          "label": "done? failed? where are you?"
+        },
+        {
+          "from": "SSM",
+          "to": "Dev",
+          "label": "last line of the build log"
+        },
+        {
+          "from": "Dev",
+          "to": "SSM",
+          "label": "run cleanup.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "strip credentials, SSH keys, machine-id, SSM registration"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "cloud-init clean  ← or UserData never runs again"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "shutdown -h now"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "wait instance-stopped ← the real success signal"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "create-image (quiesced filesystem)"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "tag AMI + snapshot (Project, Component, Version)"
+        },
+        {
+          "from": "Dev",
+          "to": "EC2",
+          "label": "terminate the builder (on every exit path)"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 19,
+      "summary": "sequence diagram with 5 nodes and 19 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "build",
+        "cfn",
+        "resolve",
+        "roll"
+      ],
+      "edges": [
+        {
+          "from": "build",
+          "to": "ami"
+        },
+        {
+          "from": "ami",
+          "to": "resolve"
+        },
+        {
+          "from": "ami",
+          "to": "roll"
+        },
+        {
+          "from": "roll",
+          "to": "cfn"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/ami-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "back",
+        "build",
+        "drift",
+        "need",
+        "ok",
+        "prod",
+        "ssh"
+      ],
+      "edges": [
+        {
+          "from": "need",
+          "to": "build"
+        },
+        {
+          "from": "ok",
+          "to": "prod",
+          "label": "yes"
+        },
+        {
+          "from": "ok",
+          "to": "back",
+          "label": "no"
+        },
+        {
+          "from": "back",
+          "to": "need"
+        },
+        {
+          "from": "ssh",
+          "to": "need",
+          "label": "\"NEVER\""
+        },
+        {
+          "from": "ssh",
+          "to": "drift"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 7 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "aws",
+        "bedrock",
+        "cli",
+        "factory",
+        "future",
+        "iface",
+        "ollama",
+        "ollamahost",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "cli",
+          "to": "svc"
+        },
+        {
+          "from": "future",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "iface"
+        },
+        {
+          "from": "factory",
+          "to": "iface"
+        },
+        {
+          "from": "iface",
+          "to": "ollama"
+        },
+        {
+          "from": "iface",
+          "to": "bedrock"
+        },
+        {
+          "from": "ollama",
+          "to": "ollamahost"
+        },
+        {
+          "from": "bedrock",
+          "to": "aws"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "iface",
+        "m7",
+        "m8"
+      ],
+      "edges": [
+        {
+          "from": "m7",
+          "to": "iface"
+        },
+        {
+          "from": "m8",
+          "to": "iface"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "BR",
+        "IMDS",
+        "P",
+        "SDK",
+        "STS"
+      ],
+      "edges": [
+        {
+          "from": "P",
+          "to": "SDK",
+          "label": "Converse(...)"
+        },
+        {
+          "from": "SDK",
+          "to": "IMDS",
+          "label": "who am I?"
+        },
+        {
+          "from": "IMDS",
+          "to": "SDK",
+          "label": "the instance role"
+        },
+        {
+          "from": "SDK",
+          "to": "STS",
+          "label": "assume it"
+        },
+        {
+          "from": "STS",
+          "to": "SDK",
+          "label": "\u003cb\u003etemporary\u003c/b\u003e credentials\u003cbr/\u003e\u003ci\u003erotated by AWS, expire on their own\u003c/i\u003e"
+        },
+        {
+          "from": "SDK",
+          "to": "SDK",
+          "label": "sign the request (SigV4)"
+        },
+        {
+          "from": "SDK",
+          "to": "BR",
+          "label": "POST /model/{id}/converse\u003cbr/\u003eAuthorization: AWS4-HMAC-SHA256…"
+        },
+        {
+          "from": "BR",
+          "to": "P",
+          "label": "tokens"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 8,
+      "summary": "sequence diagram with 5 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "denied",
+        "gate1",
+        "gate2",
+        "msg",
+        "ok",
+        "req"
+      ],
+      "edges": [
+        {
+          "from": "req",
+          "to": "gate1"
+        },
+        {
+          "from": "gate1",
+          "to": "denied"
+        },
+        {
+          "from": "gate1",
+          "to": "gate2"
+        },
+        {
+          "from": "gate2",
+          "to": "denied"
+        },
+        {
+          "from": "gate2",
+          "to": "ok"
+        },
+        {
+          "from": "denied",
+          "to": "msg"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 6 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "invoke",
+        "m1",
+        "m2",
+        "policy",
+        "region",
+        "role",
+        "star"
+      ],
+      "edges": [
+        {
+          "from": "role",
+          "to": "policy"
+        },
+        {
+          "from": "invoke",
+          "to": "region"
+        },
+        {
+          "from": "region",
+          "to": "m1"
+        },
+        {
+          "from": "region",
+          "to": "m2"
+        },
+        {
+          "from": "invoke",
+          "to": "star",
+          "label": "\"never\""
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 5,
+      "summary": "flowchart diagram with 7 nodes and 5 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "alarm",
+        "down",
+        "k1",
+        "k2",
+        "quota",
+        "req",
+        "resp",
+        "thr"
+      ],
+      "edges": [
+        {
+          "from": "req",
+          "to": "resp"
+        },
+        {
+          "from": "resp",
+          "to": "thr"
+        },
+        {
+          "from": "resp",
+          "to": "down"
+        },
+        {
+          "from": "k2",
+          "to": "alarm"
+        },
+        {
+          "from": "k1",
+          "to": "quota"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 5,
+      "summary": "flowchart diagram with 8 nodes and 5 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "BR",
+        "C",
+        "S"
+      ],
+      "edges": [
+        {
+          "from": "C",
+          "to": "S",
+          "label": "Stream(Request{System, Prompt, Purpose, CorrelationID})"
+        },
+        {
+          "from": "S",
+          "to": "S",
+          "label": "estimate tokens (pessimistic: 3 chars/token)"
+        },
+        {
+          "from": "S",
+          "to": "C",
+          "label": "✋ ErrContextExceeded — the model would silently\u003cbr/\u003etruncate, and bill you in full for half a question"
+        },
+        {
+          "from": "S",
+          "to": "S",
+          "label": "log \"inference requested\"\u003cbr/\u003e\u003cb\u003eprompt hash + size, never the prompt\u003c/b\u003e"
+        },
+        {
+          "from": "S",
+          "to": "B",
+          "label": "Stream(...)"
+        },
+        {
+          "from": "B",
+          "to": "BR",
+          "label": "ConverseStream — system in its OWN field"
+        },
+        {
+          "from": "BR",
+          "to": "B",
+          "label": "contentBlockDelta …"
+        },
+        {
+          "from": "B",
+          "to": "C",
+          "label": "chunk (a token)"
+        },
+        {
+          "from": "BR",
+          "to": "B",
+          "label": "metadata (usage, stopReason)"
+        },
+        {
+          "from": "B",
+          "to": "S",
+          "label": "Response{content, usage}"
+        },
+        {
+          "from": "S",
+          "to": "S",
+          "label": "log \"inference completed\"\u003cbr/\u003etokensPerSecond · \u003cb\u003eestimatedCostUsd\u003c/b\u003e · finishReason"
+        },
+        {
+          "from": "S",
+          "to": "C",
+          "label": "Response"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 12,
+      "summary": "sequence diagram with 4 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/bedrock-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "b",
+        "cl",
+        "o",
+        "req",
+        "router"
+      ],
+      "edges": [
+        {
+          "from": "req",
+          "to": "router"
+        },
+        {
+          "from": "router",
+          "to": "o",
+          "label": "\"a summary,\u003cbr/\u003ea private repo\""
+        },
+        {
+          "from": "router",
+          "to": "b",
+          "label": "\"reasoning,\u003cbr/\u003eor the GPU was\u003cbr/\u003einterrupted (M3)\""
+        },
+        {
+          "from": "router",
+          "to": "cl"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "caps",
+        "oll"
+      ],
+      "edges": [
+        {
+          "from": "caps",
+          "to": "oll"
+        }
+      ],
+      "nodeCount": 2,
+      "edgeCount": 1,
+      "summary": "flowchart diagram with 2 nodes and 1 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "m5",
+        "m6"
+      ],
+      "edges": [
+        {
+          "from": "m5",
+          "to": "m6"
+        }
+      ],
+      "nodeCount": 2,
+      "edgeCount": 1,
+      "summary": "flowchart diagram with 2 nodes and 1 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "convo",
+        "log",
+        "no",
+        "one",
+        "q"
+      ],
+      "edges": [
+        {
+          "from": "q",
+          "to": "one"
+        },
+        {
+          "from": "q",
+          "to": "convo"
+        },
+        {
+          "from": "no",
+          "to": "log"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 3,
+      "summary": "flowchart diagram with 5 nodes and 3 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "C",
+        "M",
+        "N",
+        "R",
+        "S"
+      ],
+      "edges": [
+        {
+          "from": "C",
+          "to": "S",
+          "label": "Converse(prompt, runner, LoopPolicy{8 turns, $0.50})"
+        },
+        {
+          "from": "S",
+          "to": "S",
+          "label": "provider.Capabilities().Tools?"
+        },
+        {
+          "from": "S",
+          "to": "C",
+          "label": "✋ ErrUnsupported — Ollama would not refuse,\u003cbr/\u003eit would INVENT an answer"
+        },
+        {
+          "from": "S",
+          "to": "M",
+          "label": "the whole conversation + every tool schema"
+        },
+        {
+          "from": "M",
+          "to": "S",
+          "label": "stopReason: tool_use → run_workflow{workflow: \"blog-generator\"}"
+        },
+        {
+          "from": "S",
+          "to": "S",
+          "label": "ValidateArguments(spec, args)"
+        },
+        {
+          "from": "S",
+          "to": "M",
+          "label": "✗ handed BACK as an error result —\u003cbr/\u003ethe model corrects itself next turn"
+        },
+        {
+          "from": "S",
+          "to": "S",
+          "label": "IdempotencyKey = sha256(correlation ‖ tool ‖ canonical(args))"
+        },
+        {
+          "from": "S",
+          "to": "R",
+          "label": "Run(call)"
+        },
+        {
+          "from": "R",
+          "to": "N",
+          "label": "trigger the workflow"
+        },
+        {
+          "from": "N",
+          "to": "R",
+          "label": "exec-42"
+        },
+        {
+          "from": "R",
+          "to": "S",
+          "label": "{\"executionId\":\"exec-42\"}"
+        },
+        {
+          "from": "S",
+          "to": "M",
+          "label": "tool result (user turn)"
+        },
+        {
+          "from": "M",
+          "to": "S",
+          "label": "\"I started the blog-generator workflow.\""
+        },
+        {
+          "from": "S",
+          "to": "C",
+          "label": "Conversation{content, usage, EffectsCommitted: true}"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 15,
+      "summary": "sequence diagram with 5 nodes and 15 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bad",
+        "diff",
+        "model",
+        "note",
+        "poison"
+      ],
+      "edges": [
+        {
+          "from": "diff",
+          "to": "poison"
+        },
+        {
+          "from": "model",
+          "to": "bad",
+          "label": "\"the model WRITES\u003cbr/\u003ethe instruction\""
+        },
+        {
+          "from": "bad",
+          "to": "note"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 3,
+      "summary": "flowchart diagram with 5 nodes and 3 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "agent",
+        "choose",
+        "instr",
+        "model",
+        "platform",
+        "submit",
+        "task",
+        "verdict"
+      ],
+      "edges": [
+        {
+          "from": "model",
+          "to": "choose"
+        },
+        {
+          "from": "task",
+          "to": "instr",
+          "label": "\"names a KEY\""
+        },
+        {
+          "from": "choose",
+          "to": "submit"
+        },
+        {
+          "from": "platform",
+          "to": "submit"
+        },
+        {
+          "from": "submit",
+          "to": "agent"
+        },
+        {
+          "from": "submit",
+          "to": "verdict"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 8 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "json",
+        "ok",
+        "repair",
+        "req",
+        "schema",
+        "tool",
+        "typed"
+      ],
+      "edges": [
+        {
+          "from": "req",
+          "to": "tool"
+        },
+        {
+          "from": "json",
+          "to": "schema"
+        },
+        {
+          "from": "json",
+          "to": "typed"
+        },
+        {
+          "from": "typed",
+          "to": "ok",
+          "label": "fits"
+        },
+        {
+          "from": "typed",
+          "to": "repair",
+          "label": "\"\u003cb\u003eErrSchemaViolation\u003c/b\u003e\""
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 5,
+      "summary": "flowchart diagram with 7 nodes and 5 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "cache",
+        "t1",
+        "t2",
+        "total"
+      ],
+      "edges": [
+        {
+          "from": "t1",
+          "to": "t2"
+        },
+        {
+          "from": "total",
+          "to": "cache"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 4 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "ag",
+        "llm",
+        "n8n",
+        "oc",
+        "tools",
+        "wf"
+      ],
+      "edges": [
+        {
+          "from": "tools",
+          "to": "llm",
+          "label": "\"implements\""
+        },
+        {
+          "from": "tools",
+          "to": "wf"
+        },
+        {
+          "from": "tools",
+          "to": "ag"
+        },
+        {
+          "from": "wf",
+          "to": "n8n"
+        },
+        {
+          "from": "ag",
+          "to": "oc"
+        },
+        {
+          "from": "llm",
+          "to": "tools",
+          "label": "\"❌ NEVER\""
+        },
+        {
+          "from": "llm",
+          "to": "wf",
+          "label": "\"❌ NEVER\""
+        },
+        {
+          "from": "tools",
+          "to": "n8n",
+          "label": "\"❌ NEVER\u003cbr/\u003e\u003ci\u003ego through the core,\u003cbr/\u003edo not reach past it\u003c/i\u003e\""
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 6 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bed",
+        "caller",
+        "classify",
+        "claude",
+        "fmt",
+        "logres",
+        "provider",
+        "repair",
+        "tmpl"
+      ],
+      "edges": [
+        {
+          "from": "caller",
+          "to": "tmpl"
+        },
+        {
+          "from": "provider",
+          "to": "bed"
+        },
+        {
+          "from": "claude",
+          "to": "classify"
+        },
+        {
+          "from": "fmt",
+          "to": "repair",
+          "label": "\"invalid\""
+        },
+        {
+          "from": "fmt",
+          "to": "logres",
+          "label": "\"valid\""
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 5,
+      "summary": "flowchart diagram with 9 nodes and 5 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bed",
+        "callers",
+        "factory",
+        "iface",
+        "oll",
+        "router",
+        "svc",
+        "tomorrow"
+      ],
+      "edges": [
+        {
+          "from": "callers",
+          "to": "svc"
+        },
+        {
+          "from": "factory",
+          "to": "iface"
+        },
+        {
+          "from": "iface",
+          "to": "oll"
+        },
+        {
+          "from": "iface",
+          "to": "bed"
+        },
+        {
+          "from": "iface",
+          "to": "tomorrow"
+        },
+        {
+          "from": "iface",
+          "to": "router"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 8 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "C",
+        "EB",
+        "GH",
+        "N",
+        "OC",
+        "P"
+      ],
+      "edges": [
+        {
+          "from": "GH",
+          "to": "EB",
+          "label": "push / pull_request"
+        },
+        {
+          "from": "EB",
+          "to": "N",
+          "label": "the event (correlationId is born here)"
+        },
+        {
+          "from": "N",
+          "to": "P",
+          "label": "run the \"pr-review\" workflow"
+        },
+        {
+          "from": "P",
+          "to": "C",
+          "label": "summarisation/diff-summary (the diff as DATA)"
+        },
+        {
+          "from": "C",
+          "to": "P",
+          "label": "a summary"
+        },
+        {
+          "from": "P",
+          "to": "OC",
+          "label": "submit(task, budget it cannot exceed)"
+        },
+        {
+          "from": "OC",
+          "to": "P",
+          "label": "output — \u003cb\u003eUNTRUSTED\u003c/b\u003e"
+        },
+        {
+          "from": "P",
+          "to": "C",
+          "label": "structured/change-triage (the agent's output as DATA)"
+        },
+        {
+          "from": "C",
+          "to": "P",
+          "label": "{\"severity\":\"low\",\"summary\":\"…\"}"
+        },
+        {
+          "from": "P",
+          "to": "P",
+          "label": "validate: schema + Go type + T.Validate()"
+        },
+        {
+          "from": "P",
+          "to": "N",
+          "label": "a VALIDATED structured result"
+        },
+        {
+          "from": "N",
+          "to": "GH",
+          "label": "comment on the pull request"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 12,
+      "summary": "sequence diagram with 6 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/claude-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "ags",
+        "aws",
+        "fac",
+        "fmts",
+        "llms",
+        "n8n",
+        "oc",
+        "oll",
+        "prompts",
+        "toolreg",
+        "wfs"
+      ],
+      "edges": [
+        {
+          "from": "wfs",
+          "to": "n8n"
+        },
+        {
+          "from": "ags",
+          "to": "oc"
+        },
+        {
+          "from": "llms",
+          "to": "fac"
+        },
+        {
+          "from": "fac",
+          "to": "oll"
+        },
+        {
+          "from": "fac",
+          "to": "aws"
+        },
+        {
+          "from": "toolreg",
+          "to": "llms",
+          "label": "\"implements llm.ToolRunner\""
+        },
+        {
+          "from": "toolreg",
+          "to": "wfs"
+        },
+        {
+          "from": "toolreg",
+          "to": "ags"
+        },
+        {
+          "from": "prompts",
+          "to": "llms"
+        },
+        {
+          "from": "fmts",
+          "to": "llms",
+          "label": "\"implements llm.Formatter\""
+        },
+        {
+          "from": "oc",
+          "to": "aws",
+          "label": "\"its OWN model —\u003cbr/\u003ethe platform is NOT in this path\""
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 11 nodes and 11 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "ag",
+        "ami",
+        "bedrock",
+        "cw",
+        "defbus",
+        "ebs",
+        "ec2",
+        "factory",
+        "iampol",
+        "igw",
+        "l1",
+        "llm",
+        "n8n",
+        "oc",
+        "ollama",
+        "platbus",
+        "rules",
+        "s3",
+        "ssm",
+        "subnet",
+        "toolreg",
+        "wf"
+      ],
+      "edges": [
+        {
+          "from": "ec2",
+          "to": "ebs"
+        },
+        {
+          "from": "subnet",
+          "to": "igw"
+        },
+        {
+          "from": "ssm",
+          "to": "ec2"
+        },
+        {
+          "from": "ami",
+          "to": "ec2",
+          "label": "\"launched from\""
+        },
+        {
+          "from": "ec2",
+          "to": "s3",
+          "label": "\"artifacts + drained work\""
+        },
+        {
+          "from": "ec2",
+          "to": "cw",
+          "label": "\"boot log · drain log\""
+        },
+        {
+          "from": "defbus",
+          "to": "rules"
+        },
+        {
+          "from": "l1",
+          "to": "platbus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "wf",
+          "to": "n8n",
+          "label": "\"HTTPS + token · idempotency key\u003cbr/\u003e· sanitised payload\""
+        },
+        {
+          "from": "n8n",
+          "to": "ag",
+          "label": "\"orchestrates\""
+        },
+        {
+          "from": "ag",
+          "to": "oc",
+          "label": "\"HTTPS + token · idempotency key\u003cbr/\u003e· mandatory budget\""
+        },
+        {
+          "from": "oc",
+          "to": "ollama",
+          "label": "\"the AGENT'S own model calls —\u003cbr/\u003ethe platform is NOT in this path\""
+        },
+        {
+          "from": "n8n",
+          "to": "llm",
+          "label": "\"single-shot work:\u003cbr/\u003esummarise · release notes\""
+        },
+        {
+          "from": "llm",
+          "to": "factory"
+        },
+        {
+          "from": "factory",
+          "to": "ollama",
+          "label": "\"LLM_PROVIDER=ollama\u003cbr/\u003e(the default)\""
+        },
+        {
+          "from": "factory",
+          "to": "bedrock",
+          "label": "\"LLM_PROVIDER=bedrock\u003cbr/\u003eSigV4 · NO stored credential\""
+        },
+        {
+          "from": "iampol",
+          "to": "bedrock",
+          "label": "\"permits · names the models\""
+        },
+        {
+          "from": "llm",
+          "to": "toolreg"
+        },
+        {
+          "from": "toolreg",
+          "to": "wf",
+          "label": "\"run_workflow — WRITE\""
+        },
+        {
+          "from": "toolreg",
+          "to": "ag",
+          "label": "\"submit_agent_task — WRITE\""
+        },
+        {
+          "from": "llm",
+          "to": "cw",
+          "label": "\"structured logs\""
+        },
+        {
+          "from": "oc",
+          "to": "ag",
+          "label": "\"output — UNTRUSTED,\u003cbr/\u003evalidated before use\""
+        },
+        {
+          "from": "wf",
+          "to": "cw",
+          "label": "\"structured logs\""
+        },
+        {
+          "from": "ag",
+          "to": "cw",
+          "label": "\"structured logs\""
+        }
+      ],
+      "nodeCount": 22,
+      "edgeCount": 25,
+      "summary": "flowchart diagram with 22 nodes and 25 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "build",
+        "c",
+        "e",
+        "i",
+        "img",
+        "n",
+        "s",
+        "sch",
+        "sp"
+      ],
+      "edges": [
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "sp"
+        },
+        {
+          "from": "s",
+          "to": "sp",
+          "label": "\"lambda zips\""
+        },
+        {
+          "from": "s",
+          "to": "sch",
+          "label": "\"lambda zips\""
+        },
+        {
+          "from": "build",
+          "to": "img"
+        },
+        {
+          "from": "img",
+          "to": "c",
+          "label": "\"AmiId parameter\""
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 9 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "sequence",
+      "nodes": [
+        "EB",
+        "EC2",
+        "I",
+        "L",
+        "Ops",
+        "S3"
+      ],
+      "edges": [
+        {
+          "from": "Ops",
+          "to": "EC2",
+          "label": "build + tag AMI (~4.5 min, ~$0.01)"
+        },
+        {
+          "from": "Ops",
+          "to": "EC2",
+          "label": "deploy compute (AmiId = the new image)"
+        },
+        {
+          "from": "EC2",
+          "to": "I",
+          "label": "launch Spot instance"
+        },
+        {
+          "from": "I",
+          "to": "I",
+          "label": "boot in 6.2s — configure only, nothing to install"
+        },
+        {
+          "from": "EC2",
+          "to": "I",
+          "label": "interruption notice (IMDS) · ~120s left"
+        },
+        {
+          "from": "EC2",
+          "to": "EB",
+          "label": "EC2 Spot Instance Interruption Warning"
+        },
+        {
+          "from": "I",
+          "to": "I",
+          "label": "stop the workload units"
+        },
+        {
+          "from": "I",
+          "to": "S3",
+          "label": "sync artifacts + interruption marker"
+        },
+        {
+          "from": "EB",
+          "to": "L",
+          "label": "invoke"
+        },
+        {
+          "from": "L",
+          "to": "L",
+          "label": "is it ours? (tag check)"
+        },
+        {
+          "from": "L",
+          "to": "EB",
+          "label": "re-publish on the platform bus"
+        },
+        {
+          "from": "L",
+          "to": "EC2",
+          "label": "count it (CloudWatch metric)"
+        },
+        {
+          "from": "EC2",
+          "to": "I",
+          "label": "terminated"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 6 nodes and 13 relationships."
+    },
+    {
+      "source": "docs/architecture/current-architecture.md",
+      "type": "flowchart",
+      "nodes": [
+        "m1",
+        "m10",
+        "m2",
+        "m3",
+        "m4",
+        "m5",
+        "m6",
+        "m7",
+        "m8",
+        "m9"
+      ],
+      "edges": [
+        {
+          "from": "m1",
+          "to": "m2"
+        },
+        {
+          "from": "m2",
+          "to": "m3"
+        },
+        {
+          "from": "m3",
+          "to": "m4"
+        },
+        {
+          "from": "m4",
+          "to": "m5"
+        },
+        {
+          "from": "m5",
+          "to": "m6"
+        },
+        {
+          "from": "m6",
+          "to": "m7"
+        },
+        {
+          "from": "m7",
+          "to": "m8"
+        },
+        {
+          "from": "m8",
+          "to": "m9"
+        },
+        {
+          "from": "m9",
+          "to": "m10"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "agentplane",
+        "bedrock",
+        "claw",
+        "control",
+        "dev",
+        "eb",
+        "gh",
+        "inference",
+        "lam",
+        "n8n",
+        "obs",
+        "ollama",
+        "out"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "gh",
+          "label": "\"push, issue, PR\""
+        },
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"model request\""
+        },
+        {
+          "from": "ollama",
+          "to": "bedrock",
+          "label": "\"fallback on\u003cbr/\u003einterruption\""
+        },
+        {
+          "from": "claw",
+          "to": "out"
+        },
+        {
+          "from": "n8n",
+          "to": "gh",
+          "label": "\"publish\""
+        },
+        {
+          "from": "control",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "agentplane",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "inference",
+          "to": "obs",
+          "label": "telemetry"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "claw",
+        "dlq",
+        "eb",
+        "gh",
+        "lam",
+        "model",
+        "prout",
+        "pub",
+        "queue",
+        "store"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"signed webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam",
+          "label": "\"matched\""
+        },
+        {
+          "from": "lam",
+          "to": "queue",
+          "label": "\"valid\""
+        },
+        {
+          "from": "lam",
+          "to": "dlq",
+          "label": "\"invalid /\u003cbr/\u003eunverified\""
+        },
+        {
+          "from": "queue",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "model"
+        },
+        {
+          "from": "model",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "store",
+          "label": "\"success\""
+        },
+        {
+          "from": "claw",
+          "to": "queue",
+          "label": "\"retry with backoff\""
+        },
+        {
+          "from": "claw",
+          "to": "dlq",
+          "label": "\"exhausted retries\""
+        },
+        {
+          "from": "store",
+          "to": "pub"
+        },
+        {
+          "from": "pub",
+          "to": "prout"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 10 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "claw",
+        "cw",
+        "eb",
+        "efs",
+        "gh",
+        "iam",
+        "lam",
+        "n8n",
+        "ollama",
+        "s3"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhooks \u0026 API\""
+        },
+        {
+          "from": "gh",
+          "to": "n8n",
+          "label": "\"commits \u0026 PRs\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw",
+          "label": "\"invoke / dispatch\""
+        },
+        {
+          "from": "claw",
+          "to": "n8n",
+          "label": "\"orchestrate\""
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"primary inference\""
+        },
+        {
+          "from": "claw",
+          "to": "bedrock",
+          "label": "\"fallback inference\""
+        },
+        {
+          "from": "claw",
+          "to": "efs",
+          "label": "\"workspace\""
+        },
+        {
+          "from": "claw",
+          "to": "s3",
+          "label": "\"artifacts\""
+        },
+        {
+          "from": "n8n",
+          "to": "efs",
+          "label": "\"workflow state\""
+        },
+        {
+          "from": "iam",
+          "to": "lam",
+          "label": "\"scopes permissions\""
+        },
+        {
+          "from": "iam",
+          "to": "claw",
+          "label": "\"scopes permissions\""
+        },
+        {
+          "from": "claw",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "n8n",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "ollama",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        },
+        {
+          "from": "lam",
+          "to": "cw",
+          "label": "logs \u0026 metrics"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 16,
+      "summary": "flowchart diagram with 11 nodes and 16 relationships."
+    },
+    {
+      "source": "docs/architecture/diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "claw",
+        "cw",
+        "eb",
+        "efs",
+        "ghext",
+        "internet",
+        "lam",
+        "n8n",
+        "nat",
+        "ollama",
+        "private",
+        "s3"
+      ],
+      "edges": [
+        {
+          "from": "internet",
+          "to": "ghext"
+        },
+        {
+          "from": "ghext",
+          "to": "eb",
+          "label": "\"webhook (HTTPS)\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw",
+          "label": "\"dispatch\""
+        },
+        {
+          "from": "claw",
+          "to": "ollama"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "efs"
+        },
+        {
+          "from": "private",
+          "to": "nat",
+          "label": "\"outbound only\""
+        },
+        {
+          "from": "nat",
+          "to": "internet",
+          "label": "\"model API, git push\""
+        },
+        {
+          "from": "claw",
+          "to": "bedrock",
+          "label": "\"VPC endpoint\""
+        },
+        {
+          "from": "claw",
+          "to": "s3",
+          "label": "\"VPC endpoint\""
+        },
+        {
+          "from": "private",
+          "to": "cw",
+          "label": "logs"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/infrastructure-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "cfn",
+        "comp",
+        "evt",
+        "iam",
+        "net",
+        "obs",
+        "sto"
+      ],
+      "edges": [
+        {
+          "from": "cfn",
+          "to": "net"
+        },
+        {
+          "from": "cfn",
+          "to": "iam"
+        },
+        {
+          "from": "cfn",
+          "to": "comp"
+        },
+        {
+          "from": "cfn",
+          "to": "sto"
+        },
+        {
+          "from": "cfn",
+          "to": "evt"
+        },
+        {
+          "from": "cfn",
+          "to": "obs"
+        },
+        {
+          "from": "comp",
+          "to": "net",
+          "label": "imports subnet, SG,\u003cbr/\u003einstance profile"
+        },
+        {
+          "from": "comp",
+          "to": "iam",
+          "label": "imports"
+        },
+        {
+          "from": "evt",
+          "to": "iam",
+          "label": "imports Lambda role"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 7 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/infrastructure-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "deploy",
+        "dev",
+        "e",
+        "i",
+        "n",
+        "o",
+        "ready",
+        "s"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "deploy"
+        },
+        {
+          "from": "deploy",
+          "to": "n"
+        },
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "c"
+        },
+        {
+          "from": "c",
+          "to": "s"
+        },
+        {
+          "from": "s",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "o"
+        },
+        {
+          "from": "o",
+          "to": "ready"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "adapter1",
+        "adapter2",
+        "agent",
+        "claude",
+        "llm",
+        "loop",
+        "n8n",
+        "ollama",
+        "openclaw",
+        "router",
+        "trigger"
+      ],
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "loop"
+        },
+        {
+          "from": "loop",
+          "to": "adapter1",
+          "label": "\"REASON\u003cbr/\u003e(Planner/Evaluator/Reflector/Summariser)\""
+        },
+        {
+          "from": "loop",
+          "to": "adapter2",
+          "label": "\"EXECUTE\u003cbr/\u003e(Executor)\""
+        },
+        {
+          "from": "adapter1",
+          "to": "llm"
+        },
+        {
+          "from": "llm",
+          "to": "router"
+        },
+        {
+          "from": "router",
+          "to": "claude"
+        },
+        {
+          "from": "router",
+          "to": "ollama"
+        },
+        {
+          "from": "adapter2",
+          "to": "agent"
+        },
+        {
+          "from": "agent",
+          "to": "openclaw"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 10,
+      "summary": "flowchart diagram with 11 nodes and 10 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "decision",
+        "done",
+        "eval",
+        "exec",
+        "goal",
+        "plan",
+        "reflect",
+        "select",
+        "summary"
+      ],
+      "edges": [
+        {
+          "from": "goal",
+          "to": "plan"
+        },
+        {
+          "from": "plan",
+          "to": "select"
+        },
+        {
+          "from": "select",
+          "to": "exec"
+        },
+        {
+          "from": "exec",
+          "to": "eval"
+        },
+        {
+          "from": "eval",
+          "to": "decision"
+        },
+        {
+          "from": "decision",
+          "to": "select",
+          "label": "\"task done, more to do\""
+        },
+        {
+          "from": "decision",
+          "to": "summary",
+          "label": "\"goal achieved\""
+        },
+        {
+          "from": "decision",
+          "to": "reflect",
+          "label": "\"transient failure\""
+        },
+        {
+          "from": "decision",
+          "to": "plan",
+          "label": "\"approach wrong\""
+        },
+        {
+          "from": "decision",
+          "to": "summary",
+          "label": "\"budget / human / stuck\""
+        },
+        {
+          "from": "reflect",
+          "to": "exec"
+        },
+        {
+          "from": "summary",
+          "to": "done"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 9 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "state",
+      "nodes": [
+        "done",
+        "evaluating",
+        "executing",
+        "failed",
+        "planning",
+        "reflecting",
+        "stopped",
+        "summarising"
+      ],
+      "edges": [
+        {
+          "from": "planning",
+          "to": "executing"
+        },
+        {
+          "from": "planning",
+          "to": "failed"
+        },
+        {
+          "from": "executing",
+          "to": "evaluating"
+        },
+        {
+          "from": "evaluating",
+          "to": "executing"
+        },
+        {
+          "from": "evaluating",
+          "to": "reflecting"
+        },
+        {
+          "from": "evaluating",
+          "to": "executing"
+        },
+        {
+          "from": "evaluating",
+          "to": "planning"
+        },
+        {
+          "from": "evaluating",
+          "to": "summarising"
+        },
+        {
+          "from": "reflecting",
+          "to": "executing"
+        },
+        {
+          "from": "executing",
+          "to": "summarising"
+        },
+        {
+          "from": "evaluating",
+          "to": "summarising"
+        },
+        {
+          "from": "summarising",
+          "to": "done"
+        },
+        {
+          "from": "summarising",
+          "to": "stopped"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 13,
+      "summary": "state diagram with 8 nodes and 13 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "advance",
+        "decide",
+        "guard",
+        "perform"
+      ],
+      "edges": [
+        {
+          "from": "decide",
+          "to": "perform",
+          "label": "\"Action: plan/execute/\u003cbr/\u003eevaluate/reflect/summarise/stop\""
+        },
+        {
+          "from": "perform",
+          "to": "advance",
+          "label": "\"StepResult\""
+        },
+        {
+          "from": "advance",
+          "to": "decide",
+          "label": "\"new State\""
+        },
+        {
+          "from": "guard",
+          "to": "decide"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 4 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "D",
+        "E",
+        "F",
+        "P",
+        "R",
+        "V"
+      ],
+      "edges": [
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Decide → plan"
+        },
+        {
+          "from": "D",
+          "to": "P",
+          "label": "Plan(goal)"
+        },
+        {
+          "from": "P",
+          "to": "D",
+          "label": "1 task"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Advance → executing"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Decide → execute(task)"
+        },
+        {
+          "from": "D",
+          "to": "E",
+          "label": "Execute (a whole agent run)"
+        },
+        {
+          "from": "E",
+          "to": "D",
+          "label": "outcome{success:false, transient:true}"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Advance → evaluating"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Decide → evaluate"
+        },
+        {
+          "from": "D",
+          "to": "V",
+          "label": "Evaluate(outcome)"
+        },
+        {
+          "from": "V",
+          "to": "D",
+          "label": "{taskSucceeded:false, retry:true}"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Advance → reflecting (retry 1)"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Decide → reflect"
+        },
+        {
+          "from": "D",
+          "to": "F",
+          "label": "Reflect(failure)"
+        },
+        {
+          "from": "F",
+          "to": "D",
+          "label": "revised instructions"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Advance → executing"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Decide → execute (Delay = backoff)"
+        },
+        {
+          "from": "D",
+          "to": "E",
+          "label": "Execute (fresh execution, attempt 1)"
+        },
+        {
+          "from": "E",
+          "to": "D",
+          "label": "outcome{success:true}"
+        },
+        {
+          "from": "D",
+          "to": "R",
+          "label": "Advance → evaluating → done"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 20,
+      "summary": "sequence diagram with 6 nodes and 20 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "b",
+        "backoff",
+        "cap",
+        "e",
+        "fail",
+        "replan",
+        "route",
+        "stop1",
+        "stop2",
+        "stop3",
+        "t"
+      ],
+      "edges": [
+        {
+          "from": "fail",
+          "to": "t"
+        },
+        {
+          "from": "t",
+          "to": "stop1",
+          "label": "\"no (deterministic)\""
+        },
+        {
+          "from": "t",
+          "to": "e",
+          "label": "\"yes\""
+        },
+        {
+          "from": "e",
+          "to": "route",
+          "label": "\"no\""
+        },
+        {
+          "from": "e",
+          "to": "b",
+          "label": "\"yes\""
+        },
+        {
+          "from": "b",
+          "to": "stop2",
+          "label": "\"no\""
+        },
+        {
+          "from": "b",
+          "to": "backoff",
+          "label": "\"yes\""
+        },
+        {
+          "from": "route",
+          "to": "replan",
+          "label": "\"yes\""
+        },
+        {
+          "from": "route",
+          "to": "stop3",
+          "label": "\"no\""
+        },
+        {
+          "from": "cap",
+          "to": "backoff",
+          "label": "\"guarantees termination\""
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 10,
+      "summary": "flowchart diagram with 11 nodes and 10 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "analysis",
+        "apply",
+        "asis",
+        "failure",
+        "history",
+        "note",
+        "reflect",
+        "revised"
+      ],
+      "edges": [
+        {
+          "from": "failure",
+          "to": "reflect"
+        },
+        {
+          "from": "reflect",
+          "to": "analysis"
+        },
+        {
+          "from": "reflect",
+          "to": "revised"
+        },
+        {
+          "from": "revised",
+          "to": "apply",
+          "label": "\"non-empty\""
+        },
+        {
+          "from": "revised",
+          "to": "asis",
+          "label": "\"empty (purely transient)\""
+        },
+        {
+          "from": "apply",
+          "to": "history"
+        },
+        {
+          "from": "asis",
+          "to": "history"
+        },
+        {
+          "from": "note",
+          "to": "apply"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 8 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "L",
+        "L2",
+        "S3"
+      ],
+      "edges": [
+        {
+          "from": "L",
+          "to": "L",
+          "label": "execute task (expensive, side-effecting)"
+        },
+        {
+          "from": "L",
+          "to": "L",
+          "label": "Advance → evaluating (PendingOutcome set)"
+        },
+        {
+          "from": "L",
+          "to": "S3",
+          "label": "Marshal + persist"
+        },
+        {
+          "from": "L2",
+          "to": "S3",
+          "label": "Load"
+        },
+        {
+          "from": "L2",
+          "to": "L2",
+          "label": "Decide → evaluate the PENDING outcome"
+        },
+        {
+          "from": "L2",
+          "to": "L2",
+          "label": "continue to completion"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 6,
+      "summary": "sequence diagram with 3 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/loop-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "adapter",
+        "agent",
+        "cmd",
+        "llm",
+        "loop",
+        "prompt",
+        "test",
+        "x"
+      ],
+      "edges": [
+        {
+          "from": "cmd",
+          "to": "adapter"
+        },
+        {
+          "from": "cmd",
+          "to": "loop"
+        },
+        {
+          "from": "adapter",
+          "to": "loop"
+        },
+        {
+          "from": "adapter",
+          "to": "llm"
+        },
+        {
+          "from": "adapter",
+          "to": "agent"
+        },
+        {
+          "from": "adapter",
+          "to": "prompt"
+        },
+        {
+          "from": "loop",
+          "to": "x",
+          "label": "\"imports NOTHING of ours\u003cbr/\u003e(stdlib only)\""
+        },
+        {
+          "from": "test",
+          "to": "loop",
+          "label": "\"fails the build if loop\u003cbr/\u003eimports llm or agent\""
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 8 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/n8n-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "a",
+        "app",
+        "boundary",
+        "c",
+        "client",
+        "cw",
+        "eng",
+        "exec",
+        "gh",
+        "i",
+        "inst",
+        "n8nc",
+        "service",
+        "svc",
+        "t",
+        "v"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "to": "svc"
+        },
+        {
+          "from": "v",
+          "to": "c"
+        },
+        {
+          "from": "svc",
+          "to": "service"
+        },
+        {
+          "from": "svc",
+          "to": "eng"
+        },
+        {
+          "from": "eng",
+          "to": "n8nc"
+        },
+        {
+          "from": "a",
+          "to": "i"
+        },
+        {
+          "from": "n8nc",
+          "to": "client"
+        },
+        {
+          "from": "n8nc",
+          "to": "boundary",
+          "label": "\"HTTPS\""
+        },
+        {
+          "from": "inst",
+          "to": "exec"
+        },
+        {
+          "from": "t",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 16,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 16 nodes and 11 relationships."
+    },
+    {
+      "source": "docs/architecture/n8n-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "e",
+        "f",
+        "h1",
+        "h2",
+        "h3",
+        "n",
+        "s",
+        "x1",
+        "y1",
+        "y2",
+        "y3"
+      ],
+      "edges": [
+        {
+          "from": "h1",
+          "to": "x1",
+          "label": "\"n8n URL,\u003cbr/\u003en8n auth,\u003cbr/\u003en8n retries,\u003cbr/\u003en8n response shape\""
+        },
+        {
+          "from": "h2",
+          "to": "x1",
+          "label": "\"…the same, again\""
+        },
+        {
+          "from": "h3",
+          "to": "x1",
+          "label": "\"…and again\""
+        },
+        {
+          "from": "y1",
+          "to": "s"
+        },
+        {
+          "from": "y2",
+          "to": "s"
+        },
+        {
+          "from": "y3",
+          "to": "s"
+        },
+        {
+          "from": "s",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "n"
+        },
+        {
+          "from": "e",
+          "to": "f"
+        }
+      ],
+      "nodeCount": 11,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 11 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/n8n-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "G",
+        "N",
+        "P"
+      ],
+      "edges": [
+        {
+          "from": "P",
+          "to": "N",
+          "label": "POST /webhook/blog\u003cbr/\u003eX-Idempotency-Key: blog:delivery-123"
+        },
+        {
+          "from": "N",
+          "to": "N",
+          "label": "workflow starts…"
+        },
+        {
+          "from": "N",
+          "to": "P",
+          "label": "the response is lost\u003cbr/\u003e(timeout, LB reset, deploy)"
+        },
+        {
+          "from": "P",
+          "to": "N",
+          "label": "retry — SAME key: blog:delivery-123"
+        },
+        {
+          "from": "N",
+          "to": "N",
+          "label": "seen it → return the first result"
+        },
+        {
+          "from": "N",
+          "to": "P",
+          "label": "accepted"
+        },
+        {
+          "from": "N",
+          "to": "N",
+          "label": "run it all again"
+        },
+        {
+          "from": "N",
+          "to": "G",
+          "label": "open a SECOND pull request"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 8,
+      "summary": "sequence diagram with 3 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/n8n-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "au",
+        "ir",
+        "iv",
+        "k",
+        "resp",
+        "retry",
+        "stop",
+        "stop2",
+        "to",
+        "un",
+        "uw",
+        "wf"
+      ],
+      "edges": [
+        {
+          "from": "resp",
+          "to": "k"
+        },
+        {
+          "from": "k",
+          "to": "un",
+          "label": "\"connection refused\u003cbr/\u003eDNS · TLS reset\""
+        },
+        {
+          "from": "k",
+          "to": "to",
+          "label": "\"no answer in time\""
+        },
+        {
+          "from": "k",
+          "to": "un",
+          "label": "\"429 · 5xx\""
+        },
+        {
+          "from": "k",
+          "to": "au",
+          "label": "\"401 · 403\""
+        },
+        {
+          "from": "k",
+          "to": "uw",
+          "label": "\"404\""
+        },
+        {
+          "from": "k",
+          "to": "ir",
+          "label": "\"400\""
+        },
+        {
+          "from": "k",
+          "to": "iv",
+          "label": "\"200 + HTML\u003cbr/\u003e200 + broken JSON\""
+        },
+        {
+          "from": "k",
+          "to": "wf",
+          "label": "\"200 + {status:error}\""
+        },
+        {
+          "from": "un",
+          "to": "retry"
+        },
+        {
+          "from": "to",
+          "to": "retry"
+        },
+        {
+          "from": "au",
+          "to": "stop"
+        },
+        {
+          "from": "uw",
+          "to": "stop"
+        },
+        {
+          "from": "ir",
+          "to": "stop"
+        },
+        {
+          "from": "iv",
+          "to": "stop"
+        },
+        {
+          "from": "wf",
+          "to": "stop2"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 16,
+      "summary": "flowchart diagram with 12 nodes and 16 relationships."
+    },
+    {
+      "source": "docs/architecture/n8n-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "cap",
+        "gh",
+        "hist",
+        "logs",
+        "red",
+        "san",
+        "tok",
+        "walk",
+        "wire"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "san"
+        },
+        {
+          "from": "cap",
+          "to": "walk"
+        },
+        {
+          "from": "walk",
+          "to": "red"
+        },
+        {
+          "from": "san",
+          "to": "wire"
+        },
+        {
+          "from": "wire",
+          "to": "hist"
+        },
+        {
+          "from": "tok",
+          "to": "wire",
+          "label": "\"header only\""
+        },
+        {
+          "from": "tok",
+          "to": "logs",
+          "label": "\"NEVER\""
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 9 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/ollama-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "app",
+        "fork",
+        "future",
+        "gh",
+        "n8n",
+        "oc",
+        "ocm",
+        "ollama",
+        "prov",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "fork"
+        },
+        {
+          "from": "fork",
+          "to": "oc",
+          "label": "\"an ERRAND\u003cbr/\u003eopen-ended · tools · a loop\""
+        },
+        {
+          "from": "fork",
+          "to": "svc",
+          "label": "\"a FUNCTION CALL\u003cbr/\u003eone prompt · one completion\""
+        },
+        {
+          "from": "oc",
+          "to": "ocm"
+        },
+        {
+          "from": "svc",
+          "to": "prov"
+        },
+        {
+          "from": "prov",
+          "to": "ollama"
+        },
+        {
+          "from": "prov",
+          "to": "future"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/ollama-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "br",
+        "c1",
+        "cl",
+        "iface",
+        "ol",
+        "rt",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "c1",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "iface"
+        },
+        {
+          "from": "iface",
+          "to": "ol"
+        },
+        {
+          "from": "iface",
+          "to": "br"
+        },
+        {
+          "from": "iface",
+          "to": "cl"
+        },
+        {
+          "from": "iface",
+          "to": "rt"
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 7 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/ollama-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "O",
+        "S",
+        "Sink"
+      ],
+      "edges": [
+        {
+          "from": "S",
+          "to": "O",
+          "label": "POST /api/generate {stream: true}"
+        },
+        {
+          "from": "O",
+          "to": "S",
+          "label": "NDJSON chunk"
+        },
+        {
+          "from": "S",
+          "to": "Sink",
+          "label": "token"
+        },
+        {
+          "from": "O",
+          "to": "S",
+          "label": "{done: true, eval_count, eval_duration}"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 4,
+      "summary": "sequence diagram with 3 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/ollama-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "alive",
+        "dead",
+        "q"
+      ],
+      "edges": [
+        {
+          "from": "q",
+          "to": "alive",
+          "label": "yes"
+        },
+        {
+          "from": "q",
+          "to": "dead",
+          "label": "no"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/architecture/ollama-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "e1",
+        "no",
+        "ok"
+      ],
+      "edges": [
+        {
+          "from": "e1",
+          "to": "ok",
+          "label": "\"no\""
+        },
+        {
+          "from": "e1",
+          "to": "no",
+          "label": "\"YES\""
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/architecture/ollama-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "big",
+        "conf",
+        "refuse",
+        "trunc",
+        "win"
+      ],
+      "edges": [
+        {
+          "from": "big",
+          "to": "win"
+        },
+        {
+          "from": "win",
+          "to": "trunc",
+          "label": "\"send it anyway\""
+        },
+        {
+          "from": "trunc",
+          "to": "conf"
+        },
+        {
+          "from": "win",
+          "to": "refuse",
+          "label": "\"llm.Service checks FIRST\""
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/openclaw-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "app",
+        "gh",
+        "model",
+        "n8n",
+        "oc",
+        "pr",
+        "rt",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "rt"
+        },
+        {
+          "from": "rt",
+          "to": "oc"
+        },
+        {
+          "from": "oc",
+          "to": "model"
+        },
+        {
+          "from": "oc",
+          "to": "svc",
+          "label": "\"output — UNTRUSTED\""
+        },
+        {
+          "from": "svc",
+          "to": "n8n",
+          "label": "\"validated\""
+        },
+        {
+          "from": "n8n",
+          "to": "pr"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 8 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/openclaw-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "N8N",
+        "OC",
+        "Svc"
+      ],
+      "edges": [
+        {
+          "from": "N8N",
+          "to": "Svc",
+          "label": "Submit(task, limits)"
+        },
+        {
+          "from": "Svc",
+          "to": "OC",
+          "label": "POST /v1/executions"
+        },
+        {
+          "from": "OC",
+          "to": "Svc",
+          "label": "202 · execution ID"
+        },
+        {
+          "from": "Svc",
+          "to": "N8N",
+          "label": "execution ID (immediately)"
+        },
+        {
+          "from": "N8N",
+          "to": "Svc",
+          "label": "Status(id)"
+        },
+        {
+          "from": "Svc",
+          "to": "OC",
+          "label": "GET /v1/executions/{id}"
+        },
+        {
+          "from": "OC",
+          "to": "Svc",
+          "label": "running · 7 steps · $0.21"
+        },
+        {
+          "from": "N8N",
+          "to": "Svc",
+          "label": "Result(id)"
+        },
+        {
+          "from": "Svc",
+          "to": "OC",
+          "label": "GET /v1/executions/{id}/result"
+        },
+        {
+          "from": "OC",
+          "to": "Svc",
+          "label": "content + artifacts"
+        },
+        {
+          "from": "Svc",
+          "to": "Svc",
+          "label": "VALIDATE (size · UTF-8 · credentials)"
+        },
+        {
+          "from": "Svc",
+          "to": "N8N",
+          "label": "result, or ErrOutputRejected"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 12,
+      "summary": "sequence diagram with 3 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/architecture/openclaw-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "b1",
+        "b2",
+        "bad",
+        "g1",
+        "g2",
+        "good"
+      ],
+      "edges": [
+        {
+          "from": "bad",
+          "to": "b1"
+        },
+        {
+          "from": "bad",
+          "to": "b2"
+        },
+        {
+          "from": "good",
+          "to": "g1"
+        },
+        {
+          "from": "good",
+          "to": "g2"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 6 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/openclaw-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "GH",
+        "OC",
+        "P"
+      ],
+      "edges": [
+        {
+          "from": "P",
+          "to": "OC",
+          "label": "POST /v1/executions\u003cbr/\u003eX-Idempotency-Key: blog-draft:push:delivery-123"
+        },
+        {
+          "from": "OC",
+          "to": "OC",
+          "label": "agent starts · reads repo · calls a model"
+        },
+        {
+          "from": "OC",
+          "to": "P",
+          "label": "the response is lost (timeout, LB reset, deploy)"
+        },
+        {
+          "from": "P",
+          "to": "OC",
+          "label": "retry — SAME key"
+        },
+        {
+          "from": "OC",
+          "to": "P",
+          "label": "the EXISTING execution"
+        },
+        {
+          "from": "OC",
+          "to": "OC",
+          "label": "a SECOND agent starts"
+        },
+        {
+          "from": "OC",
+          "to": "GH",
+          "label": "a second pull request"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 7,
+      "summary": "sequence diagram with 3 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/openclaw-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "af",
+        "au",
+        "f",
+        "ir",
+        "iv",
+        "k",
+        "never",
+        "nf",
+        "orj",
+        "retry",
+        "sec",
+        "stop",
+        "to",
+        "un"
+      ],
+      "edges": [
+        {
+          "from": "f",
+          "to": "k"
+        },
+        {
+          "from": "k",
+          "to": "un",
+          "label": "\"connection refused · DNS · TLS\""
+        },
+        {
+          "from": "k",
+          "to": "to",
+          "label": "\"no answer in time\""
+        },
+        {
+          "from": "k",
+          "to": "un",
+          "label": "\"429 · 5xx\""
+        },
+        {
+          "from": "k",
+          "to": "au",
+          "label": "\"401 · 403\""
+        },
+        {
+          "from": "k",
+          "to": "nf",
+          "label": "\"404\""
+        },
+        {
+          "from": "k",
+          "to": "ir",
+          "label": "\"400\""
+        },
+        {
+          "from": "k",
+          "to": "iv",
+          "label": "\"200 + HTML / broken JSON\""
+        },
+        {
+          "from": "k",
+          "to": "af",
+          "label": "\"status: failed\""
+        },
+        {
+          "from": "k",
+          "to": "orj",
+          "label": "\"output has a credential\""
+        },
+        {
+          "from": "un",
+          "to": "retry"
+        },
+        {
+          "from": "to",
+          "to": "retry"
+        },
+        {
+          "from": "au",
+          "to": "stop"
+        },
+        {
+          "from": "nf",
+          "to": "stop"
+        },
+        {
+          "from": "ir",
+          "to": "stop"
+        },
+        {
+          "from": "iv",
+          "to": "stop"
+        },
+        {
+          "from": "af",
+          "to": "never"
+        },
+        {
+          "from": "orj",
+          "to": "sec"
+        }
+      ],
+      "nodeCount": 14,
+      "edgeCount": 18,
+      "summary": "flowchart diagram with 14 nodes and 18 relationships."
+    },
+    {
+      "source": "docs/architecture/openclaw-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "agent2",
+        "inj",
+        "out",
+        "pub",
+        "rej",
+        "repo",
+        "s1",
+        "s2",
+        "val"
+      ],
+      "edges": [
+        {
+          "from": "repo",
+          "to": "agent2"
+        },
+        {
+          "from": "inj",
+          "to": "agent2",
+          "label": "\"prompt injection —\u003cbr/\u003ewe cannot prevent this\u003cbr/\u003efrom OUTSIDE the agent\""
+        },
+        {
+          "from": "agent2",
+          "to": "out"
+        },
+        {
+          "from": "out",
+          "to": "val"
+        },
+        {
+          "from": "s1",
+          "to": "s2"
+        },
+        {
+          "from": "val",
+          "to": "pub",
+          "label": "\"clean\""
+        },
+        {
+          "from": "val",
+          "to": "rej",
+          "label": "\"credential found\""
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 9 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "callers",
+        "iface",
+        "ollama",
+        "rb",
+        "ro",
+        "router",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "callers",
+          "to": "svc"
+        },
+        {
+          "from": "iface",
+          "to": "ollama",
+          "label": "\"LLM_PROVIDER=ollama\""
+        },
+        {
+          "from": "iface",
+          "to": "bedrock",
+          "label": "\"LLM_PROVIDER=bedrock\""
+        },
+        {
+          "from": "iface",
+          "to": "router",
+          "label": "\"LLM_PROVIDER=router\""
+        },
+        {
+          "from": "router",
+          "to": "ro"
+        },
+        {
+          "from": "router",
+          "to": "rb"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 8 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bedrock",
+        "gh",
+        "n8n",
+        "note",
+        "ollama",
+        "plat",
+        "router",
+        "svc"
+      ],
+      "edges": [
+        {
+          "from": "gh",
+          "to": "n8n"
+        },
+        {
+          "from": "n8n",
+          "to": "plat"
+        },
+        {
+          "from": "plat",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "router"
+        },
+        {
+          "from": "router",
+          "to": "ollama",
+          "label": "\"local · free · private\""
+        },
+        {
+          "from": "router",
+          "to": "bedrock",
+          "label": "\"leaves the VPC · billed\""
+        },
+        {
+          "from": "note",
+          "to": "bedrock"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 8 nodes and 7 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "done",
+        "e",
+        "inf",
+        "o",
+        "oc",
+        "prov",
+        "r",
+        "resp",
+        "s",
+        "svc",
+        "wf"
+      ],
+      "edges": [
+        {
+          "from": "wf",
+          "to": "oc"
+        },
+        {
+          "from": "oc",
+          "to": "svc"
+        },
+        {
+          "from": "svc",
+          "to": "r"
+        },
+        {
+          "from": "r",
+          "to": "c"
+        },
+        {
+          "from": "c",
+          "to": "s"
+        },
+        {
+          "from": "s",
+          "to": "o"
+        },
+        {
+          "from": "o",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "prov"
+        },
+        {
+          "from": "prov",
+          "to": "inf"
+        },
+        {
+          "from": "inf",
+          "to": "resp"
+        },
+        {
+          "from": "resp",
+          "to": "done"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 12 nodes and 11 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "H",
+        "O",
+        "R",
+        "S"
+      ],
+      "edges": [
+        {
+          "from": "S",
+          "to": "R",
+          "label": "Generate(purpose=release-notes)"
+        },
+        {
+          "from": "R",
+          "to": "H",
+          "label": "is bedrock healthy?"
+        },
+        {
+          "from": "H",
+          "to": "R",
+          "label": "yes"
+        },
+        {
+          "from": "R",
+          "to": "B",
+          "label": "Generate"
+        },
+        {
+          "from": "B",
+          "to": "R",
+          "label": "ErrThrottled"
+        },
+        {
+          "from": "R",
+          "to": "H",
+          "label": "bedrock Failed()"
+        },
+        {
+          "from": "R",
+          "to": "O",
+          "label": "Generate"
+        },
+        {
+          "from": "O",
+          "to": "R",
+          "label": "completion"
+        },
+        {
+          "from": "R",
+          "to": "H",
+          "label": "ollama Succeeded()"
+        },
+        {
+          "from": "R",
+          "to": "S",
+          "label": "Response{Provider: \"ollama\", …}"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 10,
+      "summary": "sequence diagram with 5 nodes and 10 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "drop",
+        "empty",
+        "gate",
+        "pool",
+        "refuse",
+        "req",
+        "strat"
+      ],
+      "edges": [
+        {
+          "from": "req",
+          "to": "gate"
+        },
+        {
+          "from": "gate",
+          "to": "drop",
+          "label": "\"RequireLocal + provider is hosted\""
+        },
+        {
+          "from": "gate",
+          "to": "drop",
+          "label": "\"needs tools + provider has none\""
+        },
+        {
+          "from": "gate",
+          "to": "drop",
+          "label": "\"prompt \u0026gt; window\""
+        },
+        {
+          "from": "gate",
+          "to": "pool",
+          "label": "\"eligible\""
+        },
+        {
+          "from": "pool",
+          "to": "empty"
+        },
+        {
+          "from": "empty",
+          "to": "refuse",
+          "label": "\"yes\""
+        },
+        {
+          "from": "empty",
+          "to": "strat",
+          "label": "\"no\""
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 7 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "done",
+        "exhausted",
+        "fo",
+        "next",
+        "start",
+        "start2",
+        "stop",
+        "try1",
+        "try2"
+      ],
+      "edges": [
+        {
+          "from": "start",
+          "to": "try1"
+        },
+        {
+          "from": "try1",
+          "to": "done",
+          "label": "\"yes\""
+        },
+        {
+          "from": "try1",
+          "to": "fo",
+          "label": "\"provider at fault\""
+        },
+        {
+          "from": "try1",
+          "to": "stop",
+          "label": "\"request/model at fault\""
+        },
+        {
+          "from": "fo",
+          "to": "stop",
+          "label": "\"no\""
+        },
+        {
+          "from": "fo",
+          "to": "next",
+          "label": "\"yes\""
+        },
+        {
+          "from": "next",
+          "to": "start2",
+          "label": "\"yes\""
+        },
+        {
+          "from": "next",
+          "to": "exhausted",
+          "label": "\"no\""
+        },
+        {
+          "from": "try2",
+          "to": "done",
+          "label": "\"yes\""
+        },
+        {
+          "from": "try2",
+          "to": "exhausted",
+          "label": "\"no\""
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 10,
+      "summary": "flowchart diagram with 9 nodes and 10 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "state",
+      "nodes": [
+        "Demoted",
+        "Failing",
+        "HalfOpen",
+        "Healthy"
+      ],
+      "edges": [
+        {
+          "from": "Healthy",
+          "to": "Healthy"
+        },
+        {
+          "from": "Healthy",
+          "to": "Failing"
+        },
+        {
+          "from": "Failing",
+          "to": "Healthy"
+        },
+        {
+          "from": "Failing",
+          "to": "Demoted"
+        },
+        {
+          "from": "Demoted",
+          "to": "Demoted"
+        },
+        {
+          "from": "Demoted",
+          "to": "HalfOpen"
+        },
+        {
+          "from": "HalfOpen",
+          "to": "Healthy"
+        },
+        {
+          "from": "HalfOpen",
+          "to": "Demoted"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 8,
+      "summary": "state diagram with 4 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "a1",
+        "a2",
+        "a3",
+        "b1",
+        "b2",
+        "b3",
+        "c1",
+        "c2",
+        "c3"
+      ],
+      "edges": [
+        {
+          "from": "a1",
+          "to": "a2"
+        },
+        {
+          "from": "a2",
+          "to": "a3"
+        },
+        {
+          "from": "b1",
+          "to": "b2"
+        },
+        {
+          "from": "b2",
+          "to": "b3"
+        },
+        {
+          "from": "c1",
+          "to": "c2"
+        },
+        {
+          "from": "c2",
+          "to": "c3"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 9 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "caps",
+        "fleet",
+        "i",
+        "u",
+        "w"
+      ],
+      "edges": [
+        {
+          "from": "fleet",
+          "to": "caps"
+        },
+        {
+          "from": "caps",
+          "to": "u"
+        },
+        {
+          "from": "caps",
+          "to": "i"
+        },
+        {
+          "from": "caps",
+          "to": "w"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 4,
+      "summary": "flowchart diagram with 5 nodes and 4 relationships."
+    },
+    {
+      "source": "docs/architecture/router-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "done",
+        "new",
+        "router",
+        "step1",
+        "step2",
+        "svc",
+        "test"
+      ],
+      "edges": [
+        {
+          "from": "new",
+          "to": "step1"
+        },
+        {
+          "from": "step1",
+          "to": "step2"
+        },
+        {
+          "from": "step2",
+          "to": "done"
+        },
+        {
+          "from": "router",
+          "to": "done",
+          "label": "\"never touched\u003cbr/\u003eroutes by Capabilities, not by name\""
+        },
+        {
+          "from": "svc",
+          "to": "done",
+          "label": "\"never touched\u003cbr/\u003ethey take the interface\""
+        },
+        {
+          "from": "test",
+          "to": "router",
+          "label": "\"fails the build if the\u003cbr/\u003erouter imports a vendor\""
+        }
+      ],
+      "nodeCount": 7,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 7 nodes and 6 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "reclaim",
+        "rules",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "\"event\""
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop the workload\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save the output\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"3 · leave a marker\""
+        },
+        {
+          "from": "default",
+          "to": "rules"
+        },
+        {
+          "from": "rules",
+          "to": "l1"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 10 nodes and 11 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "sequence",
+      "nodes": [
+        "AWS",
+        "Agent",
+        "CW",
+        "EB",
+        "IMDS",
+        "L",
+        "S3",
+        "Work"
+      ],
+      "edges": [
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "404 — nothing to do"
+        },
+        {
+          "from": "AWS",
+          "to": "IMDS",
+          "label": "notice (T+0s · ~120s left)"
+        },
+        {
+          "from": "AWS",
+          "to": "EB",
+          "label": "EC2 Spot Instance Interruption Warning"
+        },
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "{\"action\":\"terminate\"}"
+        },
+        {
+          "from": "Agent",
+          "to": "Work",
+          "label": "systemctl stop"
+        },
+        {
+          "from": "Work",
+          "to": "Agent",
+          "label": "stopped (nothing is writing now)"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "sync artifacts/"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "put interruption.json"
+        },
+        {
+          "from": "EB",
+          "to": "L",
+          "label": "invoke"
+        },
+        {
+          "from": "L",
+          "to": "AWS",
+          "label": "DescribeInstances (is this ours?)"
+        },
+        {
+          "from": "L",
+          "to": "CW",
+          "label": "PutMetricData InterruptionWarnings"
+        },
+        {
+          "from": "L",
+          "to": "EB",
+          "label": "PutEvents → platform bus"
+        },
+        {
+          "from": "AWS",
+          "to": "Work",
+          "label": "instance terminated (T+120s)"
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 15,
+      "summary": "sequence diagram with 8 nodes and 15 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "e1",
+        "e2",
+        "e3",
+        "e4",
+        "e5",
+        "l1",
+        "l2",
+        "m1",
+        "m3"
+      ],
+      "edges": [
+        {
+          "from": "e1",
+          "to": "l1"
+        },
+        {
+          "from": "e2",
+          "to": "l1"
+        },
+        {
+          "from": "e3",
+          "to": "l2"
+        },
+        {
+          "from": "e4",
+          "to": "l2"
+        },
+        {
+          "from": "e5",
+          "to": "l2"
+        },
+        {
+          "from": "l1",
+          "to": "m1",
+          "label": "\"owned?\""
+        },
+        {
+          "from": "l2",
+          "to": "m3",
+          "label": "\"owned?\""
+        },
+        {
+          "from": "l1",
+          "to": "bus"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 10 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "drain",
+        "fallback",
+        "od1",
+        "od2",
+        "od3",
+        "spot1",
+        "spot2",
+        "start",
+        "state",
+        "user"
+      ],
+      "edges": [
+        {
+          "from": "start",
+          "to": "state"
+        },
+        {
+          "from": "state",
+          "to": "od1",
+          "label": "yes"
+        },
+        {
+          "from": "state",
+          "to": "drain",
+          "label": "no"
+        },
+        {
+          "from": "drain",
+          "to": "od2",
+          "label": "no"
+        },
+        {
+          "from": "drain",
+          "to": "user",
+          "label": "yes"
+        },
+        {
+          "from": "user",
+          "to": "fallback",
+          "label": "yes"
+        },
+        {
+          "from": "fallback",
+          "to": "od3",
+          "label": "no"
+        },
+        {
+          "from": "fallback",
+          "to": "spot1",
+          "label": "yes"
+        },
+        {
+          "from": "user",
+          "to": "spot2",
+          "label": "no"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "docs/architecture/spot-diagrams.md",
+      "type": "flowchart",
+      "nodes": [
+        "od",
+        "pay",
+        "sp"
+      ],
+      "edges": [
+        {
+          "from": "od",
+          "to": "sp",
+          "label": "\"–70%\""
+        },
+        {
+          "from": "sp",
+          "to": "pay"
+        }
+      ],
+      "nodeCount": 3,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 3 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/blog/designing-an-ai-agent-platform-on-aws.md",
+      "type": "flowchart",
+      "nodes": [
+        "agentplane",
+        "bedrock",
+        "claw",
+        "control",
+        "dev",
+        "eb",
+        "gh",
+        "inference",
+        "lam",
+        "n8n",
+        "obs",
+        "ollama",
+        "out"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "gh",
+          "label": "\"push, issue, PR\""
+        },
+        {
+          "from": "gh",
+          "to": "eb",
+          "label": "\"webhook\""
+        },
+        {
+          "from": "eb",
+          "to": "lam"
+        },
+        {
+          "from": "lam",
+          "to": "claw"
+        },
+        {
+          "from": "claw",
+          "to": "n8n"
+        },
+        {
+          "from": "claw",
+          "to": "ollama",
+          "label": "\"model request\""
+        },
+        {
+          "from": "ollama",
+          "to": "bedrock",
+          "label": "\"fallback on interruption\""
+        },
+        {
+          "from": "claw",
+          "to": "out"
+        },
+        {
+          "from": "n8n",
+          "to": "gh",
+          "label": "\"publish\""
+        },
+        {
+          "from": "control",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "agentplane",
+          "to": "obs",
+          "label": "telemetry"
+        },
+        {
+          "from": "inference",
+          "to": "obs",
+          "label": "telemetry"
+        }
+      ],
+      "nodeCount": 13,
+      "edgeCount": 12,
+      "summary": "flowchart diagram with 13 nodes and 12 relationships."
+    },
+    {
+      "source": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "base",
+        "builder",
+        "cfn"
+      ],
+      "edges": [
+        {
+          "from": "base",
+          "to": "builder"
+        },
+        {
+          "from": "ami",
+          "to": "cfn",
+          "label": "\"AmiId parameter\""
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 2,
+      "summary": "flowchart diagram with 4 nodes and 2 relationships."
+    },
+    {
+      "source": "docs/blog/optimizing-ec2-spot-instance-startup-with-custom-amis.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "EC2",
+        "S",
+        "SSM"
+      ],
+      "edges": [
+        {
+          "from": "S",
+          "to": "B",
+          "label": "UserData → provision.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "install everything; write the manifest"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "touch ami-build.done"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "done? failed? where are you?"
+        },
+        {
+          "from": "SSM",
+          "to": "S",
+          "label": "the last line of the build log"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "run cleanup.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "strip credentials, keys, machine-id, SSM registration"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "cloud-init clean → shutdown"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "wait instance-stopped ← the real success signal"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "create-image, tag, terminate the builder"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 10,
+      "summary": "sequence diagram with 4 nodes and 10 relationships."
+    },
+    {
+      "source": "docs/blog/provisioning-an-ai-agent-platform-with-cloudformation.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "deploy",
+        "dev",
+        "e",
+        "i",
+        "n",
+        "o",
+        "ready",
+        "s"
+      ],
+      "edges": [
+        {
+          "from": "dev",
+          "to": "deploy"
+        },
+        {
+          "from": "deploy",
+          "to": "n"
+        },
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "c"
+        },
+        {
+          "from": "c",
+          "to": "s"
+        },
+        {
+          "from": "s",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "o"
+        },
+        {
+          "from": "o",
+          "to": "ready"
+        }
+      ],
+      "nodeCount": 9,
+      "edgeCount": 8,
+      "summary": "flowchart diagram with 9 nodes and 8 relationships."
+    },
+    {
+      "source": "docs/blog/reducing-ai-infrastructure-costs-with-ec2-spot-instances.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "reclaim",
+        "rules",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "\"event\""
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save\""
+        },
+        {
+          "from": "default",
+          "to": "rules"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"re-publish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 10,
+      "edgeCount": 9,
+      "summary": "flowchart diagram with 10 nodes and 9 relationships."
+    },
+    {
+      "source": "infra/AMI.md",
+      "type": "flowchart",
+      "nodes": [
+        "ami",
+        "base",
+        "builder",
+        "cfn",
+        "cw",
+        "spot"
+      ],
+      "edges": [
+        {
+          "from": "base",
+          "to": "builder"
+        },
+        {
+          "from": "ami",
+          "to": "cfn",
+          "label": "\"AmiId parameter\""
+        },
+        {
+          "from": "spot",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 3,
+      "summary": "flowchart diagram with 6 nodes and 3 relationships."
+    },
+    {
+      "source": "infra/AMI.md",
+      "type": "sequence",
+      "nodes": [
+        "B",
+        "EC2",
+        "S",
+        "SSM"
+      ],
+      "edges": [
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "run-instances (On-Demand, stock AL2023)"
+        },
+        {
+          "from": "S",
+          "to": "B",
+          "label": "UserData → fetch scripts from S3, run provision.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "write /etc/ami-manifest.json"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "touch /var/lib/ami-build.done"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "is it done? failed? where is it?"
+        },
+        {
+          "from": "SSM",
+          "to": "S",
+          "label": "last line of the build log"
+        },
+        {
+          "from": "S",
+          "to": "SSM",
+          "label": "run cleanup.sh"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "strip credentials, SSH keys, machine-id,\u003cbr/\u003eSSM registration, cloud-init state"
+        },
+        {
+          "from": "B",
+          "to": "B",
+          "label": "shutdown -h now"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "wait instance-stopped ← the real success signal"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "create-image (from a quiesced filesystem)"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "tag the AMI and its snapshot"
+        },
+        {
+          "from": "S",
+          "to": "EC2",
+          "label": "terminate the builder"
+        }
+      ],
+      "nodeCount": 4,
+      "edgeCount": 13,
+      "summary": "sequence diagram with 4 nodes and 13 relationships."
+    },
+    {
+      "source": "infra/AMI.md",
+      "type": "flowchart",
+      "nodes": [
+        "back",
+        "build",
+        "change",
+        "keep",
+        "never",
+        "ok",
+        "roll",
+        "test"
+      ],
+      "edges": [
+        {
+          "from": "change",
+          "to": "build"
+        },
+        {
+          "from": "build",
+          "to": "test"
+        },
+        {
+          "from": "test",
+          "to": "ok"
+        },
+        {
+          "from": "ok",
+          "to": "roll",
+          "label": "yes"
+        },
+        {
+          "from": "ok",
+          "to": "back",
+          "label": "no"
+        },
+        {
+          "from": "roll",
+          "to": "keep"
+        },
+        {
+          "from": "never",
+          "to": "change",
+          "label": "\"never\""
+        }
+      ],
+      "nodeCount": 8,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 8 nodes and 7 relationships."
+    },
+    {
+      "source": "infra/README.md",
+      "type": "flowchart",
+      "nodes": [
+        "c",
+        "e",
+        "i",
+        "n",
+        "s",
+        "sp"
+      ],
+      "edges": [
+        {
+          "from": "n",
+          "to": "i"
+        },
+        {
+          "from": "i",
+          "to": "e"
+        },
+        {
+          "from": "e",
+          "to": "sp"
+        },
+        {
+          "from": "s",
+          "to": "sp",
+          "label": "\"lambda zips\""
+        },
+        {
+          "from": "c",
+          "to": "n",
+          "label": "imports"
+        },
+        {
+          "from": "c",
+          "to": "i",
+          "label": "imports"
+        },
+        {
+          "from": "e",
+          "to": "i",
+          "label": "imports"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 7,
+      "summary": "flowchart diagram with 6 nodes and 7 relationships."
+    },
+    {
+      "source": "infra/SCHEDULER.md",
+      "type": "flowchart",
+      "nodes": [
+        "cw",
+        "ec2",
+        "l1",
+        "l2",
+        "s1",
+        "s2"
+      ],
+      "edges": [
+        {
+          "from": "s1",
+          "to": "l1",
+          "label": "\"invoke (SchedulerRole)\""
+        },
+        {
+          "from": "s2",
+          "to": "l2",
+          "label": "\"invoke (SchedulerRole)\""
+        },
+        {
+          "from": "l1",
+          "to": "ec2",
+          "label": "\"StartInstances (LambdaRole)\""
+        },
+        {
+          "from": "l2",
+          "to": "ec2",
+          "label": "\"StopInstances (LambdaRole)\""
+        },
+        {
+          "from": "l1",
+          "to": "cw",
+          "label": "structured JSON logs"
+        },
+        {
+          "from": "l2",
+          "to": "cw",
+          "label": "structured JSON logs"
+        }
+      ],
+      "nodeCount": 6,
+      "edgeCount": 6,
+      "summary": "flowchart diagram with 6 nodes and 6 relationships."
+    },
+    {
+      "source": "infra/SPOT.md",
+      "type": "flowchart",
+      "nodes": [
+        "bus",
+        "cw",
+        "default",
+        "drain",
+        "imds",
+        "l1",
+        "l2",
+        "r1",
+        "r3",
+        "reclaim",
+        "s3",
+        "work"
+      ],
+      "edges": [
+        {
+          "from": "reclaim",
+          "to": "imds",
+          "label": "\"~2 min notice\""
+        },
+        {
+          "from": "reclaim",
+          "to": "default",
+          "label": "event"
+        },
+        {
+          "from": "imds",
+          "to": "drain"
+        },
+        {
+          "from": "drain",
+          "to": "work",
+          "label": "\"1 · stop\""
+        },
+        {
+          "from": "drain",
+          "to": "s3",
+          "label": "\"2 · save artifacts\""
+        },
+        {
+          "from": "default",
+          "to": "r1"
+        },
+        {
+          "from": "r1",
+          "to": "l1"
+        },
+        {
+          "from": "r3",
+          "to": "l2"
+        },
+        {
+          "from": "l1",
+          "to": "bus",
+          "label": "\"republish\""
+        },
+        {
+          "from": "l1",
+          "to": "cw"
+        },
+        {
+          "from": "drain",
+          "to": "cw"
+        }
+      ],
+      "nodeCount": 12,
+      "edgeCount": 11,
+      "summary": "flowchart diagram with 12 nodes and 11 relationships."
+    },
+    {
+      "source": "infra/SPOT.md",
+      "type": "sequence",
+      "nodes": [
+        "AWS",
+        "Agent",
+        "IMDS",
+        "S3",
+        "Work"
+      ],
+      "edges": [
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "404 (healthy — no interruption)"
+        },
+        {
+          "from": "AWS",
+          "to": "IMDS",
+          "label": "interruption notice (T+0, ~120s left)"
+        },
+        {
+          "from": "Agent",
+          "to": "IMDS",
+          "label": "GET spot/instance-action"
+        },
+        {
+          "from": "IMDS",
+          "to": "Agent",
+          "label": "{\"action\":\"terminate\",\"time\":\"...\"}"
+        },
+        {
+          "from": "Agent",
+          "to": "Work",
+          "label": "systemctl stop (each DRAIN_UNITS)"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "sync /var/lib/aiap/artifacts → drain/\u003cid\u003e/artifacts/"
+        },
+        {
+          "from": "Agent",
+          "to": "S3",
+          "label": "put drain/\u003cid\u003e/interruption.json (the marker)"
+        },
+        {
+          "from": "AWS",
+          "to": "AWS",
+          "label": "instance reclaimed (~T+120s)"
+        }
+      ],
+      "nodeCount": 5,
+      "edgeCount": 9,
+      "summary": "sequence diagram with 5 nodes and 9 relationships."
+    }
+  ],
+  "changelog": {
+    "found": false
+  },
+  "implementation": {
+    "whatChanged": [
+      "feat(loop): autonomous agent loop with an explicit, bounded controller"
+    ],
+    "howItWorks": "An event-driven, AWS-native system built from 4 major components on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge, Amazon EventBridge Scheduler. A standard-go project of 222 files organized into 6 top-level directories (.githooks, .github, cmd, docs, infra, internal), separating entry points, business logic, infrastructure, and documentation.",
+    "infrastructureImprovements": [
+      "8 CloudFormation template(s) define 46 resources across EC2, Events, IAM, Lambda, Logs, S3, Scheduler (13 serverless, 2 compute, 2 storage, 8 networking, 7 IAM, 7 messaging), with 50 parameters and 30 outputs."
+    ],
+    "documentationImprovements": [
+      "docs(changelog): add v0.13.0 [skip ci]"
+    ],
+    "whyItMatters": "Release v0.14.0 advances the platform with 1 new features and 0 fixes, extending capability while keeping the existing contract stable."
+  },
+  "contentIntelligence": {
+    "summary": "designing-an-ai-agent-platform-on-aws release v0.14.0 delivers 2 analyzed changes (1 features, 0 fixes) across 30 files. Release v0.14.0 advances the platform with 1 new features and 0 fixes, extending capability while keeping the existing contract stable.",
+    "technicalHighlights": [
+      "feat(loop): autonomous agent loop with an explicit, bounded controller"
+    ],
+    "infrastructureHighlights": [
+      "8 CloudFormation template(s) define 46 resources across EC2, Events, IAM, Lambda, Logs, S3, Scheduler (13 serverless, 2 compute, 2 storage, 8 networking, 7 IAM, 7 messaging), with 50 parameters and 30 outputs.",
+      "AWS services in use: AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge, Amazon EventBridge Scheduler, Amazon S3.",
+      "A modular, multi-stack CloudFormation deployment: 13 serverless, 2 compute, 2 storage, and 8 networking resources, with least-privilege IAM (7 roles/policies)."
+    ],
+    "architectureHighlights": [
+      "The pipeline is fully event-driven: EventBridge Scheduler → Lambda → EC2 start/stop.",
+      "It blends serverless ingestion with an on-demand compute host, bounding cost while keeping the front door always available.",
+      "105 architecture diagram(s) document the system, aiding onboarding and technical writing.",
+      "Architectural patterns: Event-driven architecture, Serverless, Infrastructure as Code, Least-privilege security."
+    ],
+    "implementationComplexity": "medium",
+    "developerValue": "Developers benefit from better documentation.",
+    "businessValue": "New capabilities expand what the platform can deliver, supporting more content formats and use cases with predictable, bounded cost.",
+    "targetAudience": "Software engineers, cloud/DevOps engineers, and technical leaders building AWS-native, event-driven systems.",
+    "seoKeywords": [
+      "agent",
+      "ai",
+      "amazon cloudwatch",
+      "amazon ec2",
+      "amazon eventbridge",
+      "amazon eventbridge scheduler",
+      "amazon s3",
+      "an",
+      "aws",
+      "aws iam",
+      "aws lambda",
+      "aws lambda (go runtime)",
+      "aws sdk for go v2",
+      "changelog",
+      "designing",
+      "event-driven architecture",
+      "github actions",
+      "go",
+      "go modules",
+      "infrastructure as code"
+    ],
+    "blogTitles": [
+      "Inside designing-an-ai-agent-platform-on-aws v0.14.0: What Changed and Why It Matters",
+      "Shipping v0.14.0: An Event-Driven, AWS-Native Release Walkthrough",
+      "From Commits to Content: How designing-an-ai-agent-platform-on-aws Turns a Release into Insight"
+    ],
+    "articleOutline": [
+      "Introduction — what this release is about",
+      "Context — the problem and the architecture it fits into",
+      "What changed — features, fixes, and improvements",
+      "Infrastructure — the CloudFormation topology and AWS services",
+      "How it works — architecture diagrams and data flow",
+      "Implementation highlights — notable engineering decisions",
+      "Impact — developer and business value",
+      "What's next — future enhancements"
+    ],
+    "linkedInPost": "🚀 designing-an-ai-agent-platform-on-aws v0.14.0 is out.\n\nRelease v0.14.0 advances the platform with 1 new features and 0 fixes, extending capability while keeping the existing contract stable.\n\n1 features, 0 fixes, 30 files touched. Built event-driven on AWS with Infrastructure as Code.\n\n#golang #aws #serverless #devops #opensource",
+    "youTubeShortsTopic": "How we shipped v0.14.0: feat(loop): autonomous agent loop with an explicit, bounded controller in 60 seconds",
+    "tikTokTopic": "Dev log: what changed in designing-an-ai-agent-platform-on-aws v0.14.0",
+    "futureEnhancements": [
+      "Generate the technical blog post from this Release Context (next milestone).",
+      "Integrate Amazon Bedrock to refine the heuristic content intelligence.",
+      "Persist each Release Context and diff successive releases for trend analysis."
+    ]
+  },
+  "warnings": [
+    "no CHANGELOG entry found for v0.14.0"
+  ]
+}
