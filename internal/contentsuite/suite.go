@@ -290,7 +290,10 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
 				})
 				s.Architecture = col
-				return col.Markdown(), err
+				// Emit the version-independent, repository-level architecture document
+				// (no release tag, curated structure) so the same stable doc is produced
+				// locally and in the cloud.
+				return col.RepoLevelMarkdown(), err
 			})
 		}()
 	}

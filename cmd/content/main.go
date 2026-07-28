@@ -397,17 +397,6 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 	if len(out) == 0 && target != "all" {
 		return nil, fmt.Errorf("artifact %q was not produced (a thin release may skip it)", target)
 	}
-
-	// Render the architecture artifact as the version-independent, repository-level
-	// document (no release tag, curated structure, descriptive nodes). The local
-	// content workflow wants a stable docs/architecture.md, not a release-scoped one.
-	for i := range out {
-		if out[i].kind == "architecture" {
-			if md, err := repoArchitectureMarkdown(ctx, rctx); err == nil && md != "" {
-				out[i].markdown = md
-			}
-		}
-	}
 	return out, nil
 }
 
