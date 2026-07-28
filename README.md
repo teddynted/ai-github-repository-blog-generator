@@ -435,6 +435,17 @@ and finish with elapsed time + output size, plus a 15s heartbeat during long
 generations); `--hybrid --dry-run` previews the policy without calling any
 provider.
 
+> **Performance & hardware.** A **full `--artifact all` run through local Ollama
+> is impractical on low-end / CPU-only machines** — a single transform can take
+> several minutes, and the whole suite can exceed even a long `--timeout`. Treat
+> local Ollama as a **wiring/plumbing test**, not a quality bar: a 1–1.5B model
+> (e.g. `llama3.2:1b`) will often produce content that trips the validation gate
+> (placeholders, marketing phrases). For quality, use `--provider claude-code`
+> (or a single artifact via `--from-blog`), and rely on the deployed worker
+> (`qwen2.5:7b`) for the full suite. Note the Ollama output cap
+> (`num_predict`, default 2048) only applies to **fresh** generations — cached
+> responses replay verbatim, so add `--no-cache` to actually exercise it.
+
 ### Reuse an existing blog (`--from-blog`)
 
 `blog.md` is the foundation every other artifact derives from, and it's the most
