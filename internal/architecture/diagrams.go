@@ -148,6 +148,17 @@ func addServiceEdges(g *graph, a analysis) {
 	}
 }
 
+// mermaidLabel returns a node's human label when the diagram defines one
+// ("GH" → "GitHub Release"), otherwise the node id.
+func mermaidLabel(m *rc.MermaidDiagram, id string) string {
+	if m.NodeLabels != nil {
+		if l := m.NodeLabels[id]; l != "" {
+			return l
+		}
+	}
+	return id
+}
+
 // resolveServiceID returns the graph node ID whose service matches the label.
 func resolveServiceID(g *graph, label string) string {
 	info, known := lookupService(label)
@@ -164,11 +175,26 @@ func resolveServiceID(g *graph, label string) string {
 // dataFlow builds a graph directly from the first parsed Mermaid diagram — its
 // real nodes and edges. This is the most faithful topology.
 func dataFlow(pkg ReleasePackage, a analysis) (diagramSpec, bool) {
+	// Choose the most service-rich diagram: among the parsed Mermaid diagrams that
+	// have edges, prefer the one whose nodes resolve to the most catalogued AWS
+	// services (so a descriptive pipeline wins over an abstract, cryptic flow).
+	// Ties keep the earliest, so single-diagram repos are unaffected.
 	var src *rc.MermaidDiagram
+	bestScore := -1
 	for i := range a.Mermaid {
-		if len(a.Mermaid[i].Nodes) > 0 {
-			src = &a.Mermaid[i]
-			break
+		m := &a.Mermaid[i]
+		if len(m.Nodes) == 0 || len(m.Edges) == 0 {
+			continue
+		}
+		score := 0
+		for _, n := range m.Nodes {
+			if _, known := lookupService(mermaidLabel(m, n)); known {
+				score++
+			}
+		}
+		if score > bestScore {
+			bestScore = score
+			src = m
 		}
 	}
 	if src == nil {
@@ -176,8 +202,10 @@ func dataFlow(pkg ReleasePackage, a analysis) (diagramSpec, bool) {
 	}
 	g := graph{Direction: "LR"}
 	for _, n := range src.Nodes {
-		info, known := lookupService(n)
-		node := gnode{ID: sanitizeID(n), Label: n}
+		// Prefer the diagram's human label ("GH" → "GitHub Release") over the id.
+		label := mermaidLabel(src, n)
+		info, known := lookupService(label)
+		node := gnode{ID: sanitizeID(n), Label: label}
 		if known {
 			node.Label = info.Canonical
 			node.Category = info.Category

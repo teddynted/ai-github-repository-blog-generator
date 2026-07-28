@@ -52,6 +52,7 @@ type Diagram struct {
 	SVG         string      `json:"svg"`
 	PNG         PNGExport   `json:"png"`
 	AWSServices []string    `json:"awsServices,omitempty"`
+	Nodes       []string    `json:"nodes,omitempty"` // node labels, for component listings
 	References  []string    `json:"references,omitempty"`
 	Metadata    DiagramMeta `json:"metadata"`
 }

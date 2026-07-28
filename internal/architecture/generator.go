@@ -103,6 +103,7 @@ func (g *Generator) buildDiagram(ctx context.Context, pkg ReleasePackage, spec d
 		SVG:         renderSVG(spec.Graph, spec.Title),
 		PNG:         planPNG(spec.Graph),
 		AWSServices: spec.Graph.awsServiceLabels(),
+		Nodes:       spec.Graph.nodeLabels(),
 		References:  dedupe(spec.References),
 		Metadata:    planDiagramMeta(pkg, spec, generatedAt),
 	}

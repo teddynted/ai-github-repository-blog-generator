@@ -16,6 +16,21 @@ var seqArrows = []string{"-->>", "->>", "-->", "->", "--x", "-x"}
 // idRe captures a leading Mermaid node identifier (before any [] () {} label).
 var idRe = regexp.MustCompile(`^[A-Za-z0-9_.-]+`)
 
+// nodeDefRe captures a node id immediately followed by a bracketed label —
+// "GH[GitHub Release]", "APIGW(API Gateway)", "T{Valid?}" — group 1 = id,
+// group 2 = label text (up to the first closing bracket or quote).
+var nodeDefRe = regexp.MustCompile(`([A-Za-z0-9_.-]+)[\[({]"?([^"\]})]+)`)
+
+// cleanMermaidLabel normalises a captured node label: it drops line-break tags
+// and strips stray shape/quote characters left by special node syntaxes such as
+// cylinders ("[(text)]") or rounded nodes ("(text)").
+func cleanMermaidLabel(s string) string {
+	s = strings.ReplaceAll(s, "<br/>", " ")
+	s = strings.ReplaceAll(s, "<br>", " ")
+	s = strings.Trim(s, "[](){}\"' \t")
+	return strings.TrimSpace(s)
+}
+
 // analyzeMermaid extracts and parses every fenced ```mermaid block from the
 // markdown inventory.
 func analyzeMermaid(files []RawFile) []MermaidDiagram {
@@ -68,12 +83,20 @@ func parseMermaid(block string) MermaidDiagram {
 	}
 	d := MermaidDiagram{Type: diagramType(header)}
 	nodes := map[string]bool{}
+	labels := map[string]string{}
 	seq := d.Type == "sequence"
 
 	for _, ln := range lines {
 		t := strings.TrimSpace(ln)
 		if t == "" || t == header || strings.HasPrefix(t, "%%") {
 			continue
+		}
+		// Capture human labels from node definitions (inline or standalone):
+		// "GH[GitHub Release]", "APIGW(API Gateway)", "T{Valid?}".
+		for _, m := range nodeDefRe.FindAllStringSubmatch(t, -1) {
+			if id, lbl := m[1], cleanMermaidLabel(m[2]); lbl != "" && labels[id] == "" {
+				labels[id] = lbl
+			}
 		}
 		arrows := flowArrows
 		if seq {
@@ -94,6 +117,15 @@ func parseMermaid(block string) MermaidDiagram {
 
 	for n := range nodes {
 		d.Nodes = append(d.Nodes, n)
+	}
+	// Keep only labels for nodes that appear in the graph.
+	for id := range labels {
+		if !nodes[id] {
+			delete(labels, id)
+		}
+	}
+	if len(labels) > 0 {
+		d.NodeLabels = labels
 	}
 	sort.Strings(d.Nodes)
 	d.NodeCount = len(d.Nodes)

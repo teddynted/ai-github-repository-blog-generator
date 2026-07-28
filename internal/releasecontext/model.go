@@ -229,13 +229,17 @@ type CFNCounts struct {
 
 // MermaidDiagram is one parsed Mermaid diagram.
 type MermaidDiagram struct {
-	Source    string        `json:"source,omitempty"` // originating doc path
-	Type      string        `json:"type"`             // flowchart | sequence | state | class | er | other
-	Nodes     []string      `json:"nodes,omitempty"`
-	Edges     []MermaidEdge `json:"edges,omitempty"`
-	NodeCount int           `json:"nodeCount"`
-	EdgeCount int           `json:"edgeCount"`
-	Summary   string        `json:"summary,omitempty"`
+	Source string   `json:"source,omitempty"` // originating doc path
+	Type   string   `json:"type"`             // flowchart | sequence | state | class | er | other
+	Nodes  []string `json:"nodes,omitempty"`
+	// NodeLabels maps a node id to its human label when the diagram defines one
+	// (e.g. "GH" → "GitHub Release"), so consumers can show descriptive names
+	// instead of cryptic ids. Absent when a node has no label.
+	NodeLabels map[string]string `json:"nodeLabels,omitempty"`
+	Edges      []MermaidEdge     `json:"edges,omitempty"`
+	NodeCount  int               `json:"nodeCount"`
+	EdgeCount  int               `json:"edgeCount"`
+	Summary    string            `json:"summary,omitempty"`
 }
 
 // MermaidEdge is a directed relationship between two nodes.
