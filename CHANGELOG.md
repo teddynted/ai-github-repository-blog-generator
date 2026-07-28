@@ -10,6 +10,42 @@ inserts a new version section below this header, newest first. See
 docs/releases.md. Do not edit released sections by hand.
 -->
 
+## [0.21.2] - 2026-07-28
+
+### Features
+
+- **blog:** concise 13-section publication format as cloud standard (blog@12)
+- **blog:** encode editorial standard into the generator prompt (blog@11)
+- **blog:** feed the repository architecture graph into blog grounding
+- **blog:** reflection retry — feed validation errors back into the rewrite
+- **blog:** regenerate the article on validation failure (Option A)
+- **blog:** repository-first — document THIS repo, never a generic AWS article
+- **blog:** staff-engineer voice — kill AI tells in the blog prompt
+- **blog:** terminology/clarity quality pass in the generator (blog@13)
+- **blog:** timeless meta description from a plan-generated field
+- **content:** add local claude-code provider (subscription, no API credits)
+- **content:** local content development & prompt testing
+- **content:** per-release local output layout + clean claude-code generations
+- **content:** version local blog output (history/ per run)
+- **contentcheck:** deterministically flag invented counts + generic tech ledes
+- **scheduler:** idle-detection auto-stop for the on-demand EC2 host
+
+### Bug Fixes
+
+- **blog:** emit plan TITLE as a parseable line so the timeless title is used
+- **blog:** harden blog assembly against malformed model output
+- **blog:** strip conversational scaffolding in the shared assembly path
+- **contentcheck:** flag generic ledes only when ungrounded
+- **deploy:** idle-stop degrades to no-VPC unless real subnets+SGs are supplied
+- **providers:** raise writer max_tokens 4096 -> 8192 to stop article truncation
+- **scheduler:** empty idle VPC-list defaults + template-level cfn-lint suppress
+- **scheduler:** satisfy cfn-lint W1030 on idle-stop VPC list params
+
+### Documentation
+
+- **content:** add editorial-polished blog posts for v0.3.0, v0.6.0, v0.10.0
+
+
 ## [0.21.1] - 2026-07-27
 
 ### Features
