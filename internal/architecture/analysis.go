@@ -54,6 +54,30 @@ func analyze(pkg ReleasePackage) analysis {
 	a.Templates = dedupe(c.CloudFormation.Templates)
 	a.Dirs = c.RepositoryStructure.Directories
 	a.Mermaid = c.Mermaid
+
+	// Fold in AWS services that appear as nodes in the parsed Mermaid diagrams
+	// (matched by their labels), so services documented only in diagrams are
+	// grounded too — not just those in the structured AWSServices/CloudFormation
+	// lists. This keeps the analysis (style, warnings, overview) consistent with
+	// what the diagrams actually show.
+	for i := range a.Mermaid {
+		d := &a.Mermaid[i]
+		for _, n := range d.Nodes {
+			label := n
+			if d.NodeLabels != nil {
+				if l := d.NodeLabels[n]; l != "" {
+					label = l
+				}
+			}
+			if info, known := lookupService(label); known {
+				sn := serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: true}
+				a.Services = append(a.Services, sn)
+				a.ByCategory[sn.Category] = append(a.ByCategory[sn.Category], sn.Label)
+			}
+		}
+	}
+	a.Services = uniqueServices(a.Services)
+
 	a.HasCICD = detectCICD(c)
 	a.Inference = detectInference(pkg, a) // after services are resolved
 	return a
