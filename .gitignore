@@ -23,3 +23,7 @@ coverage.*
 # Local content development (cmd/content)
 /output/
 /.cache/
+
+# Local run logs (keep the dir, ignore the logs)
+/logs/*
+!/logs/.gitkeep
