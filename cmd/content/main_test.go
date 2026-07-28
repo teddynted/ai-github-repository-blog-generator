@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"testing"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
 
 // isoTimestamp matches RFC3339 timestamps some artifacts embed (e.g. SEO
@@ -54,7 +56,8 @@ func TestProduceBlogStandalone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	arts, err := produce(context.Background(), "blog", rctx, fakeModel{})
+	fm := fakeModel{}
+	arts, err := produce(context.Background(), "blog", rctx, fm, func(string) releasegen.Model { return fm })
 	if err != nil {
 		t.Fatalf("produce: %v", err)
 	}
@@ -71,7 +74,8 @@ func TestProduceAllViaSuite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	arts, err := produce(context.Background(), "all", rctx, fakeModel{})
+	fm := fakeModel{}
+	arts, err := produce(context.Background(), "all", rctx, fm, func(string) releasegen.Model { return fm })
 	if err != nil {
 		t.Fatalf("produce: %v", err)
 	}
@@ -119,7 +123,8 @@ func TestSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	arts, err := produce(context.Background(), "all", rctx, fakeModel{})
+	fm := fakeModel{}
+	arts, err := produce(context.Background(), "all", rctx, fm, func(string) releasegen.Model { return fm })
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/aicache"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/airouter"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
@@ -110,7 +111,7 @@ type options struct {
 	artifact, provider, ctxPath, outDir, system, model, ollamaURL, region string
 	temperature                                                           float64
 	maxTokens                                                             int
-	dryRun, verbose, noCache, noHistory                                   bool
+	dryRun, verbose, noCache, noHistory, hybrid                           bool
 	cacheDir                                                              string
 	timeout                                                               time.Duration
 }
@@ -129,6 +130,7 @@ func generate(args []string) int {
 	fs.BoolVar(&o.verbose, "verbose", false, "verbose logging")
 	fs.BoolVar(&o.noCache, "no-cache", false, "bypass the local response cache")
 	fs.BoolVar(&o.noHistory, "no-history", false, "do not archive this run under <output>/releases/<version>/history/<stamp>/")
+	fs.BoolVar(&o.hybrid, "hybrid", false, "hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default llama3.2:1b). Best with --artifact all")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
 	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
@@ -162,12 +164,32 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 
 	// Build the model. In dry-run we swap in a capturing model so the exact
 	// prompts flow through the real generators without calling any provider.
+	// In hybrid mode we build a per-kind router (premium via claude-code, the
+	// rest via Ollama) so a single `--artifact all` run mixes both providers —
+	// the same policy the production worker uses, kept in the Go generators.
 	var model Model
+	var modelFor func(string) releasegen.Model
 	var cache *aicache.Cache
 	dry := &captureModel{}
-	if o.dryRun {
+	switch {
+	case o.dryRun:
 		model = dry
-	} else {
+		modelFor = func(string) releasegen.Model { return dry }
+		if o.hybrid {
+			om := o.model
+			if om == "" {
+				om = envOr("OLLAMA_MODEL", "llama3.2:1b")
+			}
+			printHybridPolicy(om)
+		}
+	case o.hybrid:
+		m, mf, err := buildHybrid(o)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: build hybrid: %v\n", err)
+			return 1
+		}
+		model, modelFor = m, mf
+	default:
 		m, fp, err := buildModel(ctx, o)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: build %s provider: %v\n", o.provider, err)
@@ -178,9 +200,10 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 			cache = aicache.New(m, o.cacheDir, fp...)
 			model = cache
 		}
+		modelFor = func(string) releasegen.Model { return model }
 	}
 
-	artifacts, err := produce(ctx, o.artifact, rctx, model)
+	artifacts, err := produce(ctx, o.artifact, rctx, model, modelFor)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: generate %s: %v\n", o.artifact, err)
 		return 1
@@ -253,16 +276,16 @@ type artifact struct {
 // (the common prompt-iteration path — one model, no downstream chain); anything
 // else runs the full suite (which resolves inter-artifact dependencies) and
 // selects the requested output(s).
-func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model Model) ([]artifact, error) {
+func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model Model, modelFor func(string) releasegen.Model) ([]artifact, error) {
 	if target == "blog" {
-		post, err := (&releasegen.Generator{Model: model}).Blog(ctx, rctx)
+		post, err := (&releasegen.Generator{Model: modelFor("blog")}).Blog(ctx, rctx)
 		if err != nil {
 			return nil, err
 		}
 		return []artifact{{kind: "blog", ext: "md", markdown: post.Markdown}}, nil
 	}
 
-	orch := &contentsuite.Orchestrator{Model: model, ModelFor: func(string) releasegen.Model { return model }}
+	orch := &contentsuite.Orchestrator{Model: model, ModelFor: modelFor}
 	suite := orch.Run(ctx, rctx, nil)
 	var out []artifact
 	for _, a := range suite.Artifacts() {
@@ -354,6 +377,57 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		return m, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens), nil
 	default:
 		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, ollama, or claude-code)", o.provider)
+	}
+}
+
+// buildHybrid builds a per-kind router for local hybrid generation: premium
+// kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) go
+// to claude-code, everything else to Ollama. It mirrors the production worker's
+// airouter policy (internal/airouter.DefaultRules) so a local `--artifact all`
+// run exercises the same routing, with every prompt still owned by the Go
+// generators. The returned base Model (Ollama) drives the orchestrator's cheap
+// analysis stages; modelFor routes each artifact to its provider.
+func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
+	premium, err := newClaudeCodeModel()
+	if err != nil {
+		return nil, nil, fmt.Errorf("premium provider (claude-code): %w", err)
+	}
+	ollamaModel := o.model
+	if ollamaModel == "" {
+		ollamaModel = envOr("OLLAMA_MODEL", "llama3.2:1b")
+	}
+	var claudeM, ollamaM Model = premium, ollama.New(ollamaModel, ollama.WithBaseURL(o.ollamaURL))
+	if !o.noCache {
+		claudeM = aicache.New(claudeM, o.cacheDir, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens)...)
+		ollamaM = aicache.New(ollamaM, o.cacheDir, fingerprint("ollama", ollamaModel, o.system, o.temperature, o.maxTokens)...)
+	}
+
+	providers := map[string]airouter.Model{
+		airouter.ProviderClaude: claudeM,
+		airouter.ProviderOllama: ollamaM,
+	}
+	router := airouter.New(providers, airouter.DefaultRules(), airouter.ProviderOllama, airouter.ProviderOllama, nil)
+	printHybridPolicy(ollamaModel)
+	return ollamaM, func(kind string) releasegen.Model { return router.ModelFor(kind) }, nil
+}
+
+// printHybridPolicy writes the per-kind provider routing to stderr so a hybrid
+// run (or a --hybrid --dry-run preview) is self-documenting.
+func printHybridPolicy(ollamaModel string) {
+	rules := airouter.DefaultRules()
+	kinds := append([]string{"blog", "architecture", "architecture-diagram-spec", "linkedin", "x-thread"}, airouter.AllKinds...)
+	seen := map[string]bool{}
+	fmt.Fprintf(os.Stderr, "hybrid routing — premium=claude-code, transforms=ollama:%s\n", ollamaModel)
+	for _, k := range kinds {
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		p := rules[k]
+		if p == "" {
+			p = airouter.ProviderOllama
+		}
+		fmt.Fprintf(os.Stderr, "  %-26s → %s\n", k, p)
 	}
 }
 
