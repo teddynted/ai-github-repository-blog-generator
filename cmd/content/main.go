@@ -48,8 +48,9 @@ type Model interface {
 
 // supportedArtifacts is the full local artifact set (kind → default extension).
 var supportedArtifacts = []string{
-	"blog", "architecture", "linkedin", "x-thread", "storyboard", "voiceover",
-	"youtube", "youtube-shorts", "tiktok", "visual-assets", "seo-metadata",
+	"blog", "architecture", "architecture-diagram-spec", "linkedin", "x-thread",
+	"storyboard", "voiceover", "youtube", "youtube-shorts", "tiktok",
+	"visual-assets", "seo-metadata",
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
