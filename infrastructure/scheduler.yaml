@@ -17,6 +17,8 @@ Metadata:
         Parameters: [ScheduleTimezone, StartExpression, StopExpression, ScheduleState, ManageSchedules]
       - Label: { default: Lambda code + runtime }
         Parameters: [ArtifactsBucket, StartCodeKey, StopCodeKey, LambdaMemorySize, LambdaTimeout, LogRetentionDays]
+      - Label: { default: Idle auto-stop (opt-in) }
+        Parameters: [EnableIdleStop, IdleCodeKey, IdleEvalRate, IdleMinutes, CpuThreshold, StartupGraceMinutes, N8nUrl, N8nApiKey, OllamaUrl, IdleSnsTopicArn, IdleDryRun, IdleUseVpc, IdleSubnetIds, IdleSecurityGroupIds]
     ParameterLabels:
       InstanceId: { default: EC2 instance ID to start/stop }
       ScheduleTimezone: { default: IANA timezone for the cron expressions }
@@ -96,10 +98,81 @@ Parameters:
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
     Description: Retention for the Lambda CloudWatch log groups.
 
+  # --- Idle auto-stop (opt-in alternative to the fixed StopSchedule) -----------
+  EnableIdleStop:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Set "true" to create an idle-detection Lambda that stops the instance only
+      after IdleMinutes of low CPU/network and no active n8n/Ollama work. When
+      enabled, set ScheduleState=DISABLED (or ManageSchedules=false) so the fixed
+      StopSchedule does not also stop the instance.
+  IdleCodeKey:
+    Type: String
+    Default: idle-stop.zip
+    Description: S3 key of the idle-stop Lambda package.
+  IdleEvalRate:
+    Type: String
+    Default: rate(1 hour)
+    Description: How often the idle check runs (EventBridge rate expression).
+  IdleMinutes:
+    Type: Number
+    Default: 30
+    Description: Sustained idle duration before the instance is stopped.
+  CpuThreshold:
+    Type: String
+    Default: "5"
+    Description: CPUUtilization percent below which the instance counts as idle.
+  StartupGraceMinutes:
+    Type: Number
+    Default: 15
+    Description: Never stop within this many minutes of the instance's launch time.
+  N8nUrl:
+    Type: String
+    Default: ""
+    Description: Base URL of n8n (e.g. http://10.0.1.20:5678); empty disables the n8n check. Requires IdleUseVpc.
+  N8nApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: n8n public-API key for the executions check.
+  OllamaUrl:
+    Type: String
+    Default: ""
+    Description: Base URL of Ollama (e.g. http://10.0.1.20:11434); empty disables the Ollama check. Requires IdleUseVpc.
+  IdleSnsTopicArn:
+    Type: String
+    Default: ""
+    Description: Optional SNS topic ARN for a pre-stop notification.
+  IdleDryRun:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: When "true" the Lambda logs the stop decision but does not stop the instance. Flip to "false" after validating logs.
+  IdleUseVpc:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Attach the Lambda to a VPC so it can reach the instance's private n8n/Ollama ports. Required for the app-level checks.
+  IdleSubnetIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Subnet IDs for the Lambda ENI (only when IdleUseVpc=true).
+  IdleSecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Security groups allowing the Lambda to reach the instance on 5678/11434 (only when IdleUseVpc=true).
+
 Conditions:
   # Lets operators deploy just the functions (ManageSchedules=false) and drive
   # start/stop manually, without the two EventBridge Schedules.
   CreateSchedules: !Equals [!Ref ManageSchedules, "true"]
+  # Idle auto-stop is opt-in; nested conditions gate the SNS statement and the
+  # VpcConfig so neither is emitted unless configured.
+  CreateIdleStop: !Equals [!Ref EnableIdleStop, "true"]
+  IdleWithSns: !And [!Condition CreateIdleStop, !Not [!Equals [!Ref IdleSnsTopicArn, ""]]]
+  IdleWithVpc: !And [!Condition CreateIdleStop, !Equals [!Ref IdleUseVpc, "true"]]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -332,6 +405,133 @@ Resources:
         DeadLetterConfig:
           Arn: !GetAtt SchedulerDLQ.Arn
 
+  # ---------------------------------------------------------------------------
+  # Idle auto-stop (opt-in): a Lambda polled hourly by an EventBridge rule that
+  # stops the instance only after sustained idleness across CPU, network, and
+  # (optionally) n8n/Ollama activity checks. Independent of the start path and
+  # the fixed StopSchedule.
+  # ---------------------------------------------------------------------------
+  IdleStopLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: CreateIdleStop
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-idle-stop"
+      RetentionInDays: !Ref LogRetentionDays
+
+  IdleStopFunctionRole:
+    Type: AWS::IAM::Role
+    Condition: CreateIdleStop
+    Properties:
+      RoleName: !Sub "${ProjectName}-idle-stop-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        !If
+          - IdleWithVpc
+          - - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+            - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+          - - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: idle-stop
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: StopAndTagTargetInstance
+                Effect: Allow
+                Action: [ec2:StopInstances, ec2:CreateTags, ec2:DeleteTags]
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}"
+              - Sid: DescribeInstances
+                Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+              - Sid: ReadMetrics
+                Effect: Allow
+                Action: cloudwatch:GetMetricData
+                Resource: "*"
+              - !If
+                - IdleWithSns
+                - Sid: NotifyBeforeStop
+                  Effect: Allow
+                  Action: sns:Publish
+                  Resource: !Ref IdleSnsTopicArn
+                - !Ref AWS::NoValue
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  IdleStopFunction:
+    Type: AWS::Lambda::Function
+    Condition: CreateIdleStop
+    DependsOn: IdleStopLogGroup
+    Metadata:
+      # The VpcConfig subnet/SG lists are only referenced under IdleWithVpc; with
+      # IdleUseVpc=false their empty CommaDelimitedList default is never used, but
+      # cfn-lint resolves the Ref statically and flags the empty value (W1030).
+      cfn-lint:
+        config:
+          ignore_checks: [W1030]
+    Properties:
+      FunctionName: !Sub "${ProjectName}-idle-stop"
+      Description: Stops the target EC2 instance after sustained idleness.
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+      Role: !GetAtt IdleStopFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref IdleCodeKey
+      VpcConfig:
+        !If
+          - IdleWithVpc
+          - SubnetIds: !Ref IdleSubnetIds
+            SecurityGroupIds: !Ref IdleSecurityGroupIds
+          - !Ref AWS::NoValue
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          INSTANCE_ID: !Ref InstanceId
+          CPU_THRESHOLD: !Ref CpuThreshold
+          IDLE_MINUTES: !Ref IdleMinutes
+          STARTUP_GRACE_MINUTES: !Ref StartupGraceMinutes
+          N8N_URL: !Ref N8nUrl
+          N8N_API_KEY: !Ref N8nApiKey
+          OLLAMA_URL: !Ref OllamaUrl
+          SNS_TOPIC_ARN: !Ref IdleSnsTopicArn
+          DRY_RUN: !Ref IdleDryRun
+          LOG_LEVEL: info
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  IdleStopRule:
+    Type: AWS::Events::Rule
+    Condition: CreateIdleStop
+    Properties:
+      Name: !Sub "${ProjectName}-idle-stop"
+      Description: Polls instance idleness and stops it when idle long enough.
+      ScheduleExpression: !Ref IdleEvalRate
+      State: !Ref ScheduleState
+      Targets:
+        - Id: idle-stop
+          Arn: !GetAtt IdleStopFunction.Arn
+
+  IdleStopInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: CreateIdleStop
+    Properties:
+      FunctionName: !Ref IdleStopFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt IdleStopRule.Arn
+
 Outputs:
   StartFunctionArn:
     Description: ARN of the start Lambda (invoke manually to force a start).
@@ -350,6 +550,10 @@ Outputs:
   ScheduleWindow:
     Description: Human-readable summary of the configured on/off window.
     Value: !Sub "start '${StartExpression}' / stop '${StopExpression}' (${ScheduleTimezone}), state=${ScheduleState}"
+  IdleStopFunctionArn:
+    Condition: CreateIdleStop
+    Description: ARN of the idle-stop Lambda (invoke manually to force an idle check).
+    Value: !GetAtt IdleStopFunction.Arn
   SchedulerDLQUrl:
     Condition: CreateSchedules
     Description: Dead-letter queue for failed schedule invocations (inspect on alarm).

@@ -31,6 +31,8 @@ github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.31 h1:3GUprIsfmGcC5SACIyB0e7E0BM1
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.31/go.mod h1:7PuV1yl5e2xnUbm+RqvVg5i2iBM8EyijZNoI9wsOoOc=
 github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.56.0 h1:CWw8zDpnMJLwSvZd41Ncf/eJPeZ5t74UxGAu4HbM3S4=
 github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.56.0/go.mod h1:dGxTgK2ZKWrbZv5o/8oCeO3Uch3n0w2rtSFroeJoLcE=
+github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.65.0 h1:mthzbb+JegG3ij6kCilO/tPPVT+ohq0dA/mc3kHFHDo=
+github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.65.0/go.mod h1:t3drm8DC/zlLUm3MvhkgD4Me6U6EJjzO+ZhcBzWxkcc=
 github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0 h1:wnyC01GGkqvRvVI73+xRTr8qDyIZMzqjHlsFqWUUVSo=
 github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0/go.mod h1:HnWoC3m6VmjUSg+kBL6OgQsXdyRAGzBYWb7B3J2f+JM=
 github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 h1:v6och6VKfZ/N8Kr5EyWKIu1JOfqjv4xpDAAyCxEuLlw=
@@ -55,6 +57,8 @@ github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0 h1:5RbF+fv7+6MU1ImSF
 github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0/go.mod h1:oUyL28WfxY0RqPhFpkrWZx26Cu4JlyrWMMcWq8qqhi0=
 github.com/aws/aws-sdk-go-v2/service/signin v1.3.0 h1:i0+tbB9QBnzL5NrF2WR/zk8q2s+1N+RaDYr2627E8UI=
 github.com/aws/aws-sdk-go-v2/service/signin v1.3.0/go.mod h1:mxC0nT/C8wMMS97DemZPzvUZxvIt+2Iq+eS3JdFZGgg=
+github.com/aws/aws-sdk-go-v2/service/sns v1.42.0 h1:hE9mxcePgE1labOMy2zgkfy3KuxIk7P0DkJpAkd4vCw=
+github.com/aws/aws-sdk-go-v2/service/sns v1.42.0/go.mod h1:xb3KrcS9KZApl6VZt+PWDjfGrutL6qaizkA+FAnRpYA=
 github.com/aws/aws-sdk-go-v2/service/sqs v1.45.0 h1:k1aaG71RTEqSWNy1LWkKtSRT2G36x2/HbU+nu54uXpc=
 github.com/aws/aws-sdk-go-v2/service/sqs v1.45.0/go.mod h1:JISE0m3JPVhirZEVIAUyK4C62n87tU4BZmUa9Ozc2to=
 github.com/aws/aws-sdk-go-v2/service/sso v1.32.0 h1:qjMmry/cBDee1E/2gyvel0uRYCi3mwRZ2hf6N+GAodo=
