@@ -1,6 +1,6 @@
 # Architecture Diagrams: widget
 
-_Repository-level architecture overview · Event-driven serverless_
+_Repository-level architecture overview · Event-driven_
 
 > **Notes:** diagrams are generated from the repository README, documented AWS integrations, automation workflows, and the current project structure. The architecture document is intentionally **version-independent** so it can be reused across releases, branches, and generated documentation workflows.
 
@@ -124,7 +124,7 @@ flowchart LR
 
 | Attribute | Value |
 | --- | --- |
-| **Architecture style** | Event-driven serverless |
+| **Architecture style** | Event-driven |
 | **Primary workflow** | Webhook → Amazon EventBridge → Amazon SQS → Amazon EC2 |
 | **Infrastructure complexity** | medium |
 | **Operational model** | Infrastructure as Code on AWS |

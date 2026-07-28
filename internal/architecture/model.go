@@ -24,10 +24,19 @@ type ArchitectureCollection struct {
 	Metadata      Metadata `json:"metadata"`
 	// PlatformOverview is a grounded, high-level prose summary of the platform,
 	// rendered before the diagrams. Empty when the context has no overview.
-	PlatformOverview    string       `json:"platformOverview,omitempty"`
-	Diagrams            []Diagram    `json:"diagrams"`
-	ContentIntelligence Intelligence `json:"contentIntelligence"`
-	Warnings            []string     `json:"warnings,omitempty"`
+	PlatformOverview string `json:"platformOverview,omitempty"`
+	// RepoDirectories carries each top-level directory and its responsibility, for
+	// the Repository Structure View of the repo-level document.
+	RepoDirectories     []DirectoryResponsibility `json:"repoDirectories,omitempty"`
+	Diagrams            []Diagram                 `json:"diagrams"`
+	ContentIntelligence Intelligence              `json:"contentIntelligence"`
+	Warnings            []string                  `json:"warnings,omitempty"`
+}
+
+// DirectoryResponsibility is one top-level directory and its grounded responsibility.
+type DirectoryResponsibility struct {
+	Path           string `json:"path"`
+	Responsibility string `json:"responsibility,omitempty"`
 }
 
 // Metadata identifies the source of the diagrams.

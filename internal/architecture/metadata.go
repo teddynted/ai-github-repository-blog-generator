@@ -137,14 +137,19 @@ func architectureStyle(a analysis) string {
 
 func baseArchitectureStyle(a analysis) string {
 	hasServerless := len(a.categoryServices("Serverless")) > 0
+	hasCompute := len(a.categoryServices("Compute")) > 0
+	// Only call it "serverless" when the platform is PURELY serverless — no
+	// non-serverless compute (e.g. Amazon EC2) and no self-hosted runtime (e.g.
+	// Ollama). A mixed compute model is just "Event-driven".
+	serverlessOnly := hasServerless && !hasCompute && len(a.Inference.Local) == 0
 	switch {
-	case a.EventDriven && hasServerless:
+	case a.EventDriven && serverlessOnly:
 		return "Event-driven serverless"
 	case a.EventDriven:
 		return "Event-driven"
-	case hasServerless:
+	case serverlessOnly:
 		return "Serverless"
-	case len(a.categoryServices("Compute")) > 0:
+	case hasCompute:
 		return "Container / compute-based"
 	default:
 		return "Application"

@@ -51,10 +51,10 @@ func (col ArchitectureCollection) RepoLevelMarkdown() string {
 	if len(ci.LocalInference) > 0 && len(ci.CloudInference) > 0 {
 		logicalTitle = "Logical Architecture — Hybrid AI Data Flow"
 	}
-	writeRepoSection(&b, deployment, "Deployment Architecture — AWS Integration", "Deployment architecture", "Deployment Diagram", "AWS Services Used")
-	writeRepoSection(&b, logical, logicalTitle, "Logical architecture", "Data Flow Diagram", "Key Components")
-	writeRepoSection(&b, component, "Repository Structure View", "Top-level package layout", "Component Diagram", "Repository Responsibilities")
-	writeRepoSection(&b, cicd, "CI/CD & Infrastructure Automation", "Delivery and infrastructure automation", "Deployment Diagram", "Deployment Characteristics")
+	writeRepoSection(&b, deployment, "Deployment Architecture — AWS Integration", "Deployment architecture", "Deployment Diagram", "AWS Services Used", nil)
+	writeRepoSection(&b, logical, logicalTitle, "Logical architecture", "Data Flow Diagram", "Key Components", nil)
+	writeRepoSection(&b, component, "Repository Structure View", "Top-level package layout", "Component Diagram", "Repository Responsibilities", dirBullets(col.RepoDirectories))
+	writeRepoSection(&b, cicd, "CI/CD & Infrastructure Automation", "Delivery and infrastructure automation", "Deployment Diagram", "Deployment Characteristics", nil)
 
 	writeRepoIntelligence(&b, ci)
 
@@ -80,8 +80,10 @@ func (col ArchitectureCollection) pick(used map[int]bool, prefs ...string) *Diag
 }
 
 // writeRepoSection renders one curated diagram section with a fixed title, its
-// Mermaid, and a component bullet list. It is a no-op when the diagram is absent.
-func writeRepoSection(b *strings.Builder, d *Diagram, title, subtitle, typeLabel, componentsHeading string) {
+// Mermaid, and a component bullet list. When bullets is non-nil it is used for the
+// list verbatim; otherwise the diagram's node labels (or AWS services) are listed.
+// It is a no-op when the diagram is absent.
+func writeRepoSection(b *strings.Builder, d *Diagram, title, subtitle, typeLabel, componentsHeading string, bullets []string) {
 	if d == nil {
 		return
 	}
@@ -89,9 +91,12 @@ func writeRepoSection(b *strings.Builder, d *Diagram, title, subtitle, typeLabel
 	fmt.Fprintf(b, "**Type:** %s · **Complexity:** %s\n\n", typeLabel, d.Metadata.Complexity)
 	fmt.Fprintf(b, "```mermaid\n%s\n```\n\n", d.Mermaid)
 
-	components := d.Nodes
-	if len(components) == 0 {
-		components = d.AWSServices
+	components := bullets
+	if components == nil {
+		components = d.Nodes
+		if len(components) == 0 {
+			components = d.AWSServices
+		}
 	}
 	if len(components) > 0 {
 		fmt.Fprintf(b, "### %s\n\n", componentsHeading)
@@ -100,6 +105,24 @@ func writeRepoSection(b *strings.Builder, d *Diagram, title, subtitle, typeLabel
 		}
 		b.WriteString("\n")
 	}
+}
+
+// dirBullets formats directory responsibilities as "**path** — responsibility"
+// bullets (path only when no responsibility is grounded). Returns nil when there
+// are none, so the section falls back to the diagram's node labels.
+func dirBullets(dirs []DirectoryResponsibility) []string {
+	if len(dirs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if d.Responsibility != "" {
+			out = append(out, "**"+d.Path+"** — "+d.Responsibility)
+		} else {
+			out = append(out, "**"+d.Path+"**")
+		}
+	}
+	return out
 }
 
 // writeRepoIntelligence renders the Architecture Intelligence table. Rows appear

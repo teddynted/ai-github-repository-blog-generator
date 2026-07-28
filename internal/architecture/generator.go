@@ -75,6 +75,7 @@ func (g *Generator) Architecture(ctx context.Context, pkg ReleasePackage) (Archi
 	collection.Diagrams = diagrams
 	collection.Metadata.DiagramCount = len(diagrams)
 	collection.PlatformOverview = platformOverview(pkg, a)
+	collection.RepoDirectories = repoDirectories(a)
 	collection.ContentIntelligence = planIntelligence(pkg, a, diagrams)
 	collection.Warnings = collectWarnings(a)
 
@@ -178,6 +179,20 @@ func sanitizeOverview(s string) string {
 	s = strings.ReplaceAll(s, " ,", ",")
 	s = strings.Join(strings.Fields(s), " ") // collapse whitespace
 	return strings.TrimSpace(s)
+}
+
+// repoDirectories returns the top-level directories with their grounded
+// responsibilities, for the Repository Structure View. Directories without a
+// stated responsibility still appear (path only).
+func repoDirectories(a analysis) []DirectoryResponsibility {
+	var out []DirectoryResponsibility
+	for _, d := range topDirs(a.Dirs, 12) {
+		out = append(out, DirectoryResponsibility{
+			Path:           d.Path,
+			Responsibility: strings.TrimSpace(d.Responsibility),
+		})
+	}
+	return out
 }
 
 func collectWarnings(a analysis) []string {
