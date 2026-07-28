@@ -42,7 +42,13 @@ func analyze(pkg ReleasePackage) analysis {
 	names := dedupe(append(append([]string{}, c.Architecture.AWSServices...), c.CloudFormation.Services...))
 	for _, name := range names {
 		info, known := lookupService(name)
-		sn := serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: known}
+		// Skip uncatalogued tokens (e.g. raw CloudFormation namespaces like "Events",
+		// "Logs", "KMS") — they are noise or duplicates of a canonical service and
+		// would otherwise pollute the diagrams with an "Other" group.
+		if !known {
+			continue
+		}
+		sn := serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: true}
 		a.Services = append(a.Services, sn)
 		a.ByCategory[sn.Category] = append(a.ByCategory[sn.Category], sn.Label)
 	}
