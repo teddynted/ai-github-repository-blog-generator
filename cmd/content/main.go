@@ -368,6 +368,16 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 		return []artifact{{kind: "blog", ext: "md", markdown: post.Markdown}}, nil
 	}
 
+	// architecture is rendered as the version-independent, repository-level document
+	// directly from the context (deterministic) — no suite run, no wasted model call.
+	if target == "architecture" {
+		md, err := repoArchitectureMarkdown(ctx, rctx)
+		if err != nil {
+			return nil, err
+		}
+		return []artifact{{kind: "architecture", ext: "md", markdown: md}}, nil
+	}
+
 	// blog is nil → the orchestrator generates it first; non-nil (--from-blog) →
 	// it uses the supplied blog verbatim and only runs the downstream stages.
 	orch := &contentsuite.Orchestrator{Model: model, ModelFor: modelFor, Logger: suiteLogger()}
@@ -387,7 +397,29 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 	if len(out) == 0 && target != "all" {
 		return nil, fmt.Errorf("artifact %q was not produced (a thin release may skip it)", target)
 	}
+
+	// Render the architecture artifact as the version-independent, repository-level
+	// document (no release tag, curated structure, descriptive nodes). The local
+	// content workflow wants a stable docs/architecture.md, not a release-scoped one.
+	for i := range out {
+		if out[i].kind == "architecture" {
+			if md, err := repoArchitectureMarkdown(ctx, rctx); err == nil && md != "" {
+				out[i].markdown = md
+			}
+		}
+	}
 	return out, nil
+}
+
+// repoArchitectureMarkdown renders the version-independent architecture document
+// from the context. It is deterministic — the model only polishes per-diagram
+// descriptions, which the repo-level rendering omits — so no model is needed.
+func repoArchitectureMarkdown(ctx context.Context, rctx *rc.ReleaseContext) (string, error) {
+	col, err := (&architecture.Generator{}).Architecture(ctx, architecture.ReleasePackage{Context: rctx})
+	if err != nil {
+		return "", err
+	}
+	return col.RepoLevelMarkdown(), nil
 }
 
 // loadBlogPost reads an existing blog.md into a BlogPost so the suite can derive
