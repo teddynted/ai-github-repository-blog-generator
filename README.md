@@ -451,25 +451,67 @@ provider.
 `blog.md` is the foundation every other artifact derives from, and it's the most
 expensive to generate. `--from-blog <path>` loads an existing `blog.md` and runs
 the suite's **offline path** — it **skips blog regeneration** and derives the
-downstream artifacts from the supplied blog. Iterate the blog once, then
-regenerate everything else cheaply:
+downstream artifacts from the supplied blog. This gives a clean two-stage
+workflow: build the blog once, then generate the rest against it.
+
+**Stage 1 — build the foundation blog (once):**
 
 ```bash
-# derive all downstream artifacts from a saved blog.md
-go run ./cmd/content --artifact all --from-blog output/releases/v0.3.0/blog.md \
-  --hybrid --no-history --context fixtures/designing-v0.3.0.json
-
-# …or just one downstream file
-go run ./cmd/content --artifact seo-metadata --from-blog output/releases/v0.3.0/blog.md \
-  --no-history --context fixtures/designing-v0.3.0.json
+CTX=fixtures/designing-v0.3.0.json
+go run ./cmd/content --artifact blog --provider claude-code --no-history --context "$CTX"
+BLOG=output/releases/v0.3.0/blog.md      # the file Stage 2 reads
 ```
 
-`--from-blog` requires `--artifact` ≠ `blog`. Note the suite is a dependency
-graph, not independent transforms: the **blog-only** artifacts (architecture,
-linkedin, x-thread, storyboard, seo-metadata) derive straight from `blog.md`,
-while the **storyboard-derived** ones (voiceover, youtube, youtube-shorts,
-tiktok, visual-assets) internally trigger storyboard first — it just isn't
-written unless you ask for it.
+**Stage 2 — derive the downstream artifacts from that blog.** All at once
+(`--hybrid` auto-routes each kind to its provider):
+
+```bash
+go run ./cmd/content --artifact all --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+```
+
+…or one artifact at a time (subsequent steps). `--hybrid` routes each kind
+correctly — the premium four to `claude-code`, the transforms to Ollama:
+
+```bash
+# blog-only, premium (→ claude-code)
+go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
+go run ./cmd/content --artifact architecture-diagram-spec --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
+go run ./cmd/content --artifact linkedin                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
+go run ./cmd/content --artifact x-thread                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
+
+# transforms (→ Ollama; --no-cache exercises the num_predict cap)
+go run ./cmd/content --artifact seo-metadata   --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+go run ./cmd/content --artifact storyboard     --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+go run ./cmd/content --artifact voiceover      --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+go run ./cmd/content --artifact youtube        --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+go run ./cmd/content --artifact youtube-shorts --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+go run ./cmd/content --artifact tiktok         --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+go run ./cmd/content --artifact visual-assets  --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+```
+
+…or loop the two groups:
+
+```bash
+for a in architecture architecture-diagram-spec linkedin x-thread; do
+  go run ./cmd/content --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
+done
+for a in seo-metadata storyboard voiceover youtube youtube-shorts tiktok visual-assets; do
+  go run ./cmd/content --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"
+done
+```
+
+**Notes.**
+
+- `--from-blog` requires `--artifact` ≠ `blog` (there's nothing to derive).
+- The suite is a dependency graph, not independent transforms. **Blog-only**
+  artifacts (architecture, linkedin, x-thread, storyboard, seo-metadata) derive
+  straight from `blog.md`. The **storyboard-derived** ones (voiceover, youtube,
+  youtube-shorts, tiktok, visual-assets) internally regenerate storyboard first —
+  so generating those one-by-one repeats the storyboard step each time. To avoid
+  the repeat, generate them together (or `--artifact all`).
+- Swap `--hybrid` for `--provider ollama` (or `--provider claude-code`) to force
+  a single provider for a step. On low-end hardware, prefer these per-artifact
+  steps over `--artifact all` — see the performance note above.
 
 ### Flags
 
