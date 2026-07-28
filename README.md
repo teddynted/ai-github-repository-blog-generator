@@ -477,8 +477,8 @@ command is just the remaining stages in its chain:
 
 | `--artifact`                | Also runs (dependencies)                                             | Provider mix |
 | --------------------------- | ------------------------------------------------------------------- | ------------ |
-| `architecture-diagram-spec` | — (blog only)                                                       | claude       |
-| `architecture`              | `storyboard`                                                        | claude + Ollama |
+| `architecture`              | — (blog only)                                                       | **claude only** |
+| `architecture-diagram-spec` | — (blog only)                                                       | **claude only** |
 | `storyboard`                | — (blog only)                                                       | Ollama       |
 | `voiceover`                 | `storyboard`                                                        | Ollama       |
 | `youtube`                   | `storyboard`, `voiceover`                                           | Ollama       |
@@ -486,15 +486,17 @@ command is just the remaining stages in its chain:
 | `linkedin` / `x-thread`     | almost everything (`architecture` + the full SEO chain)             | claude + Ollama |
 
 > [!NOTE]
-> `architecture` consumes the storyboard's repo/release labels, so it pulls in one
-> Ollama `storyboard` step. `seo-metadata`, `linkedin`, and `x-thread` sit at the
-> end of the dependency graph and expand to most of the suite — for those, prefer
-> `--artifact all` (one storyboard, shared) over separate per-artifact runs.
+> `architecture` reads only the storyboard's repo/release labels — which come from
+> the release context, not from generated content — so it runs on **Claude alone**,
+> no Ollama, identical to the cloud output. `linkedin` and `x-thread`, however,
+> genuinely consume Ollama-produced SEO keywords, hashtags, and visual-asset
+> references, so they expand to most of the suite; for those, prefer `--artifact all`
+> (one shared chain) over separate per-artifact runs.
 
 ```bash
-# blog-only, premium (→ claude-code)
+# blog-only, premium (→ claude-code, no Ollama)
+go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
 go run ./cmd/content --artifact architecture-diagram-spec --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
-go run ./cmd/content --artifact architecture              --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + storyboard
 go run ./cmd/content --artifact linkedin                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + full chain
 go run ./cmd/content --artifact x-thread                  --from-blog "$BLOG" --hybrid --no-history --context "$CTX"  # + full chain
 

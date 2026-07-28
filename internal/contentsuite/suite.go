@@ -145,15 +145,20 @@ type Orchestrator struct {
 // the minimal set to execute is the requested stages plus this graph's transitive
 // closure. Keep it in sync with Run.
 var stageDeps = map[string][]string{
-	"blog":                      nil,
-	"storyboard":                {"blog"},
-	"voiceover":                 {"storyboard"},
-	"youtube":                   {"voiceover"},
-	"youtube-shorts":            {"youtube"},
-	"tiktok":                    {"youtube-shorts"},
-	"visual-assets":             {"tiktok"},
-	"seo-metadata":              {"visual-assets"},
-	"architecture":              {"storyboard"},
+	"blog":           nil,
+	"storyboard":     {"blog"},
+	"voiceover":      {"storyboard"},
+	"youtube":        {"voiceover"},
+	"youtube-shorts": {"youtube"},
+	"tiktok":         {"youtube-shorts"},
+	"visual-assets":  {"tiktok"},
+	"seo-metadata":   {"visual-assets"},
+	// architecture reads only the storyboard's repo/release labels (seeded from the
+	// release context in Run), not its generated scenes — so it depends on the blog
+	// alone and never triggers the Ollama-bound storyboard stage. linkedin/x-thread,
+	// by contrast, genuinely consume SEO + visual-assets + architecture *content*,
+	// so they keep their full chains (local output stays identical to the cloud).
+	"architecture":              {"blog"},
 	"linkedin":                  {"architecture", "seo-metadata"},
 	"x-thread":                  {"architecture", "seo-metadata"},
 	"architecture-diagram-spec": {"blog"},
@@ -234,6 +239,21 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 			s.Blog = b
 			return b.Markdown, err
 		}))
+	}
+
+	// Seed the storyboard's repo/release labels from the release context. The
+	// architecture stage reads only these labels (not the storyboard's generated
+	// scenes), so this lets architecture run without the Ollama-bound storyboard
+	// stage. When the storyboard stage runs, it overwrites this with the full
+	// result — architecture reads the same labels either way, so its output is
+	// identical whether or not the storyboard stage ran.
+	s.Storyboard = storyboard.Storyboard{
+		SchemaVersion: storyboard.SchemaVersion,
+		Metadata: storyboard.Metadata{
+			Repository:      rctx.Repository.FullName,
+			Release:         rctx.Release.Tag,
+			SourceBlogTitle: s.Blog.Title,
+		},
 	}
 
 	// --- M4 Storyboard (blog + context) ---
