@@ -9,6 +9,15 @@ Description: >
   independent of the blog-gen application stacks (it targets any instance ID).
 
 Metadata:
+  # W1030: the idle VPC list params default to empty so CloudFormation's
+  # EarlyValidation does not existence-check a non-existent placeholder subnet/SG.
+  # They are only referenced under the IdleWithVpc condition. Suppressed at the
+  # template level because cfn-lint 1.46 attributes the finding to the parameter,
+  # where a resource-level ignore does not apply.
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W1030
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label: { default: Target instance }
@@ -155,18 +164,19 @@ Parameters:
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: Attach the Lambda to a VPC so it can reach the instance's private n8n/Ollama ports. Required for the app-level checks.
+  # NOTE: these default to empty. A placeholder like subnet-00000000 would satisfy
+  # cfn-lint's pattern check but FAIL CloudFormation's EarlyValidation existence
+  # check (the placeholder subnet does not exist), so the empty default is correct
+  # — it is only referenced under IdleWithVpc, and CloudFormation does not existence-
+  # check an empty value. cfn-lint's resulting W1030 is suppressed at template level.
   IdleSubnetIds:
     Type: CommaDelimitedList
-    # Placeholder default matches the subnet-id pattern so cfn-lint does not flag
-    # it; it is only ever referenced under IdleWithVpc, so supply real subnet IDs
-    # when IdleUseVpc=true.
-    Default: "subnet-00000000"
-    Description: Subnet IDs for the Lambda ENI (only when IdleUseVpc=true).
+    Default: ""
+    Description: Subnet IDs for the Lambda ENI (required when IdleUseVpc=true).
   IdleSecurityGroupIds:
     Type: CommaDelimitedList
-    # Placeholder default (see IdleSubnetIds); supply real SG IDs when IdleUseVpc=true.
-    Default: "sg-00000000"
-    Description: Security groups allowing the Lambda to reach the instance on 5678/11434 (only when IdleUseVpc=true).
+    Default: ""
+    Description: Security groups allowing the Lambda to reach the instance on 5678/11434 (required when IdleUseVpc=true).
 
 Conditions:
   # Lets operators deploy just the functions (ManageSchedules=false) and drive
