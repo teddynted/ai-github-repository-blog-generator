@@ -17,6 +17,36 @@ import (
 // fastRetry avoids real backoff delays in tests.
 var fastRetry = retry.Config{MaxAttempts: 3, BaseDelay: 0}
 
+func TestNumPredictCap(t *testing.T) {
+	capture := func(model string, opts ...Option) *generateRequest {
+		var got generateRequest
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &got)
+			_ = json.NewEncoder(w).Encode(generateResponse{Response: "ok", Done: true})
+		}))
+		defer srv.Close()
+		_, err := New(model, append(opts, WithBaseURL(srv.URL))...).Generate(context.Background(), "x")
+		if err != nil {
+			t.Fatalf("Generate: %v", err)
+		}
+		return &got
+	}
+
+	// Default: the cap is sent.
+	if r := capture("m"); r.Options == nil || r.Options.NumPredict != DefaultNumPredict {
+		t.Errorf("default num_predict = %+v, want %d", r.Options, DefaultNumPredict)
+	}
+	// Explicit override.
+	if r := capture("m", WithNumPredict(512)); r.Options == nil || r.Options.NumPredict != 512 {
+		t.Errorf("override num_predict = %+v, want 512", r.Options)
+	}
+	// Zero removes the cap entirely (no options block).
+	if r := capture("m", WithNumPredict(0)); r.Options != nil {
+		t.Errorf("num_predict 0 should omit options, got %+v", r.Options)
+	}
+}
+
 func TestGenerateSendsRequestAndReturnsResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/generate" {
