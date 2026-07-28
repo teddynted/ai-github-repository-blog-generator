@@ -197,7 +197,8 @@ jobs:
           IDLE_DRY_RUN: ${{ vars.IDLE_DRY_RUN }}
           IDLE_N8N_URL: ${{ vars.IDLE_N8N_URL }}
           IDLE_OLLAMA_URL: ${{ vars.IDLE_OLLAMA_URL }}
-          IDLE_USE_VPC: ${{ vars.IDLE_USE_VPC }}
+          # VPC mode is derived from whether both subnet + SG IDs are supplied
+          # (see the deploy step), so there is no separate IDLE_USE_VPC toggle.
           IDLE_SUBNET_IDS: ${{ vars.IDLE_SUBNET_IDS }}
           IDLE_SG_IDS: ${{ vars.IDLE_SG_IDS }}
         run: |
@@ -217,9 +218,16 @@ jobs:
           [ -n "$IDLE_DRY_RUN" ]     && P="$P IdleDryRun=$IDLE_DRY_RUN"
           [ -n "$IDLE_N8N_URL" ]     && P="$P N8nUrl=$IDLE_N8N_URL"
           [ -n "$IDLE_OLLAMA_URL" ]  && P="$P OllamaUrl=$IDLE_OLLAMA_URL"
-          [ -n "$IDLE_USE_VPC" ]     && P="$P IdleUseVpc=$IDLE_USE_VPC"
-          [ -n "$IDLE_SUBNET_IDS" ]  && P="$P IdleSubnetIds=$IDLE_SUBNET_IDS"
-          [ -n "$IDLE_SG_IDS" ]      && P="$P IdleSecurityGroupIds=$IDLE_SG_IDS"
+          # VPC mode drives the n8n/Ollama app checks, and a VPC Lambda MUST have
+          # real subnets AND security groups — an empty VpcConfig is rejected by
+          # the Lambda API. So enable VPC only when both are supplied; otherwise
+          # idle-stop runs without the app probes (CPU + network only) rather than
+          # failing the stack. This makes IDLE_USE_VPC derived, not independently set.
+          if [ -n "$IDLE_SUBNET_IDS" ] && [ -n "$IDLE_SG_IDS" ]; then
+            P="$P IdleUseVpc=true IdleSubnetIds=$IDLE_SUBNET_IDS IdleSecurityGroupIds=$IDLE_SG_IDS"
+          else
+            P="$P IdleUseVpc=false"
+          fi
           aws cloudformation deploy \
             --template-file infrastructure/scheduler.yaml \
             --stack-name blog-gen-scheduler \
