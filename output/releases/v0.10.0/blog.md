@@ -1,125 +1,121 @@
 ---
-title: "Designing a Provider-Agnostic LLM Layer for an Event-Driven AI Agent Platform on AWS"
-description: "How to build a pluggable LLM provider abstraction that swaps between self-hosted Ollama and Amazon Bedrock using IAM SigV4 auth with no stored credentials."
+title: "Designing a Pluggable LLM Provider Layer for an AI Agent Platform on AWS"
+description: "How an event-driven AI agent platform abstracts its language-model backend behind a provider factory, swapping self-hosted Ollama for managed Amazon Bedrock…"
 tags: [aws-iam, aws-lambda, amazon-cloudwatch, amazon-ec2, amazon-eventbridge, amazon-eventbridge-scheduler, amazon-s3, github-actions]
 ---
 
-# Designing a Provider-Agnostic LLM Layer for an Event-Driven AI Agent Platform on AWS
+# Designing a Pluggable LLM Provider Layer for an AI Agent Platform on AWS
 
-## Introduction
+## Why This Matters
 
-The moment a system hardcodes a single inference backend, it inherits that backend everywhere — its cost curve, its operational model, and its deployment constraints propagate into every call site. Changing backends later stops being a configuration decision and becomes a code change, with all the review, testing, and release risk that implies. That coupling is the problem a provider-agnostic LLM architecture is meant to dissolve: an LLM provider abstraction turns backend selection into a *deployment* decision rather than a software change. Callers depend on a stable contract; which model service answers a given request is resolved at deployment time, not compiled in.
+The platform's single-shot language-model work — summarising a repository, drafting release notes — ran against exactly one backend: a self-hosted Ollama process on an on-demand Amazon EC2 host. That coupling tied model availability, scaling, and reliability to a single machine. When the host was down or under-provisioned, the platform had no managed path to fall back to or scale into. Backend choice was fixed in the deployment, not a decision the operator could make. The pressure here is portability and availability: a system that generates content from a language model should not be permanently bound to one process on one instance.
 
-Only once that boundary exists do the familiar trade-offs — cost, operational overhead, data residency — become choices a deployment can make instead of properties baked into the binary. This repository, an event-driven, AWS-native AI agent platform written primarily in Go, confronts the coupling directly in its inference layer. It defines a narrow `llm.Provider` contract and resolves the concrete backend from a single environment variable, keeping a self-hosted Ollama instance as the default while making Amazon Bedrock available behind the same interface. This article documents that design: how the provider abstraction is structured, how the managed backend is reached without storing a credential, and why the platform keeps its own inference calls architecturally separate from the calls made by the agent it hosts.
+## The Existing Architecture
 
-## Background
+The platform is event-driven and AWS-native. A workflow hands work to n8n, which orchestrates the agent; separately, n8n routes the platform's own single-shot work — summarise, release notes — through an `llm` component. That `llm` component already resolved a concrete model backend and emitted structured logs to Amazon CloudWatch.
 
-The platform is organized as a standard Go project that separates its entry points, business logic, infrastructure definitions, and documentation. Its runtime is event-driven: an EventBridge Scheduler triggers a Lambda that starts and stops an EC2 host, blending serverless ingestion with an on-demand compute host so the front door stays available while heavier compute runs only when needed. Around that spine sit the components that do the actual work — an `n8n` workflow layer, an agent (`ag`) and its orchestrator (`oc`), a shared LLM layer (`llm`), and the inference backends themselves.
+This path is deliberately distinct from the agent's own model calls, which flow `ag → oc → ollama`. The platform is not in that path, and that boundary is intentional. The existing design worked for a single backend. Its limitation was that the backend was hard-wired: the `llm` component could reach only the self-hosted Ollama host, with no way to select a managed alternative.
 
-The platform performs two kinds of language-model work, and they are not the same. Its own single-shot tasks — summarising and generating release notes — run through the `llm` layer. Separately, the embedded agent makes its own model calls through the orchestrator. Before Bedrock was introduced, the single-shot path ran against a self-hosted Ollama backend on EC2 as its default and only option. That default is deliberate: a self-hosted model on an on-demand host bounds cost predictably, which is the same reasoning that governs the platform's start/stop compute model.
+## The Engineering Constraint
 
-## Engineering Problem
+- Adding a managed backend must not change the default behaviour. Existing deployments that use Ollama must keep working, unchanged, with no new required configuration.
+- The caller contract must stay stable. Code that calls the `llm` component must not need to know which backend answers.
+- Managed inference must be reached without storing long-lived credentials. No API keys or static secrets may live in the deployment.
+- Access to managed models must be least-privilege — scoped to specific models, not blanket permission to an entire service.
+- Observability must be uniform. A managed backend has to produce the same structured Amazon CloudWatch logs as the self-hosted one, so operators read one log shape regardless of provider.
 
-A single hardcoded inference backend forces one cost and operations profile onto every environment. Self-hosted Ollama on EC2 keeps spend bounded and predictable, but it commits every deployment to running and maintaining that compute — patching the host, sizing it, keeping the model available. An environment that would rather trade fixed operational overhead for pay-per-use managed inference has no way to make that choice without editing the code that calls the model.
+## The Solution
 
-Cost, though, is only the most visible pressure. The same rigidity shows up across the software lifecycle. Local development wants a lightweight model that runs on a laptop without AWS access at all; production wants managed inference it does not have to operate; and both should exercise the *same* code path so that what passes in development is what runs in production. Behavioural consistency across environments is hard to guarantee when the backend is a compile-time fact rather than a configured one. A hardcoded backend tends to grow parallel code paths — one that talks to the real service, another stubbed out for tests or local runs — and those paths drift. Testing compounds the problem: business logic that reaches directly for a concrete client cannot be exercised without standing up that client, so unit tests either contact a live model or are not written at all. What the platform needed was a single seam that every environment shares, so that local, test, and production runs differ only in which backend is selected — never in the logic that calls it.
+The change introduces Amazon Bedrock as a second `llm.Provider` behind a factory. The factory selects the concrete implementation at runtime from the `LLM_PROVIDER` environment variable: `ollama` remains the default, and `bedrock` is opt-in. Both implementations satisfy the same `llm.Provider` interface, so callers are unaware of which backend runs.
 
-Adding a managed backend introduces a second, sharper problem: authentication. A managed AWS LLM service must be reached securely, and the obvious path — storing an API key or long-lived credential somewhere the platform can read it — creates a secret to provision, rotate, and protect on every host that runs the code. The platform needed a way to authenticate to a managed model service with no stored credential at all, while still constraining exactly which models a given deployment is permitted to invoke. Backend flexibility that came at the price of scattered secrets would trade one operational burden for a worse one.
+Amazon Bedrock is reached over SigV4 through the AWS SDK for Go v2, with no stored credential. An AWS IAM policy permits the Bedrock calls and names the specific models the platform may invoke. Because selection is configuration rather than code, an operator switches between self-hosted and managed inference by setting one variable — and a deployment that sets nothing continues to use Ollama exactly as before.
 
-## Solution Overview
+## Architecture Summary
 
-The platform models the inference backend behind an `llm.Provider` interface and selects the concrete implementation through a factory keyed on a single environment variable, `LLM_PROVIDER`. Setting it to `ollama` — the default — resolves the self-hosted backend; setting it to `bedrock` resolves the managed one. Callers depend only on the interface and never learn which backend answered.
+| Concern | Implementation |
+| --- | --- |
+| Backend selection | Factory keyed on `LLM_PROVIDER` (`ollama` default, `bedrock` opt-in) |
+| Provider contract | Both backends implement the `llm.Provider` interface |
+| Self-hosted path | Ollama on an on-demand Amazon EC2 host |
+| Managed path | Amazon Bedrock via AWS SDK for Go v2 |
+| Managed auth | SigV4, no stored credential |
+| Authorisation | AWS IAM policy permitting Bedrock and naming the models |
+| Observability | Structured logs to Amazon CloudWatch from the `llm` path |
+| Scope of change | Additive; default runtime behaviour unchanged |
 
-Amazon Bedrock is reached over AWS SigV4 with no stored credential. Authentication rides on the host's IAM role, and an IAM policy does double duty: it permits access to Bedrock and names the specific models that may be invoked. The set of callable models is therefore an infrastructure decision expressed in policy, not a value embedded in code.
+The two concrete providers differ along a small, well-defined set of axes:
 
-Regardless of which backend the factory returns, every provider emits structured logs to CloudWatch. Operators and callers see uniform telemetry whether inference ran on self-hosted Ollama or managed Bedrock, so observability does not fork with the backend.
-
-## Architecture
-
-The single-shot inference path runs `n8n → llm → factory`, and the factory fans out to one of two backends. With `LLM_PROVIDER=ollama` the factory routes to the self-hosted `ollama` backend; with `LLM_PROVIDER=bedrock` it routes to `bedrock` over SigV4 with no stored credential. The `iampol` component points at `bedrock`, permitting access and naming the allowed models. The `llm` layer writes structured logs to `cw` (CloudWatch) on either path.
-
-```mermaid
-flowchart LR
-  n8n[n8n workflow] --> llm[llm layer]
-  llm --> factory[provider factory]
-  factory -->|LLM_PROVIDER=ollama · default| ollama[Ollama on EC2]
-  factory -->|LLM_PROVIDER=bedrock · SigV4 · no stored credential| bedrock[Amazon Bedrock]
-  iampol[IAM policy] -->|permits · names the models| bedrock
-  llm -->|structured logs| cw[CloudWatch]
-```
-
-The agent's own inference is a separate path that the provider abstraction does not touch. There, `n8n` orchestrates the agent (`ag`), which calls its orchestrator (`oc`) with an HTTPS token, an idempotency key, and a mandatory budget; the orchestrator makes the agent's own model calls to `ollama`. The repository's diagram marks this explicitly: on `oc → ollama`, the platform is *not* in this path. The return edge, `oc → ag`, is labelled untrusted and validated before use — agent output is treated as data to check, not as a trusted result to consume directly.
-
-```mermaid
-flowchart LR
-  subgraph Platform single-shot
-    wf[n8n] --> llmlayer[llm] --> fac[factory] --> prov[ollama / bedrock]
-  end
-  subgraph Agent's own calls
-    n8n2[n8n] --> agent[ag] --> orch[oc] --> agentollama[ollama]
-    orch -.untrusted · validated.-> agent
-  end
-```
-
-Keeping these two paths distinct is a design decision, not an accident of layout. The platform's trusted single-shot work flows through the swappable provider layer; the agent's own model calls run through the orchestrator with a mandatory budget and are held at arm's length. One boundary governs cost and vendor choice; the other governs trust.
-
-The two backends behind the single-shot path sit at opposite ends of the build-versus-buy spectrum, and the abstraction exists so a deployment can pick either without the calling code noticing. The comparison below summarises how they differ:
-
-| Aspect | Ollama | Amazon Bedrock |
+| Axis | Ollama (default) | Amazon Bedrock (opt-in) |
 | --- | --- | --- |
-| Infrastructure | Self-hosted model server on an EC2 host the platform runs | Fully managed AWS service; no inference infrastructure to operate |
-| Authentication | Reached directly as a self-hosted backend (no request signing) | AWS SigV4 request signing via the host's IAM role |
-| Credentials | None stored | None stored — access flows from the IAM role |
-| Cost Model | Fixed cost of the running EC2 host; bounded and predictable | Pay-per-use managed pricing |
-| Operational Overhead | Patch, size, and keep the host and model available | None — managed by AWS |
-| Default Backend | Yes — selected when `LLM_PROVIDER` is unset | Opt-in — selected with `LLM_PROVIDER=bedrock` |
+| Selection flag | `LLM_PROVIDER=ollama` | `LLM_PROVIDER=bedrock` |
+| Hosting | Self-hosted on an on-demand Amazon EC2 host | Managed service |
+| Authentication | Local process call | SigV4, no stored credential |
+| Authorisation | None stated | AWS IAM policy naming the models |
+| Role | Default provider | Second, opt-in provider |
 
-Neither column is presented as the correct choice; the point of the table is that both are reachable through one interface, so the decision is a deployment setting rather than a property of the code.
+## Architecture Diagram
 
-## Implementation Details
+```mermaid
+flowchart TD
+    llm[llm component] --> factory{provider factory<br/>reads LLM_PROVIDER}
+    factory -->|LLM_PROVIDER=ollama · default| ollama[Ollama<br/>self-hosted on EC2]
+    factory -->|LLM_PROVIDER=bedrock · SigV4 · no stored credential| bedrock[Amazon Bedrock]
+    iampol[IAM policy] -->|permits · names the models| bedrock
+    llm -->|structured logs| cw[Amazon CloudWatch]
+```
 
-Adding Bedrock is the addition of a second concrete `llm.Provider` behind the interface that already existed — and the most important property of that change is what it did *not* touch. The calling contract did not move. Code that asked the `llm` layer to summarise text or draft release notes kept calling the same method, existing business logic required no changes, and every caller continued to compile unchanged. The provider interface stayed stable; the new backend simply satisfies it.
+The `llm` component receives single-shot work and delegates backend choice to the factory. The factory reads `LLM_PROVIDER` and returns either the Ollama implementation or the Bedrock implementation; both honour the same interface, so the request path above the factory is identical. When the Bedrock implementation is selected, calls are signed with SigV4 and authorised by an IAM policy that names the permitted models. Regardless of which provider answers, the `llm` path writes structured logs to Amazon CloudWatch.
 
-This is Go's preference for programming to interfaces rather than implementations, applied at an architectural seam. Because callers depend on the small `llm.Provider` surface and not on any concrete client, a new provider is additive: it implements the same methods and slots in behind the factory. The interface absorbs the difference between backends, so the blast radius of adding one is confined to the provider layer and its configuration.
+## Key Implementation Details
 
-Backend choice is a configuration concern rather than a code concern. The `LLM_PROVIDER` environment variable drives the factory, so a deployment selects Ollama or Bedrock by setting a value, not by branching at call sites or shipping a different build. Ollama remains the default when the variable is unset, preserving existing behaviour for every environment that does not opt in.
+### Selection through the factory
 
-Bedrock authentication is SigV4-based and leans on the host's IAM role rather than any embedded key. The accompanying IAM policy names the permitted models, so the boundary of what the deployment may invoke is defined in infrastructure. Changing which models are reachable is a policy edit, and the code carries no secret to leak.
+The factory reads `LLM_PROVIDER` and constructs the matching `llm.Provider`. An unset or `ollama` value yields the self-hosted implementation; `bedrock` yields the managed one. Callers depend only on the interface, never on a concrete type, so adding the second backend touched the factory and the new implementation — not the call sites. This is why the change is additive: the contract that surrounds the `llm` component did not move, and existing deployments resolve to the same Ollama provider they always used.
 
-## Engineering Decisions
+### Credential-free Bedrock access
 
-The interface-plus-factory structure is chosen over conditional logic at each call site. Scattering `if provider == "bedrock"` checks across the codebase would couple every caller to the set of known backends and force edits in many places each time a backend is added. A single factory concentrates that decision in one location, and a new provider slots in by implementing the interface — callers are untouched.
+The Bedrock implementation authenticates with SigV4 through the AWS SDK for Go v2 and stores no credential. Authorisation comes from an AWS IAM policy that both permits the Bedrock action and names the specific models the platform may invoke. Access is therefore scoped at the model level rather than granted broadly across the service. No API key or static secret is embedded in the deployment; identity and permission are supplied by the surrounding AWS environment and constrained by the policy.
 
-Role-based SigV4 authentication is chosen over stored credentials for the managed backend. This removes the secret-management problem entirely: there is no key to provision, rotate, or accidentally commit, and access is governed by the same AWS IAM machinery that controls the rest of the platform's permissions. Folding the list of callable models into that policy means the security boundary and the capability boundary are described in one place.
+### Uniform observability
 
-Preserving the self-hosted default keeps cost bounded for deployments that want it, while making the managed backend an opt-in. The platform does not force pay-per-use inference on every environment; it makes the trade available to environments that prefer to shed operational work. This mirrors the platform's broader posture of bounding cost through on-demand compute.
+The Bedrock provider emits the same structured Amazon CloudWatch logs as the existing Ollama path. Operators read one log shape whether the request was answered locally or by the managed service. This keeps the observability contract stable across the swap: switching `LLM_PROVIDER` changes the backend, not the telemetry an on-call engineer inspects.
 
-## Repository Changes
+## Why These Decisions Were Made
 
-The substantive change is a single code feature: Amazon Bedrock added as a second `llm.Provider` behind the existing interface. It extends capability while leaving the calling contract stable — a feature-only change with no accompanying fixes. Alongside it, a documentation change records the prior version's changelog entry. The narrowness matters: adding a whole new managed inference backend touched the provider layer and its configuration, not the callers, because the interface absorbed the difference.
+### A provider interface plus a factory
+
+Isolating callers from backend choice made the managed backend an additive change. The alternative — branching on backend type inside each caller — would have spread provider knowledge across the codebase and made the default hard to preserve. A single interface with a factory keeps one seam to extend, and it keeps Ollama as the untouched default so existing deployments carry no risk from the addition.
+
+### SigV4 and a model-scoped IAM policy
+
+Reaching Amazon Bedrock over SigV4 avoids embedding a long-lived credential in the deployment, which would have to be stored, rotated, and guarded. Naming the permitted models in the IAM policy enforces least privilege at the model level rather than granting the whole service. Authentication and authorisation are handled by the AWS environment, not by application secrets.
+
+### Keeping the agent's model calls out of the platform path
+
+The platform routes only its own single-shot work through the `llm` component. The agent's own model calls follow the separate `ag → oc → ollama` path, where the platform is deliberately absent. This preserves a clean trust and responsibility boundary: the provider abstraction governs the platform's inference, not the agent's.
+
+## Repository Impact
+
+A second `llm.Provider` implementation was added alongside the existing Ollama provider, selected by the factory on `LLM_PROVIDER`. An AWS IAM policy was added to authorise Amazon Bedrock and name the permitted models. The Bedrock provider was wired to emit the same structured Amazon CloudWatch logs as the existing path, and the repository's architecture diagram was updated to show the factory choosing between Ollama and Bedrock, including the SigV4 no-stored-credential edge and the policy that names the models. The default runtime behaviour was left unchanged — deployments that set no provider still resolve to Ollama.
 
 ## Benefits
 
-Deployment flexibility is the most direct result. An operator moves a deployment between self-hosted and managed inference by setting `LLM_PROVIDER`, with no rebuild and no change to the code that consumes model output. Different environments can run different backends from the same source — a lightweight local model during development, managed Bedrock in production — while exercising one shared code path.
-
-The security posture improves because there is no stored LLM credential to manage. Access to Bedrock is mediated by an AWS IAM role and SigV4, and the IAM policy constrains which models can be invoked — the platform cannot call a model the policy does not name.
-
-Testing benefits from the same seam. Because callers depend on the `llm.Provider` interface rather than a concrete client, a mock provider that satisfies the interface can be substituted in unit tests, letting business logic be exercised without contacting either Ollama or Bedrock. Tests stay fast, deterministic, and free of network or infrastructure dependencies.
-
-Maintainability follows from the interface as well. A future provider requires only a new implementation of the same contract and a factory entry; the calling code and the shape of the abstraction stay put. Observability stays uniform because every provider emits the same structured logs to CloudWatch, so operators read one telemetry format regardless of which backend answered.
+- Self-hosted or managed inference is chosen by configuration, not by editing code.
+- The self-hosted path remains the safe default, so existing deployments are unaffected.
+- Managed access is credential-free and least-privilege, scoped to named models via AWS IAM.
+- Observability is consistent across providers through structured Amazon CloudWatch logs.
+- New backends can be added behind the same interface without disturbing callers.
 
 ## Tradeoffs
 
-The two backends carry opposite operational profiles, and choosing between them is a real trade rather than a free win. Self-hosted Ollama on EC2 bounds cost and keeps inference in infrastructure the platform controls, but it carries the compute and maintenance burden of running that host. Managed Bedrock removes the infrastructure work but shifts spend to pay-per-use and introduces a dependence on the managed provider. Neither is universally correct; the abstraction exists precisely so the choice can be made per environment.
+- Amazon Bedrock introduces a managed, usage-billed dependency, replacing the fixed cost profile of the self-hosted Ollama host with per-request charges.
+- Two backends now sit behind one interface, so both the Ollama and Bedrock implementations must be maintained and kept contract-compatible.
+- The managed path adds an AWS IAM policy that must be kept in step with the set of models the platform is allowed to call.
 
-The abstraction itself has a cost, and it is more than a layer of indirection. A provider interface naturally exposes the lowest common denominator between the backends it spans: it can only offer capabilities that every implementation can honour. Features that one provider supports and another does not — streaming responses, tool calling, provider-specific request parameters, or model-specific capabilities — do not fit cleanly behind a shared contract. Surfacing them would mean either widening the interface so every provider must account for the feature, or introducing provider-specific escape hatches that let callers reach past the abstraction. Both approaches have consequences, and this design does not prescribe one; the point is simply that a uniform interface trades access to each backend's differentiated features for the portability it provides. That constraint is the price of keeping callers vendor-agnostic.
+## What This Enables Next
 
-## Applying the Pattern
-
-The structure generalises beyond this platform to any system that must stay portable across inference backends or, more broadly, across interchangeable third-party services. The recipe has four parts. Define a narrow provider interface that captures only what callers actually need, so implementations stay small and substitutable. Resolve the concrete implementation in a configuration-driven factory keyed on a single variable, so switching backends is a deployment decision. Authenticate to managed services with a role and request signing rather than stored credentials, and let the access policy also define the boundary of what may be called. Emit the same structured telemetry from every implementation, so observability does not fragment as backends multiply.
-
-Applied together, these turn a vendor commitment into a per-deployment setting. The interface keeps callers ignorant of the backend, the factory makes selection external, role-based auth removes the secret, and uniform logging keeps operations consistent across whatever backends are added later.
+With the factory in place, the platform can run managed inference wherever the self-hosted host is unsuitable — capacity limits, host downtime, or environments where operating an Ollama instance is undesirable. The provider seam also establishes a repeatable shape for integration: any further backend can be added as another `llm.Provider` selected by the same environment variable, authorised by its own least-privilege policy, and observed through the same structured logs. The abstraction turns backend choice into a deployment-time decision rather than a code change.
 
 ## Conclusion
 
-A thin provider abstraction changes the question "which LLM backend?" from a commitment expressed in code into a choice expressed in deployment configuration. This platform models inference behind an `llm.Provider` interface, resolves the backend from `LLM_PROVIDER` through a factory, and keeps self-hosted Ollama as the default with managed Amazon Bedrock available beside it. Pairing that flexibility with AWS IAM and SigV4 keeps it credential-free — the managed backend is reached over signed requests with no stored secret, and the IAM policy names the models a deployment may call. The result is a provider-agnostic LLM architecture that can move between self-hosted and managed compute without touching calling code, while the agent's own model calls stay deliberately outside that path and its output stays untrusted until validated.
+The reusable pattern here is a small provider interface fronted by a configuration-driven factory. By defining `llm.Provider` and selecting the implementation from `LLM_PROVIDER` at runtime, the platform turns its language-model backend into a swappable dependency — self-hosted Ollama by default, managed Amazon Bedrock when configured — without disturbing any caller. Credential-free SigV4 access and an IAM policy that names the permitted models keep the managed path least-privilege, and shared Amazon CloudWatch logging keeps observability uniform across the swap. For engineers building similar systems, the practical takeaway is to isolate any external backend behind a narrow interface, drive selection from configuration with the safe option as the default, and let the surrounding AWS identity — not stored secrets — carry authorisation. That keeps capability additive and the existing contract intact.

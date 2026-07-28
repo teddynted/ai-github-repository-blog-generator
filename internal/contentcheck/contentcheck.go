@@ -194,7 +194,7 @@ func blog(r *Report, c string) {
 		}
 	}
 	// Required section spine (the deterministic anchors).
-	for _, sec := range []string{"## Introduction", "## Conclusion"} {
+	for _, sec := range []string{"## Why This Matters", "## Conclusion"} {
 		if !strings.Contains(c, sec) {
 			r.err("required section missing: %q", sec)
 		}

@@ -236,11 +236,12 @@ func TestBlogPromptRequiresEngineeringDepthOverCommits(t *testing.T) {
 		}
 	}
 
-	// The depth sections must exist and stay in teaching order (problem →
-	// architecture → implementation → decisions → tradeoffs → applying it).
+	// The depth sections must exist and stay in teaching order (constraint →
+	// solution → architecture → implementation → decisions → tradeoffs → next).
 	wantOrder := []string{
-		"Engineering Problem", "Architecture", "Implementation Details",
-		"Engineering Decisions", "Tradeoffs", "Applying the Pattern",
+		"The Engineering Constraint", "The Solution", "Architecture Diagram",
+		"Key Implementation Details", "Why These Decisions Were Made", "Tradeoffs",
+		"What This Enables Next",
 	}
 	assertSubsequence(t, blogSections, wantOrder)
 }
