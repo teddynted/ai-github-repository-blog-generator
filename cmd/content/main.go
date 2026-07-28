@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -109,6 +110,7 @@ func validateCmd(args []string) int {
 // options holds the parsed CLI configuration for a generate run.
 type options struct {
 	artifact, provider, ctxPath, outDir, system, model, ollamaURL, region string
+	fromBlog                                                              string
 	temperature                                                           float64
 	maxTokens                                                             int
 	dryRun, verbose, noCache, noHistory, hybrid                           bool
@@ -131,6 +133,7 @@ func generate(args []string) int {
 	fs.BoolVar(&o.noCache, "no-cache", false, "bypass the local response cache")
 	fs.BoolVar(&o.noHistory, "no-history", false, "do not archive this run under <output>/releases/<version>/history/<stamp>/")
 	fs.BoolVar(&o.hybrid, "hybrid", false, "hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default llama3.2:1b). Best with --artifact all")
+	fs.StringVar(&o.fromBlog, "from-blog", "", "generate downstream artifacts from an EXISTING blog.md (skip blog regeneration). Requires --artifact != blog; pair with --artifact all or a specific downstream kind")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
 	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
@@ -203,7 +206,24 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		modelFor = func(string) releasegen.Model { return model }
 	}
 
-	artifacts, err := produce(ctx, o.artifact, rctx, model, modelFor)
+	// --from-blog: derive downstream artifacts from an existing blog.md instead
+	// of regenerating the (expensive) foundation article.
+	var preBlog *releasegen.BlogPost
+	if o.fromBlog != "" {
+		if o.artifact == "blog" {
+			fmt.Fprintln(os.Stderr, "error: --from-blog cannot be used with --artifact blog (nothing to derive)")
+			return 1
+		}
+		bp, err := loadBlogPost(o.fromBlog)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
+		preBlog = &bp
+		fmt.Fprintf(os.Stderr, "using existing blog (%s, %d words) — skipping blog regeneration\n", o.fromBlog, bp.WordCount)
+	}
+
+	artifacts, err := produce(ctx, o.artifact, rctx, model, modelFor, preBlog)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: generate %s: %v\n", o.artifact, err)
 		return 1
@@ -276,7 +296,7 @@ type artifact struct {
 // (the common prompt-iteration path — one model, no downstream chain); anything
 // else runs the full suite (which resolves inter-artifact dependencies) and
 // selects the requested output(s).
-func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model Model, modelFor func(string) releasegen.Model) ([]artifact, error) {
+func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model Model, modelFor func(string) releasegen.Model, blog *releasegen.BlogPost) ([]artifact, error) {
 	if target == "blog" {
 		post, err := (&releasegen.Generator{Model: modelFor("blog")}).Blog(ctx, rctx)
 		if err != nil {
@@ -285,8 +305,10 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 		return []artifact{{kind: "blog", ext: "md", markdown: post.Markdown}}, nil
 	}
 
+	// blog is nil → the orchestrator generates it first; non-nil (--from-blog) →
+	// it uses the supplied blog verbatim and only runs the downstream stages.
 	orch := &contentsuite.Orchestrator{Model: model, ModelFor: modelFor}
-	suite := orch.Run(ctx, rctx, nil)
+	suite := orch.Run(ctx, rctx, blog)
 	var out []artifact
 	for _, a := range suite.Artifacts() {
 		if target != "all" && a.Kind != target {
@@ -298,6 +320,46 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 		return nil, fmt.Errorf("artifact %q was not produced (a thin release may skip it)", target)
 	}
 	return out, nil
+}
+
+// loadBlogPost reads an existing blog.md into a BlogPost so the suite can derive
+// downstream artifacts from it without regenerating the blog. The whole file is
+// the Markdown; the leading YAML front matter (title/description/tags) is parsed
+// for the generators that use those fields.
+func loadBlogPost(path string) (releasegen.BlogPost, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return releasegen.BlogPost{}, fmt.Errorf("read --from-blog %s: %w", path, err)
+	}
+	md := string(b)
+	if strings.TrimSpace(md) == "" {
+		return releasegen.BlogPost{}, fmt.Errorf("--from-blog %s is empty", path)
+	}
+	bp := releasegen.BlogPost{Markdown: md, WordCount: len(strings.Fields(md))}
+	if rest, ok := strings.CutPrefix(md, "---\n"); ok {
+		if i := strings.Index(rest, "\n---"); i >= 0 {
+			for _, line := range strings.Split(rest[:i], "\n") {
+				k, v, found := strings.Cut(line, ":")
+				if !found {
+					continue
+				}
+				v = strings.TrimSpace(v)
+				switch strings.TrimSpace(k) {
+				case "title":
+					bp.Title = strings.Trim(v, `"`)
+				case "description":
+					bp.MetaDescription = strings.Trim(v, `"`)
+				case "tags":
+					for _, t := range strings.Split(strings.Trim(v, "[]"), ",") {
+						if t = strings.TrimSpace(t); t != "" {
+							bp.Tags = append(bp.Tags, t)
+						}
+					}
+				}
+			}
+		}
+	}
+	return bp, nil
 }
 
 func logRun(o options, arts []artifact, cache *aicache.Cache, releaseDir, histDir string, dur time.Duration) {
@@ -406,9 +468,63 @@ func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
 		airouter.ProviderClaude: claudeM,
 		airouter.ProviderOllama: ollamaM,
 	}
-	router := airouter.New(providers, airouter.DefaultRules(), airouter.ProviderOllama, airouter.ProviderOllama, nil)
+	// A stderr logger surfaces each routing decision live, so a long run shows
+	// per-artifact progress ("ai routing decision content_type=blog provider=claude")
+	// as it happens rather than going silent until the final summary.
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// Wrap each provider so every generation logs start + finish with elapsed
+	// time — otherwise a long run goes silent for minutes between routing lines.
+	claudeM = loggingModel{inner: claudeM, label: "claude-code", logger: logger}
+	ollamaM = loggingModel{inner: ollamaM, label: "ollama:" + ollamaModel, logger: logger}
+	providers[airouter.ProviderClaude] = claudeM
+	providers[airouter.ProviderOllama] = ollamaM
+
+	router := airouter.New(providers, airouter.DefaultRules(), airouter.ProviderOllama, airouter.ProviderOllama, logger)
 	printHybridPolicy(ollamaModel)
 	return ollamaM, func(kind string) releasegen.Model { return router.ModelFor(kind) }, nil
+}
+
+// loggingModel wraps a Model to log each Generate call's start and finish with
+// elapsed time and I/O sizes, so a long hybrid run shows continuous progress
+// (per artifact, and per retry) on stderr instead of long silent gaps.
+type loggingModel struct {
+	inner  Model
+	label  string
+	logger *slog.Logger
+}
+
+func (m loggingModel) Generate(ctx context.Context, prompt string) (string, error) {
+	start := time.Now()
+	m.logger.Info("generating", "provider", m.label, "prompt_chars", len(prompt))
+
+	// Heartbeat: a single model call is one blocking request with nothing to log
+	// mid-flight, so tick every 15s to show the call is still alive during long
+	// (minutes-scale) generations.
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				m.logger.Info("… still generating", "provider", m.label,
+					"elapsed", time.Since(start).Round(time.Second).String())
+			}
+		}
+	}()
+
+	out, err := m.inner.Generate(ctx, prompt)
+	close(done)
+	if err != nil {
+		m.logger.Warn("generation failed", "provider", m.label,
+			"elapsed", time.Since(start).Round(time.Second).String(), "error", err.Error())
+		return out, err
+	}
+	m.logger.Info("generated", "provider", m.label,
+		"elapsed", time.Since(start).Round(time.Second).String(), "out_chars", len(out))
+	return out, nil
 }
 
 // printHybridPolicy writes the per-kind provider routing to stderr so a hybrid

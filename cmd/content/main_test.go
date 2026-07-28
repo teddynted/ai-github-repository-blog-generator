@@ -57,7 +57,7 @@ func TestProduceBlogStandalone(t *testing.T) {
 		t.Fatal(err)
 	}
 	fm := fakeModel{}
-	arts, err := produce(context.Background(), "blog", rctx, fm, func(string) releasegen.Model { return fm })
+	arts, err := produce(context.Background(), "blog", rctx, fm, func(string) releasegen.Model { return fm }, nil)
 	if err != nil {
 		t.Fatalf("produce: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestProduceAllViaSuite(t *testing.T) {
 		t.Fatal(err)
 	}
 	fm := fakeModel{}
-	arts, err := produce(context.Background(), "all", rctx, fm, func(string) releasegen.Model { return fm })
+	arts, err := produce(context.Background(), "all", rctx, fm, func(string) releasegen.Model { return fm }, nil)
 	if err != nil {
 		t.Fatalf("produce: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fm := fakeModel{}
-	arts, err := produce(context.Background(), "all", rctx, fm, func(string) releasegen.Model { return fm })
+	arts, err := produce(context.Background(), "all", rctx, fm, func(string) releasegen.Model { return fm }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
