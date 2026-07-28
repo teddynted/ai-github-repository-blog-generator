@@ -19,6 +19,10 @@ func (col ArchitectureCollection) Markdown() string {
 		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(col.Warnings, "; "))
 	}
 
+	if col.PlatformOverview != "" {
+		fmt.Fprintf(&b, "## Platform Overview\n\n%s\n\n", col.PlatformOverview)
+	}
+
 	for _, d := range col.Diagrams {
 		writeDiagram(&b, d)
 	}
@@ -56,6 +60,14 @@ func writeIntelligence(b *strings.Builder, ci Intelligence) {
 	b.WriteString("---\n\n## Architecture Intelligence\n\n")
 	fmt.Fprintf(b, "- **Style:** %s · **Deployment:** %s\n", ci.ArchitectureStyle, ci.DeploymentPattern)
 	fmt.Fprintf(b, "- **Infrastructure complexity:** %s\n", ci.InfrastructureComplexity)
+	if ci.PrimaryWorkflow != "" {
+		fmt.Fprintf(b, "- **Primary workflow:** %s\n", ci.PrimaryWorkflow)
+	}
+	writeComp(b, "Local inference", ci.LocalInference)
+	writeComp(b, "Cloud inference", ci.CloudInference)
+	if ci.OperationalModel != "" {
+		fmt.Fprintf(b, "- **Operational model:** %s\n", ci.OperationalModel)
+	}
 	writeComp(b, "Cloud services", ci.CloudServices)
 	writeComp(b, "Compute", ci.ComputeComponents)
 	writeComp(b, "Serverless", ci.ServerlessComponents)

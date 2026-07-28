@@ -16,6 +16,7 @@ type analysis struct {
 	Dirs       []rc.DirectoryInfo
 	Mermaid    []rc.MermaidDiagram
 	HasCICD    bool
+	Inference  inference // grounded local/cloud AI-inference providers
 }
 
 // serviceNode is a resolved AWS service with its catalogue info.
@@ -54,6 +55,7 @@ func analyze(pkg ReleasePackage) analysis {
 	a.Dirs = c.RepositoryStructure.Directories
 	a.Mermaid = c.Mermaid
 	a.HasCICD = detectCICD(c)
+	a.Inference = detectInference(pkg, a) // after services are resolved
 	return a
 }
 
