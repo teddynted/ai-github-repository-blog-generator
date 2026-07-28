@@ -52,9 +52,11 @@ else
   for a in architecture architecture-diagram-spec linkedin x-thread; do
     run --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --context "$CTX"
   done
-  # NOTE: the storyboard-derived transforms (voiceover, youtube, youtube-shorts,
-  # tiktok, visual-assets) internally regenerate storyboard each per-artifact
-  # run. Set FAST=1 to generate them together and avoid the repeat.
+  # NOTE: each --artifact runs only that stage plus its dependencies (not the
+  # whole suite). The storyboard-derived transforms (voiceover, youtube, …) and
+  # seo-metadata still each re-run the storyboard chain they depend on, so across
+  # separate per-artifact runs the storyboard is regenerated repeatedly. Set
+  # FAST=1 to generate everything in one run and share a single storyboard.
   say "Stage 2b: transforms (→ ollama:${MODEL}, --no-cache)"
   for a in seo-metadata storyboard voiceover youtube youtube-shorts tiktok visual-assets; do
     run --artifact "$a" --from-blog "$BLOG" --hybrid --no-history --no-cache --context "$CTX"

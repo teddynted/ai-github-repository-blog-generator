@@ -2,6 +2,7 @@ package contentsuite
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
@@ -174,6 +175,92 @@ func TestOrchestratorGeneratesBlogWhenNilAndModelPresent(t *testing.T) {
 	}
 	if s.Blog.Markdown == "" {
 		t.Error("blog should be generated from the model")
+	}
+}
+
+func stageNames(s *Suite) map[string]bool {
+	got := map[string]bool{}
+	for _, st := range s.Manifest.Stages {
+		got[st.Name] = true
+	}
+	return got
+}
+
+func TestOrchestratorOnlyRunsSelectedStagePlusDependencies(t *testing.T) {
+	cases := []struct {
+		name string
+		only string
+		want []string // exact set of stages that should run
+	}{
+		// architecture reads only the storyboard's labels (seeded from the release
+		// context), so it depends on the blog alone — no Ollama storyboard stage.
+		{"architecture", "architecture", []string{"blog", "architecture"}},
+		// the diagram spec grounds on the blog alone.
+		{"diagram-spec", "architecture-diagram-spec", []string{"blog", "architecture-diagram-spec"}},
+		// seo sits at the end of the storyboard→voiceover→youtube→…→seo chain.
+		{"seo", "seo-metadata", []string{
+			"blog", "storyboard", "voiceover", "youtube", "youtube-shorts",
+			"tiktok", "visual-assets", "seo-metadata",
+		}},
+		// linkedin consumes architecture + seo, so it expands to nearly everything
+		// except x-thread and the diagram artifacts.
+		{"linkedin", "linkedin", []string{
+			"blog", "storyboard", "voiceover", "youtube", "youtube-shorts",
+			"tiktok", "visual-assets", "seo-metadata", "architecture", "linkedin",
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			o := &Orchestrator{Only: map[string]bool{tc.only: true}}
+			s := o.Run(context.Background(), sampleContext(), wellFormedBlog())
+			got := stageNames(s)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ran %d stages %v, want %d %v", len(got), sortedKeys(got), len(tc.want), tc.want)
+			}
+			for _, w := range tc.want {
+				if !got[w] {
+					t.Errorf("expected stage %q to run; ran %v", w, sortedKeys(got))
+				}
+			}
+			// The requested artifact must actually be produced.
+			var produced bool
+			for _, a := range s.Artifacts() {
+				if a.Kind == tc.only {
+					produced = true
+				}
+			}
+			if !produced {
+				t.Errorf("requested artifact %q was not produced", tc.only)
+			}
+		})
+	}
+}
+
+func TestArchitectureKeepsRepoLabelsWithoutStoryboardStage(t *testing.T) {
+	// Selecting only architecture skips the (Ollama) storyboard stage, but the
+	// storyboard's repo/release labels are seeded from the release context — so
+	// the architecture output must still carry the real repo, not the "project"
+	// fallback it would use with an empty storyboard.
+	o := &Orchestrator{Only: map[string]bool{"architecture": true}}
+	s := o.Run(context.Background(), sampleContext(), wellFormedBlog())
+
+	if stageNames(s)["storyboard"] {
+		t.Fatal("storyboard stage should not run for an architecture-only selection")
+	}
+	if s.Storyboard.Metadata.Repository != "acme/demo" || s.Storyboard.Metadata.Release != "v1.0.0" {
+		t.Errorf("storyboard labels not seeded from context: %+v", s.Storyboard.Metadata)
+	}
+	var archMD string
+	for _, a := range s.Artifacts() {
+		if a.Kind == "architecture" {
+			archMD = a.Markdown
+		}
+	}
+	if archMD == "" {
+		t.Fatal("architecture artifact not produced")
+	}
+	if !strings.Contains(archMD, "demo") {
+		t.Errorf("architecture output lost the repo label (expected the real repo, not the fallback):\n%s", archMD)
 	}
 }
 

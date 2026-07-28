@@ -48,8 +48,9 @@ type Model interface {
 
 // supportedArtifacts is the full local artifact set (kind → default extension).
 var supportedArtifacts = []string{
-	"blog", "architecture", "linkedin", "x-thread", "storyboard", "voiceover",
-	"youtube", "youtube-shorts", "tiktok", "visual-assets", "seo-metadata",
+	"blog", "architecture", "architecture-diagram-spec", "linkedin", "x-thread",
+	"storyboard", "voiceover", "youtube", "youtube-shorts", "tiktok",
+	"visual-assets", "seo-metadata",
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
@@ -307,7 +308,12 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 
 	// blog is nil → the orchestrator generates it first; non-nil (--from-blog) →
 	// it uses the supplied blog verbatim and only runs the downstream stages.
-	orch := &contentsuite.Orchestrator{Model: model, ModelFor: modelFor}
+	orch := &contentsuite.Orchestrator{Model: model, ModelFor: modelFor, Logger: suiteLogger()}
+	// A single --artifact runs only that stage plus its real dependencies (not the
+	// whole suite); --artifact all runs everything.
+	if target != "all" {
+		orch.Only = map[string]bool{target: true}
+	}
 	suite := orch.Run(ctx, rctx, blog)
 	var out []artifact
 	for _, a := range suite.Artifacts() {
@@ -482,7 +488,7 @@ func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
 	// A stderr logger surfaces each routing decision live, so a long run shows
 	// per-artifact progress ("ai routing decision content_type=blog provider=claude")
 	// as it happens rather than going silent until the final summary.
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := suiteLogger()
 	// Wrap each provider so every generation logs start + finish with elapsed
 	// time — otherwise a long run goes silent for minutes between routing lines.
 	claudeM = loggingModel{inner: claudeM, label: "claude-code", logger: logger}
@@ -493,6 +499,12 @@ func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
 	router := airouter.New(providers, airouter.DefaultRules(), airouter.ProviderOllama, airouter.ProviderOllama, logger)
 	printHybridPolicy(ollamaModel)
 	return ollamaM, func(kind string) releasegen.Model { return router.ModelFor(kind) }, nil
+}
+
+// suiteLogger returns the stderr logger used for live run progress (routing
+// decisions, stage selection, per-generation timing).
+func suiteLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
 // loggingModel wraps a Model to log each Generate call's start and finish with
