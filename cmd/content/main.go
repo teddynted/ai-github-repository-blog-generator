@@ -398,6 +398,17 @@ func (m *captureModel) Generate(_ context.Context, prompt string) (string, error
 	return "## Introduction\n\nDRY-RUN STUB.\n\n## Conclusion\n\nDRY-RUN STUB.", nil
 }
 
+// ollamaOpts builds the shared Ollama client options. --max-tokens, when set,
+// overrides the client's default num_predict cap; otherwise the default cap
+// (which keeps small models from rambling) applies.
+func ollamaOpts(o options) []ollama.Option {
+	opts := []ollama.Option{ollama.WithBaseURL(o.ollamaURL)}
+	if o.maxTokens > 0 {
+		opts = append(opts, ollama.WithNumPredict(o.maxTokens))
+	}
+	return opts
+}
+
 func buildModel(ctx context.Context, o options) (Model, []string, error) {
 	switch o.provider {
 	case "anthropic":
@@ -428,7 +439,7 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if model == "" {
 			model = envOr("OLLAMA_MODEL", "qwen2.5:7b")
 		}
-		return ollama.New(model, ollama.WithBaseURL(o.ollamaURL)), fingerprint("ollama", model, o.system, o.temperature, o.maxTokens), nil
+		return ollama.New(model, ollamaOpts(o)...), fingerprint("ollama", model, o.system, o.temperature, o.maxTokens), nil
 	case "claude-code":
 		// Local-dev only: generate via the Claude Code subscription (`claude -p`)
 		// instead of Anthropic API credits.
@@ -458,7 +469,7 @@ func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
 	if ollamaModel == "" {
 		ollamaModel = envOr("OLLAMA_MODEL", "llama3.2:1b")
 	}
-	var claudeM, ollamaM Model = premium, ollama.New(ollamaModel, ollama.WithBaseURL(o.ollamaURL))
+	var claudeM, ollamaM Model = premium, ollama.New(ollamaModel, ollamaOpts(o)...)
 	if !o.noCache {
 		claudeM = aicache.New(claudeM, o.cacheDir, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens)...)
 		ollamaM = aicache.New(ollamaM, o.cacheDir, fingerprint("ollama", ollamaModel, o.system, o.temperature, o.maxTokens)...)

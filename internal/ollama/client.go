@@ -28,12 +28,19 @@ const DefaultBaseURL = "http://localhost:11434"
 // headers"), so the default is generous; override with WithTimeout.
 const DefaultTimeout = 15 * time.Minute
 
+// DefaultNumPredict caps the tokens a single completion may generate. Small
+// local models (e.g. llama3.2:1b) often ignore stop cues and ramble, producing
+// huge, slow outputs; this bound keeps each call fast and its output sane.
+// Override with WithNumPredict (0 = unbounded, the Ollama default).
+const DefaultNumPredict = 2048
+
 // Client talks to a local Ollama server for a fixed model.
 type Client struct {
-	baseURL string
-	model   string
-	http    *http.Client
-	retry   retry.Config
+	baseURL    string
+	model      string
+	http       *http.Client
+	retry      retry.Config
+	numPredict int
 }
 
 // Option configures a Client.
@@ -58,15 +65,21 @@ func WithTimeout(d time.Duration) Option {
 // WithRetry overrides the retry policy (e.g. faster in tests).
 func WithRetry(cfg retry.Config) Option { return func(c *Client) { c.retry = cfg } }
 
+// WithNumPredict overrides the max output tokens per completion. A value <= 0
+// removes the cap (the Ollama server default). Use it to allow longer outputs
+// (e.g. a full blog via Ollama) or to tighten the cap for faster transforms.
+func WithNumPredict(n int) Option { return func(c *Client) { c.numPredict = n } }
+
 // New returns a Client for the given model. Inference on a large model can take
 // a while, so the default timeout is generous; transient failures (e.g. the
 // model still loading) are retried with backoff.
 func New(model string, opts ...Option) *Client {
 	c := &Client{
-		baseURL: DefaultBaseURL,
-		model:   model,
-		http:    &http.Client{Timeout: DefaultTimeout},
-		retry:   retry.Default,
+		baseURL:    DefaultBaseURL,
+		model:      model,
+		http:       &http.Client{Timeout: DefaultTimeout},
+		retry:      retry.Default,
+		numPredict: DefaultNumPredict,
 	}
 	for _, o := range opts {
 		o(c)
@@ -75,9 +88,14 @@ func New(model string, opts ...Option) *Client {
 }
 
 type generateRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
+	Model   string          `json:"model"`
+	Prompt  string          `json:"prompt"`
+	Stream  bool            `json:"stream"`
+	Options *generateOption `json:"options,omitempty"`
+}
+
+type generateOption struct {
+	NumPredict int `json:"num_predict"`
 }
 
 type generateResponse struct {
@@ -88,7 +106,11 @@ type generateResponse struct {
 // Generate runs a single non-streaming completion for the prompt and returns
 // the generated text. Transient failures are retried with backoff.
 func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
-	raw, _ := json.Marshal(generateRequest{Model: c.model, Prompt: prompt, Stream: false})
+	greq := generateRequest{Model: c.model, Prompt: prompt, Stream: false}
+	if c.numPredict > 0 {
+		greq.Options = &generateOption{NumPredict: c.numPredict}
+	}
+	raw, _ := json.Marshal(greq)
 
 	var out generateResponse
 	err := retry.Do(ctx, c.retry, func() error {
