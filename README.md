@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/brand/logo-horizontal-dark.svg">
-  <img alt="AI GitHub Repository Blog Generator" src="./docs/assets/brand/logo-horizontal-dark.svg" width="96" height="96">
+  <img alt="AI GitHub Repository Blog Generator" src="./docs/assets/brand/logo-horizontal-dark.svg" width="360">
 </picture>
 
 
