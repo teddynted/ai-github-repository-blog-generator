@@ -18,8 +18,11 @@ func TestSanitizeOverviewRepairsThinContextArtifacts(t *testing.T) {
 	if strings.Contains(got, "65 files") || strings.Contains(got, "of 65") {
 		t.Errorf("file count not stripped: %q", got)
 	}
-	if !strings.Contains(got, "built from 2 major components.") {
-		t.Errorf("expected clean 'built from 2 major components.', got %q", got)
+	if strings.Contains(got, "major components") || strings.Contains(got, "built from") {
+		t.Errorf("machine-generated 'built from N major components' clause not stripped: %q", got)
+	}
+	if !strings.Contains(got, "An event-driven, AWS-native system.") {
+		t.Errorf("expected clean lead sentence, got %q", got)
 	}
 }
 

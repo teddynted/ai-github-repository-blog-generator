@@ -189,13 +189,20 @@ func eventDrivenJustification(a analysis) string {
 // repository-level architecture document should not embed a file count.
 var fileCountRe = regexp.MustCompile(`(?i)\s*of\s+\d+\s+files?`)
 
+// componentsCountRe matches a "built from N major components [on <services>]"
+// clause — a machine-generated count (and an awkward service list) that a
+// repository-level overview should not carry.
+var componentsCountRe = regexp.MustCompile(`(?i)\s*built from \d+ major components?(\s+on\s+[^.]*)?`)
+
 // sanitizeOverview repairs artifacts left by thin/older release contexts: the
-// empty-AWS-service " on ." fragment, an embedded file count, and any resulting
-// double spaces or stray " ." so the overview reads as clean prose.
+// "built from N major components on …" clause, an embedded file count, the empty
+// " on ." fragment, and any resulting double spaces or stray " ." so the overview
+// reads as clean prose.
 func sanitizeOverview(s string) string {
 	if s == "" {
 		return ""
 	}
+	s = componentsCountRe.ReplaceAllString(s, "")
 	s = strings.ReplaceAll(s, " on .", ".") // empty AWS-service list artifact
 	s = strings.ReplaceAll(s, " on ,", ",")
 	s = fileCountRe.ReplaceAllString(s, "")
@@ -205,16 +212,41 @@ func sanitizeOverview(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// repoDirectories returns the top-level directories with their grounded
-// responsibilities, for the Repository Structure View. Directories without a
-// stated responsibility still appear (path only).
+// knownDirResponsibilities describes well-known top-level directories by
+// convention, used when the release context has no specific (or only a generic
+// placeholder) responsibility for them.
+var knownDirResponsibilities = map[string]string{
+	".githooks":      "local Git hook automation and developer workflow enforcement",
+	".github":        "CI/CD workflows and repository automation",
+	"cmd":            "application entry points and command-line executables",
+	"docs":           "architecture and project documentation",
+	"infra":          "CloudFormation templates and infrastructure-as-code definitions",
+	"infrastructure": "CloudFormation templates and infrastructure-as-code definitions",
+	"internal":       "core application and business logic packages",
+	"lambdas":        "AWS Lambda function handlers",
+	"scripts":        "developer and automation scripts",
+	"packer":         "machine-image build definitions",
+	"pkg":            "reusable library packages",
+	"test":           "test suites and fixtures",
+	"tests":          "test suites and fixtures",
+	"api":            "API definitions and handlers",
+	"web":            "web frontend assets",
+}
+
+// repoDirectories returns the top-level directories with their responsibilities
+// for the Repository Structure View, preferring the release context's stated
+// responsibility and falling back to a by-convention description for well-known
+// directories (so entries like ".githooks/" don't read as "Project directory").
 func repoDirectories(a analysis) []DirectoryResponsibility {
 	var out []DirectoryResponsibility
 	for _, d := range topDirs(a.Dirs, 12) {
-		out = append(out, DirectoryResponsibility{
-			Path:           d.Path,
-			Responsibility: strings.TrimSpace(d.Responsibility),
-		})
+		resp := strings.TrimSpace(d.Responsibility)
+		if resp == "" || strings.EqualFold(resp, "Project directory") || strings.EqualFold(resp, "Directory") {
+			if known, ok := knownDirResponsibilities[strings.Trim(strings.ToLower(d.Path), "/")]; ok {
+				resp = known
+			}
+		}
+		out = append(out, DirectoryResponsibility{Path: d.Path, Responsibility: resp})
 	}
 	return out
 }

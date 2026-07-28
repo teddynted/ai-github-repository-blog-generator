@@ -51,8 +51,8 @@ func TestDetectInferenceHybrid(t *testing.T) {
 	if !a.Inference.hybrid() {
 		t.Fatalf("expected hybrid inference, got local=%v cloud=%v", a.Inference.Local, a.Inference.Cloud)
 	}
-	if !contains(a.Inference.Local, "Ollama") {
-		t.Errorf("local inference should include Ollama, got %v", a.Inference.Local)
+	if !contains(a.Inference.Local, "Ollama Runtime") {
+		t.Errorf("local inference should include Ollama Runtime, got %v", a.Inference.Local)
 	}
 	if !contains(a.Inference.Cloud, "Amazon Bedrock") || !contains(a.Inference.Cloud, "Anthropic Claude") {
 		t.Errorf("cloud inference should include Bedrock + Claude, got %v", a.Inference.Cloud)
@@ -70,7 +70,7 @@ func TestHybridMarkdownFramingAndSubgraphs(t *testing.T) {
 		"## Platform Overview",
 		"hybrid AI platform", // style label
 		"Logical Architecture — Hybrid AI Data Flow",
-		"- **Local inference:** Ollama",
+		"- **Local inference:** Ollama Runtime",
 		"- **Cloud inference:**",
 		"- **Operational model:** Self-hosted automation with cloud AI augmentation",
 		"- **Primary workflow:**",

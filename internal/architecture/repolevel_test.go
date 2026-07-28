@@ -23,7 +23,7 @@ func TestRepoLevelMarkdownIsVersionIndependent(t *testing.T) {
 		"## Logical Architecture — Hybrid AI Data Flow", // hybrid detected → hybrid title
 		"## Architecture Intelligence",
 		"| **Architecture style** |",
-		"| **Local inference** | Ollama |",
+		"| **Local inference** | Ollama Runtime |",
 		"## Generation Context",
 	} {
 		if !strings.Contains(md, want) {

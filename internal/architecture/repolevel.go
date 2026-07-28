@@ -92,6 +92,7 @@ func writeRepoSection(b *strings.Builder, d *Diagram, title, subtitle, typeLabel
 	fmt.Fprintf(b, "```mermaid\n%s\n```\n\n", d.Mermaid)
 
 	components := bullets
+	preformatted := bullets != nil
 	if components == nil {
 		components = d.Nodes
 		if len(components) == 0 {
@@ -101,10 +102,51 @@ func writeRepoSection(b *strings.Builder, d *Diagram, title, subtitle, typeLabel
 	if len(components) > 0 {
 		fmt.Fprintf(b, "### %s\n\n", componentsHeading)
 		for _, c := range components {
+			if !preformatted {
+				c = describeComponent(c) // add a one-line role when known
+			}
 			fmt.Fprintf(b, "- %s\n", c)
 		}
 		b.WriteString("\n")
 	}
+}
+
+// componentDescriptions gives a one-sentence role for well-known services and
+// platform components, used to turn a bare name list into descriptive bullets.
+var componentDescriptions = map[string]string{
+	"GitHub":                "source of webhooks, commits, and pull requests that trigger the pipeline",
+	"Amazon EventBridge":    "asynchronous event ingestion and routing",
+	"AWS Lambda":            "event handling and dispatch to the orchestration layer",
+	"OpenClaw Orchestrator": "coordinates inference routing and artifact generation",
+	"n8n Automation":        "runs the automation workflows",
+	"n8n Workflow Engine":   "runs the automation workflows",
+	"Ollama Runtime":        "local inference (primary backend)",
+	"Amazon Bedrock":        "managed cloud inference (fallback backend)",
+	"Amazon S3":             "durable artifact storage",
+	"Amazon EFS":            "shared workspace and workflow state",
+	"Amazon CloudWatch":     "centralized logs and metrics",
+	"AWS IAM":               "identity and access management",
+	"AWS IAM Role":          "assumed by the workflow to grant scoped, least-privilege access",
+	"CI/CD Workflow":        "runs validation and build steps for each change",
+	"Deployment Artifacts":  "build outputs published for downstream infrastructure automation",
+	"AWS CloudFormation":    "provisions infrastructure as code",
+	"Amazon EC2":            "on-demand compute for workloads that are not serverless",
+	"Amazon API Gateway":    "managed API entry point",
+	"Amazon DynamoDB":       "managed NoSQL data store",
+	"Amazon SQS":            "message queue buffering asynchronous work",
+	"Amazon SNS":            "pub/sub notification fan-out",
+	"AWS Secrets Manager":   "secure storage for credentials and secrets",
+	"AWS Systems Manager":   "operational configuration and parameter storage",
+	"AWS KMS":               "encryption key management",
+}
+
+// describeComponent formats a bullet as "**Name** — role" when a role is known,
+// otherwise the bare name (e.g. for unrecognised or abbreviated diagram nodes).
+func describeComponent(label string) string {
+	if d := componentDescriptions[label]; d != "" {
+		return "**" + label + "** — " + d
+	}
+	return label
 }
 
 // dirBullets formats directory responsibilities as "**path** — responsibility"

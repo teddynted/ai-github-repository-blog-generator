@@ -46,12 +46,12 @@ flowchart TD
 
 ### AWS Services Used
 
-- AWS Lambda
-- Amazon EventBridge
-- Amazon SQS
-- Amazon EC2
-- AWS CloudFormation
-- Amazon CloudWatch
+- **AWS Lambda** — event handling and dispatch to the orchestration layer
+- **Amazon EventBridge** — asynchronous event ingestion and routing
+- **Amazon SQS** — message queue buffering asynchronous work
+- **Amazon EC2** — on-demand compute for workloads that are not serverless
+- **AWS CloudFormation** — provisions infrastructure as code
+- **Amazon CloudWatch** — centralized logs and metrics
 
 ---
 
@@ -78,9 +78,9 @@ flowchart LR
 ### Key Components
 
 - Webhook
-- Amazon EventBridge
-- Amazon SQS
-- Amazon EC2
+- **Amazon EventBridge** — asynchronous event ingestion and routing
+- **Amazon SQS** — message queue buffering asynchronous work
+- **Amazon EC2** — on-demand compute for workloads that are not serverless
 
 ---
 
@@ -111,12 +111,12 @@ flowchart LR
 
 ### Deployment Characteristics
 
-- GitHub
-- CI/CD Workflow
-- AWS CloudFormation
-- Amazon EventBridge
-- Amazon SQS
-- Amazon EC2
+- **GitHub** — source of webhooks, commits, and pull requests that trigger the pipeline
+- **CI/CD Workflow** — runs validation and build steps for each change
+- **AWS CloudFormation** — provisions infrastructure as code
+- **Amazon EventBridge** — asynchronous event ingestion and routing
+- **Amazon SQS** — message queue buffering asynchronous work
+- **Amazon EC2** — on-demand compute for workloads that are not serverless
 
 ---
 
