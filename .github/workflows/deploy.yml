@@ -65,7 +65,7 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed daily window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -91,7 +91,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop; do
+          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
@@ -189,6 +189,17 @@ jobs:
           # (the scheduler.yaml defaults). Set SCHEDULE_TIMEZONE to run the
           # window in local wall-clock time (e.g. Africa/Johannesburg).
           SCHEDULE_TIMEZONE: ${{ vars.SCHEDULE_TIMEZONE }}
+          # Idle auto-stop (opt-in). Set ENABLE_IDLE_STOP=true to create the idle
+          # Lambda + hourly rule; keep IDLE_DRY_RUN=true until logs look right,
+          # and set ScheduleState=DISABLED so the fixed StopSchedule stands down.
+          ENABLE_IDLE_STOP: ${{ vars.ENABLE_IDLE_STOP }}
+          IDLE_MINUTES: ${{ vars.IDLE_MINUTES }}
+          IDLE_DRY_RUN: ${{ vars.IDLE_DRY_RUN }}
+          IDLE_N8N_URL: ${{ vars.IDLE_N8N_URL }}
+          IDLE_OLLAMA_URL: ${{ vars.IDLE_OLLAMA_URL }}
+          IDLE_USE_VPC: ${{ vars.IDLE_USE_VPC }}
+          IDLE_SUBNET_IDS: ${{ vars.IDLE_SUBNET_IDS }}
+          IDLE_SG_IDS: ${{ vars.IDLE_SG_IDS }}
         run: |
           # The scheduler stack owns instance power: it starts the On-Demand host
           # at 18:00 and stops it at 20:00, every day (7 days a week). Wire it to the compute
@@ -197,7 +208,18 @@ jobs:
             --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
           P="ProjectName=blog-gen InstanceId=$INSTANCE_ID ArtifactsBucket=$ARTIFACTS_BUCKET"
           P="$P StartCodeKey=$SHA/scheduled-start.zip StopCodeKey=$SHA/scheduled-stop.zip"
+          P="$P IdleCodeKey=$SHA/idle-stop.zip"
           [ -n "$SCHEDULE_TIMEZONE" ] && P="$P ScheduleTimezone=$SCHEDULE_TIMEZONE"
+          # Idle auto-stop is opt-in via repo vars; unset leaves EnableIdleStop=false
+          # (the template default), so the idle Lambda/rule are not created.
+          [ -n "$ENABLE_IDLE_STOP" ] && P="$P EnableIdleStop=$ENABLE_IDLE_STOP"
+          [ -n "$IDLE_MINUTES" ]     && P="$P IdleMinutes=$IDLE_MINUTES"
+          [ -n "$IDLE_DRY_RUN" ]     && P="$P IdleDryRun=$IDLE_DRY_RUN"
+          [ -n "$IDLE_N8N_URL" ]     && P="$P N8nUrl=$IDLE_N8N_URL"
+          [ -n "$IDLE_OLLAMA_URL" ]  && P="$P OllamaUrl=$IDLE_OLLAMA_URL"
+          [ -n "$IDLE_USE_VPC" ]     && P="$P IdleUseVpc=$IDLE_USE_VPC"
+          [ -n "$IDLE_SUBNET_IDS" ]  && P="$P IdleSubnetIds=$IDLE_SUBNET_IDS"
+          [ -n "$IDLE_SG_IDS" ]      && P="$P IdleSecurityGroupIds=$IDLE_SG_IDS"
           aws cloudformation deploy \
             --template-file infrastructure/scheduler.yaml \
             --stack-name blog-gen-scheduler \

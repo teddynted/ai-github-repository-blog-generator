@@ -52,8 +52,8 @@ func TestGenerateBuildsAnthropicBodyAndReturnsText(t *testing.T) {
 	if req.AnthropicVersion != anthropicVersion {
 		t.Errorf("anthropic_version = %q", req.AnthropicVersion)
 	}
-	if req.MaxTokens != 4096 {
-		t.Errorf("default max_tokens = %d, want 4096", req.MaxTokens)
+	if req.MaxTokens != 8192 {
+		t.Errorf("default max_tokens = %d, want 8192", req.MaxTokens)
 	}
 	if req.System != "You are the lead engineer." {
 		t.Errorf("system = %q", req.System)
@@ -98,7 +98,7 @@ func TestConfigDefaults(t *testing.T) {
 	if c.modelID != "custom.model:0" {
 		t.Errorf("model id = %q", c.modelID)
 	}
-	if c.maxTokens != 4096 {
+	if c.maxTokens != 8192 {
 		t.Errorf("maxTokens default = %d", c.maxTokens)
 	}
 }

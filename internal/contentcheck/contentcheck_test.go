@@ -13,7 +13,7 @@ tags: [aws, go]
 
 # Designing an Event-Driven Platform on AWS
 
-## Introduction
+## Why This Matters
 
 The system decouples release events from generation using a queue.
 

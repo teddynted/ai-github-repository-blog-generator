@@ -21,7 +21,7 @@ func blogContext() *rc.ReleaseContext {
 
 func TestBlogAssemblesFrontMatterAndBody(t *testing.T) {
 	fm := &fakeModel{reply: func(string) (string, error) {
-		return "## Introduction\n\nThis release matters.\n\n## Conclusion\n\nThat's it.", nil
+		return "## Why This Matters\n\nThe platform decouples ingestion from processing.\n\n## Conclusion\n\nThe pattern holds.", nil
 	}}
 	g := &Generator{Model: fm}
 	post, err := g.Blog(context.Background(), blogContext())
@@ -42,7 +42,7 @@ func TestBlogAssemblesFrontMatterAndBody(t *testing.T) {
 	md := post.Markdown
 	for _, want := range []string{
 		"---\n", "title: \"Inside widget v0.2.0\"", "description: ", "tags: [",
-		"# Inside widget v0.2.0", "## Introduction", "This release matters.",
+		"# Inside widget v0.2.0", "## Why This Matters", "The platform decouples ingestion from processing.",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown missing %q", want)
@@ -54,7 +54,7 @@ func TestBlogAssemblesFrontMatterAndBody(t *testing.T) {
 }
 
 func TestBlogEmbedsMermaidDiagrams(t *testing.T) {
-	fm := &fakeModel{reply: func(string) (string, error) { return "## Introduction\n\nProse.", nil }}
+	fm := &fakeModel{reply: func(string) (string, error) { return "## Why This Matters\n\nProse.", nil }}
 	post, err := (&Generator{Model: fm}).Blog(context.Background(), blogContext())
 	if err != nil {
 		t.Fatal(err)
@@ -91,10 +91,10 @@ func TestBlogRetriesUntilValid(t *testing.T) {
 		articleAttempts++
 		if articleAttempts == 1 {
 			// Invalid: a generic technology lede + no Conclusion.
-			return "## Introduction\n\nEvent-driven architectures decouple producers from consumers.", nil
+			return "## Why This Matters\n\nEvent-driven architectures decouple producers from consumers.", nil
 		}
 		// Valid: grounded, complete.
-		return "## Introduction\n\nThe repository routes events through a durable queue.\n\n## Conclusion\n\nThe pattern holds.", nil
+		return "## Why This Matters\n\nThe repository routes events through a durable queue.\n\n## Conclusion\n\nThe pattern holds.", nil
 	}}
 
 	post, err := (&Generator{Model: fm, MaxBlogAttempts: 3}).Blog(context.Background(), blogContext())
@@ -117,13 +117,13 @@ func TestBlogFallsBackToBestDraft(t *testing.T) {
 		if strings.Contains(p, "produce a grounded PLAN") {
 			return "TITLE: X\nTHEME: y", nil
 		}
-		return "## Introduction\n\nThe repository decouples ingestion from processing.", nil
+		return "## Why This Matters\n\nThe repository decouples ingestion from processing.", nil
 	}}
 	post, err := (&Generator{Model: fm, MaxBlogAttempts: 3}).Blog(context.Background(), blogContext())
 	if err != nil {
 		t.Fatalf("Blog: %v", err)
 	}
-	if post.Markdown == "" || !strings.Contains(post.Markdown, "## Introduction") {
+	if post.Markdown == "" || !strings.Contains(post.Markdown, "## Why This Matters") {
 		t.Error("expected a best-effort draft even when all attempts fail validation")
 	}
 }
@@ -151,9 +151,9 @@ func TestBlogPlanThenWritePrompts(t *testing.T) {
 
 	article := fm.prompts[1]
 	for _, want := range []string{
-		"Introduction", "Engineering Problem", "Solution Overview", "Engineering Decisions",
-		"Tradeoffs", "Applying the Pattern", "What's Next", "Conclusion",
-		"Never fabricate", "Omit unknowns silently", "1,500–2,500 words",
+		"Why This Matters", "The Engineering Constraint", "The Solution", "Why These Decisions Were Made",
+		"Tradeoffs", "What This Enables Next", "Conclusion",
+		"Never fabricate", "Omit unknowns silently", "1,400–1,900 words",
 		"Do NOT write YAML front matter",
 		"TIMELESS engineering article", "This release delivers", // timeless framing + forbidden phrase
 		"acme/widget", "add release context builder", // grounding

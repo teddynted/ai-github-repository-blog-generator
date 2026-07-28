@@ -82,7 +82,11 @@ func New(api invoker, cfg Config) *Client {
 		c.modelID = DefaultModelID
 	}
 	if c.maxTokens <= 0 {
-		c.maxTokens = 4096
+		// 8192 leaves ample headroom for a full ~2,500-word article plus its
+		// Conclusion; 4096 truncated long articles mid-section (the model never
+		// reached the Conclusion, failing validation). max_tokens is an upper
+		// bound — only tokens actually generated are billed.
+		c.maxTokens = 8192
 	}
 	return c
 }

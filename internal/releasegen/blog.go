@@ -179,7 +179,7 @@ func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 	b.WriteString("STAGE 1 — Repository analysis: the repository's purpose and maturity, the current and previous milestones, the release scope, and what actually changed (files, packages; documentation vs code vs infrastructure vs AI/AWS; the code-vs-documentation ratio).\n")
 	b.WriteString("STAGE 2 — Engineering analysis: for each important change, what problem it solves, why it was needed, what it enables next, its trade-offs, the AWS services involved, and its effect on scalability, maintainability, cost, and reliability. Keep a point ONLY if the context supports it.\n")
 	b.WriteString("STAGE 3 — Architecture analysis: read the architecture graph in the context and identify the ACTUAL components and how they connect (name the specific routers, queues, providers, and services it lists) — never abstract the system to \"two components\". Then plan AT MOST TWO diagrams designed to explain the article's engineering topic, built from those real components, not copied verbatim from the repository. Plan no diagram when one would not aid understanding.\n")
-	b.WriteString("STAGE 4 — Article plan: the single main engineering theme (the problem solved — not \"four commits\"), the supporting themes, the key AWS services, the target audience, SEO keywords, and concrete reader takeaways. Also decide whether the article's core is a genuine choice between TWO concrete alternatives the context supports (e.g. self-hosted vs managed, primary vs fallback, boot-time vs pre-baked); if so, plan a single comparison table, otherwise plan none. And plan the Introduction to open on the architectural problem, not the solution.\n\n")
+	b.WriteString("STAGE 4 — Article plan: the single main engineering theme (the problem solved — not \"four commits\"), the supporting themes, the key AWS services, the target audience, SEO keywords, and concrete reader takeaways. Also decide whether the article's core is a genuine choice between TWO concrete alternatives the context supports (e.g. self-hosted vs managed, primary vs fallback, boot-time vs pre-baked); if so, plan a single comparison table, otherwise plan none. And plan 'Why This Matters' to open on the operational problem, not the solution.\n\n")
 	b.WriteString("OUTPUT a concise, structured plan (not prose, not the article). Write each field on its own line in the exact form \"FIELD: value\" as plain text — do NOT use Markdown headings (no \"#\", no \"##\") for these fields. The FIRST line MUST begin literally with \"TITLE:\".\n")
 	b.WriteString("- TITLE: one timeless, topic-based article title about the engineering — in the style of \"Designing an Event-Driven AI Agent Platform on AWS\". It names the system and the engineering problem, NOT the release. No version number, no \"release\"/\"update\"/\"changelog\", no date.\n")
 	b.WriteString("- DESCRIPTION: one timeless meta description (roughly 150–160 characters) summarising the article's engineering topic for search results. No version number, no \"release\"/\"update\", no date.\n")
@@ -196,20 +196,37 @@ func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 
 // articlePrompt is Stage 5: write the article from the plan, grounded strictly
 // in the context. Front matter, the H1, and diagrams are added deterministically
-// afterwards, so the model produces only the body from "## Introduction" onward.
+// afterwards, so the model produces only the body from "## Why This Matters" onward.
 func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) string {
 	ground := safeTruncate(contextBlock(rctx), g.promptBudget())
 	var b strings.Builder
 	b.WriteString("You are a Staff Software Engineer / Senior AWS Engineer writing a publication-quality engineering article that DOCUMENTS THIS repository's design and engineering decisions — the register of the AWS Builders' Library, Stripe Engineering, the Cloudflare Blog, and the Netflix and Uber engineering blogs. THIS repository is the sole source of truth; the article must be impossible to write without access to it. It is NOT marketing copy, NOT a changelog, and NOT a generic AWS/Go/event-driven tutorial. Write in the third person about the system; teach the reader about THIS repository's engineering; do not praise the project.\n\n")
-	b.WriteString("Write roughly 1,500–2,500 words in GitHub-flavoured Markdown, executing the PLAN below. The working title is: ")
+	b.WriteString("Write a CONCISE, scannable, publication-quality article of 1,400–1,900 words (hard maximum 2,200) in GitHub-flavoured Markdown, executing the PLAN below. The working title is: ")
 	b.WriteString(title)
-	b.WriteString("\n\nUse these second-level (##) sections, in order, omitting any the PLAN marked OMIT:\n")
+	b.WriteString("\n\nUse EXACTLY these second-level (##) sections, in this order (omit only a section the PLAN marks OMIT):\n")
 	for _, s := range blogSections {
 		b.WriteString("- ")
 		b.WriteString(s)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nThis is a TIMELESS engineering article. The GitHub release is only the TRIGGER that prompted it — it is NOT the topic. Write about the system's design so the article is still valuable to an engineer who reads it years from now and never saw the release. Every paragraph should answer at least one of: what problem existed, why was it difficult, why does this matter, how does it work, why was this approach chosen and not another, what are the trade-offs (cost, security, performance, operational, scalability, maintainability, and failure modes), and how would another engineer build something similar.\n\n")
+	b.WriteString("\nThis is a TIMELESS engineering article. The GitHub release is only the TRIGGER that prompted it — it is NOT the topic. Write about the system's design so the article is still valuable to an engineer who reads it years from now and never saw the release. Every paragraph should answer at least one of: what problem existed, why was it difficult, why does this matter, how does it work, why was this approach chosen and not another, what are the trade-offs, and how would another engineer build something similar.\n\n")
+	b.WriteString("SECTION-BY-SECTION SHAPE:\n")
+	b.WriteString("- 'Why This Matters' (80–120 words): state the operational problem — single-provider or single-backend lock-in, incompatible integrations, coupling, or the inability to change safely. Do NOT open with generic lines like \"In today's cloud-native world\" or \"As AI adoption grows\".\n")
+	b.WriteString("- 'The Existing Architecture': one short paragraph summarising the current flow (an arrow chain is welcome, e.g. `A → B → C`), then what worked and the limitation that appeared.\n")
+	b.WriteString("- 'The Engineering Constraint': a concise bullet list of the hard constraints (100–180 words total).\n")
+	b.WriteString("- 'The Solution' (under 200 words): the core mechanism, including any environment variable or configuration that drives it and when it is resolved.\n")
+	b.WriteString("- 'Architecture Summary': a compact Markdown table with the columns 'Concern | Implementation', placed BEFORE the diagram.\n")
+	b.WriteString("- 'Architecture Diagram': ONE Mermaid diagram built from the real components, followed by ONE short paragraph describing the request flow.\n")
+	b.WriteString("- 'Key Implementation Details': 2–4 short ### subsections, each 60–120 words, each covering one concrete implementation aspect — name the real identifiers, environment variables, IAM actions, SDKs, and log fields the context supports.\n")
+	b.WriteString("- 'Why These Decisions Were Made': 2–4 short ### subsections, each naming one decision and the tradeoff behind it (the alternative rejected, and why).\n")
+	b.WriteString("- 'Repository Impact': the SPECIFIC changes this work made — components added, configuration/IAM updated, docs/diagram updated. Avoid vague phrases like \"the platform was improved\" or \"significant updates were made\".\n")
+	b.WriteString("- 'Benefits' and 'Tradeoffs': bullet points only. Keep 'Tradeoffs' to about three specific bullets, with no long explanatory paragraphs.\n")
+	b.WriteString("- 'What This Enables Next' (under 120 words): what the design now makes possible; NOT a roadmap or list of future milestones.\n")
+	b.WriteString("- 'Conclusion' (120–180 words): name the reusable engineering pattern the article demonstrates, and end with a practical takeaway for engineers building similar systems.\n\n")
+	b.WriteString("PARAGRAPH & SENTENCE RULES:\n")
+	b.WriteString("- Maximum 4 sentences AND 100 words per paragraph; prefer 2–3 sentence paragraphs.\n")
+	b.WriteString("- Use active voice. Keep sentences under 30 words; split long comma-chained clauses into separate statements.\n")
+	b.WriteString("- De-duplicate: explain each cross-cutting idea (loose coupling, IAM-enforced access, structured logging, factory extensibility) ONCE in detail, then reference it briefly — never re-explain it in a later section.\n\n")
 	b.WriteString("HARD RULES:\n")
 	b.WriteString("- Do NOT revolve the article around a release. Never write \"In this release\", \"This release delivers\", \"This update\", \"the latest version\", \"Version vX.Y.Z introduces\", or similar. Do NOT put version numbers or dates in the body — the version lives only in the front-matter metadata, which is added separately.\n")
 	b.WriteString("- Ground EVERY claim in the PLAN and the Release Context. Never fabricate facts, motivations, architecture, implementation, AWS services, or design decisions.\n")
@@ -217,23 +234,27 @@ func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) s
 	b.WriteString("- Explain THIS repository's specific engineering decisions where the evidence supports them (why a component exists, why local and managed inference are combined, why a queue decouples the pipeline, why the infrastructure is defined as code). Where the context does not state a motivation, describe what exists and omit the why. Every major section must answer \"what engineering decision does this repository implement?\", not \"how does AWS work?\".\n")
 	b.WriteString("- Do NOT teach AWS. The audience already understands Lambda, EventBridge, SQS, DynamoDB, IAM, CloudFormation, Go, and GitHub Actions — do not explain how these services work unless this repository uses them in an unusual way. Explain WHY this repository uses them and how it wires them together.\n")
 	b.WriteString("- Use the repository's OWN terminology verbatim (its milestones and the routing, provider-abstraction, orchestration, content-generator, and Release Context concepts exactly as they appear in the context). Do not rename repository concepts to generic alternatives.\n")
+	b.WriteString("- Be terminology-CONSISTENT: pick ONE name for each concept and use it throughout — do not alternate between a term and a synonym for the same thing. Reproduce Go identifiers, environment variables, state names, and boolean signal names EXACTLY as the context spells them (case and underscores included), and refer to each by that same token every time.\n")
 	b.WriteString("- Describe the architecture using the ACTUAL components and relationships from the architecture graph in the context — name the specific routers, queues, providers, and services and how they connect. Do NOT reduce the system to \"two components\" or generic \"Component A / Component B\"; any diagram you write must use those real component names.\n")
-	b.WriteString("- Open the Introduction with the architectural PROBLEM or tension this repository confronts (the coupling, vendor lock-in, boot-time cost, availability, or portability pressure) BEFORE any solution or implementation detail. Hook a senior engineer with the engineering problem in the first paragraph; introduce the repository only once the problem is framed.\n")
+	b.WriteString("- When the system separates distinct planes or paths (e.g. a control plane that schedules and dispatches versus a data plane that carries the work, or a trusted versus an untrusted path), name each plane explicitly and keep them distinct in both prose and diagrams — never blur one into the other. Only draw a plane distinction the context actually supports.\n")
+	b.WriteString("- Lead with the problem, not the solution: 'Why This Matters' must frame the operational pressure (coupling, vendor lock-in, boot-time cost, availability, or portability) before any mechanism or implementation detail appears anywhere in the article.\n")
 	b.WriteString("- In PROSE, always name components and services in their full, readable form (e.g. \"Amazon EventBridge\", \"AWS Lambda\", \"Amazon CloudWatch\", \"Amazon EFS\", \"Amazon S3\", and each component's real name). NEVER use the architecture graph's short node identifiers (such as eb, lam, cw, efs, s3, gh, iam) inside sentences — those abbreviations may appear ONLY inside Mermaid diagram code.\n")
-	b.WriteString("- When the engineering centres on a genuine choice between TWO concrete alternatives that the context supports (e.g. a self-hosted vs a managed provider, a primary vs a fallback backend, boot-time vs pre-baked provisioning), include exactly ONE compact Markdown comparison table contrasting them across the dimensions that matter (role, hosting, cost model, operational burden, when each applies). Present both sides objectively and recommend neither. Add NO table when the context contains no real two-way contrast.\n")
+	b.WriteString("- The 'Architecture Summary' table (Concern | Implementation) is always required. SEPARATELY, when the engineering centres on a genuine choice between TWO concrete alternatives the context supports (e.g. self-hosted vs managed provider, primary vs fallback backend, boot-time vs pre-baked provisioning), you MAY add one further compact comparison table contrasting them (role, hosting, cost model, operational burden, when each applies), presenting both sides objectively. Add no comparison table when there is no real two-way contrast.\n")
 	b.WriteString("- In Engineering Decisions, explain WHY each choice was made over the alternative a competent engineer would otherwise reach for — the reasoning, not just the mechanism. Where the context gives no rationale, state the decision and its observable consequence and omit invented motivation.\n")
 	b.WriteString("- Make every trade-off SPECIFIC to this system: name the component or decision and exactly what it costs — what is given up, what surface it adds, what must now be maintained. Never settle for generic statements like \"more components add complexity\"; say which components, and why that added surface is the price of which benefit.\n")
 	b.WriteString("- Never state raw counts — of files, directories, packages, diagrams, components, or services — EVEN when the context provides them; counts go stale. Describe the role or relationship instead. FORBIDDEN verbatim: \"organizes 65 files across four top-level directories\", \"employs 15 architecture diagrams\", \"has four top-level directories\". WRITE INSTEAD: \"separates infrastructure definitions from business logic and deployment entry points\".\n")
 	b.WriteString("- Do NOT teach or describe technologies in the abstract ANYWHERE in the article — not in the Introduction, not in the Background, not in any section. FORBIDDEN sentence patterns: \"Event-driven architectures decouple…\", \"AWS provides services — Lambda…\", \"Go offers…\", \"Serverless is popular…\". Every section must be about THIS repository's problem, context, and decisions — never a primer on AWS, Go, or event-driven architecture. Open each section with the repository's constraint or decision, never a generic industry statement.\n")
 	b.WriteString("- Never use \"likely\", \"probably\", \"presumably\", \"appears to\", \"it seems\", \"the team wanted\", or \"this was created because\" unless the context states it. Omit unknowns silently.\n")
 	b.WriteString("- Do NOT narrate the changelog or reference commits unless strictly necessary. Explain engineering, not a commit list.\n")
-	b.WriteString("- No AI filler, marketing language, or empty adjectives. Forbidden: \"exciting\", \"powerful\", \"revolutionary\", \"game-changing\", \"innovative\", \"next-generation\", \"cutting-edge\", \"state-of-the-art\", \"world-class\", \"future-proof\", \"marks a milestone\", \"showcases\", \"demonstrates commitment\". Concise, factual language only.\n")
+	b.WriteString("- No AI filler, marketing language, or empty adjectives. Forbidden: \"exciting\", \"powerful\", \"powerful solution\", \"revolutionary\", \"game-changing\", \"innovative\", \"next-generation\", \"cutting-edge\", \"state-of-the-art\", \"world-class\", \"future-proof\", \"seamlessly\", \"leverage the power of\", \"robust and scalable\", \"marks a milestone\", \"showcases\", \"demonstrates commitment\". Concise, factual language only.\n")
 	b.WriteString("- Vary sentence and paragraph structure. Do NOT use formulaic scaffolding such as \"The immediate benefit...\", \"The second benefit...\", or \"The obvious trade-off...\". Write as an experienced engineer documenting a real system.\n")
 	b.WriteString("- Describe only architecture that exists in the context; never present planned work as implemented.\n")
+	b.WriteString("- Never introduce an orchestration, workflow, scheduling, queue, or container component the context does not show (e.g. Kubernetes, Amazon ECS, AWS Step Functions, Amazon SQS). Describe only the components the architecture graph names; do not reach for a familiar service the system does not use.\n")
+	b.WriteString("- Read for flow: each section should follow from the last, and sentences within a paragraph should connect rather than list. Prefer smooth transitions over abrupt topic jumps, while keeping paragraphs short and every claim grounded.\n")
 	b.WriteString("- Include AT MOST TWO Mermaid diagrams, only where a diagram genuinely clarifies the engineering. Design each diagram for this article's topic — never paste a diagram verbatim from the repository. Omit diagrams entirely when they would not aid understanding.\n")
-	b.WriteString("- In \"What's Next\", do NOT list roadmap items or future milestones. Explain what engineering this implementation now ENABLES: the architectural foundation it establishes and the capabilities it makes possible.\n")
-	b.WriteString("- Never truncate. Every section must contain complete, meaningful content — never stop mid-heading or leave a section empty.\n")
-	b.WriteString("- Do NOT write YAML front matter or an H1 title — those are added separately. Start at \"## Introduction\".\n")
+	b.WriteString("- In \"What This Enables Next\", do NOT list roadmap items or future milestones. Explain what engineering this implementation now ENABLES: the architectural foundation it establishes and the capabilities it makes possible.\n")
+	b.WriteString("- Never truncate. Every section must contain complete, meaningful content — never stop mid-heading or leave a section empty, and ALWAYS finish with a complete \"## Conclusion\".\n")
+	b.WriteString("- Do NOT write YAML front matter or an H1 title — those are added separately. Start at \"## Why This Matters\".\n")
 	b.WriteString("- Use fenced code blocks for commands or configuration cited from the context. Use proper Unicode punctuation; never emit mojibake.\n")
 	b.WriteString("- This article is the source that downstream generators (LinkedIn, X thread, video scripts, SEO metadata) transform. Write for engineers, not social media: clear section boundaries, consistent terminology, and each concept explained once. Do NOT add calls to action, hashtags, or engagement hooks.\n\n")
 	b.WriteString("Before returning, verify: could this article be reused for a DIFFERENT repository by only changing the name? If yes, it is too generic — rewrite it. Does every major section reference THIS repository's implementation? Does it explain repository decisions rather than teach AWS? Third-person engineering voice; no invented personal stories, motivations, or statistics; not a release announcement; every claim grounded in the Release Context; at most two topic-specific Mermaid diagrams; complete sections; valid UTF-8 with no mojibake; a Staff Engineer would recognise it as repository documentation, not AI output. If any check fails, rewrite the article before returning it.\n\n")
@@ -248,22 +269,24 @@ func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) s
 	return b.String()
 }
 
-// blogSections is the canonical long-form article structure — the sequence a
-// senior engineer would use to explain a release: what changed, why, how it
-// works, the decisions and trade-offs, and where it goes next.
+// blogSections is the canonical article structure — a concise, scannable
+// publication format: lead with why it matters, establish the prior state and
+// the constraint, present the solution, summarise and diagram the architecture,
+// then the implementation details, the reasoning, the impact, the trade-offs,
+// and the reusable pattern.
 var blogSections = []string{
-	"Introduction",
-	"Background",
-	"Engineering Problem",
-	"Solution Overview",
-	"Architecture",
-	"Implementation Details",
-	"Engineering Decisions",
-	"Repository Changes",
+	"Why This Matters",
+	"The Existing Architecture",
+	"The Engineering Constraint",
+	"The Solution",
+	"Architecture Summary",
+	"Architecture Diagram",
+	"Key Implementation Details",
+	"Why These Decisions Were Made",
+	"Repository Impact",
 	"Benefits",
 	"Tradeoffs",
-	"Applying the Pattern",
-	"What's Next",
+	"What This Enables Next",
 	"Conclusion",
 }
 
