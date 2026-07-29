@@ -254,9 +254,15 @@ func renderBand(bd band, width int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="12" fill="%s" stroke="%s" stroke-width="1"/>`,
 		margin, bd.y, width-2*margin, bd.h, fill, stroke)
+	// Use the short plane name (before any parenthetical) so the rotated gutter
+	// label fits the band height.
+	short := bd.label
+	if i := strings.Index(short, " ("); i > 0 {
+		short = short[:i]
+	}
 	lx, ly := margin+18, bd.y+bd.h/2
 	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="10" font-weight="700" letter-spacing="1" fill="#6B7A90" text-anchor="middle" transform="rotate(-90 %d %d)">%s</text>`,
-		lx, ly, lx, ly, esc(strings.ToUpper(bd.label)))
+		lx, ly, lx, ly, esc(strings.ToUpper(short)))
 	return b.String()
 }
 

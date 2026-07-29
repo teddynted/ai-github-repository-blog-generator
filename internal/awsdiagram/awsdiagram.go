@@ -127,7 +127,12 @@ func categoryFor(label string) Category {
 // a storage artifact, not compute).
 func categoryForType(typ, label string) Category {
 	t := strings.ToLower(typ)
+	l := strings.ToLower(label)
 	switch {
+	// Scheduling/eventing before serverless: "serverless (scheduler)" backed by
+	// EventBridge Scheduler is integration, not a Lambda-style serverless node.
+	case has(t, "schedul", "messaging", "integration", "queue") || has(l, "eventbridge", "scheduler", "sqs", "sns"):
+		return CatIntegration
 	case has(t, "serverless", "lambda", "function"):
 		return CatServerless
 	case has(t, "compute"):

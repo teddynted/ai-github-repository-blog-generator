@@ -269,12 +269,20 @@ func parseConnections(spec string) []rawConn {
 			continue
 		}
 		indented := len(raw) > 0 && (raw[0] == ' ' || raw[0] == '\t')
-		// Top-level "- Source → Target" bullet starts a new connection.
+		// Top-level bullet starts a new connection: either "- A → B" (arrow form,
+		// possibly with Source:/Target: labels) or "- Source: A" (fielded form).
 		if !indented && strings.HasPrefix(t, "- ") {
 			body := cleanCell(strings.TrimPrefix(t, "- "))
 			if src, tgt, arrow, ok := splitArrow(body); ok {
 				flush()
 				cur = &rawConn{source: src, target: tgt, arrow: arrow}
+				continue
+			}
+			if lb := strings.ToLower(body); strings.HasPrefix(lb, "source:") || strings.HasPrefix(lb, "from:") {
+				flush()
+				cur = &rawConn{source: stripEndpointLabel(body)}
+			} else {
+				flush() // a non-connection top-level bullet ends the current one
 			}
 			continue
 		}
@@ -292,26 +300,45 @@ func parseConnections(spec string) []rawConn {
 			cur.purpose = val
 		case strings.HasPrefix(key, "direction"):
 			cur.direction = val
+		case strings.HasPrefix(key, "target"), strings.HasPrefix(key, "to"):
+			if cur.target == "" {
+				cur.target = stripParen(val)
+			}
+		case strings.HasPrefix(key, "source"), strings.HasPrefix(key, "from"):
+			if cur.source == "" {
+				cur.source = stripParen(val)
+			}
 		}
 	}
 	flush()
 	return conns
 }
 
-// splitArrow splits "A → B" (or ->, ⇄, ↔, ⇆, <->) into endpoints, stripping any
-// trailing parenthetical qualifier from each so "Versioned Custom AMI (+ snapshot)"
-// collapses onto "Versioned Custom AMI".
+// splitArrow splits "A → B" (or ->, ⇄, ↔, ⇆, <->) into endpoints. It strips a
+// trailing parenthetical qualifier ("Versioned Custom AMI (+ snapshot)" →
+// "Versioned Custom AMI") and any leading "Source:"/"Target:" field label the
+// model prepends ("Source: Build Driver → Target: Build Artifact Bucket").
 func splitArrow(s string) (from, to, arrow string, ok bool) {
 	for _, a := range []string{"→", "⇄", "↔", "⇆", "<->", "->"} {
 		if i := strings.Index(s, a); i >= 0 {
-			from = stripParen(cleanCell(s[:i]))
-			to = stripParen(cleanCell(s[i+len(a):]))
+			from = stripParen(stripEndpointLabel(cleanCell(s[:i])))
+			to = stripParen(stripEndpointLabel(cleanCell(s[i+len(a):])))
 			if from != "" && to != "" {
 				return from, to, a, true
 			}
 		}
 	}
 	return "", "", "", false
+}
+
+// stripEndpointLabel removes a leading "Source:"/"Target:"/"From:"/"To:" label.
+func stripEndpointLabel(s string) string {
+	for _, p := range []string{"source:", "target:", "from:", "to:"} {
+		if len(s) >= len(p) && strings.EqualFold(s[:len(p)], p) {
+			return strings.TrimSpace(s[len(p):])
+		}
+	}
+	return s
 }
 
 // splitField splits "Key: value" (a sub-bullet). key is lowercased and trimmed.
