@@ -10,6 +10,7 @@ import "strings"
 func Parse(spec, title string) Diagram {
 	d := Diagram{Title: title}
 	idOf := map[string]string{}
+	seenEdge := map[string]bool{}
 	addNode := func(label string) string {
 		label = cleanCell(label)
 		if label == "" {
@@ -41,6 +42,12 @@ func Parse(spec, title string) Diagram {
 			if toID == "" || toID == fromID {
 				continue
 			}
+			// Collapse repeated connections between the same pair (several control
+			// calls Dev→EC2) into one edge so the diagram stays legible.
+			if seenEdge[fromID+"\x00"+toID] {
+				continue
+			}
+			seenEdge[fromID+"\x00"+toID] = true
 			d.Edges = append(d.Edges, Edge{
 				From:     fromID,
 				To:       toID,
