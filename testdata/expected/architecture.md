@@ -22,12 +22,9 @@ First production release of Widget. Adds an EventBridge-driven ingestion pipelin
 
 ## Affected AWS Components
 
-- **AWS Lambda** — event handling and dispatch to the orchestration layer
 - **Amazon EventBridge** — asynchronous event ingestion and routing
-- **Amazon SQS** — message queue buffering asynchronous work
 - **Amazon EC2** — on-demand compute for workloads that are not serverless
-- **AWS CloudFormation** — provisions infrastructure as code
-- **Amazon CloudWatch** — centralized logs and metrics
+- **Amazon SQS** — message queue buffering asynchronous work
 
 ---
 

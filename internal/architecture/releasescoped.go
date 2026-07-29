@@ -49,8 +49,17 @@ func ReleaseScopedMarkdown(col ArchitectureCollection, rctx *rc.ReleaseContext, 
 		fmt.Fprintf(&b, "---\n\n## What Changed in This Release\n\n%s\n\n", changed)
 	}
 
-	// --- Affected AWS Components (scoped to the release's grounded services) ---
-	if services := col.ContentIntelligence.CloudServices; len(services) > 0 {
+	blogDiagrams := extractMermaidBlocks(blog.Markdown)
+
+	// --- Affected AWS Components — scoped to the RELEASE via the blog: services in
+	// the release's own diagrams, plus services the blog discusses more than once
+	// (one-off mentions like a passing "Bedrock as fallback" are excluded). Falls
+	// back to the context's services only when the blog names none. ---
+	services := releaseServices(blog.Markdown, blogDiagrams)
+	if len(services) == 0 {
+		services = col.ContentIntelligence.CloudServices
+	}
+	if len(services) > 0 {
 		b.WriteString("---\n\n## Affected AWS Components\n\n")
 		for _, s := range services {
 			b.WriteString("- " + describeComponent(s) + "\n")
@@ -58,8 +67,15 @@ func ReleaseScopedMarkdown(col ArchitectureCollection, rctx *rc.ReleaseContext, 
 		b.WriteString("\n")
 	}
 
-	// --- Updated Architecture Flow (the grounded diagrams) ---
-	if len(col.Diagrams) > 0 {
+	// --- Updated Architecture Flow — the RELEASE's own diagrams from the blog
+	// (release-specific), not the baseline platform topology. Falls back to the
+	// grounded context diagrams only when the blog contains none. ---
+	if len(blogDiagrams) > 0 {
+		b.WriteString("---\n\n## Updated Architecture Flow\n\n")
+		for _, d := range blogDiagrams {
+			fmt.Fprintf(&b, "```mermaid\n%s\n```\n\n", strings.TrimRight(d, "\n"))
+		}
+	} else if len(col.Diagrams) > 0 {
 		b.WriteString("---\n\n## Updated Architecture Flow\n\n")
 		used := map[int]bool{}
 		flow := col.pick(used, "Data Flow Diagram", "Event-Driven Architecture", "High-Level Architecture", "Sequence Diagram")
@@ -127,6 +143,87 @@ func bulletsFrom(_ string, parts ...string) string {
 	}
 	return strings.Join(out, "\n") + "\n"
 }
+
+// extractMermaidBlocks returns the raw contents of every ```mermaid fenced block
+// in a Markdown document, in order — the release's own, GitHub-renderable diagrams.
+func extractMermaidBlocks(md string) []string {
+	var blocks []string
+	var cur []string
+	in := false
+	for _, ln := range strings.Split(md, "\n") {
+		t := strings.TrimSpace(ln)
+		switch {
+		case !in && strings.HasPrefix(t, "```mermaid"):
+			in, cur = true, nil
+		case in && strings.HasPrefix(t, "```"):
+			in = false
+			// Keep only diagrams with real content: the type declaration plus at
+			// least one statement (skip degenerate empty blocks like "flowchart TD").
+			nonBlank := 0
+			for _, c := range cur {
+				if strings.TrimSpace(c) != "" {
+					nonBlank++
+				}
+			}
+			if nonBlank >= 2 {
+				blocks = append(blocks, strings.Join(cur, "\n"))
+			}
+		case in:
+			cur = append(cur, ln)
+		}
+	}
+	return blocks
+}
+
+// releaseServices returns the catalogued AWS services that are relevant to the
+// release: those appearing in the release's own diagrams, plus those the blog
+// mentions at least twice. Whole-word matching avoids false positives (e.g. "rds"
+// inside "words"); the frequency floor drops one-off, non-focal mentions.
+func releaseServices(blogMd string, diagrams []string) []string {
+	diagLower := strings.ToLower(strings.Join(diagrams, "\n"))
+	fullLower := strings.ToLower(blogMd)
+	seen := map[string]bool{}
+	var out []string
+	for _, entry := range catalogueByKeyLen {
+		if seen[entry.info.Canonical] {
+			continue
+		}
+		if containsWholeWord(diagLower, entry.key) || countWholeWord(fullLower, entry.key) >= 2 {
+			seen[entry.info.Canonical] = true
+			out = append(out, entry.info.Canonical)
+		}
+	}
+	return out
+}
+
+// isWordChar reports whether b is part of an identifier word (letters/digits).
+func isWordChar(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
+}
+
+// countWord counts whole-word (boundary-delimited) occurrences of word in text.
+func countWholeWord(text, word string) int {
+	if word == "" {
+		return 0
+	}
+	n, idx := 0, 0
+	for {
+		i := strings.Index(text[idx:], word)
+		if i < 0 {
+			return n
+		}
+		i += idx
+		before := i == 0 || !isWordChar(text[i-1])
+		after := i+len(word) >= len(text) || !isWordChar(text[i+len(word)])
+		if before && after {
+			n++
+		}
+		idx = i + 1
+	}
+}
+
+// containsWord reports whether text contains word as a whole word.
+func containsWholeWord(text, word string) bool { return countWholeWord(text, word) > 0 }
 
 // bareRepoName strips an owner prefix from "owner/name".
 func bareRepoName(s string) string {
