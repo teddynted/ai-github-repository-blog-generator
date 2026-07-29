@@ -78,21 +78,14 @@ flowchart TD
 
 ## Operational Impact
 
-- Single-region, single public subnet; serverless front door, scheduled EC2 compute.
-- SQS absorbs bursts; the worker processes within a scheduled window.
-- SQS provides durable buffering and retries; a dead-letter queue captures poison messages.
-
----
-
-## Security Considerations
-
-IMDSv2 enforced, least-privilege IAM, secrets in AWS Secrets Manager, HMAC-verified webhooks.
+- EventBridge routes to SQS, drained by an EC2 worker.
+- _Webhook publishes to EventBridge, which buffers in SQS, drained by the EC2 worker._ The pattern generalises to event-driven workloads.
 
 ---
 
 ## Relationship to the Platform
 
-Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
+This release delivers **Shipping Widget v1.0.0**. It integrates with the existing platform architecture rather than redefining it, and affects only the components and flows described above.
 
 ---
 

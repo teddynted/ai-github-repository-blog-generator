@@ -20,16 +20,13 @@ func ReleaseScopedMarkdown(col ArchitectureCollection, rctx *rc.ReleaseContext, 
 
 	repo := bareRepoName(col.Metadata.Repository)
 	version := "current"
-	theme := ""
-	var arch rc.Architecture
 	if rctx != nil {
 		if rctx.Repository.Name != "" {
 			repo = rctx.Repository.Name
 		}
 		version = firstNonEmpty(rctx.Release.Tag, rctx.Release.Name, "current")
-		arch = rctx.Architecture
 	}
-	theme = firstNonEmpty(strings.TrimSpace(blog.Title), col.ContentIntelligence.ArchitectureStyle)
+	theme := firstNonEmpty(strings.TrimSpace(blog.Title), col.ContentIntelligence.ArchitectureStyle)
 
 	fmt.Fprintf(&b, "# Release Architecture: %s %s\n\n", repo, version)
 	b.WriteString("_Architecture impact analysis derived from the release blog_\n\n")
@@ -88,20 +85,32 @@ func ReleaseScopedMarkdown(col ArchitectureCollection, rctx *rc.ReleaseContext, 
 		}
 	}
 
-	// --- Operational Impact (grounded scalability/reliability/deployment) ---
-	if op := bulletsFrom("", firstNonEmpty(arch.DeploymentTopology), firstNonEmpty(arch.Scalability), firstNonEmpty(arch.Reliability)); op != "" {
-		fmt.Fprintf(&b, "---\n\n## Operational Impact\n\n%s\n", op)
+	// The remaining sections are derived from the release blog — NOT the context's
+	// platform-wide Architecture fields, which describe the whole repository
+	// (deployment inventory, baseline security, directory layout) and would leak
+	// non-release information into a release-scoped artifact.
+	prose := blogProse(blog.Markdown)
+
+	// --- Operational Impact — release-specific operational consequences ---
+	if op := sentencesMatching(prose, operationalKeywords, 4); len(op) > 0 {
+		b.WriteString("---\n\n## Operational Impact\n\n")
+		for _, s := range op {
+			b.WriteString("- " + s + "\n")
+		}
+		b.WriteString("\n")
 	}
 
-	// --- Security Considerations (grounded) ---
-	if s := strings.TrimSpace(arch.Security); s != "" {
-		fmt.Fprintf(&b, "---\n\n## Security Considerations\n\n%s\n\n", s)
+	// --- Security Considerations — only security the release itself touches ---
+	if sec := sentencesMatching(prose, securityKeywords, 3); len(sec) > 0 {
+		b.WriteString("---\n\n## Security Considerations\n\n")
+		for _, s := range sec {
+			b.WriteString("- " + s + "\n")
+		}
+		b.WriteString("\n")
 	}
 
-	// --- Relationship to the Platform ---
-	if rel := sanitizeOverview(strings.TrimSpace(arch.Overview)); rel != "" {
-		fmt.Fprintf(&b, "---\n\n## Relationship to the Platform\n\n%s\n\n", rel)
-	}
+	// --- Relationship to the Platform — a concise release-integration statement ---
+	fmt.Fprintf(&b, "---\n\n## Relationship to the Platform\n\n%s\n\n", relationshipStatement(theme))
 
 	// --- Generation Context ---
 	fmt.Fprintf(&b, "---\n\n## Generation Context\n\nThis document is generated from the release-specific `blog.md` artifact for **%s** and represents the architectural impact of that release rather than a permanent repository-wide architecture reference.\n", version)
@@ -130,18 +139,115 @@ func whatChanged(rctx *rc.ReleaseContext, blog releasegen.BlogPost) string {
 	return ""
 }
 
-// bulletsFrom returns a bullet list of the non-empty sentences, or "".
-func bulletsFrom(_ string, parts ...string) string {
+// operationalKeywords select release-specific operational sentences from the blog.
+var operationalKeywords = []string{
+	"startup", "latency", "boot", "provision", "scal", "deploy", "cost",
+	"interrupt", "drain", "spot", "warm", "cold start", "throughput", "faster",
+	"reduce",
+}
+
+// securityKeywords select release-specific security sentences from the blog —
+// concrete security actions, not broad terms like "permission" that also match
+// baseline platform descriptions.
+var securityKeywords = []string{
+	"credential", "secret", "least-privilege", "least privilege", "encrypt",
+	"harden", "cleanup", "machine-id", "scrub", "sanitize", "revoke",
+}
+
+// baselineNoise flags sentences that describe the broader platform topology
+// rather than the release, so they are excluded from the release-scoped sections.
+var baselineNoise = []string{"claw", "n8n", "ollama", "bedrock"}
+
+// blogProse returns the blog's plain prose: front matter, fenced code blocks,
+// headings, and table rows removed, so sentence extraction sees only sentences.
+func blogProse(md string) string {
 	var out []string
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, "- "+p)
+	inFrontMatter, inFence := false, false
+	for i, ln := range strings.Split(md, "\n") {
+		t := strings.TrimSpace(ln)
+		if i == 0 && t == "---" {
+			inFrontMatter = true
+			continue
+		}
+		if inFrontMatter {
+			if t == "---" {
+				inFrontMatter = false
+			}
+			continue
+		}
+		if strings.HasPrefix(t, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "|") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, " ")
+}
+
+// splitSentences splits prose into sentences on terminal punctuation.
+func splitSentences(text string) []string {
+	text = strings.Join(strings.Fields(text), " ")
+	var out []string
+	start := 0
+	for i := 0; i < len(text); i++ {
+		if c := text[i]; c == '.' || c == '!' || c == '?' {
+			if i+1 >= len(text) || text[i+1] == ' ' {
+				out = append(out, text[start:i+1])
+				start = i + 1
+			}
 		}
 	}
-	if len(out) == 0 {
-		return ""
+	if start < len(text) {
+		out = append(out, text[start:])
 	}
-	return strings.Join(out, "\n") + "\n"
+	return out
+}
+
+// sentencesMatching returns up to max distinct blog sentences that mention any of
+// the keywords — the grounded, release-specific statements for a section.
+func sentencesMatching(prose string, keywords []string, max int) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, s := range splitSentences(prose) {
+		s = strings.TrimSpace(strings.TrimLeft(s, "-*> "))
+		if len(s) < 25 || len(s) > 300 || seen[s] {
+			continue
+		}
+		ls := strings.ToLower(s)
+		// Skip sentences that describe the broader platform (baseline components not
+		// introduced by this release) — they are not release-specific impact.
+		if containsAny(ls, baselineNoise...) {
+			continue
+		}
+		for _, k := range keywords {
+			if strings.Contains(ls, k) {
+				seen[s] = true
+				out = append(out, s)
+				break
+			}
+		}
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
+}
+
+// relationshipStatement is a concise release-integration sentence built from the
+// release theme — never the platform-wide overview or repository directory layout.
+func relationshipStatement(theme string) string {
+	short := strings.TrimSpace(theme)
+	if i := strings.Index(short, ":"); i > 0 {
+		short = strings.TrimSpace(short[:i])
+	}
+	if short == "" {
+		short = "the changes described above"
+	}
+	return "This release delivers **" + short + "**. It integrates with the existing platform " +
+		"architecture rather than redefining it, and affects only the components and flows described above."
 }
 
 // extractMermaidBlocks returns the raw contents of every ```mermaid fenced block
