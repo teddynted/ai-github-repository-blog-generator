@@ -1,20 +1,52 @@
-# Architecture Diagrams: acme/widget v1.0.0
+# Release Architecture: widget v1.0.0
 
-_4 diagrams · Event-driven serverless architecture · confidence 92/100_
+_Architecture impact analysis derived from the release blog_
 
-## Platform Overview
-
-Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
+> **Source:** This document is generated from the release-specific `blog.md` artifact and captures the architectural impact of **v1.0.0**.
 
 ---
 
-## widget v1.0.0 — High-Level AWS Architecture
+## Release Context
 
-_Services grouped by category_
+- **Repository:** widget
+- **Release:** v1.0.0
+- **Primary Engineering Theme:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-**Type:** High-Level Architecture · **Complexity:** low · **Confidence:** 100/100
+---
 
-## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+## What Changed in This Release
+
+First production release of Widget. Adds an EventBridge-driven ingestion pipeline, an SQS durable buffer, a hardened EC2 worker, and CloudFormation infrastructure. Breaking: the legacy polling endpoint is removed.
+
+---
+
+## Affected AWS Components
+
+- **Amazon EventBridge** — asynchronous event ingestion and routing
+- **Amazon EC2** — on-demand compute for workloads that are not serverless
+- **Amazon SQS** — message queue buffering asynchronous work
+
+---
+
+## Updated Architecture Flow
+
+**widget v1.0.0 — Event-Driven Flow**
+
+```mermaid
+flowchart LR
+    Webhook["Webhook"]
+    Amazon_EventBridge["Amazon EventBridge"]
+    Amazon_SQS["Amazon SQS"]
+    Amazon_EC2["Amazon EC2"]
+    Webhook --> Amazon_EventBridge
+    Amazon_EventBridge --> Amazon_SQS
+    Amazon_SQS --> Amazon_EC2
+    style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
+    style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
+    style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
+```
+
+**widget v1.0.0 — High-Level AWS Architecture**
 
 ```mermaid
 flowchart TD
@@ -42,246 +74,21 @@ flowchart TD
     style Amazon_CloudWatch fill:#E7157B,stroke:#232F3E,color:#fff
 ```
 
-**AWS services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
+---
 
-**Grounded in:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
+## Operational Impact
 
-<details><summary>Graphviz (DOT)</summary>
-
-```dot
-digraph Architecture {
-  rankdir=TB;
-  graph [fontname="Helvetica", splines=true, nodesep=0.5, ranksep=0.6];
-  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#EEF1F5", color="#232F3E"];
-  edge [fontname="Helvetica", color="#546174"];
-
-  subgraph cluster_0 {
-    label="Compute";
-    style="rounded";
-    color="#B7C0CD";
-    Amazon_EC2 [label="Amazon EC2", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-  }
-  subgraph cluster_1 {
-    label="Serverless";
-    style="rounded";
-    color="#B7C0CD";
-    AWS_Lambda [label="AWS Lambda", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-  }
-  subgraph cluster_2 {
-    label="Integration";
-    style="rounded";
-    color="#B7C0CD";
-    Amazon_EventBridge [label="Amazon EventBridge", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-    AWS_CloudFormation [label="AWS CloudFormation", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  }
-  subgraph cluster_3 {
-    label="Messaging";
-    style="rounded";
-    color="#B7C0CD";
-    Amazon_SQS [label="Amazon SQS", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  }
-  subgraph cluster_4 {
-    label="Observability";
-    style="rounded";
-    color="#B7C0CD";
-    Amazon_CloudWatch [label="Amazon CloudWatch", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  }
-
-}
-```
-
-</details>
-
-**PNG export:** 1920x1080 (16:9), 144 DPI, transparent background
+- EventBridge routes to SQS, drained by an EC2 worker.
+- _Webhook publishes to EventBridge, which buffers in SQS, drained by the EC2 worker._ The pattern generalises to event-driven workloads.
 
 ---
 
-## widget v1.0.0 — Event-Driven Flow
+## Relationship to the Platform
 
-_Grounded in the release's described flows_
-
-**Type:** Event-Driven Architecture · **Complexity:** low · **Confidence:** 90/100
-
-## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-```mermaid
-flowchart LR
-    Webhook["Webhook"]
-    Amazon_EventBridge["Amazon EventBridge"]
-    Amazon_SQS["Amazon SQS"]
-    Amazon_EC2["Amazon EC2"]
-    Webhook --> Amazon_EventBridge
-    Amazon_EventBridge --> Amazon_SQS
-    Amazon_SQS --> Amazon_EC2
-    style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
-```
-
-**AWS services:** Amazon EventBridge, Amazon SQS, Amazon EC2
-
-**Grounded in:** webhook → EventBridge → SQS → EC2 worker
-
-<details><summary>Graphviz (DOT)</summary>
-
-```dot
-digraph Architecture {
-  rankdir=LR;
-  graph [fontname="Helvetica", splines=true, nodesep=0.5, ranksep=0.6];
-  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#EEF1F5", color="#232F3E"];
-  edge [fontname="Helvetica", color="#546174"];
-
-  Webhook [label="Webhook", fillcolor="#EEF1F5", fontcolor="#232F3E"];
-  Amazon_EventBridge [label="Amazon EventBridge", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_SQS [label="Amazon SQS", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_EC2 [label="Amazon EC2", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-
-  Webhook -> Amazon_EventBridge;
-  Amazon_EventBridge -> Amazon_SQS;
-  Amazon_SQS -> Amazon_EC2;
-}
-```
-
-</details>
-
-**PNG export:** 1920x1080 (16:9), 144 DPI, transparent background
+This release delivers **Shipping Widget v1.0.0**. It integrates with the existing platform architecture rather than redefining it, and affects only the components and flows described above.
 
 ---
 
-## widget v1.0.0 — Request Sequence
+## Generation Context
 
-**Type:** Sequence Diagram · **Complexity:** low · **Confidence:** 90/100
-
-## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-```mermaid
-sequenceDiagram
-    participant Webhook as Webhook
-    participant Amazon_EventBridge as Amazon EventBridge
-    participant Amazon_SQS as Amazon SQS
-    participant Amazon_EC2 as Amazon EC2
-    Webhook->>Amazon_EventBridge: sends to
-    Amazon_EventBridge->>Amazon_SQS: sends to
-    Amazon_SQS->>Amazon_EC2: sends to
-```
-
-**AWS services:** Amazon EventBridge, Amazon SQS, Amazon EC2
-
-**Grounded in:** webhook → EventBridge → SQS → EC2 worker
-
-<details><summary>Graphviz (DOT)</summary>
-
-```dot
-digraph Architecture {
-  rankdir=LR;
-  graph [fontname="Helvetica", splines=true, nodesep=0.5, ranksep=0.6];
-  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#EEF1F5", color="#232F3E"];
-  edge [fontname="Helvetica", color="#546174"];
-
-  Webhook [label="Webhook", fillcolor="#EEF1F5", fontcolor="#232F3E"];
-  Amazon_EventBridge [label="Amazon EventBridge", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_SQS [label="Amazon SQS", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_EC2 [label="Amazon EC2", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-
-  Webhook -> Amazon_EventBridge;
-  Amazon_EventBridge -> Amazon_SQS;
-  Amazon_SQS -> Amazon_EC2;
-}
-```
-
-</details>
-
-**PNG export:** 1920x1080 (16:9), 144 DPI, transparent background
-
----
-
-## widget v1.0.0 — CI/CD & Provisioning
-
-_From release to provisioned infrastructure_
-
-**Type:** CI/CD Pipeline · **Complexity:** medium · **Confidence:** 91/100
-
-## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-```mermaid
-flowchart LR
-    github["GitHub Release"]
-    workflow["CI/CD Workflow"]
-    cloudformation["AWS CloudFormation"]
-    AWS_Lambda["AWS Lambda"]
-    Amazon_EventBridge["Amazon EventBridge"]
-    Amazon_SQS["Amazon SQS"]
-    Amazon_EC2["Amazon EC2"]
-    AWS_CloudFormation["AWS CloudFormation"]
-    Amazon_CloudWatch["Amazon CloudWatch"]
-    github -->|triggers| workflow
-    workflow -->|deploys| cloudformation
-    cloudformation -->|provisions| AWS_Lambda
-    cloudformation -->|provisions| Amazon_EventBridge
-    cloudformation -->|provisions| Amazon_SQS
-    cloudformation -->|provisions| Amazon_EC2
-    cloudformation -->|provisions| AWS_CloudFormation
-    cloudformation -->|provisions| Amazon_CloudWatch
-    style cloudformation fill:#E7157B,stroke:#232F3E,color:#fff
-    style AWS_Lambda fill:#ED7100,stroke:#232F3E,color:#fff
-    style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
-    style AWS_CloudFormation fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_CloudWatch fill:#E7157B,stroke:#232F3E,color:#fff
-```
-
-**AWS services:** AWS CloudFormation, AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, Amazon CloudWatch
-
-**Grounded in:** infrastructure/pipeline.yaml, AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
-
-<details><summary>Graphviz (DOT)</summary>
-
-```dot
-digraph Architecture {
-  rankdir=LR;
-  graph [fontname="Helvetica", splines=true, nodesep=0.5, ranksep=0.6];
-  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#EEF1F5", color="#232F3E"];
-  edge [fontname="Helvetica", color="#546174"];
-
-  github [label="GitHub Release", fillcolor="#EEF1F5", fontcolor="#232F3E"];
-  workflow [label="CI/CD Workflow", fillcolor="#EEF1F5", fontcolor="#232F3E"];
-  cloudformation [label="AWS CloudFormation", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  AWS_Lambda [label="AWS Lambda", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-  Amazon_EventBridge [label="Amazon EventBridge", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_SQS [label="Amazon SQS", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_EC2 [label="Amazon EC2", fillcolor="#ED7100", fontcolor="#FFFFFF"];
-  AWS_CloudFormation [label="AWS CloudFormation", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-  Amazon_CloudWatch [label="Amazon CloudWatch", fillcolor="#E7157B", fontcolor="#FFFFFF"];
-
-  github -> workflow [label="triggers"];
-  workflow -> cloudformation [label="deploys"];
-  cloudformation -> AWS_Lambda [label="provisions"];
-  cloudformation -> Amazon_EventBridge [label="provisions"];
-  cloudformation -> Amazon_SQS [label="provisions"];
-  cloudformation -> Amazon_EC2 [label="provisions"];
-  cloudformation -> AWS_CloudFormation [label="provisions"];
-  cloudformation -> Amazon_CloudWatch [label="provisions"];
-}
-```
-
-</details>
-
-**PNG export:** 1920x1080 (16:9), 144 DPI, transparent background
-
----
-
-## Architecture Intelligence
-
-- **Style:** Event-driven serverless · **Deployment:** Single-region, single public subnet; serverless front door, scheduled EC2 compute.
-- **Infrastructure complexity:** medium
-- **Primary workflow:** Webhook → Amazon EventBridge → Amazon SQS → Amazon EC2
-- **Operational model:** Infrastructure as Code on AWS
-- **Cloud services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
-- **Compute:** Amazon EC2
-- **Serverless:** AWS Lambda
-- **Messaging:** Amazon SQS
-- **Integration:** Amazon EventBridge, AWS CloudFormation
-- **Observability:** Amazon CloudWatch
-- **Estimated reading time:** 4 min · **Diagram confidence:** 92/100
-
+This document is generated from the release-specific `blog.md` artifact for **v1.0.0** and represents the architectural impact of that release rather than a permanent repository-wide architecture reference.

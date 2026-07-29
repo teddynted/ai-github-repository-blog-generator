@@ -125,29 +125,65 @@ func planIntelligence(pkg ReleasePackage, a analysis, diagrams []Diagram) Intell
 	}
 }
 
+// architectureStyle derives the platform classification from repository EVIDENCE,
+// never a fixed template. Each qualifier is only used when it is grounded:
+// "Event-driven" only with event/messaging evidence (a.EventDriven), "hybrid AI"
+// only when both local and cloud inference are detected, and the AI/tooling/
+// automation shape from the services and structure actually present.
 func architectureStyle(a analysis) string {
-	base := baseArchitectureStyle(a)
-	// Only label it a hybrid AI platform when both local and cloud inference are
-	// grounded in the context — never for a plain infrastructure repo.
-	if a.Inference.hybrid() {
-		return base + " hybrid AI platform"
-	}
-	return base
-}
+	hybrid := a.Inference.hybrid()
+	hasAI := hybrid || len(a.Inference.Cloud) > 0 || len(a.Inference.Local) > 0 || len(a.categoryServices("AI/ML")) > 0
 
-func baseArchitectureStyle(a analysis) string {
-	hasServerless := len(a.categoryServices("Serverless")) > 0
-	hasMessaging := len(a.categoryServices("Messaging")) > 0 || len(a.categoryServices("Integration")) > 0
+	if hasAI {
+		suffix := "AI platform"
+		if hybrid {
+			suffix = "hybrid AI platform"
+		}
+		switch {
+		case a.EventDriven:
+			return "Event-driven " + suffix
+		case a.hasService("Amazon API Gateway"):
+			return "Service-oriented " + suffix
+		case isDeveloperTooling(a):
+			return "AI-enabled developer tooling platform"
+		default:
+			return upperFirst(suffix) // "Hybrid AI platform" / "AI platform"
+		}
+	}
+	// No AI evidence — classify by infrastructure shape.
 	switch {
-	case hasServerless && hasMessaging:
-		return "Event-driven serverless"
-	case hasServerless:
-		return "Serverless"
+	case a.EventDriven:
+		return "Event-driven platform"
+	case len(a.Templates) > 0 && len(a.Services) > 0:
+		return "Cloud automation platform"
+	case len(a.categoryServices("Serverless")) > 0:
+		return "Serverless platform"
 	case len(a.categoryServices("Compute")) > 0:
-		return "Container / compute-based"
+		return "Compute-based platform"
 	default:
 		return "Application"
 	}
+}
+
+// isDeveloperTooling reports a CLI/tooling-shaped repo: command entry points with
+// little or no cloud infrastructure of its own.
+func isDeveloperTooling(a analysis) bool {
+	hasCmd := false
+	for _, d := range a.Dirs {
+		if p := strings.ToLower(d.Path); p == "cmd" || strings.HasPrefix(p, "cmd/") {
+			hasCmd = true
+			break
+		}
+	}
+	return hasCmd && len(a.Services) <= 1 && len(a.Templates) == 0
+}
+
+// upperFirst capitalises the first rune of s.
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // primaryWorkflow renders the release's main event-driven flow as a concise

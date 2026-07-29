@@ -215,7 +215,9 @@ func TestMetadataAndComponents(t *testing.T) {
 	if len(ci.CloudServices) == 0 || len(ci.ServerlessComponents) == 0 {
 		t.Errorf("components not categorized: %+v", ci)
 	}
-	if ci.ArchitectureStyle != "Event-driven serverless" {
+	// No AI inference in this sample, but event/messaging services are present →
+	// evidence-driven classification is "Event-driven platform".
+	if ci.ArchitectureStyle != "Event-driven platform" {
 		t.Errorf("architecture style = %q", ci.ArchitectureStyle)
 	}
 	// A diagram references its grounded resources.

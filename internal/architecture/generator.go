@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -74,6 +75,7 @@ func (g *Generator) Architecture(ctx context.Context, pkg ReleasePackage) (Archi
 	collection.Diagrams = diagrams
 	collection.Metadata.DiagramCount = len(diagrams)
 	collection.PlatformOverview = platformOverview(pkg, a)
+	collection.RepoDirectories = repoDirectories(a)
 	collection.ContentIntelligence = planIntelligence(pkg, a, diagrams)
 	collection.Warnings = collectWarnings(a)
 
@@ -103,6 +105,7 @@ func (g *Generator) buildDiagram(ctx context.Context, pkg ReleasePackage, spec d
 		SVG:         renderSVG(spec.Graph, spec.Title),
 		PNG:         planPNG(spec.Graph),
 		AWSServices: spec.Graph.awsServiceLabels(),
+		Nodes:       spec.Graph.nodeLabels(),
 		References:  dedupe(spec.References),
 		Metadata:    planDiagramMeta(pkg, spec, generatedAt),
 	}
@@ -141,21 +144,111 @@ func platformOverview(pkg ReleasePackage, a analysis) string {
 	if pkg.Context == nil {
 		return ""
 	}
-	overview := firstNonEmpty(
+	overview := sanitizeOverview(firstNonEmpty(
 		strings.TrimSpace(pkg.Context.Architecture.Overview),
 		strings.TrimSpace(pkg.Context.RepositoryStructure.Overview),
-	)
+	))
 	if overview == "" {
 		return ""
 	}
 	// When the platform runs hybrid inference, lead with a grounded one-liner that
 	// names the detected providers, then the context overview.
 	if a.Inference.hybrid() {
-		return "A hybrid AI platform combining local inference (" +
+		overview = "A hybrid AI platform combining local inference (" +
 			joinAndArch(a.Inference.Local) + ") with cloud inference (" +
 			joinAndArch(a.Inference.Cloud) + "). " + overview
 	}
+	// Justify the event-driven classification with the grounded evidence, so the
+	// label is never asserted without a reason.
+	if a.EventDriven {
+		overview += " " + eventDrivenJustification(a)
+	}
 	return overview
+}
+
+// eventDrivenJustification explains WHY the platform is event-driven, naming the
+// grounded eventing services when present, otherwise citing the documented
+// asynchronous workflow.
+func eventDrivenJustification(a analysis) string {
+	// Genuine eventing evidence: messaging services (SQS/SNS) plus EventBridge —
+	// NOT every Integration service (which includes IaC like CloudFormation).
+	evidence := a.categoryServices("Messaging")
+	for _, s := range a.serviceLabels() {
+		if strings.Contains(s, "EventBridge") {
+			evidence = append(evidence, s)
+		}
+	}
+	if evidence = dedupe(evidence); len(evidence) > 0 {
+		return "The platform is classified as **event-driven** because external events are ingested and routed through " +
+			joinAndArch(evidence) + " for asynchronous processing before orchestration and inference execution."
+	}
+	return "The platform is classified as **event-driven** based on its documented asynchronous, event-triggered workflow."
+}
+
+// fileCountRe matches a "of N files" clause so it can be stripped — a
+// repository-level architecture document should not embed a file count.
+var fileCountRe = regexp.MustCompile(`(?i)\s*of\s+\d+\s+files?`)
+
+// componentsCountRe matches a "built from N major components [on <services>]"
+// clause — a machine-generated count (and an awkward service list) that a
+// repository-level overview should not carry.
+var componentsCountRe = regexp.MustCompile(`(?i)\s*built from \d+ major components?(\s+on\s+[^.]*)?`)
+
+// sanitizeOverview repairs artifacts left by thin/older release contexts: the
+// "built from N major components on …" clause, an embedded file count, the empty
+// " on ." fragment, and any resulting double spaces or stray " ." so the overview
+// reads as clean prose.
+func sanitizeOverview(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = componentsCountRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, " on .", ".") // empty AWS-service list artifact
+	s = strings.ReplaceAll(s, " on ,", ",")
+	s = fileCountRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, " .", ".")
+	s = strings.ReplaceAll(s, " ,", ",")
+	s = strings.Join(strings.Fields(s), " ") // collapse whitespace
+	return strings.TrimSpace(s)
+}
+
+// knownDirResponsibilities describes well-known top-level directories by
+// convention, used when the release context has no specific (or only a generic
+// placeholder) responsibility for them.
+var knownDirResponsibilities = map[string]string{
+	".githooks":      "local Git hook automation and developer workflow enforcement",
+	".github":        "CI/CD workflows and repository automation",
+	"cmd":            "application entry points and command-line executables",
+	"docs":           "architecture and project documentation",
+	"infra":          "CloudFormation templates and infrastructure-as-code definitions",
+	"infrastructure": "CloudFormation templates and infrastructure-as-code definitions",
+	"internal":       "core application and business logic packages",
+	"lambdas":        "AWS Lambda function handlers",
+	"scripts":        "developer and automation scripts",
+	"packer":         "machine-image build definitions",
+	"pkg":            "reusable library packages",
+	"test":           "test suites and fixtures",
+	"tests":          "test suites and fixtures",
+	"api":            "API definitions and handlers",
+	"web":            "web frontend assets",
+}
+
+// repoDirectories returns the top-level directories with their responsibilities
+// for the Repository Structure View, preferring the release context's stated
+// responsibility and falling back to a by-convention description for well-known
+// directories (so entries like ".githooks/" don't read as "Project directory").
+func repoDirectories(a analysis) []DirectoryResponsibility {
+	var out []DirectoryResponsibility
+	for _, d := range topDirs(a.Dirs, 12) {
+		resp := strings.TrimSpace(d.Responsibility)
+		if resp == "" || strings.EqualFold(resp, "Project directory") || strings.EqualFold(resp, "Directory") {
+			if known, ok := knownDirResponsibilities[strings.Trim(strings.ToLower(d.Path), "/")]; ok {
+				resp = known
+			}
+		}
+		out = append(out, DirectoryResponsibility{Path: d.Path, Responsibility: resp})
+	}
+	return out
 }
 
 func collectWarnings(a analysis) []string {

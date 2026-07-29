@@ -32,6 +32,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/aicache"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/airouter"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
@@ -115,6 +116,8 @@ type options struct {
 	temperature                                                           float64
 	maxTokens                                                             int
 	dryRun, verbose, noCache, noHistory, hybrid                           bool
+	repoLevel                                                             bool
+	repo                                                                  string
 	cacheDir                                                              string
 	timeout                                                               time.Duration
 }
@@ -140,9 +143,18 @@ func generate(args []string) int {
 	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
 	fs.StringVar(&o.region, "region", envOr("AWS_REGION", "us-east-1"), "AWS region (Bedrock)")
 	fs.DurationVar(&o.timeout, "timeout", 15*time.Minute, "overall timeout")
+	fs.BoolVar(&o.repoLevel, "repo-level", false, "generate a version-independent, repository-level docs/architecture.md — from the LOCAL working tree (--repo, default) or an existing Release Context fixture (--context); the release version is ignored, never embedded. Deterministic and offline")
+	fs.StringVar(&o.repo, "repo", ".", "repository root to read for --repo-level")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+
+	// --repo-level builds its own context from the working tree and writes a single
+	// version-independent doc — it doesn't use --context or the artifact suite.
+	if o.repoLevel {
+		return repoLevelRun(o)
+	}
+
 	if o.ctxPath == "" {
 		fmt.Fprintln(os.Stderr, "error: --context is required (e.g. --context fixtures/v0.3.0.json)")
 		return 2
@@ -161,6 +173,56 @@ func generate(args []string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
 	defer cancel()
 	return execute(ctx, o, rctx)
+}
+
+// repoLevelRun writes a version-independent, repository-level docs/architecture.md.
+// Its context comes from the local working tree (default) or, when --context is
+// given, from an existing Release Context fixture — in which case the release's
+// version/tag is simply ignored by the repo-level renderer (the context itself is
+// never mutated). Deterministic, offline, no provider involved.
+func repoLevelRun(o options) int {
+	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
+	defer cancel()
+
+	var rctx *rc.ReleaseContext
+	var err error
+	if o.ctxPath != "" {
+		rctx, err = loadContext(o.ctxPath) // render a version-independent doc from a fixture
+	} else {
+		rctx, err = rc.BuildRepoLevel(ctx, o.repo, "")
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: build repo-level context: %v\n", err)
+		return 1
+	}
+	col, err := (&architecture.Generator{Logger: suiteLogger()}).Architecture(ctx, architecture.ReleasePackage{Context: rctx})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: architecture: %v\n", err)
+		return 1
+	}
+	target := repoLevelTarget(o)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if err := os.WriteFile(target, []byte(col.RepoLevelMarkdown()), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "error: write %s: %v\n", target, err)
+		return 1
+	}
+	fmt.Printf("wrote %s (%d diagrams, version-independent)\n", target, len(col.Diagrams))
+	return 0
+}
+
+// repoLevelTarget resolves the --repo-level output path: <repo>/docs/architecture.md
+// by default; an --output ending in .md is used verbatim, else treated as a directory.
+func repoLevelTarget(o options) string {
+	if o.outDir != "" && o.outDir != "output" {
+		if strings.HasSuffix(o.outDir, ".md") {
+			return o.outDir
+		}
+		return filepath.Join(o.outDir, "architecture.md")
+	}
+	return filepath.Join(o.repo, "docs", "architecture.md")
 }
 
 func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
@@ -304,6 +366,20 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 			return nil, err
 		}
 		return []artifact{{kind: "blog", ext: "md", markdown: post.Markdown}}, nil
+	}
+
+	// architecture is a release-scoped artifact derived from the blog: render it
+	// directly from the context (deterministic) — no suite run, no wasted model call.
+	if target == "architecture" {
+		col, err := (&architecture.Generator{}).Architecture(ctx, architecture.ReleasePackage{Context: rctx})
+		if err != nil {
+			return nil, err
+		}
+		var bp releasegen.BlogPost
+		if blog != nil {
+			bp = *blog
+		}
+		return []artifact{{kind: "architecture", ext: "md", markdown: architecture.ReleaseScopedMarkdown(col, rctx, bp)}}, nil
 	}
 
 	// blog is nil → the orchestrator generates it first; non-nil (--from-blog) →

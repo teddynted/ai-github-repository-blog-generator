@@ -80,6 +80,15 @@ func (g *graph) addGroup(name string, ids []string) {
 	}
 }
 
+// nodeLabels returns every node's label, in graph order (deduped).
+func (g *graph) nodeLabels() []string {
+	var out []string
+	for _, n := range g.Nodes {
+		out = append(out, n.Label)
+	}
+	return dedupe(out)
+}
+
 // awsServiceLabels returns the canonical AWS service labels among the nodes.
 func (g *graph) awsServiceLabels() []string {
 	var out []string

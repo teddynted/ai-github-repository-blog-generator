@@ -148,6 +148,17 @@ func addServiceEdges(g *graph, a analysis) {
 	}
 }
 
+// mermaidLabel returns a node's human label when the diagram defines one
+// ("GH" → "GitHub Release"), otherwise the node id.
+func mermaidLabel(m *rc.MermaidDiagram, id string) string {
+	if m.NodeLabels != nil {
+		if l := m.NodeLabels[id]; l != "" {
+			return l
+		}
+	}
+	return id
+}
+
 // resolveServiceID returns the graph node ID whose service matches the label.
 func resolveServiceID(g *graph, label string) string {
 	info, known := lookupService(label)
@@ -164,11 +175,26 @@ func resolveServiceID(g *graph, label string) string {
 // dataFlow builds a graph directly from the first parsed Mermaid diagram — its
 // real nodes and edges. This is the most faithful topology.
 func dataFlow(pkg ReleasePackage, a analysis) (diagramSpec, bool) {
+	// Choose the most service-rich diagram: among the parsed Mermaid diagrams that
+	// have edges, prefer the one whose nodes resolve to the most catalogued AWS
+	// services (so a descriptive pipeline wins over an abstract, cryptic flow).
+	// Ties keep the earliest, so single-diagram repos are unaffected.
 	var src *rc.MermaidDiagram
+	bestScore := -1
 	for i := range a.Mermaid {
-		if len(a.Mermaid[i].Nodes) > 0 {
-			src = &a.Mermaid[i]
-			break
+		m := &a.Mermaid[i]
+		if len(m.Nodes) == 0 || len(m.Edges) == 0 {
+			continue
+		}
+		score := 0
+		for _, n := range m.Nodes {
+			if _, known := lookupService(mermaidLabel(m, n)); known {
+				score++
+			}
+		}
+		if score > bestScore {
+			bestScore = score
+			src = m
 		}
 	}
 	if src == nil {
@@ -176,8 +202,10 @@ func dataFlow(pkg ReleasePackage, a analysis) (diagramSpec, bool) {
 	}
 	g := graph{Direction: "LR"}
 	for _, n := range src.Nodes {
-		info, known := lookupService(n)
-		node := gnode{ID: sanitizeID(n), Label: n}
+		// Prefer the diagram's human label ("GH" → "GitHub Release") over the id.
+		label := mermaidLabel(src, n)
+		info, known := lookupService(label)
+		node := gnode{ID: sanitizeID(n), Label: label}
 		if known {
 			node.Label = info.Canonical
 			node.Category = info.Category
@@ -296,38 +324,48 @@ func componentDiagram(pkg ReleasePackage, a analysis) (diagramSpec, bool) {
 	}, true
 }
 
-// cicd builds a grounded CI/CD pipeline: the repo's workflow deploys the
-// CloudFormation templates, which provision the AWS services.
+// cicd builds a grounded, conservative CI/CD & infrastructure-automation flow: a
+// workflow triggered by GitHub that assumes an IAM role and publishes deployment
+// artifacts, provisioning resources via CloudFormation ONLY when templates are
+// present. It never claims to provision a managed service (e.g. Amazon Bedrock)
+// that is not an actual CloudFormation resource.
 func cicd(pkg ReleasePackage, a analysis) (diagramSpec, bool) {
-	if !a.HasCICD || (len(a.Templates) == 0 && len(a.Services) == 0) {
+	if !a.HasCICD {
 		return diagramSpec{}, false
 	}
 	g := graph{Direction: "LR"}
-	gh := g.addNode(gnode{ID: "github", Label: "GitHub Release"})
+	gh := g.addNode(gnode{ID: "github", Label: "GitHub"})
 	wf := g.addNode(gnode{ID: "workflow", Label: "CI/CD Workflow"})
 	g.addEdge(gh, wf, "triggers")
 
-	deployTarget := wf
-	if len(a.Templates) > 0 {
+	// Assume an IAM role when IAM is part of the platform (grounded).
+	if a.hasService("AWS IAM") {
+		role := g.addNode(gnode{ID: "iamrole", Label: "AWS IAM Role", Category: "Security", Icon: "Security-Identity-Compliance/AWS-IAM", Color: categoryColor["Security"]})
+		g.addEdge(wf, role, "assumes")
+	}
+
+	// Provision only real CloudFormation resources; otherwise publish artifacts.
+	cfnSvcs := a.cfnServiceNodes()
+	if len(a.Templates) > 0 && len(cfnSvcs) > 0 {
 		cfn := g.addNode(gnode{ID: "cloudformation", Label: "AWS CloudFormation", Category: "Integration", Icon: "Management-Governance/AWS-CloudFormation", Color: categoryColor["Integration"]})
 		g.addEdge(wf, cfn, "deploys")
-		deployTarget = cfn
+		for _, s := range topServices(cfnSvcs, 8) {
+			id := g.addNode(gnode{ID: sanitizeID(s.Label), Label: s.Label, Category: s.Category, Icon: s.Icon, Color: s.Color})
+			g.addEdge(cfn, id, "provisions")
+		}
+	} else {
+		art := g.addNode(gnode{ID: "artifacts", Label: "Deployment Artifacts"})
+		g.addEdge(wf, art, "publishes")
 	}
-	for _, s := range topServices(a.Services, 8) {
-		id := g.addNode(gnode{ID: sanitizeID(s.Label), Label: s.Label, Category: s.Category, Icon: s.Icon, Color: s.Color})
-		g.addEdge(deployTarget, id, "provisions")
-	}
-	if len(g.Edges) == 0 {
-		return diagramSpec{}, false
-	}
+
 	return diagramSpec{
 		Type:        "CI/CD Pipeline",
 		MermaidType: "flowchart",
-		Title:       repoShort(pkg) + " " + tag(pkg) + " — CI/CD & Provisioning",
-		Subtitle:    "From release to provisioned infrastructure",
-		Description: "How a release flows through CI/CD to provision the AWS infrastructure as code.",
+		Title:       repoShort(pkg) + " " + tag(pkg) + " — CI/CD & Infrastructure Automation",
+		Subtitle:    "Delivery and infrastructure automation",
+		Description: "How changes flow through CI/CD: the workflow assumes an IAM role and publishes deployment artifacts, provisioning infrastructure as code when CloudFormation templates are present.",
 		Graph:       g,
-		References:  append(a.Templates, a.serviceLabels()...),
+		References:  a.Templates,
 	}, true
 }
 

@@ -21,7 +21,7 @@ type kw struct{ key, canonical string }
 
 // localInferenceKeywords are runtimes that serve models on self-hosted hardware.
 var localInferenceKeywords = []kw{
-	{"ollama", "Ollama"},
+	{"ollama", "Ollama Runtime"},
 	{"llama.cpp", "llama.cpp"},
 	{"llamacpp", "llama.cpp"},
 	{"vllm", "vLLM"},

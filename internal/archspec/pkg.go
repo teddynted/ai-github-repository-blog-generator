@@ -11,4 +11,9 @@ import (
 type ReleasePackage struct {
 	Context *rc.ReleaseContext  // Milestone 2 — the ground truth
 	Blog    releasegen.BlogPost // Milestone 3 — the article topic
+	// ArchitectureDoc is the release-scoped architecture.md (Milestone 11), the
+	// authoritative release-specific architectural interpretation. When present it
+	// is the primary evidence the specification is derived from; empty otherwise
+	// (the generator then works from the blog + context alone).
+	ArchitectureDoc string
 }

@@ -136,10 +136,11 @@ func archOverview(rc *ReleaseContext, arch Architecture) string {
 	if len(arch.AWSServices) == 0 && len(arch.Components) == 0 {
 		return rc.RepositoryStructure.Overview
 	}
-	return fmt.Sprintf(
-		"An event-driven, AWS-native system built from %d major components on %s. %s",
-		len(arch.Components), strings.Join(topN(arch.AWSServices, 6), ", "), rc.RepositoryStructure.Overview,
-	)
+	lead := fmt.Sprintf("An event-driven, AWS-native system built from %d major components", len(arch.Components))
+	if svcs := topN(arch.AWSServices, 6); len(svcs) > 0 {
+		lead += " on " + strings.Join(svcs, ", ")
+	}
+	return strings.TrimSpace(lead + ". " + rc.RepositoryStructure.Overview)
 }
 
 func archInsights(rc *ReleaseContext, arch Architecture) []string {

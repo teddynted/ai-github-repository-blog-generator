@@ -8,15 +8,16 @@ import (
 
 // analysis is the grounded infrastructure summary the diagram builders consume.
 type analysis struct {
-	Services   []serviceNode // resolved AWS services (grounded)
-	ByCategory map[string][]string
-	Flows      []string         // event-driven flow descriptions
-	Resources  []rc.CFNResource // CloudFormation resources
-	Templates  []string
-	Dirs       []rc.DirectoryInfo
-	Mermaid    []rc.MermaidDiagram
-	HasCICD    bool
-	Inference  inference // grounded local/cloud AI-inference providers
+	Services    []serviceNode // resolved AWS services (grounded)
+	ByCategory  map[string][]string
+	Flows       []string         // event-driven flow descriptions
+	Resources   []rc.CFNResource // CloudFormation resources
+	Templates   []string
+	Dirs        []rc.DirectoryInfo
+	Mermaid     []rc.MermaidDiagram
+	HasCICD     bool
+	EventDriven bool      // grounded: messaging/event services, flows, or the overview says so
+	Inference   inference // grounded local/cloud AI-inference providers
 }
 
 // serviceNode is a resolved AWS service with its catalogue info.
@@ -42,7 +43,13 @@ func analyze(pkg ReleasePackage) analysis {
 	names := dedupe(append(append([]string{}, c.Architecture.AWSServices...), c.CloudFormation.Services...))
 	for _, name := range names {
 		info, known := lookupService(name)
-		sn := serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: known}
+		// Skip uncatalogued tokens (e.g. raw CloudFormation namespaces like "Events",
+		// "Logs", "KMS") — they are noise or duplicates of a canonical service and
+		// would otherwise pollute the diagrams with an "Other" group.
+		if !known {
+			continue
+		}
+		sn := serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: true}
 		a.Services = append(a.Services, sn)
 		a.ByCategory[sn.Category] = append(a.ByCategory[sn.Category], sn.Label)
 	}
@@ -54,7 +61,39 @@ func analyze(pkg ReleasePackage) analysis {
 	a.Templates = dedupe(c.CloudFormation.Templates)
 	a.Dirs = c.RepositoryStructure.Directories
 	a.Mermaid = c.Mermaid
+
+	// Fold in AWS services that appear as nodes in the parsed Mermaid diagrams
+	// (matched by their labels), so services documented only in diagrams are
+	// grounded too — not just those in the structured AWSServices/CloudFormation
+	// lists. This keeps the analysis (style, warnings, overview) consistent with
+	// what the diagrams actually show.
+	for i := range a.Mermaid {
+		d := &a.Mermaid[i]
+		for _, n := range d.Nodes {
+			label := n
+			if d.NodeLabels != nil {
+				if l := d.NodeLabels[n]; l != "" {
+					label = l
+				}
+			}
+			if info, known := lookupService(label); known {
+				sn := serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: true}
+				a.Services = append(a.Services, sn)
+				a.ByCategory[sn.Category] = append(a.ByCategory[sn.Category], sn.Label)
+			}
+		}
+	}
+	a.Services = uniqueServices(a.Services)
+
 	a.HasCICD = detectCICD(c)
+	// Event-driven when messaging/event services or flows are present, or when the
+	// context's own architecture prose describes the system as event-driven.
+	prose := strings.ToLower(c.Architecture.Overview + " " + c.Architecture.DeploymentTopology)
+	a.EventDriven = len(a.Flows) > 0 ||
+		len(a.categoryServices("Messaging")) > 0 ||
+		len(a.categoryServices("Integration")) > 0 ||
+		strings.Contains(prose, "event-driven") ||
+		strings.Contains(prose, "event driven")
 	a.Inference = detectInference(pkg, a) // after services are resolved
 	return a
 }
@@ -94,6 +133,35 @@ func detectCICD(c *rc.ReleaseContext) bool {
 // categoryServices returns the grounded service labels in a category (dedup).
 func (a analysis) categoryServices(cat string) []string {
 	return dedupe(a.ByCategory[cat])
+}
+
+// hasService reports whether a resolved AWS service with the given canonical
+// label is present in the analysis.
+func (a analysis) hasService(label string) bool {
+	for _, s := range a.Services {
+		if s.Label == label {
+			return true
+		}
+	}
+	return false
+}
+
+// cfnServiceNodes returns the services that are actual CloudFormation resources
+// (grounded in the parsed CFN templates), NOT services merely referenced in a
+// diagram. This keeps "CI/CD provisions X" claims honest — a managed service like
+// Amazon Bedrock, mentioned only in a diagram, is never claimed to be provisioned.
+func (a analysis) cfnServiceNodes() []serviceNode {
+	seen := map[string]bool{}
+	var out []serviceNode
+	for _, r := range a.Resources {
+		info, known := lookupService(firstNonEmpty(r.Service, r.Type))
+		if !known || seen[info.Canonical] {
+			continue
+		}
+		seen[info.Canonical] = true
+		out = append(out, serviceNode{Label: info.Canonical, Category: info.Category, Icon: info.Icon, Color: info.Color, Known: true})
+	}
+	return out
 }
 
 // serviceLabels returns all resolved AWS service labels.

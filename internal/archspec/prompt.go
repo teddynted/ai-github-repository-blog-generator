@@ -2,11 +2,30 @@ package archspec
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
+
+// platformSuffixRe matches a trailing permanent-platform classification clause on
+// a title/topic — "… for an Event-Driven AI Agent Platform", "… on a Hybrid AI
+// platform" — so it can be stripped, keeping the topic scoped to the release.
+var platformSuffixRe = regexp.MustCompile(`(?i)[\s,:]+(for|on|within|in|of)\s+an?\s+[^,.:]*\bplatform\b\s*$`)
+
+// releaseTopic returns a title/topic scoped to the release, with any trailing
+// permanent-platform classification removed.
+func releaseTopic(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		stripped := strings.TrimSpace(platformSuffixRe.ReplaceAllString(s, ""))
+		if stripped == s {
+			return strings.TrimRight(stripped, " :,-")
+		}
+		s = stripped
+	}
+}
 
 // prompt builds the strictly-grounded specification prompt. It leads with a
 // deterministic evidence block assembled from the Release Context (the source of
@@ -14,7 +33,7 @@ import (
 // format, and finally forbids any rendering output.
 func (g *Generator) prompt(pkg ReleasePackage) string {
 	rctx := pkg.Context
-	services := evidenceServices(rctx)
+	services := evidenceServices(rctx, pkg.Blog.Markdown)
 
 	var b strings.Builder
 	b.WriteString("You are a senior AWS solutions architect producing an AWS Architecture Diagram Specification for a repository. ")
@@ -23,7 +42,7 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("The specification must describe the architecture THIS repository implements or documents for the engineering topic below — never a generic AWS diagram. ")
 	b.WriteString("Use ONLY the repository evidence provided. Every AWS service you show must be backed by that evidence. If the repository does not implement or document a service, omit it. Do not speculate and do not invent services, resources, connections, or security controls.\n\n")
 
-	if topic := strings.TrimSpace(pkg.Blog.Title); topic != "" {
+	if topic := releaseTopic(pkg.Blog.Title); topic != "" {
 		fmt.Fprintf(&b, "Engineering topic (focus the diagram on this): %s\n\n", topic)
 	}
 
@@ -39,9 +58,9 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("OUTPUT — return structured Markdown, and nothing else, in exactly this shape:\n\n")
 	b.WriteString(specHeading + "\n\n")
 	b.WriteString("## Diagram Metadata\n")
-	b.WriteString("- Title: a specific, topic-driven title (not \"AWS Architecture\").\n")
-	b.WriteString("- Purpose: what the diagram communicates.\n")
-	b.WriteString("- Primary Engineering Topic\n")
+	b.WriteString("- Title: a specific title describing the architectural CHANGE this release introduces (not \"AWS Architecture\"). Do NOT append a permanent platform description or classification — e.g. write \"Pre-Baked Custom AMIs for Fast Spot Startup on AWS\", NOT \"… on an Event-Driven AI Agent Platform\".\n")
+	b.WriteString("- Purpose: what the diagram communicates about this release's change.\n")
+	b.WriteString("- Primary Engineering Topic: the release's engineering focus in one sentence — NOT the overall repository mission or a platform classification.\n")
 	fmt.Fprintf(&b, "- Repository: %s\n", rctx.Repository.FullName)
 	fmt.Fprintf(&b, "- Milestone: %s\n", firstNonEmpty(rctx.Release.Tag, rctx.Release.Name))
 	fmt.Fprintf(&b, "- Diagram Version: %s\n", DiagramVersion)
@@ -64,6 +83,7 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("- Do NOT render the diagram. Describe it structurally so a renderer can draw it deterministically.\n")
 	b.WriteString("- Ground every component, connection, and security boundary in the evidence; cite the specific repository evidence. If you cannot cite evidence, omit the item.\n")
 	b.WriteString("- Never present planned or roadmap work as implemented. Describe only what exists in the evidence.\n")
+	b.WriteString("- Do NOT emit permanent, repository-wide platform labels or classifications (e.g. \"Event-driven AI Agent Platform\", \"Serverless hybrid AI platform\", \"AWS-native AI platform\", \"Repository-level architecture overview\", \"overall platform architecture\") in the Title, Primary Engineering Topic, or anywhere else — UNLESS the engineering topic itself is explicitly about that. Scope every statement to the change this release introduces, so the same instructions work for any future release regardless of its architecture style.\n")
 
 	return b.String()
 }
@@ -73,81 +93,101 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 // Release Context captured.
 func evidenceBlock(pkg ReleasePackage) string {
 	rctx := pkg.Context
+	scoped := serviceSet(evidenceServices(rctx, pkg.Blog.Markdown))
 	var b strings.Builder
-	b.WriteString("=== REPOSITORY EVIDENCE (source of truth) ===\n")
+
+	// The release-scoped architecture.md, when present, is the authoritative
+	// interpretation the spec is derived from.
+	if doc := strings.TrimSpace(pkg.ArchitectureDoc); doc != "" {
+		b.WriteString("=== RELEASE ARCHITECTURE (architecture.md — authoritative release interpretation) ===\n")
+		b.WriteString(doc + "\n")
+		b.WriteString("=== END RELEASE ARCHITECTURE ===\n\n")
+	}
+
+	// The RELEASE BLOG is the primary source of truth — the spec must describe only
+	// what THIS release documents.
+	b.WriteString("=== RELEASE BLOG (primary source — describe only what this evidences) ===\n")
 	fmt.Fprintf(&b, "Repository: %s\n", rctx.Repository.FullName)
-	if s := strings.TrimSpace(rctx.Repository.Summary); s != "" {
-		fmt.Fprintf(&b, "Summary: %s\n", s)
-	}
 	fmt.Fprintf(&b, "Release/milestone: %s\n", firstNonEmpty(rctx.Release.Tag, rctx.Release.Name))
-
-	cfn := rctx.CloudFormation
-	if len(cfn.Resources) > 0 {
-		b.WriteString("\nCloudFormation resources (LogicalID — Type — Service — Category — Template):\n")
-		for _, r := range cfn.Resources {
-			fmt.Fprintf(&b, "- %s — %s — %s — %s — %s\n",
-				r.LogicalID, dash(r.Type), dash(r.Service), dash(r.Category), dash(r.Template))
+	if t := releaseTopic(pkg.Blog.Title); t != "" {
+		fmt.Fprintf(&b, "Release topic: %s\n", t)
+	}
+	if body := strings.TrimSpace(pkg.Blog.Markdown); body != "" {
+		b.WriteString("\nBlog content:\n")
+		b.WriteString(body + "\n")
+	}
+	// The release's OWN diagrams (from the blog), not the repository's.
+	if diagrams := blogMermaid(pkg.Blog.Markdown); len(diagrams) > 0 {
+		b.WriteString("\nDiagrams in the release blog:\n")
+		for _, d := range diagrams {
+			fmt.Fprintf(&b, "```\n%s\n```\n", d)
 		}
 	}
-	if len(cfn.Services) > 0 {
-		fmt.Fprintf(&b, "CloudFormation services detected: %s\n", strings.Join(cfn.Services, ", "))
-	}
-	if c := cfn.Counts; c.Resources > 0 {
-		fmt.Fprintf(&b, "CloudFormation counts: %d resources — %d serverless, %d compute, %d storage, %d networking, %d IAM, %d messaging\n",
-			c.Resources, c.Serverless, c.Compute, c.Storage, c.Networking, c.IAM, c.Messaging)
-	}
+	b.WriteString("=== END RELEASE BLOG ===\n\n")
 
-	arch := rctx.Architecture
-	if strings.TrimSpace(arch.Overview) != "" {
-		fmt.Fprintf(&b, "\nArchitecture overview: %s\n", arch.Overview)
-	}
-	if len(arch.AWSServices) > 0 {
-		fmt.Fprintf(&b, "AWS services (architecture): %s\n", strings.Join(arch.AWSServices, ", "))
-	}
-	if len(arch.Components) > 0 {
-		b.WriteString("Architecture components (Name — Responsibility [kind]):\n")
-		for _, c := range arch.Components {
-			kind := ""
-			if c.Kind != "" {
-				kind = " [" + c.Kind + "]"
-			}
-			fmt.Fprintf(&b, "- %s — %s%s\n", c.Name, c.Responsibility, kind)
+	// Supporting repository evidence, SCOPED to the release: only CloudFormation
+	// resources whose service the blog discusses — so unrelated stacks/roles never
+	// enter the spec.
+	b.WriteString("=== SUPPORTING REPOSITORY EVIDENCE (only where it corroborates the blog) ===\n")
+	var rels []string
+	for _, r := range rctx.CloudFormation.Resources {
+		if scoped[strings.ToLower(strings.TrimSpace(r.Service))] {
+			rels = append(rels, fmt.Sprintf("- %s — %s — %s — %s — %s",
+				r.LogicalID, dash(r.Type), dash(r.Service), dash(r.Category), dash(r.Template)))
 		}
 	}
-	writeList(&b, "Event-driven flows:", arch.EventDrivenFlows)
-	if strings.TrimSpace(arch.Security) != "" {
-		fmt.Fprintf(&b, "Security: %s\n", arch.Security)
+	if len(rels) > 0 {
+		b.WriteString("CloudFormation resources for release-relevant services (LogicalID — Type — Service — Category — Template):\n")
+		b.WriteString(strings.Join(rels, "\n") + "\n")
 	}
-	if strings.TrimSpace(arch.Reliability) != "" {
-		fmt.Fprintf(&b, "Reliability: %s\n", arch.Reliability)
-	}
-	if strings.TrimSpace(arch.Scalability) != "" {
-		fmt.Fprintf(&b, "Scalability: %s\n", arch.Scalability)
-	}
-
-	if len(rctx.Mermaid) > 0 {
-		b.WriteString("\nMermaid diagrams found in the repository (summary — source — edges):\n")
-		for _, d := range rctx.Mermaid {
-			var edges []string
-			for _, e := range d.Edges {
-				if e.Label != "" {
-					edges = append(edges, fmt.Sprintf("%s->%s(%s)", e.From, e.To, e.Label))
-				} else {
-					edges = append(edges, fmt.Sprintf("%s->%s", e.From, e.To))
-				}
-			}
-			fmt.Fprintf(&b, "- %s — %s — %s\n", d.Summary, dash(d.Source), strings.Join(edges, ", "))
-		}
-	}
-
-	b.WriteString("=== END REPOSITORY EVIDENCE ===\n")
+	b.WriteString("=== END SUPPORTING EVIDENCE ===\n")
 	return b.String()
 }
 
-// evidenceServices returns the deduplicated, sorted set of AWS services backed
-// by evidence (CloudFormation + architecture). This is the closed vocabulary the
-// specification may draw from.
-func evidenceServices(rctx *rc.ReleaseContext) []string {
+// serviceSet returns a lowercase lookup set of service names.
+func serviceSet(services []string) map[string]bool {
+	set := map[string]bool{}
+	for _, s := range services {
+		set[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+	return set
+}
+
+// blogMermaid returns the raw contents of every ```mermaid block in the blog —
+// the release's own, release-specific diagrams.
+func blogMermaid(md string) []string {
+	var blocks []string
+	var cur []string
+	in := false
+	for _, ln := range strings.Split(md, "\n") {
+		t := strings.TrimSpace(ln)
+		switch {
+		case !in && strings.HasPrefix(t, "```mermaid"):
+			in, cur = true, nil
+		case in && strings.HasPrefix(t, "```"):
+			in = false
+			nonBlank := 0
+			for _, c := range cur {
+				if strings.TrimSpace(c) != "" {
+					nonBlank++
+				}
+			}
+			if nonBlank >= 2 {
+				blocks = append(blocks, strings.Join(cur, "\n"))
+			}
+		case in:
+			cur = append(cur, ln)
+		}
+	}
+	return blocks
+}
+
+// evidenceServices returns the closed AWS-service vocabulary the specification may
+// draw from: services backed by repository evidence (CloudFormation + architecture)
+// AND actually discussed in the release blog. Scoping to the blog keeps the spec
+// release-specific — a service the repository uses but this release never mentions
+// (e.g. Bedrock in an AMI release) is excluded.
+func evidenceServices(rctx *rc.ReleaseContext, blogMd string) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(list []string) {
@@ -157,13 +197,81 @@ func evidenceServices(rctx *rc.ReleaseContext) []string {
 				continue
 			}
 			seen[strings.ToLower(s)] = true
-			out = append(out, s)
+			if blogMd == "" || blogMentionsService(blogMd, s) {
+				out = append(out, s)
+			}
 		}
 	}
 	add(rctx.CloudFormation.Services)
 	add(rctx.Architecture.AWSServices)
+	out = preferCanonical(out)
 	sort.Strings(out)
 	return out
+}
+
+// preferCanonical drops a service name that is a whole-word subset of a longer
+// name already present — so raw CloudFormation namespace tokens ("EC2", "Lambda",
+// "Scheduler") give way to their canonical forms ("Amazon EC2", "AWS Lambda",
+// "Amazon EventBridge Scheduler").
+func preferCanonical(services []string) []string {
+	var out []string
+	for _, s := range services {
+		// Always keep vendor-prefixed canonical names — distinct services like
+		// "Amazon EventBridge" and "Amazon EventBridge Scheduler" must both survive.
+		if strings.HasPrefix(s, "Amazon ") || strings.HasPrefix(s, "AWS ") {
+			out = append(out, s)
+			continue
+		}
+		// Drop a bare token that is a whole-word subset of a longer name present.
+		ls := strings.ToLower(s)
+		subsumed := false
+		for _, other := range services {
+			if other != s && len(other) > len(s) && archspecContainsWord(strings.ToLower(other), ls) {
+				subsumed = true
+				break
+			}
+		}
+		if !subsumed {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// blogMentionsService reports whether the blog discusses the given AWS service,
+// matching its distinctive token (the name without the "Amazon"/"AWS" vendor
+// prefix) as a whole word — so "Amazon EventBridge" matches "EventBridge" and
+// "AWS Lambda" matches "Lambda", without false positives from substrings.
+func blogMentionsService(blogMd, service string) bool {
+	tok := strings.ToLower(strings.TrimSpace(service))
+	for _, p := range []string{"amazon ", "aws ", "amazon", "aws"} {
+		tok = strings.TrimSpace(strings.TrimPrefix(tok, p))
+	}
+	if tok == "" {
+		return false
+	}
+	return archspecContainsWord(strings.ToLower(blogMd), tok)
+}
+
+// archspecContainsWord reports whether text contains word bounded by non-word
+// characters (letters/digits are word characters).
+func archspecContainsWord(text, word string) bool {
+	isWord := func(b byte) bool {
+		return b >= 'a' && b <= 'z' || b >= '0' && b <= '9'
+	}
+	for idx := 0; ; {
+		i := strings.Index(text[idx:], word)
+		if i < 0 {
+			return false
+		}
+		i += idx
+		before := i == 0 || !isWord(text[i-1])
+		after := i+len(word) >= len(text) || !isWord(text[i+len(word)])
+		if before && after {
+			return true
+		}
+		idx = i + 1
+	}
 }
 
 func writeList(b *strings.Builder, heading string, items []string) {
