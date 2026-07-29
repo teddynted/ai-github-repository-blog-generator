@@ -96,6 +96,14 @@ func evidenceBlock(pkg ReleasePackage) string {
 	scoped := serviceSet(evidenceServices(rctx, pkg.Blog.Markdown))
 	var b strings.Builder
 
+	// The release-scoped architecture.md, when present, is the authoritative
+	// interpretation the spec is derived from.
+	if doc := strings.TrimSpace(pkg.ArchitectureDoc); doc != "" {
+		b.WriteString("=== RELEASE ARCHITECTURE (architecture.md — authoritative release interpretation) ===\n")
+		b.WriteString(doc + "\n")
+		b.WriteString("=== END RELEASE ARCHITECTURE ===\n\n")
+	}
+
 	// The RELEASE BLOG is the primary source of truth — the spec must describe only
 	// what THIS release documents.
 	b.WriteString("=== RELEASE BLOG (primary source — describe only what this evidences) ===\n")

@@ -196,7 +196,7 @@ func TestOrchestratorOnlyRunsSelectedStagePlusDependencies(t *testing.T) {
 		// context), so it depends on the blog alone — no Ollama storyboard stage.
 		{"architecture", "architecture", []string{"blog", "architecture"}},
 		// the diagram spec grounds on the blog alone.
-		{"diagram-spec", "architecture-diagram-spec", []string{"blog", "architecture-diagram-spec"}},
+		{"diagram-spec", "architecture-diagram-spec", []string{"blog", "architecture", "architecture-diagram-spec"}},
 		// seo sits at the end of the storyboard→voiceover→youtube→…→seo chain.
 		{"seo", "seo-metadata", []string{
 			"blog", "storyboard", "voiceover", "youtube", "youtube-shorts",

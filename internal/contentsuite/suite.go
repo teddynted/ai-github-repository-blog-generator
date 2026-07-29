@@ -161,7 +161,7 @@ var stageDeps = map[string][]string{
 	"architecture":              {"blog"},
 	"linkedin":                  {"architecture", "seo-metadata"},
 	"x-thread":                  {"architecture", "seo-metadata"},
-	"architecture-diagram-spec": {"blog"},
+	"architecture-diagram-spec": {"blog", "architecture"},
 	"architecture-diagram":      {"blog"},
 }
 
@@ -408,6 +408,9 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		s.record(o.run("architecture-diagram-spec", 14, "12-architecture-diagram-spec.md", func() (string, error) {
 			spec, err := (&archspec.Generator{Model: o.model("architecture-diagram-spec"), Logger: o.Logger}).Spec(ctx, archspec.ReleasePackage{
 				Context: rctx, Blog: s.Blog,
+				// Derive the spec from the release-scoped architecture.md (the
+				// authoritative release interpretation) when it was produced.
+				ArchitectureDoc: architecture.ReleaseScopedMarkdown(s.Architecture, rctx, s.Blog),
 			})
 			s.DiagramSpec = spec
 			return spec.Markdown(), err
