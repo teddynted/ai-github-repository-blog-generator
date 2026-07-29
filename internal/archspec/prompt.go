@@ -2,11 +2,30 @@ package archspec
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
+
+// platformSuffixRe matches a trailing permanent-platform classification clause on
+// a title/topic — "… for an Event-Driven AI Agent Platform", "… on a Hybrid AI
+// platform" — so it can be stripped, keeping the topic scoped to the release.
+var platformSuffixRe = regexp.MustCompile(`(?i)[\s,:]+(for|on|within|in|of)\s+an?\s+[^,.:]*\bplatform\b\s*$`)
+
+// releaseTopic returns a title/topic scoped to the release, with any trailing
+// permanent-platform classification removed.
+func releaseTopic(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		stripped := strings.TrimSpace(platformSuffixRe.ReplaceAllString(s, ""))
+		if stripped == s {
+			return strings.TrimRight(stripped, " :,-")
+		}
+		s = stripped
+	}
+}
 
 // prompt builds the strictly-grounded specification prompt. It leads with a
 // deterministic evidence block assembled from the Release Context (the source of
@@ -23,7 +42,7 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("The specification must describe the architecture THIS repository implements or documents for the engineering topic below — never a generic AWS diagram. ")
 	b.WriteString("Use ONLY the repository evidence provided. Every AWS service you show must be backed by that evidence. If the repository does not implement or document a service, omit it. Do not speculate and do not invent services, resources, connections, or security controls.\n\n")
 
-	if topic := strings.TrimSpace(pkg.Blog.Title); topic != "" {
+	if topic := releaseTopic(pkg.Blog.Title); topic != "" {
 		fmt.Fprintf(&b, "Engineering topic (focus the diagram on this): %s\n\n", topic)
 	}
 
@@ -39,9 +58,9 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("OUTPUT — return structured Markdown, and nothing else, in exactly this shape:\n\n")
 	b.WriteString(specHeading + "\n\n")
 	b.WriteString("## Diagram Metadata\n")
-	b.WriteString("- Title: a specific, topic-driven title (not \"AWS Architecture\").\n")
-	b.WriteString("- Purpose: what the diagram communicates.\n")
-	b.WriteString("- Primary Engineering Topic\n")
+	b.WriteString("- Title: a specific title describing the architectural CHANGE this release introduces (not \"AWS Architecture\"). Do NOT append a permanent platform description or classification — e.g. write \"Pre-Baked Custom AMIs for Fast Spot Startup on AWS\", NOT \"… on an Event-Driven AI Agent Platform\".\n")
+	b.WriteString("- Purpose: what the diagram communicates about this release's change.\n")
+	b.WriteString("- Primary Engineering Topic: the release's engineering focus in one sentence — NOT the overall repository mission or a platform classification.\n")
 	fmt.Fprintf(&b, "- Repository: %s\n", rctx.Repository.FullName)
 	fmt.Fprintf(&b, "- Milestone: %s\n", firstNonEmpty(rctx.Release.Tag, rctx.Release.Name))
 	fmt.Fprintf(&b, "- Diagram Version: %s\n", DiagramVersion)
@@ -64,6 +83,7 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("- Do NOT render the diagram. Describe it structurally so a renderer can draw it deterministically.\n")
 	b.WriteString("- Ground every component, connection, and security boundary in the evidence; cite the specific repository evidence. If you cannot cite evidence, omit the item.\n")
 	b.WriteString("- Never present planned or roadmap work as implemented. Describe only what exists in the evidence.\n")
+	b.WriteString("- Do NOT emit permanent, repository-wide platform labels or classifications (e.g. \"Event-driven AI Agent Platform\", \"Serverless hybrid AI platform\", \"AWS-native AI platform\", \"Repository-level architecture overview\", \"overall platform architecture\") in the Title, Primary Engineering Topic, or anywhere else — UNLESS the engineering topic itself is explicitly about that. Scope every statement to the change this release introduces, so the same instructions work for any future release regardless of its architecture style.\n")
 
 	return b.String()
 }

@@ -21,7 +21,7 @@ func assembleOffline(pkg ReleasePackage) string {
 	b.WriteString("## Diagram Metadata\n")
 	fmt.Fprintf(&b, "- Title: %s\n", specTitle(pkg))
 	fmt.Fprintf(&b, "- Purpose: Represent the AWS architecture %s implements, as captured from repository evidence.\n", rctx.Repository.FullName)
-	if topic := strings.TrimSpace(pkg.Blog.Title); topic != "" {
+	if topic := releaseTopic(pkg.Blog.Title); topic != "" {
 		fmt.Fprintf(&b, "- Primary Engineering Topic: %s\n", topic)
 	}
 	fmt.Fprintf(&b, "- Repository: %s\n", rctx.Repository.FullName)

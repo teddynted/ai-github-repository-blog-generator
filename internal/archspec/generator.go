@@ -135,7 +135,7 @@ func ensureHeading(body string) string {
 // when available. The model produces the authoritative Title inside the
 // metadata; this is only the struct's identity field.
 func specTitle(pkg ReleasePackage) string {
-	if t := strings.TrimSpace(pkg.Blog.Title); t != "" {
+	if t := releaseTopic(pkg.Blog.Title); t != "" {
 		return t + " — AWS Architecture"
 	}
 	name := pkg.Context.Repository.Name
