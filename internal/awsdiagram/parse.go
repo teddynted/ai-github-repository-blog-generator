@@ -2,96 +2,351 @@ package awsdiagram
 
 import "strings"
 
-// Parse builds a Diagram from an architecture-diagram-spec.md by reading its
-// grounded "## Connections" table (the reliable, structured part of the spec).
-// Nodes come from the Source/Target columns; edges carry the mechanism as a label
-// and are dashed for supporting relationships (governance/observability/polling).
-// Returns a zero-node Diagram when no connections table is present.
+// component is one entry parsed from the spec's "## Components" section. It
+// carries the canonical Name (used as the node label), the AWS Service, the
+// declared Type, and the Plane subsection it was grouped under.
+type component struct {
+	Name    string
+	Service string
+	Type    string
+	Plane   string
+}
+
+// Parse builds a Diagram from an architecture-diagram-spec.md. It first reads
+// the "## Components" section for each component's canonical name, AWS service,
+// and plane grouping, then reads "## Connections" (bullet OR table form) for the
+// edges. Connection endpoints are resolved back to their canonical component so
+// that a raw service name ("Amazon S3") or a name with a parenthetical qualifier
+// ("Versioned Custom AMI (+ snapshot)") collapses onto the one canonical node.
+// Returns a zero-node Diagram when no connections are present.
 func Parse(spec, title string) Diagram {
+	comps, index := parseComponents(spec)
+
 	d := Diagram{Title: title}
 	idOf := map[string]string{}
+	catOf := map[string]Category{}
 	seenEdge := map[string]bool{}
+
 	addNode := func(label string) string {
-		label = cleanCell(label)
-		if label == "" {
+		c := resolveComponent(label, index)
+		name := label
+		typ, plane := "", ""
+		if c != nil {
+			name, typ, plane = c.Name, c.Type, c.Plane
+		}
+		name = cleanCell(name)
+		if name == "" {
 			return ""
 		}
-		key := strings.ToLower(label)
+		key := strings.ToLower(name)
 		if id, ok := idOf[key]; ok {
 			return id
 		}
-		id := sanitizeID(label)
+		id := sanitizeID(name)
 		idOf[key] = id
-		d.Nodes = append(d.Nodes, Node{ID: id, Label: label, Category: categoryFor(label)})
+		cat := categoryFor(name)
+		if c != nil {
+			cat = categoryForType(typ, name+" "+c.Service)
+		}
+		catOf[id] = cat
+		d.Nodes = append(d.Nodes, Node{ID: id, Label: name, Category: cat, Plane: plane})
 		return id
 	}
 
-	for _, row := range connectionRows(spec) {
-		if len(row) < 6 {
-			continue
-		}
-		source, target, mech, purpose, direction := row[1], row[2], row[3], row[4], row[5]
-		dashed := supporting(mech + " " + purpose + " " + direction)
-		fromID := addNode(source)
+	for _, cn := range parseConnections(spec) {
+		text := cn.mech + " " + cn.purpose + " " + cn.direction + " " + cn.arrow
+		fromID := addNode(cn.source)
 		if fromID == "" {
 			continue
 		}
-		// A target may name more than one node ("AWS Lambda / Amazon EC2").
-		for _, t := range splitTargets(target) {
+		for _, t := range splitTargets(cn.target) {
 			toID := addNode(t)
 			if toID == "" || toID == fromID {
 				continue
 			}
 			// Collapse repeated connections between the same pair (several control
-			// calls Dev→EC2) into one edge so the diagram stays legible.
+			// calls Dev→EC2, plus an out-of-band status probe) into one edge.
 			if seenEdge[fromID+"\x00"+toID] {
 				continue
 			}
 			seenEdge[fromID+"\x00"+toID] = true
+			// Dashed = explicit supporting text, OR either endpoint is cross-cutting
+			// (an IAM governance attachment or an observability push).
+			dashed := supporting(text) || isSupportCat(catOf[fromID]) || isSupportCat(catOf[toID])
 			d.Edges = append(d.Edges, Edge{
 				From:     fromID,
 				To:       toID,
-				Label:    edgeLabel(mech, purpose),
+				Label:    edgeLabel(cn.mech, cn.purpose),
 				Dashed:   dashed,
-				Emphasis: isPrimaryEdge(source, t),
+				Emphasis: isPrimaryEdge(cn.source, t),
 			})
+		}
+	}
+
+	// Cross-cutting components (IAM, observability) are frequently described in
+	// Components but carry no explicit connection row. Surface them as standalone
+	// badges so the diagram shows the governance/observability context.
+	for i := range comps {
+		c := &comps[i]
+		cat := categoryForType(c.Type, c.Name+" "+c.Service)
+		isCross := isSupportCat(cat) || strings.Contains(strings.ToLower(c.Plane), "cross")
+		if isCross && idOf[strings.ToLower(cleanCell(c.Name))] == "" {
+			addNode(c.Name)
 		}
 	}
 	return d
 }
 
-// connectionRows returns the cells of each data row in the "## Connections" table.
-func connectionRows(spec string) [][]string {
-	var rows [][]string
-	inSection, inTable := false, false
-	for _, ln := range strings.Split(spec, "\n") {
-		t := strings.TrimSpace(ln)
-		switch {
-		case strings.HasPrefix(t, "## "):
-			inSection = strings.EqualFold(t, "## Connections")
-			inTable = false
-			continue
-		case !inSection:
+// componentIndex resolves a connection endpoint name to a canonical component.
+type componentIndex struct {
+	byName    map[string]*component // canonical name and its paren-stripped form
+	byService map[string]*component // only services owned by exactly one component
+}
+
+// resolveComponent finds the canonical component for a connection endpoint,
+// trying the name (and its paren-stripped form) first, then a unique AWS service.
+func resolveComponent(label string, idx componentIndex) *component {
+	name := cleanCell(label)
+	if name == "" {
+		return nil
+	}
+	if c, ok := idx.byName[strings.ToLower(name)]; ok {
+		return c
+	}
+	if stripped := stripParen(name); stripped != name {
+		if c, ok := idx.byName[strings.ToLower(stripped)]; ok {
+			return c
+		}
+	}
+	if c, ok := idx.byService[strings.ToLower(name)]; ok {
+		return c
+	}
+	return nil
+}
+
+// parseComponents reads the "## Components" section into components and an index.
+func parseComponents(spec string) ([]component, componentIndex) {
+	var comps []component
+	var cur *component
+	plane := ""
+	inSection := false
+
+	flush := func() {
+		if cur != nil && cur.Name != "" {
+			comps = append(comps, *cur)
+		}
+		cur = nil
+	}
+
+	for _, raw := range strings.Split(spec, "\n") {
+		t := strings.TrimSpace(raw)
+		if strings.HasPrefix(t, "## ") {
+			flush()
+			inSection = strings.EqualFold(t, "## Components")
+			plane = ""
 			continue
 		}
-		if !strings.HasPrefix(t, "|") {
-			if inTable {
-				break // table ended
+		if !inSection {
+			continue
+		}
+		if strings.HasPrefix(t, "### ") {
+			flush()
+			plane = cleanCell(strings.TrimPrefix(t, "### "))
+			continue
+		}
+		indented := len(raw) > 0 && (raw[0] == ' ' || raw[0] == '\t')
+		// A top-level "- **Name**" bullet starts a new component.
+		if !indented && strings.HasPrefix(t, "- ") {
+			name := cleanCell(strings.TrimPrefix(t, "- "))
+			if name != "" {
+				flush()
+				cur = &component{Name: name, Plane: plane}
 			}
 			continue
 		}
-		cells := splitRow(t)
-		// Skip the header and the |---|---| separator.
-		if isSeparatorRow(cells) {
-			inTable = true
+		if cur == nil || !strings.HasPrefix(t, "- ") {
 			continue
 		}
-		if !inTable {
-			continue // header row (before the separator)
+		key, val, ok := splitField(strings.TrimPrefix(t, "- "))
+		if !ok {
+			continue
 		}
-		rows = append(rows, cells)
+		switch {
+		case strings.HasPrefix(key, "type"):
+			cur.Type = val
+		case strings.HasPrefix(key, "aws service"):
+			cur.Service = val
+		}
 	}
-	return rows
+	flush()
+
+	idx := componentIndex{byName: map[string]*component{}, byService: map[string]*component{}}
+	serviceCount := map[string]int{}
+	for i := range comps {
+		c := &comps[i]
+		idx.byName[strings.ToLower(c.Name)] = c
+		if s := stripParen(c.Name); s != c.Name {
+			idx.byName[strings.ToLower(s)] = c
+		}
+		if svc := cleanCell(c.Service); svc != "" {
+			serviceCount[strings.ToLower(svc)]++
+		}
+	}
+	// Only index a service when a single component owns it, so ambiguous services
+	// (e.g. several Amazon EC2 components) never mis-resolve a connection endpoint.
+	for i := range comps {
+		c := &comps[i]
+		svc := strings.ToLower(cleanCell(c.Service))
+		if svc != "" && serviceCount[svc] == 1 {
+			idx.byService[svc] = c
+		}
+	}
+	return comps, idx
+}
+
+// rawConn is one connection before endpoints are resolved to canonical nodes.
+type rawConn struct {
+	source, target   string
+	mech, purpose    string
+	direction, arrow string
+}
+
+// parseConnections reads the "## Connections" section in either bullet form
+// ("- Source → Target" followed by indented "- Key: value" sub-bullets) or the
+// legacy pipe-table form.
+func parseConnections(spec string) []rawConn {
+	var conns []rawConn
+	var cur *rawConn
+	inSection := false
+
+	flush := func() {
+		if cur != nil && cur.source != "" && cur.target != "" {
+			conns = append(conns, *cur)
+		}
+		cur = nil
+	}
+
+	for _, raw := range strings.Split(spec, "\n") {
+		t := strings.TrimSpace(raw)
+		if strings.HasPrefix(t, "## ") {
+			flush()
+			inSection = strings.EqualFold(t, "## Connections")
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		// Table row.
+		if strings.HasPrefix(t, "|") {
+			cells := splitRow(t)
+			if isSeparatorRow(cells) {
+				continue
+			}
+			// Drop a leading index column ("#", "1", ...) if present.
+			if len(cells) > 0 && isIndexCell(cells[0]) {
+				cells = cells[1:]
+			}
+			if len(cells) < 2 || strings.EqualFold(cleanCell(cells[0]), "source") {
+				continue // too short, or the header row
+			}
+			c := rawConn{source: cleanCell(cells[0]), target: cleanCell(cells[1])}
+			if len(cells) > 2 {
+				c.mech = cells[2]
+			}
+			if len(cells) > 3 {
+				c.purpose = cells[3]
+			}
+			if len(cells) > 4 {
+				c.direction = cells[4]
+			}
+			// Some specs pack "A → B" into the source cell instead of two columns.
+			if src, tgt, arrow, ok := splitArrow(c.source); ok {
+				c.source, c.target, c.arrow = src, tgt, arrow
+			}
+			if c.source != "" && c.target != "" {
+				conns = append(conns, c)
+			}
+			continue
+		}
+		indented := len(raw) > 0 && (raw[0] == ' ' || raw[0] == '\t')
+		// Top-level "- Source → Target" bullet starts a new connection.
+		if !indented && strings.HasPrefix(t, "- ") {
+			body := cleanCell(strings.TrimPrefix(t, "- "))
+			if src, tgt, arrow, ok := splitArrow(body); ok {
+				flush()
+				cur = &rawConn{source: src, target: tgt, arrow: arrow}
+			}
+			continue
+		}
+		if cur == nil || !strings.HasPrefix(t, "- ") {
+			continue
+		}
+		key, val, ok := splitField(strings.TrimPrefix(t, "- "))
+		if !ok {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(key, "protocol"), strings.HasPrefix(key, "mechanism"):
+			cur.mech = val
+		case strings.HasPrefix(key, "purpose"):
+			cur.purpose = val
+		case strings.HasPrefix(key, "direction"):
+			cur.direction = val
+		}
+	}
+	flush()
+	return conns
+}
+
+// splitArrow splits "A → B" (or ->, ⇄, ↔, ⇆, <->) into endpoints, stripping any
+// trailing parenthetical qualifier from each so "Versioned Custom AMI (+ snapshot)"
+// collapses onto "Versioned Custom AMI".
+func splitArrow(s string) (from, to, arrow string, ok bool) {
+	for _, a := range []string{"→", "⇄", "↔", "⇆", "<->", "->"} {
+		if i := strings.Index(s, a); i >= 0 {
+			from = stripParen(cleanCell(s[:i]))
+			to = stripParen(cleanCell(s[i+len(a):]))
+			if from != "" && to != "" {
+				return from, to, a, true
+			}
+		}
+	}
+	return "", "", "", false
+}
+
+// splitField splits "Key: value" (a sub-bullet). key is lowercased and trimmed.
+func splitField(s string) (key, val string, ok bool) {
+	i := strings.Index(s, ":")
+	if i < 0 {
+		return "", "", false
+	}
+	return strings.ToLower(strings.TrimSpace(cleanCell(s[:i]))), cleanCell(s[i+1:]), true
+}
+
+// isIndexCell reports whether a table cell is a leading row-index ("#", "1", …)
+// rather than a Source/Target name.
+func isIndexCell(c string) bool {
+	c = strings.TrimSpace(cleanCell(c))
+	if c == "#" {
+		return true
+	}
+	if c == "" {
+		return false
+	}
+	for _, r := range c {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// stripParen removes a trailing "( ... )" qualifier from a component name.
+func stripParen(s string) string {
+	if i := strings.LastIndex(s, "("); i > 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return strings.TrimSpace(s)
 }
 
 func splitRow(line string) []string {
@@ -134,12 +389,15 @@ func splitTargets(cell string) []string {
 	return []string{cell}
 }
 
-// supporting reports whether an edge is a governance/observability/out-of-band
-// relationship (drawn dashed) rather than a primary data/control flow.
+// supporting reports whether an edge's mechanism/purpose text marks it as a
+// governance/observability/out-of-band relationship (drawn dashed). It avoids the
+// generic "IAM-scoped API" qualifier that decorates nearly every call — those are
+// primary data/control flows; a governance edge is instead detected by an IAM or
+// observability endpoint (see the category check in Parse).
 func supporting(text string) bool {
 	return has(strings.ToLower(text),
 		"poll", "out-of-band", "out of band", "status", "observab", "logs", "metric",
-		"iam", "policy", "permission", "role", "scope", "governance", "↔", "attach")
+		"telemetry", "governance", "⇄", "↔")
 }
 
 // isPrimaryEdge marks the release's central relationship (the AMI → runtime EC2
@@ -157,7 +415,7 @@ func edgeLabel(mech, purpose string) string {
 	return truncate(firstClause(label), 40)
 }
 
-// cleanCell strips Markdown emphasis/backticks from a table cell.
+// cleanCell strips Markdown emphasis/backticks from a table cell or bullet.
 func cleanCell(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.ReplaceAll(s, "**", "")

@@ -27,6 +27,10 @@ type Node struct {
 	ID       string
 	Label    string
 	Category Category
+	// Plane is the workflow phase the node belongs to (e.g. "Build Plane",
+	// "Runtime Plane", "Cross-cutting"), taken from the spec's Components
+	// grouping. Empty when the spec does not group components into planes.
+	Plane string
 }
 
 // Edge is a directed connection. Dashed marks a supporting relationship
@@ -115,6 +119,40 @@ func categoryFor(label string) Category {
 	default:
 		return CatOther
 	}
+}
+
+// categoryForType maps a component's declared Type (from the Components section)
+// to a category, falling back to label inference when the type is unknown. The
+// label is still consulted for storage-vs-compute nuance (an EC2-backed AMI is
+// a storage artifact, not compute).
+func categoryForType(typ, label string) Category {
+	t := strings.ToLower(typ)
+	switch {
+	case has(t, "serverless", "lambda", "function"):
+		return CatServerless
+	case has(t, "compute"):
+		return CatCompute
+	case has(t, "storage", "image", "artifact"):
+		return CatStorage
+	case has(t, "messaging", "schedul", "integration", "event", "queue"):
+		return CatIntegration
+	case has(t, "observab", "monitor", "logging", "telemetry"):
+		return CatObservability
+	case has(t, "iam", "security", "identity", "access"):
+		return CatSecurity
+	case has(t, "external"):
+		return CatExternal
+	case t == "":
+		return categoryFor(label)
+	default:
+		return categoryFor(typ + " " + label)
+	}
+}
+
+// isSupportCat reports whether a category is cross-cutting (governance or
+// observability), which the renderer draws with a dashed relationship.
+func isSupportCat(c Category) bool {
+	return c == CatSecurity || c == CatObservability
 }
 
 func has(s string, subs ...string) bool {
