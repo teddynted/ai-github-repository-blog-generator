@@ -88,8 +88,36 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("- Rendering Notes must lay out only the release's change (its primary components + minimal cross-cutting IAM/observability). Do not describe a generic platform bus, ingress, VPC, or repository-wide topology unless it is explicitly part of the change.\n")
 	b.WriteString("- Do NOT reference these repository-wide runtime/platform components unless the engineering topic is explicitly about them — even if the blog names them as background: Amazon Bedrock, Ollama, OpenClaw (claw), n8n, Kafka, a general-purpose EventBridge event bus, webhook ingestion, or networking primitives (VPC, subnets, security groups, NAT/internet gateways). Scope every service to THIS release's workflow — e.g. describe S3 as staging the build's scripts/artifacts, not as \"storage for the platform\", and scope IAM to the permissions the release's own EC2/Lambda/S3/AMI operations need.\n")
 	b.WriteString("- Do NOT infer a tool from the blog's frontmatter tags or metadata — a \"github-actions\" tag does not establish that the build is GitHub Actions-driven. Name a specific tool only when the blog BODY describes it as part of the change; otherwise describe it generically (e.g. \"external build driver that invokes the AWS APIs for the workflow\").\n")
+	b.WriteString("- Describe each component's purpose in terms of THIS release's change, not the baseline platform's posture. For a scheduled start/stop control path, say it bounds COMPUTE cost for the on-demand host and preserves the release's runtime control flow — do NOT describe it as \"keeping ingestion/the front door/inference/always-on services available\" (that is pre-existing platform behaviour, not this release's contribution).\n")
 
 	return b.String()
+}
+
+// baselineComponentTerms name repository-wide runtime components that are NOT the
+// subject of a typical release. Blog lines mentioning them are dropped from the
+// evidence so the spec can't cite baseline platform detail. Only specific product
+// names are listed — never generic words like "inference" that a future release
+// might legitimately be about.
+var baselineComponentTerms = []string{"claw", "openclaw", "ollama", "bedrock", "n8n", "kafka"}
+
+// filterBaselineComponents removes blog lines that mention a baseline component,
+// keeping the rest of the article intact.
+func filterBaselineComponents(md string) string {
+	var out []string
+	for _, ln := range strings.Split(md, "\n") {
+		low := strings.ToLower(ln)
+		drop := false
+		for _, t := range baselineComponentTerms {
+			if strings.Contains(low, t) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, ln)
+		}
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 // evidenceBlock assembles the deterministic, repository-grounded evidence the
@@ -116,7 +144,7 @@ func evidenceBlock(pkg ReleasePackage) string {
 	if t := releaseTopic(pkg.Blog.Title); t != "" {
 		fmt.Fprintf(&b, "Release topic: %s\n", t)
 	}
-	if body := strings.TrimSpace(pkg.Blog.Markdown); body != "" {
+	if body := filterBaselineComponents(strings.TrimSpace(pkg.Blog.Markdown)); body != "" {
 		b.WriteString("\nBlog content:\n")
 		b.WriteString(body + "\n")
 	}
