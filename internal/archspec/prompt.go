@@ -84,6 +84,8 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("- Ground every component, connection, and security boundary in the evidence; cite the specific repository evidence. If you cannot cite evidence, omit the item.\n")
 	b.WriteString("- Never present planned or roadmap work as implemented. Describe only what exists in the evidence.\n")
 	b.WriteString("- Do NOT emit permanent, repository-wide platform labels or classifications (e.g. \"Event-driven AI Agent Platform\", \"Serverless hybrid AI platform\", \"AWS-native AI platform\", \"Repository-level architecture overview\", \"overall platform architecture\") in the Title, Primary Engineering Topic, or anywhere else — UNLESS the engineering topic itself is explicitly about that. Scope every statement to the change this release introduces, so the same instructions work for any future release regardless of its architecture style.\n")
+	b.WriteString("- Include ONLY the components central to the engineering topic plus the minimal supporting cross-cutting services (IAM, observability) needed to explain them. Do NOT include generic platform ingress or event-routing — webhook ingestion, a general-purpose event bus, unrelated queues/functions — unless the topic is specifically about it. Prefer the specific trigger the release uses (e.g. a scheduled rule) over a generic bus. If a service is not required to explain the release's change, omit it even when it appears in the evidence.\n")
+	b.WriteString("- Rendering Notes must lay out only the release's change (its primary components + minimal cross-cutting IAM/observability). Do not describe a generic platform bus, ingress, VPC, or repository-wide topology unless it is explicitly part of the change.\n")
 
 	return b.String()
 }
