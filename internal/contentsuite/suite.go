@@ -22,11 +22,13 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archspec"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/awsdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/linkedin"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
@@ -162,7 +164,7 @@ var stageDeps = map[string][]string{
 	"linkedin":                  {"architecture", "seo-metadata"},
 	"x-thread":                  {"architecture", "seo-metadata"},
 	"architecture-diagram-spec": {"blog", "architecture"},
-	"architecture-diagram":      {"blog"},
+	"architecture-diagram":      {"architecture-diagram-spec"},
 }
 
 // activeStages returns the set of stages to execute. A nil result means "run
@@ -423,6 +425,14 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	// CFN/service graph). Skipped when the release has no diagrammable evidence.
 	if run("architecture-diagram") {
 		s.record(o.runExt("architecture-diagram", 15, "13-architecture-diagram.svg", "svg", func() (string, error) {
+			// Preferred: render the RELEASE-SPECIFIC diagram from the diagram-spec's
+			// grounded Connections table (AWS-styled, two-layer flow).
+			if spec := strings.TrimSpace(s.DiagramSpec.Markdown()); spec != "" {
+				if svg := awsdiagram.Render(awsdiagram.Parse(spec, diagramTitle(rctx, s.Blog))); svg != "" {
+					return svg, nil
+				}
+			}
+			// Fallback: the repository-grounded graph render.
 			graphs := diagramGraphs(rctx)
 			if len(graphs) == 0 {
 				return "", errNoDiagram
