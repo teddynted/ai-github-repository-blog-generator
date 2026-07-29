@@ -103,7 +103,7 @@ func (g *Generator) Spec(ctx context.Context, pkg ReleasePackage) (Spec, error) 
 			slog.String("repository", spec.Repository),
 			slog.String("release", spec.Release),
 			slog.Int("cfnResources", len(pkg.Context.CloudFormation.Resources)),
-			slog.Int("awsServices", len(evidenceServices(pkg.Context))),
+			slog.Int("awsServices", len(evidenceServices(pkg.Context, pkg.Blog.Markdown))),
 			slog.Int("bytes", len(spec.Body)),
 		)
 	}
