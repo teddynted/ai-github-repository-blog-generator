@@ -368,14 +368,18 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 		return []artifact{{kind: "blog", ext: "md", markdown: post.Markdown}}, nil
 	}
 
-	// architecture is rendered as the version-independent, repository-level document
+	// architecture is a release-scoped artifact derived from the blog: render it
 	// directly from the context (deterministic) — no suite run, no wasted model call.
 	if target == "architecture" {
-		md, err := repoArchitectureMarkdown(ctx, rctx)
+		col, err := (&architecture.Generator{}).Architecture(ctx, architecture.ReleasePackage{Context: rctx})
 		if err != nil {
 			return nil, err
 		}
-		return []artifact{{kind: "architecture", ext: "md", markdown: md}}, nil
+		var bp releasegen.BlogPost
+		if blog != nil {
+			bp = *blog
+		}
+		return []artifact{{kind: "architecture", ext: "md", markdown: architecture.ReleaseScopedMarkdown(col, rctx, bp)}}, nil
 	}
 
 	// blog is nil → the orchestrator generates it first; non-nil (--from-blog) →
@@ -398,17 +402,6 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 		return nil, fmt.Errorf("artifact %q was not produced (a thin release may skip it)", target)
 	}
 	return out, nil
-}
-
-// repoArchitectureMarkdown renders the version-independent architecture document
-// from the context. It is deterministic — the model only polishes per-diagram
-// descriptions, which the repo-level rendering omits — so no model is needed.
-func repoArchitectureMarkdown(ctx context.Context, rctx *rc.ReleaseContext) (string, error) {
-	col, err := (&architecture.Generator{}).Architecture(ctx, architecture.ReleasePackage{Context: rctx})
-	if err != nil {
-		return "", err
-	}
-	return col.RepoLevelMarkdown(), nil
 }
 
 // loadBlogPost reads an existing blog.md into a BlogPost so the suite can derive

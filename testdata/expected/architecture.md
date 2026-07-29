@@ -1,22 +1,55 @@
-# Architecture Diagrams: widget
+# Release Architecture: widget v1.0.0
 
-_Repository-level architecture overview · Event-driven platform_
+_Architecture impact analysis derived from the release blog_
 
-> **Notes:** diagrams are generated from the repository README, documented AWS integrations, automation workflows, and the current project structure. The architecture document is intentionally **version-independent** so it can be reused across releases, branches, and generated documentation workflows.
-
----
-
-## Platform Overview
-
-Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. The platform is classified as **event-driven** because external events are ingested and routed through Amazon SQS and Amazon EventBridge for asynchronous processing before orchestration and inference execution.
+> **Source:** This document is generated from the release-specific `blog.md` artifact and captures the architectural impact of **v1.0.0**.
 
 ---
 
-## Deployment Architecture — AWS Integration
+## Release Context
 
-_Deployment architecture_
+- **Repository:** widget
+- **Release:** v1.0.0
+- **Primary Engineering Theme:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-**Type:** Deployment Diagram · **Complexity:** low
+---
+
+## What Changed in This Release
+
+First production release of Widget. Adds an EventBridge-driven ingestion pipeline, an SQS durable buffer, a hardened EC2 worker, and CloudFormation infrastructure. Breaking: the legacy polling endpoint is removed.
+
+---
+
+## Affected AWS Components
+
+- **AWS Lambda** — event handling and dispatch to the orchestration layer
+- **Amazon EventBridge** — asynchronous event ingestion and routing
+- **Amazon SQS** — message queue buffering asynchronous work
+- **Amazon EC2** — on-demand compute for workloads that are not serverless
+- **AWS CloudFormation** — provisions infrastructure as code
+- **Amazon CloudWatch** — centralized logs and metrics
+
+---
+
+## Updated Architecture Flow
+
+**widget v1.0.0 — Event-Driven Flow**
+
+```mermaid
+flowchart LR
+    Webhook["Webhook"]
+    Amazon_EventBridge["Amazon EventBridge"]
+    Amazon_SQS["Amazon SQS"]
+    Amazon_EC2["Amazon EC2"]
+    Webhook --> Amazon_EventBridge
+    Amazon_EventBridge --> Amazon_SQS
+    Amazon_SQS --> Amazon_EC2
+    style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
+    style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
+    style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
+```
+
+**widget v1.0.0 — High-Level AWS Architecture**
 
 ```mermaid
 flowchart TD
@@ -44,95 +77,28 @@ flowchart TD
     style Amazon_CloudWatch fill:#E7157B,stroke:#232F3E,color:#fff
 ```
 
-### AWS Services Used
+---
 
-- **AWS Lambda** — event handling and dispatch to the orchestration layer
-- **Amazon EventBridge** — asynchronous event ingestion and routing
-- **Amazon SQS** — message queue buffering asynchronous work
-- **Amazon EC2** — on-demand compute for workloads that are not serverless
-- **AWS CloudFormation** — provisions infrastructure as code
-- **Amazon CloudWatch** — centralized logs and metrics
+## Operational Impact
+
+- Single-region, single public subnet; serverless front door, scheduled EC2 compute.
+- SQS absorbs bursts; the worker processes within a scheduled window.
+- SQS provides durable buffering and retries; a dead-letter queue captures poison messages.
 
 ---
 
-## Logical Architecture — Data Flow
+## Security Considerations
 
-_Logical architecture_
-
-**Type:** Data Flow Diagram · **Complexity:** low
-
-```mermaid
-flowchart LR
-    Webhook["Webhook"]
-    Amazon_EventBridge["Amazon EventBridge"]
-    Amazon_SQS["Amazon SQS"]
-    Amazon_EC2["Amazon EC2"]
-    Webhook --> Amazon_EventBridge
-    Amazon_EventBridge --> Amazon_SQS
-    Amazon_SQS --> Amazon_EC2
-    style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
-```
-
-### Key Components
-
-- Webhook
-- **Amazon EventBridge** — asynchronous event ingestion and routing
-- **Amazon SQS** — message queue buffering asynchronous work
-- **Amazon EC2** — on-demand compute for workloads that are not serverless
+IMDSv2 enforced, least-privilege IAM, secrets in AWS Secrets Manager, HMAC-verified webhooks.
 
 ---
 
-## CI/CD & Infrastructure Automation
+## Relationship to the Platform
 
-_Delivery and infrastructure automation_
-
-**Type:** Deployment Diagram · **Complexity:** medium
-
-```mermaid
-flowchart LR
-    github["GitHub"]
-    workflow["CI/CD Workflow"]
-    cloudformation["AWS CloudFormation"]
-    Amazon_EventBridge["Amazon EventBridge"]
-    Amazon_SQS["Amazon SQS"]
-    Amazon_EC2["Amazon EC2"]
-    github -->|triggers| workflow
-    workflow -->|deploys| cloudformation
-    cloudformation -->|provisions| Amazon_EventBridge
-    cloudformation -->|provisions| Amazon_SQS
-    cloudformation -->|provisions| Amazon_EC2
-    style cloudformation fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_EventBridge fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_SQS fill:#E7157B,stroke:#232F3E,color:#fff
-    style Amazon_EC2 fill:#ED7100,stroke:#232F3E,color:#fff
-```
-
-### Deployment Characteristics
-
-- **GitHub** — source of webhooks, commits, and pull requests that trigger the pipeline
-- **CI/CD Workflow** — runs validation and build steps for each change
-- **AWS CloudFormation** — provisions infrastructure as code
-- **Amazon EventBridge** — asynchronous event ingestion and routing
-- **Amazon SQS** — message queue buffering asynchronous work
-- **Amazon EC2** — on-demand compute for workloads that are not serverless
-
----
-
-## Architecture Intelligence
-
-| Attribute | Value |
-| --- | --- |
-| **Architecture style** | Event-driven platform |
-| **Primary workflow** | Webhook → Amazon EventBridge → Amazon SQS → Amazon EC2 |
-| **Infrastructure complexity** | medium |
-| **Operational model** | Infrastructure as Code on AWS |
-| **Centralized observability** | Amazon CloudWatch |
-| **Estimated reading time** | 4 min |
+Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
 
 ---
 
 ## Generation Context
 
-This document is generated from the **current repository state**, including the README, documentation, workflows, and project structure available at generation time. No release-specific version information is embedded in the architecture document.
+This document is generated from the release-specific `blog.md` artifact for **v1.0.0** and represents the architectural impact of that release rather than a permanent repository-wide architecture reference.

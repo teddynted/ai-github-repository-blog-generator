@@ -290,10 +290,11 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
 				})
 				s.Architecture = col
-				// Emit the version-independent, repository-level architecture document
-				// (no release tag, curated structure) so the same stable doc is produced
-				// locally and in the cloud.
-				return col.RepoLevelMarkdown(), err
+				// Emit the RELEASE-SCOPED architecture document — derived from this
+				// release's blog, titled with the release version, scoped to what the
+				// release documents. The same rendering is produced locally and in the
+				// cloud, and stays structured for the downstream diagram-spec stage.
+				return architecture.ReleaseScopedMarkdown(col, rctx, s.Blog), err
 			})
 		}()
 	}
