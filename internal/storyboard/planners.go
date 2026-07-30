@@ -66,8 +66,16 @@ func planAssets(typ string) []string {
 	switch typ {
 	case "introduction":
 		return []string{"Repository Logo", "Title Card"}
-	case "problem":
-		return []string{"Timeline", "Flow Diagram"}
+	case "problem", "constraint":
+		return []string{"Timeline", "Flow Diagram", "Motion Graphics"}
+	case "solution":
+		return []string{"Pipeline Animation", "AWS Icons", "Motion Graphics"}
+	case "decisions":
+		return []string{"State Overlay", "Motion Graphics"}
+	case "tradeoffs":
+		return []string{"Lifecycle Animation", "Metric Tiles"}
+	case "future":
+		return []string{"Motion Graphics", "AWS Icons", "Timeline"}
 	case "architecture", "diagram":
 		return []string{"Architecture Diagram", "AWS Icons"}
 	case "cloudformation":

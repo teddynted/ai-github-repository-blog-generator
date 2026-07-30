@@ -235,6 +235,16 @@ func planVisuals(typ, title string, assets []string, diagrams []DiagramRef) Visu
 		v.Description = "Animated title card with the repository logo and release tag; brief motion-graphic intro."
 	case "problem":
 		v.Description = "A before/after timeline dramatising the operational cost — animate the slow path filling up; keep on-screen text light so the narration carries it."
+	case "constraint":
+		v.Description = "An animated boot/provisioning timeline: package installs streaming from live repositories, with two runs diverging to show the non-determinism. Highlight the delta."
+	case "solution":
+		v.Description = "The build-pipeline reveal, assembling left to right (scripts → artifact store → builder → manifest → captured, tagged artifact). Camera: a slow lateral track along the pipeline."
+	case "decisions":
+		v.Description = "A state-transition overlay contrasting the wrong path with the right one (e.g. skipped vs. reset first-boot state), each decision resolving on screen as narration names it."
+	case "tradeoffs":
+		v.Description = "A lifecycle animation: versioned artifacts stacking, each with its own snapshot, a storage meter ticking up, and a rebuild-cadence clock — the costs made visible."
+	case "future":
+		v.Description = "A capability unlock: the fast path enabling an interruption-and-recovery cycle — reclaim, relaunch from the artifact, back in service — animated end to end."
 	case "architecture", "diagram":
 		if len(diagrams) > 0 {
 			v.Description = fmt.Sprintf("The architecture diagram (%s): build the graph edge by edge, lower-third each AWS service as narration names it, and pulse the single most important cross-plane hand-off.", diagrams[0].Source)

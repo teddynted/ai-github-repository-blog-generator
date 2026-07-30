@@ -14,13 +14,13 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 - **Objective:** Establish the problem and why this change matters.
 - **Timing:** 16s recommended (13–21s, medium)
 - **Narration:** The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy, and coupled ingestion to processing. We needed a pipeline that absorbs bursts, decouples the front door from the worker, and keeps cost bounded.
-- **Visual:** A before/after timeline dramatising the operational cost — animate the slow path filling up; keep on-screen text light so the narration carries it. Assets: Timeline, Flow Diagram.
+- **Visual:** A before/after timeline dramatising the operational cost — animate the slow path filling up; keep on-screen text light so the narration carries it. Assets: Timeline, Flow Diagram, Motion Graphics.
 - **Camera:** Focus Shift — Rack focus from context to the problem statement.
 - **Animation:**
   1. Fade In → scene
 - **Overlays:**
   - [Title] The problem
-- **Assets:** Timeline, Flow Diagram
+- **Assets:** Timeline, Flow Diagram, Motion Graphics
 - **Transition:** Diagram Morph (0.8s)
 - **Music:** neutral, technical
 
