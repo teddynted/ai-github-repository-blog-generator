@@ -14,7 +14,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 - **Objective:** Establish the problem and why this change matters.
 - **Timing:** 16s recommended (13–21s, medium)
 - **Narration:** The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy, and coupled ingestion to processing. We needed a pipeline that absorbs bursts, decouples the front door from the worker, and keeps cost bounded.
-- **Visual:** Text-forward slide framing the problem, with a supporting timeline or before/after graphic. Assets: Timeline, Flow Diagram.
+- **Visual:** A before/after timeline dramatising the operational cost — animate the slow path filling up; keep on-screen text light so the narration carries it. Assets: Timeline, Flow Diagram.
 - **Camera:** Focus Shift — Rack focus from context to the problem statement.
 - **Animation:**
   1. Fade In → scene
@@ -31,7 +31,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 - **Objective:** Explain the system architecture and how components interact.
 - **Timing:** 23s recommended (20–28s, slow)
 - **Narration:** Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching events into an Amazon SQS queue, which provides durable buffering and retries; a dead-letter queue captures poison messages. - A scheduled EC2 worker drains the queue during its window and processes each widget.
-- **Visual:** An architecture canvas illustrating the components and how they connect. Assets: Architecture Diagram, AWS Icons.
+- **Visual:** An architecture canvas that builds the components in one at a time, with a lower-third AWS-service label appearing as each is introduced. Assets: Architecture Diagram, AWS Icons.
 - **Camera:** Diagram Focus — Frame the diagram; move to each highlighted node.
 - **Animation:**
   1. Fade In → scene
@@ -53,7 +53,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 - **Objective:** Explain how the feature was implemented.
 - **Timing:** 22s recommended (19–27s, slow)
 - **Narration:** When a widget event arrives, the Lambda verifies its signature and publishes it to EventBridge. Because EventBridge fans out to SQS, ingestion never blocks on processing — bursts pile up safely in the queue. The EC2 worker, started on a schedule, pulls messages, processes them, and relies on SQS retries plus the DLQ for anything that fails.
-- **Visual:** A code editor focused on the key implementation, with the relevant lines highlighted. Assets: Code Editor, Terminal Recording.
+- **Visual:** A terminal or editor screen recording of the key mechanism — scroll or type the real identifiers, tags, and config, highlighting each as the narration reaches it. Assets: Code Editor, Terminal Recording.
 - **Camera:** Push In — Push in on the key code as it is explained.
 - **Animation:**
   1. Fade In → scene
@@ -105,7 +105,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 - **Objective:** Summarise the takeaways and point to what's next.
 - **Timing:** 9s recommended (6–14s, medium)
 - **Narration:** Widget v1.0.0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
-- **Visual:** Closing title card recapping key takeaways with a subtle call to action. Assets: Repository Logo, Title Card.
+- **Visual:** Closing title card recapping the reusable pattern with a subtle call to action. Assets: Repository Logo, Title Card.
 - **Camera:** Slow Zoom Out — Zoom out to close the video calmly.
 - **Animation:**
   1. Fade In → scene

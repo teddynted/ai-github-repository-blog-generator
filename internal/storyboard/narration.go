@@ -234,25 +234,25 @@ func planVisuals(typ, title string, assets []string, diagrams []DiagramRef) Visu
 	case "introduction":
 		v.Description = "Animated title card with the repository logo and release tag; brief motion-graphic intro."
 	case "problem":
-		v.Description = "Text-forward slide framing the problem, with a supporting timeline or before/after graphic."
+		v.Description = "A before/after timeline dramatising the operational cost — animate the slow path filling up; keep on-screen text light so the narration carries it."
 	case "architecture", "diagram":
 		if len(diagrams) > 0 {
-			v.Description = fmt.Sprintf("The architecture diagram (%s) centred on canvas, building and highlighting nodes as narration proceeds.", diagrams[0].Source)
+			v.Description = fmt.Sprintf("The architecture diagram (%s): build the graph edge by edge, lower-third each AWS service as narration names it, and pulse the single most important cross-plane hand-off.", diagrams[0].Source)
 		} else {
-			v.Description = "An architecture canvas illustrating the components and how they connect."
+			v.Description = "An architecture canvas that builds the components in one at a time, with a lower-third AWS-service label appearing as each is introduced."
 		}
 	case "cloudformation":
-		v.Description = "A code editor showing the CloudFormation template, scrolling and highlighting each resource."
+		v.Description = "A scrolling CloudFormation template / change-set view, lower-thirding each resource type as it scrolls past and highlighting the lines the narration cites."
 	case "repository":
-		v.Description = "A screen recording of the GitHub repository: the file tree and the changed files."
+		v.Description = "A screen recording of the repository diff: the file tree, then the changed files, zooming the key hunks the narration names."
 	case "implementation":
-		v.Description = "A code editor focused on the key implementation, with the relevant lines highlighted."
+		v.Description = "A terminal or editor screen recording of the key mechanism — scroll or type the real identifiers, tags, and config, highlighting each as the narration reaches it."
 	case "results":
-		v.Description = "Outcome-focused graphics: metrics, a flow diagram, and before/after framing."
+		v.Description = "Outcome graphics: metric tiles plus a before/after comparison, animating the delta between the two states."
 	case "lessons":
 		v.Description = "Clean slides listing practical guidance and how to use or extend the feature."
 	case "conclusion":
-		v.Description = "Closing title card recapping key takeaways with a subtle call to action."
+		v.Description = "Closing title card recapping the reusable pattern with a subtle call to action."
 	default:
 		v.Description = "A supporting visual for: " + title + "."
 	}
