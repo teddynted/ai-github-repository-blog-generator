@@ -168,12 +168,17 @@ func visualHint(typ string) string {
 
 func narrationPrompt(title, typ, nextTitle, draft string) string {
 	target := "2–4 short, spoken sentences (about 35–55 words total"
-	deepHint := ""
+	sceneHint := ""
 	if isDeepTechnical(typ) {
 		// Deep-technical scenes carry the concrete detail — give them room to name
 		// each mechanism (version resolution, duplicate checks, manifest, tagging).
 		target = "3–5 short, spoken sentences (about 55–85 words total"
-		deepHint = "This is a deep-technical scene: briefly cover EACH distinct mechanism the DRAFT names — the viewer should come away knowing the full set of steps, not just the first one explained at length. Give each mechanism a sentence or clause; do not dwell on only the opening point.\n"
+		sceneHint = "This is a deep-technical scene: briefly cover EACH distinct mechanism the DRAFT names — the viewer should come away knowing the full set of steps, not just the first one explained at length. Give each mechanism a sentence or clause; do not dwell on only the opening point.\n"
+	}
+	if typ == "conclusion" {
+		// A conference-style close: problem → pattern → what it enables, ending on
+		// one memorable, forward-looking line.
+		sceneHint = "This is the closing scene: land it in three quick beats — the problem this solved, the reusable engineering pattern it demonstrates, and what it now enables — and end on ONE short, memorable, forward-looking line.\n"
 	}
 	bridge := ""
 	if strings.TrimSpace(nextTitle) != "" {
@@ -189,6 +194,9 @@ func narrationPrompt(title, typ, nextTitle, draft string) string {
 			"Rewrite the DRAFT below into %s, roughly 12–18 words per sentence). Be clear, confident, conversational, and "+
 			"technically precise. Prefer present tense and active voice; keep each sentence to a single idea rather than "+
 			"long compound clauses.\n"+
+			"Vary your sentence openings for spoken rhythm: do not begin consecutive sentences with the same word or the "+
+			"same subject (for example repeated \"The pipeline\", \"The builder\", \"The host\"), and never start a "+
+			"sentence with \"So\".\n"+
 			"Ground every claim in the DRAFT: use ONLY the facts, AWS services, and mechanisms it states — never invent "+
 			"features, numbers, or components, and never substitute a different AWS service for the one named (for example, "+
 			"do not say ECS when the draft says EC2).\n"+
@@ -201,7 +209,7 @@ func narrationPrompt(title, typ, nextTitle, draft string) string {
 			"Output ONLY the spoken sentences — no preamble, no quotation marks, no scene labels, and no framing such as "+
 			"\"Here is\" or \"rewritten version\". Begin directly with the first spoken word.\n\n"+
 			"DRAFT:\n%s",
-		title, typ, visualHint(typ), bridge, deepHint, target, draft,
+		title, typ, visualHint(typ), bridge, sceneHint, target, draft,
 	)
 }
 
