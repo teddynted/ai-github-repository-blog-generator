@@ -155,27 +155,37 @@ func parseComponents(spec string) ([]component, componentIndex) {
 			continue
 		}
 		indented := len(raw) > 0 && (raw[0] == ' ' || raw[0] == '\t')
-		// A top-level "- **Name**" bullet starts a new component.
-		if !indented && strings.HasPrefix(t, "- ") {
-			name := cleanCell(strings.TrimPrefix(t, "- "))
-			if name != "" {
+		// A component header is either a standalone bold line "**Name**" (the
+		// generator's form, with the fields as top-level "- Key: value" bullets
+		// below it) or a legacy top-level "- **Name**" bullet. Anything else that
+		// is a "- " bullet is a field of the current component.
+		bulletBody := ""
+		if strings.HasPrefix(t, "- ") {
+			bulletBody = strings.TrimSpace(strings.TrimPrefix(t, "- "))
+		}
+		isBold := func(s string) bool {
+			return strings.HasPrefix(s, "**") && strings.HasSuffix(s, "**") && len(s) > 4
+		}
+		switch {
+		case !indented && isBold(t):
+			if name := cleanCell(t); name != "" {
 				flush()
 				cur = &component{Name: name, Plane: plane}
 			}
-			continue
-		}
-		if cur == nil || !strings.HasPrefix(t, "- ") {
-			continue
-		}
-		key, val, ok := splitField(strings.TrimPrefix(t, "- "))
-		if !ok {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(key, "type"):
-			cur.Type = val
-		case strings.HasPrefix(key, "aws service"):
-			cur.Service = val
+		case bulletBody != "" && isBold(bulletBody):
+			if name := cleanCell(bulletBody); name != "" {
+				flush()
+				cur = &component{Name: name, Plane: plane}
+			}
+		case bulletBody != "" && cur != nil:
+			if key, val, ok := splitField(bulletBody); ok {
+				switch {
+				case strings.HasPrefix(key, "type"):
+					cur.Type = val
+				case strings.HasPrefix(key, "aws service"):
+					cur.Service = val
+				}
+			}
 		}
 	}
 	flush()

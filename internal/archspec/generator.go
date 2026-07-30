@@ -135,6 +135,16 @@ func ensureHeading(body string) string {
 	return specHeading + "\n\n" + body
 }
 
+// graphContract is the fixed graph-definition contract stamped just before the
+// Renderer Contract. It states, for automated validation tooling, that Components
+// and Connections are the canonical node/edge sets and win over descriptive text.
+const graphContract = `## Graph Definition Contract
+- **Components** define the canonical node set.
+- **Connections** define the canonical edge set.
+- Renderers must not infer additional nodes or edges from descriptive text.
+- **Operational Flow**, **Security**, **Failure Handling**, and **Rendering Notes** provide semantic annotations only.
+- If descriptive text conflicts with the graph definition, **Components + Connections** take precedence.`
+
 // rendererContract is the fixed contract appended to every spec, telling
 // downstream renderers which sections are the authoritative graph and how to
 // resolve conflicts. It is deterministic (never model-authored) so the guarantee
@@ -151,8 +161,20 @@ const rendererContract = `## Renderer Contract
 // re-decorated body is unchanged.
 func decorate(body string, pkg ReleasePackage) string {
 	body = injectProvenance(body, pkg)
+	body = appendGraphContract(body)
 	body = appendRendererContract(body)
 	return body
+}
+
+// appendGraphContract adds the fixed Graph Definition Contract to the end of the
+// document, unless already present. decorate() runs it before
+// appendRendererContract so the graph contract lands immediately above the
+// Renderer Contract.
+func appendGraphContract(body string) string {
+	if strings.Contains(body, "## Graph Definition Contract") {
+		return body
+	}
+	return strings.TrimRight(body, "\n") + "\n\n" + graphContract + "\n"
 }
 
 // injectProvenance inserts the Source Inputs and Generation Metadata sections
