@@ -1,8 +1,8 @@
 # YouTube Script: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and cloud practitioners · intermediate_
+_acme/widget · release v1.0.0 · long-form · ~1:39 · Software engineers and cloud practitioners · intermediate_
 
-> **Notes:** runtime 1:40 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
+> **Notes:** runtime 1:39 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
 
 ## Hook (`00:00–00:15`, showcase)
 
@@ -41,8 +41,6 @@ _acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and c
 > Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching events into an Amazon SQS queue, which provides durable buffering and retries; a dead-letter queue captures poison messages. - A scheduled EC2 worker drains the queue during its window and processes each widget. Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. On the AWS side we lean on AWS Lambda, Amazon EventBridge, Amazon SQS, and Amazon EC2. webhook-handler handles validate and publish inbound events. worker handles drain SQS and process widgets. The flow works like this: webhook → EventBridge → SQS → EC2 worker.
 
 - **Visual references:** Diagram: ; AWS service icons: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
-**Demonstration:**
-  1. Reveal the diagram — Build  node by node as you narrate.
 **Callouts:**
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
@@ -99,18 +97,18 @@ _acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and c
 
 ## Chapter 6 — Wrapping up
 
-- **Timestamp:** `01:30–01:40` (target 10s; 5–25s)
+- **Timestamp:** `01:30–01:39` (target 9s; 5–24s)
 - **Storyboard scenes:** 6 · **Voice-over scenes:** 6
 
 ### Narration
 
-> Widget v1. 0. 0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
+> Widget v1.0.0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
 
 - **Transition:** That's the release end to end — thanks for watching.
 
 ---
 
-## Conclusion (`01:30–01:40`)
+## Conclusion (`01:30–01:39`)
 
 > So that's acme/widget v1.0.0 end to end. Next up: we keep building the pipeline release by release. Thanks for watching.
 
@@ -134,7 +132,7 @@ _acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 1:40 · **Speaking time:** 3:04 · **Words:** 460
+- **Estimated runtime:** 1:39 · **Speaking time:** 3:03 · **Words:** 458
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 - **Alternative titles:** How acme/widget v1.0.0 Actually Works; Building v1.0.0: A Full Architecture Walkthrough

@@ -92,6 +92,10 @@ func (g *Generator) Spec(ctx context.Context, pkg ReleasePackage) (Spec, error) 
 		body = ensureHeading(strings.TrimSpace(raw))
 	}
 
+	// Stamp the deterministic provenance/contract sections that must be identical
+	// on every artifact (LLM or offline path) rather than left to the model.
+	body = decorate(body, pkg)
+
 	spec := Spec{
 		Title:      specTitle(pkg),
 		Repository: pkg.Context.Repository.FullName,
@@ -129,6 +133,121 @@ func ensureHeading(body string) string {
 	// The model may have led with a stray "# AWS Architecture..." variant or
 	// prose; normalise to the canonical heading on top.
 	return specHeading + "\n\n" + body
+}
+
+// graphContract is the fixed graph-definition contract stamped just before the
+// Renderer Contract. It states, for automated validation tooling, that Components
+// and Connections are the canonical node/edge sets and win over descriptive text.
+const graphContract = `## Graph Definition Contract
+- **Components** define the canonical node set.
+- **Connections** define the canonical edge set.
+- Renderers must not infer additional nodes or edges from descriptive text.
+- **Operational Flow**, **Security**, **Failure Handling**, and **Rendering Notes** provide semantic annotations only.
+- If descriptive text conflicts with the graph definition, **Components + Connections** take precedence.`
+
+// rendererContract is the fixed contract appended to every spec, telling
+// downstream renderers which sections are the authoritative graph and how to
+// resolve conflicts. It is deterministic (never model-authored) so the guarantee
+// is identical on every artifact.
+const rendererContract = `## Renderer Contract
+- This artifact is intended to be consumed directly by automated SVG / draw.io / Mermaid renderers.
+- Renderers should treat the **Components** and **Connections** sections as the authoritative graph definition.
+- **Operational Flow**, **Security**, and **Failure Handling** provide semantic annotations and must not introduce additional visual nodes unless explicitly declared in **Components**.
+- If a conflict exists, **Components + Connections** take precedence over descriptive sections.`
+
+// decorate stamps the deterministic, non-model-authored sections onto the spec:
+// the Source Inputs / Generation Metadata provenance block (right after Diagram
+// Metadata) and the Renderer Contract (at the end). Both are idempotent so a
+// re-decorated body is unchanged.
+func decorate(body string, pkg ReleasePackage) string {
+	body = injectProvenance(body, pkg)
+	body = appendGraphContract(body)
+	body = appendRendererContract(body)
+	return body
+}
+
+// appendGraphContract adds the fixed Graph Definition Contract to the end of the
+// document, unless already present. decorate() runs it before
+// appendRendererContract so the graph contract lands immediately above the
+// Renderer Contract.
+func appendGraphContract(body string) string {
+	if strings.Contains(body, "## Graph Definition Contract") {
+		return body
+	}
+	return strings.TrimRight(body, "\n") + "\n\n" + graphContract + "\n"
+}
+
+// injectProvenance inserts the Source Inputs and Generation Metadata sections
+// immediately after the Diagram Metadata block, making the derived-IR provenance
+// explicit and auditable. Source Inputs reflect the inputs actually used.
+func injectProvenance(body string, pkg ReleasePackage) string {
+	if strings.Contains(body, "## Generation Metadata") {
+		return body
+	}
+	var b strings.Builder
+	b.WriteString("## Source Inputs\n")
+	b.WriteString("- blog.md\n")
+	if strings.TrimSpace(pkg.ArchitectureDoc) != "" {
+		b.WriteString("- architecture.md\n")
+	}
+	b.WriteString("\n## Generation Metadata\n")
+	b.WriteString("- Artifact Generator: architecture-diagram-spec\n")
+	b.WriteString("- Artifact Role: Derived intermediate representation (IR)\n")
+	fmt.Fprintf(&b, "- Generated From Release: %s\n", firstNonEmpty(pkg.Context.Release.Tag, pkg.Context.Release.Name))
+	b.WriteString("- Compatibility: Renderer-safe, non-authoritative source artifact")
+	return insertAfterSection(body, "## Diagram Metadata", b.String())
+}
+
+// appendRendererContract adds the fixed Renderer Contract to the end of the
+// document (after Rendering Notes, the trailing section), unless already present.
+func appendRendererContract(body string) string {
+	if strings.Contains(body, "## Renderer Contract") {
+		return body
+	}
+	return strings.TrimRight(body, "\n") + "\n\n" + rendererContract + "\n"
+}
+
+// insertAfterSection returns body with block inserted immediately after the
+// section that begins with heading (i.e. before the next "## " top-level heading,
+// or at the end of the document if heading is the last section). When the heading
+// is absent, block is inserted right after the H1 so provenance still appears near
+// the top.
+func insertAfterSection(body, heading, block string) string {
+	lines := strings.Split(body, "\n")
+	start := -1
+	for i, ln := range lines {
+		if strings.TrimSpace(ln) == heading {
+			start = i
+			break
+		}
+	}
+	insertAt := len(lines) // default: end of document
+	if start >= 0 {
+		for i := start + 1; i < len(lines); i++ {
+			if strings.HasPrefix(lines[i], "## ") {
+				insertAt = i
+				break
+			}
+		}
+	} else {
+		// No Diagram Metadata heading — fall back to just after the H1.
+		for i, ln := range lines {
+			if strings.HasPrefix(ln, "# ") {
+				insertAt = i + 1
+				break
+			}
+		}
+		if insertAt == len(lines) {
+			insertAt = 0
+		}
+	}
+	before := strings.TrimRight(strings.Join(lines[:insertAt], "\n"), "\n")
+	after := strings.TrimLeft(strings.Join(lines[insertAt:], "\n"), "\n")
+	parts := []string{before, block}
+	if after != "" {
+		parts = append(parts, after)
+	}
+	return strings.TrimRight(strings.Join(parts, "\n\n"), "\n") + "\n"
 }
 
 // specTitle is the deterministic fallback title, anchored to the article topic

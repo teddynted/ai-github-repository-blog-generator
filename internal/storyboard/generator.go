@@ -58,6 +58,11 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		extraWarnings = append(extraWarnings, "blog had no ## sections; storyboarded a single overview scene from the intro")
 	}
 
+	// Scope diagrams to the release's OWN diagram (the blog's Mermaid), not the
+	// whole-repository set in rctx.Mermaid — which pulls in unrelated README,
+	// release-management, and docs diagrams and explodes the animation plan.
+	releaseDiagrams := rc.AnalyzeMarkdown(post.Markdown, "release architecture diagram")
+
 	scenes := make([]Scene, 0, len(sections))
 	for i, sec := range sections {
 		typ := sceneType(sec.Title)
@@ -67,9 +72,13 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 			Type:        typ,
 			Objective:   objectiveFor(typ, sec.Title),
 		}
-		sc.Narration = g.narration(ctx, sec, typ)
+		nextTitle := ""
+		if i+1 < len(sections) {
+			nextTitle = sections[i+1].Title
+		}
+		sc.Narration = g.narration(ctx, sec, typ, nextTitle)
 		sc.Duration = planDuration(sc.Narration, g.WordsPerSecond)
-		sc.Diagrams = planDiagrams(typ, rctx.Mermaid)
+		sc.Diagrams = planDiagrams(typ, releaseDiagrams)
 		sc.Code = planCode(sec.Body)
 		sc.Camera = planCamera(typ)
 		sc.Animations = planAnimations(typ, sc.Diagrams, sc.Code)
@@ -150,8 +159,15 @@ func videoPacing(scenes []Scene) string {
 
 func collectWarnings(sb Storyboard, rctx *rc.ReleaseContext) []string {
 	var w []string
-	if len(rctx.Mermaid) == 0 {
-		w = append(w, "no Mermaid diagrams in the release context; architecture scenes have no diagram references")
+	hasDiagram := false
+	for _, s := range sb.Scenes {
+		if len(s.Diagrams) > 0 {
+			hasDiagram = true
+			break
+		}
+	}
+	if !hasDiagram {
+		w = append(w, "the release blog has no Mermaid diagram; architecture scenes have no diagram references")
 	}
 	// Long-form videos target 8–15 minutes; flag when we fall short.
 	if sb.Video.TargetFormat == "long-form" && sb.Video.TotalDurationSec < 480 {

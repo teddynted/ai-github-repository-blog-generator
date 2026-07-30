@@ -33,6 +33,20 @@ func cleanMermaidLabel(s string) string {
 
 // analyzeMermaid extracts and parses every fenced ```mermaid block from the
 // markdown inventory.
+// AnalyzeMarkdown parses the Mermaid diagrams from a single markdown document,
+// labelling each with the given source. It lets consumers scope to one
+// document's own diagrams (e.g. a release blog) instead of the whole-repository
+// set captured in ReleaseContext.Mermaid.
+func AnalyzeMarkdown(content, source string) []MermaidDiagram {
+	var out []MermaidDiagram
+	for _, block := range mermaidBlocks(content) {
+		d := parseMermaid(block)
+		d.Source = source
+		out = append(out, d)
+	}
+	return out
+}
+
 func analyzeMermaid(files []RawFile) []MermaidDiagram {
 	var out []MermaidDiagram
 	for _, f := range files {
