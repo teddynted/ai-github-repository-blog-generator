@@ -207,8 +207,11 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 			"long compound clauses.\n"+
 			"Vary your sentence openings for spoken rhythm: do not begin consecutive sentences with the same word or the "+
 			"same subject (for example repeated \"The pipeline\", \"The builder\", \"The host\", \"This\", or \"That\"), "+
-			"and never start a sentence with \"So\", \"Then\", or \"Think of it as\". Prefer short declarative sentences of "+
-			"about 10–16 spoken words.\n"+
+			"and never start a sentence with \"So\", \"Then\", or \"Think of it as\". Keep EVERY sentence under 20 spoken "+
+			"words — if one runs longer, split it into two so it reads in a single breath.\n"+
+			"Vary distinctive phrasing across sentences: introduce a signature term once (a central verb or noun), then "+
+			"prefer natural technical variations instead of leaning on the same word every sentence. Do not reuse the exact "+
+			"same distinctive phrase that EARLIER SCENES already used (below) — say it a different way.\n"+
 			"Ground every claim in the DRAFT: use ONLY the facts, AWS services, and mechanisms it states — never invent "+
 			"features, numbers, or components, and never substitute a different AWS service for the one named (for example, "+
 			"do not say ECS when the draft says EC2).\n"+
