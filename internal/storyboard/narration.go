@@ -19,10 +19,40 @@ func (g *Generator) narration(ctx context.Context, sec section, typ string) stri
 	if err != nil {
 		return draft
 	}
-	if r := collapse(strings.TrimSpace(out)); r != "" {
+	if r := collapse(stripNarrationPreamble(out)); r != "" {
 		return r
 	}
 	return draft
+}
+
+// stripNarrationPreamble removes the assistant-style framing that small models
+// prepend to voice-over ("Here is a rewritten version of the draft in 2-3
+// sentences:") and the surrounding quotes they often add, leaving only the
+// spoken narration.
+func stripNarrationPreamble(s string) string {
+	s = strings.TrimSpace(s)
+	// Drop a leading meta clause that ends at the first ':' when it reads as the
+	// model narrating what it did rather than the narration itself.
+	if i := strings.IndexByte(s, ':'); i > 0 && i < 160 {
+		head := strings.ToLower(s[:i])
+		for _, m := range []string{"here is", "here's", "here are", "sure", "certainly",
+			"rewritten", "rewrite", "revised", "version of", "as requested",
+			"spoken sentence", "spoken narration", "narration", "the draft"} {
+			if strings.Contains(head, m) {
+				s = strings.TrimSpace(s[i+1:])
+				break
+			}
+		}
+	}
+	// Strip a single pair of wrapping straight or curly quotes.
+	s = strings.TrimSpace(s)
+	for _, q := range []struct{ open, close string }{{"\"", "\""}, {"'", "'"}, {"“", "”"}} {
+		if strings.HasPrefix(s, q.open) && strings.HasSuffix(s, q.close) && len(s) > len(q.open)+len(q.close) {
+			s = strings.TrimSpace(s[len(q.open) : len(s)-len(q.close)])
+			break
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 // narrationDraft produces grounded narration from the section prose, with a
@@ -45,9 +75,11 @@ func narrationPrompt(title, typ, draft string) string {
 	return fmt.Sprintf(
 		"You are writing spoken voice-over narration for one scene of a technical video.\n"+
 			"Scene: %q (type: %s).\n\n"+
-			"Rewrite the DRAFT below into 2–3 clear, natural spoken sentences (max ~60 words), "+
-			"professional and educational, suitable for a voice-over. Use ONLY the facts in the "+
-			"draft — do not invent features, numbers, or architecture. Output only the narration text.\n\n"+
+			"Rewrite the DRAFT below into 2–4 clear, natural spoken sentences (max ~70 words), "+
+			"professional and educational, suitable for a confident engineering voice-over. Use ONLY the facts in the "+
+			"draft — do not invent features, numbers, or architecture.\n"+
+			"Output ONLY the narration sentences themselves — no preamble, no quotation marks, and no framing such as "+
+			"\"Here is\", \"rewritten version\", or \"In this scenario\". Begin directly with the first spoken word.\n\n"+
 			"DRAFT:\n%s",
 		title, typ, draft,
 	)

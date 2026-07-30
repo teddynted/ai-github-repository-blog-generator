@@ -1,8 +1,17 @@
 package storyboard
 
+// maxSceneAnimations bounds the animation steps in a single scene so a scene
+// stays watchable (no exhaustive node enumeration). maxAnimHighlights bounds the
+// node highlights within that budget, leaving room for the build and arrow cues.
+const (
+	maxSceneAnimations = 6
+	maxAnimHighlights  = 3
+)
+
 // planAnimations builds a sequenced animation plan for a scene from its type and
 // the diagrams/code it shows. Node-highlight animations are grounded in the
-// real parsed diagram nodes (never invented).
+// real parsed diagram nodes (never invented) and follow the narrative path
+// rather than enumerating every node. The result is capped to maxSceneAnimations.
 func planAnimations(typ string, diagrams []DiagramRef, code []CodeRef) []Animation {
 	var out []Animation
 	seq := 1
@@ -17,12 +26,18 @@ func planAnimations(typ string, diagrams []DiagramRef, code []CodeRef) []Animati
 	case "introduction":
 		add("Scale Up", "title", "Title card scales up into place.")
 	case "architecture", "diagram":
-		for _, d := range diagrams {
+		// One primary diagram per scene; highlight the key nodes on the narrative
+		// path, not every node.
+		if len(diagrams) > 0 {
+			d := diagrams[0]
 			add("Diagram Build", d.Source, "Build the diagram edge by edge.")
-			for _, node := range d.HighlightNodes {
+			for i, node := range d.HighlightNodes {
+				if i >= maxAnimHighlights {
+					break
+				}
 				add("Highlight Node", node, "Highlight and label the node as narration reaches it.")
 			}
-			add("Draw Arrow", d.Source, "Trace the data/control flow between nodes.")
+			add("Draw Arrow", d.Source, "Trace the primary flow between the key nodes.")
 		}
 	case "cloudformation":
 		add("Sequential Reveal", "template", "Reveal the template section by section.")
@@ -40,6 +55,10 @@ func planAnimations(typ string, diagrams []DiagramRef, code []CodeRef) []Animati
 	// Any scene that carries code gets a code cue if it didn't already.
 	if len(code) > 0 && typ != "cloudformation" && typ != "implementation" {
 		add("Highlight", "code", "Highlight the referenced snippet.")
+	}
+	// Keep scenes watchable: never emit more than maxSceneAnimations steps.
+	if len(out) > maxSceneAnimations {
+		out = out[:maxSceneAnimations]
 	}
 	return out
 }
