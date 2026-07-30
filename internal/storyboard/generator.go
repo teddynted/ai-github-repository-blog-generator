@@ -66,6 +66,7 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 
 	scenes := make([]Scene, 0, len(sections))
 	var priorNarration []string // what earlier scenes already said, for de-duplication
+	diagramIntroduced := false  // the primary diagram is built once, then recalled
 	for i, sec := range sections {
 		typ := sceneType(sec.Title)
 		sc := Scene{
@@ -84,12 +85,18 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		}
 		sc.Duration = planDuration(sc.Narration, g.WordsPerSecond)
 		sc.Diagrams = planDiagrams(typ, releaseDiagrams)
+		// Build the diagram from scratch only on its first appearance; later
+		// architecture scenes recall it instead of rebuilding the same graph.
+		repeatDiagram := len(sc.Diagrams) > 0 && diagramIntroduced
+		if len(sc.Diagrams) > 0 {
+			diagramIntroduced = true
+		}
 		sc.Code = planCode(sec.Body)
 		sc.Camera = planCamera(typ)
-		sc.Animations = planAnimations(typ, sc.Diagrams, sc.Code)
+		sc.Animations = planAnimations(typ, sc.Diagrams, sc.Code, repeatDiagram)
 		sc.Overlays = planOverlays(typ, sec.Title, rctx)
 		sc.Assets = planAssets(typ)
-		sc.Visuals = planVisuals(typ, sec.Title, sc.Assets, sc.Diagrams)
+		sc.Visuals = planVisuals(typ, sec.Title, sc.Assets, sc.Diagrams, repeatDiagram)
 		sc.MusicMood, sc.SoundEffects = planMood(typ)
 		scenes = append(scenes, sc)
 	}

@@ -57,11 +57,11 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 (short, 9:16)_
 - **Objective:** Walk through the architecture diagram visually.
 - **Timing:** 10s recommended (7–15s, medium)
 - **Narration:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-- **Visual:** The architecture diagram (release architecture diagram): build the graph edge by edge, lower-third each AWS service as narration names it, and pulse the single most important cross-plane hand-off. Assets: Architecture Diagram, AWS Icons.
+- **Visual:** Recall the architecture diagram (release architecture diagram) already on screen — do NOT rebuild it. Pan/zoom to the region this scene discusses and re-highlight only its nodes. Assets: Architecture Diagram, AWS Icons.
 - **Camera:** Diagram Focus — Frame the diagram; move to each highlighted node.
 - **Animation:**
   1. Fade In → scene
-  2. Diagram Build → release architecture diagram — Build the diagram edge by edge.
+  2. Recall Diagram → release architecture diagram — Bring the existing diagram back; pan/zoom to this scene's region rather than rebuilding it.
   3. Draw Arrow → release architecture diagram — Trace the primary flow between the key nodes.
 - **Overlays:**
   - [Title] Architecture Diagrams

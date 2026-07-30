@@ -160,7 +160,7 @@ func TestPlanCode(t *testing.T) {
 
 func TestPlanAnimationsHighlightsRealNodes(t *testing.T) {
 	refs := planDiagrams("architecture", sampleContext().Mermaid)
-	anims := planAnimations("architecture", refs, nil)
+	anims := planAnimations("architecture", refs, nil, false)
 	var highlighted []string
 	for _, a := range anims {
 		if a.Type == "Highlight Node" {

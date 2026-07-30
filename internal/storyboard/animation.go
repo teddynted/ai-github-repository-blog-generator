@@ -12,7 +12,7 @@ const (
 // the diagrams/code it shows. Node-highlight animations are grounded in the
 // real parsed diagram nodes (never invented) and follow the narrative path
 // rather than enumerating every node. The result is capped to maxSceneAnimations.
-func planAnimations(typ string, diagrams []DiagramRef, code []CodeRef) []Animation {
+func planAnimations(typ string, diagrams []DiagramRef, code []CodeRef, repeat bool) []Animation {
 	var out []Animation
 	seq := 1
 	add := func(t, target, notes string) {
@@ -27,10 +27,16 @@ func planAnimations(typ string, diagrams []DiagramRef, code []CodeRef) []Animati
 		add("Scale Up", "title", "Title card scales up into place.")
 	case "architecture", "diagram":
 		// One primary diagram per scene; highlight the key nodes on the narrative
-		// path, not every node.
+		// path, not every node. Build the diagram from scratch only the first time
+		// it appears — later architecture scenes recall it and re-focus, so the
+		// same graph isn't rebuilt edge by edge three times in one video.
 		if len(diagrams) > 0 {
 			d := diagrams[0]
-			add("Diagram Build", d.Source, "Build the diagram edge by edge.")
+			if repeat {
+				add("Recall Diagram", d.Source, "Bring the existing diagram back; pan/zoom to this scene's region rather than rebuilding it.")
+			} else {
+				add("Diagram Build", d.Source, "Build the diagram edge by edge.")
+			}
 			for i, node := range d.HighlightNodes {
 				if i >= maxAnimHighlights {
 					break

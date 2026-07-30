@@ -228,7 +228,7 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 
 // planVisuals describes what fills the frame for a scene (deterministic, tied to
 // the chosen assets and diagrams).
-func planVisuals(typ, title string, assets []string, diagrams []DiagramRef) Visuals {
+func planVisuals(typ, title string, assets []string, diagrams []DiagramRef, repeat bool) Visuals {
 	v := Visuals{Style: "clean, modern, developer-focused", Background: backgroundFor(typ)}
 	switch typ {
 	case "introduction":
@@ -246,9 +246,12 @@ func planVisuals(typ, title string, assets []string, diagrams []DiagramRef) Visu
 	case "future":
 		v.Description = "A capability unlock: the fast path enabling an interruption-and-recovery cycle — reclaim, relaunch from the artifact, back in service — animated end to end."
 	case "architecture", "diagram":
-		if len(diagrams) > 0 {
+		switch {
+		case len(diagrams) > 0 && repeat:
+			v.Description = fmt.Sprintf("Recall the architecture diagram (%s) already on screen — do NOT rebuild it. Pan/zoom to the region this scene discusses and re-highlight only its nodes.", diagrams[0].Source)
+		case len(diagrams) > 0:
 			v.Description = fmt.Sprintf("The architecture diagram (%s): build the graph edge by edge, lower-third each AWS service as narration names it, and pulse the single most important cross-plane hand-off.", diagrams[0].Source)
-		} else {
+		default:
 			v.Description = "An architecture canvas that builds the components in one at a time, with a lower-third AWS-service label appearing as each is introduced."
 		}
 	case "cloudformation":
