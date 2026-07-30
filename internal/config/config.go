@@ -77,8 +77,8 @@ type Config struct {
 	// e.g. "20m"). Long-form generation on CPU can exceed the old 5m ceiling.
 	OllamaTimeout time.Duration
 	// BedrockModelID selects the Amazon Bedrock Claude model for the Stage-3
-	// technical-writer (BEDROCK_MODEL_ID, e.g.
-	// "anthropic.claude-3-5-sonnet-20240620-v1:0"). When set, Claude writes the
+	// technical-writer (BEDROCK_MODEL_ID, e.g. the Sonnet 5 inference-profile id
+	// "us.anthropic.claude-sonnet-5"). When set, Claude writes the
 	// content (grounded in the Ollama engineering analysis); when blank, Ollama
 	// remains the writer (the zero-paid-inference default). Auth is IAM via the
 	// instance role in AWSRegion — no API key.
@@ -94,7 +94,7 @@ type Config struct {
 	// instance's env file.
 	AnthropicAPIKeySecret string
 	// AnthropicModel is the Anthropic API model id for the writer (ANTHROPIC_MODEL,
-	// e.g. "claude-sonnet-4-5"). Blank uses the client default.
+	// e.g. "claude-sonnet-5"). Blank uses the client default.
 	AnthropicModel string
 	// AIRoutingRules is the Hybrid AI Routing policy as JSON (AI_ROUTING_RULES),
 	// mapping content kinds to providers — e.g.

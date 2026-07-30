@@ -29,7 +29,7 @@ const DefaultBaseURL = "http://localhost:11434"
 const DefaultTimeout = 15 * time.Minute
 
 // DefaultNumPredict caps the tokens a single completion may generate. Small
-// local models (e.g. llama3.2:1b) often ignore stop cues and ramble, producing
+// small local models often ignore stop cues and ramble, producing
 // huge, slow outputs; this bound keeps each call fast and its output sane.
 // Override with WithNumPredict (0 = unbounded, the Ollama default).
 const DefaultNumPredict = 2048

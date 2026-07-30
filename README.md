@@ -429,7 +429,7 @@ go run ./cmd/content --artifact all --hybrid --no-history \
   --context fixtures/designing-v0.3.0.json
 ```
 
-The Ollama transform model defaults to `--model` / `OLLAMA_MODEL` / `llama3.2:1b`.
+The Ollama transform model defaults to `--model` / `OLLAMA_MODEL` / `qwen2.5:7b`.
 Each run prints the routing policy up front and logs progress per artifact (start
 and finish with elapsed time + output size, plus a 15s heartbeat during long
 generations); `--hybrid --dry-run` previews the policy without calling any
@@ -438,8 +438,9 @@ provider.
 > **Performance & hardware.** A **full `--artifact all` run through local Ollama
 > is impractical on low-end / CPU-only machines** — a single transform can take
 > several minutes, and the whole suite can exceed even a long `--timeout`. Treat
-> local Ollama as a **wiring/plumbing test**, not a quality bar: a 1–1.5B model
-> (e.g. `llama3.2:1b`) will often produce content that trips the validation gate
+> local Ollama as a **wiring/plumbing test**, not a quality bar: `qwen2.5:7b` (the
+> default) is slow for a full suite on CPU, and downgrading to a tiny 1–2B model to
+> go faster will often produce content that trips the validation gate
 > (placeholders, marketing phrases). For quality, use `--provider claude-code`
 > (or a single artifact via `--from-blog`), and rely on the deployed worker
 > (`qwen2.5:7b`) for the full suite. Note the Ollama output cap
