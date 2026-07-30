@@ -16,12 +16,12 @@ _acme/widget · release v1.0.0 · 3 shorts_
 ### Scene Breakdown
 
 **Scene 1** (10s) — _Zoom In · Zoom · Zoom_
-  - Visual: Highlight AWS Lambda.
+  - Visual: Build the architecture diagram node by node.
   - Overlay: Architecture Reveal
   - Narration: ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 **Scene 2** (10s) — _Diagram Focus · Diagram Build · Slide_
-  - Visual: Highlight Amazon EventBridge.
+  - Visual: Full architecture on screen.
   - Narration: The key idea: widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
 
 **Scene 3** (10s) — _Zoom Out · Slide · Fade_
@@ -39,6 +39,8 @@ _acme/widget · release v1.0.0 · 3 shorts_
 
 ### Visuals
 
+- [Mermaid Animation] Build the architecture diagram node by node. _(ref: release architecture diagram)_
+- [Architecture Diagram] Full architecture on screen. _(ref: release architecture diagram)_
 - [Animated Callout] Highlight AWS Lambda. _(ref: AWS Lambda)_
 - [Animated Callout] Highlight Amazon EventBridge. _(ref: Amazon EventBridge)_
 - [Animated Callout] Highlight Amazon SQS. _(ref: Amazon SQS)_
@@ -63,12 +65,12 @@ _acme/widget · release v1.0.0 · 3 shorts_
 ### Scene Breakdown
 
 **Scene 1** (10s) — _Zoom In · Zoom · Zoom_
-  - Visual: Callout the practice.
+  - Visual: Point to where it applies.
   - Overlay: AWS Best Practice
   - Narration: ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 **Scene 2** (10s) — _Diagram Focus · Highlight · Slide_
-  - Visual: End card: the repository.
+  - Visual: Callout the practice.
   - Narration: Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
 
 **Scene 3** (10s) — _Zoom Out · Slide · Fade_
@@ -86,6 +88,7 @@ _acme/widget · release v1.0.0 · 3 shorts_
 
 ### Visuals
 
+- [Architecture Diagram] Point to where it applies. _(ref: release architecture diagram)_
 - [Animated Callout] Callout the practice. _(ref: acme/widget)_
 - [Repository Screenshot] End card: the repository. _(ref: https://github.com/acme/widget)_
 

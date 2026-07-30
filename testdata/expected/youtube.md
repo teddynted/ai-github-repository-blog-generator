@@ -42,7 +42,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 - **Visual references:** Diagram: ; AWS service icons: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
 **Demonstration:**
-  1. Reveal the diagram — Build  node by node as you narrate.
+  1. Reveal the diagram — Build release architecture diagram node by node as you narrate.
 **Callouts:**
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
@@ -61,7 +61,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 - **Visual references:** Diagram: ; AWS service icons: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
 **Demonstration:**
-  1. Reveal the diagram — Build  node by node as you narrate.
+  1. Reveal the diagram — Build release architecture diagram node by node as you narrate.
 **Callouts:**
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.

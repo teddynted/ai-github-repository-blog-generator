@@ -273,7 +273,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Mood:** clear, educational, precise · **Technical focus:** component relationships
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** component blocks → node labels (added by compositor)
-- **Grounded in:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
+- **Grounded in:** release architecture diagram, AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
 
 ---
 

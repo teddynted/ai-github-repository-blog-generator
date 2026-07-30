@@ -16,16 +16,16 @@ _acme/widget · release v1.0.0 · 3 videos_
 ### Scene Breakdown
 
 **Scene 1** (5s) — _Push In · Zoom Effects · Zoom_
-  - Visual: Highlight AWS Lambda.
+  - Visual: Build the architecture diagram node by node.
   - Overlay: Architecture Insight
   - Narration: ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 **Scene 2** (5s) — _Zoom · Pulse · Slide_
-  - Visual: Highlight Amazon EventBridge.
+  - Visual: Full architecture on screen.
   - Narration: Most setups tangle these concerns together.
 
 **Scene 3** (5s) — _Highlight Diagram · Diagram Build · Slide_
-  - Visual: Highlight Amazon SQS.
+  - Visual: Highlight AWS Lambda.
   - Narration: Here's the fix: widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
 
 **Scene 4** (5s) — _Pull Out · Slide · Fade_
@@ -44,6 +44,8 @@ _acme/widget · release v1.0.0 · 3 videos_
 
 ### Visual Suggestions
 
+- [Mermaid Diagram] Build the architecture diagram node by node. _(ref: release architecture diagram)_
+- [Architecture Animation] Full architecture on screen. _(ref: release architecture diagram)_
 - [Editor View] Highlight AWS Lambda. _(ref: AWS Lambda)_
 - [Editor View] Highlight Amazon EventBridge. _(ref: Amazon EventBridge)_
 - [Editor View] Highlight Amazon SQS. _(ref: Amazon SQS)_
@@ -60,7 +62,7 @@ _acme/widget · release v1.0.0 · 3 videos_
 
 ## Video 2 — An AWS tip most devs miss
 
-- **Topic:** AWS Tip · **Duration:** 0:20 (20s) · **Retention:** 89/100 · **Words:** 27
+- **Topic:** AWS Tip · **Duration:** 0:20 (20s) · **Retention:** 96/100 · **Words:** 27
 - **Hook:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 ### Script
@@ -70,16 +72,16 @@ _acme/widget · release v1.0.0 · 3 videos_
 ### Scene Breakdown
 
 **Scene 1** (5s) — _Push In · Zoom Effects · Zoom_
-  - Visual: Callout the practice.
+  - Visual: Point to where it applies.
   - Overlay: AWS Tip
   - Narration: ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 **Scene 2** (5s) — _Zoom · Pulse · Slide_
-  - Visual: End card: the repository.
+  - Visual: Callout the practice.
   - Narration: Doing this by hand gets tedious fast.
 
 **Scene 3** (5s) — _Screen Recording · Callout Popups · Slide_
-  - Visual: Callout the practice.
+  - Visual: End card: the repository.
   - Narration: Here's the fix: keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
 
 **Scene 4** (5s) — _Pull Out · Slide · Fade_
@@ -98,6 +100,7 @@ _acme/widget · release v1.0.0 · 3 videos_
 
 ### Visual Suggestions
 
+- [Architecture Animation] Point to where it applies. _(ref: release architecture diagram)_
 - [Editor View] Callout the practice. _(ref: acme/widget)_
 - [Repository Screenshot] End card: the repository. _(ref: https://github.com/acme/widget)_
 
@@ -165,7 +168,7 @@ _acme/widget · release v1.0.0 · 3 videos_
 
 ## Collection Intelligence
 
-- **Videos:** 3 · **Total:** 1:00 · **Average:** 20s · **Avg retention:** 92/100
+- **Videos:** 3 · **Total:** 1:00 · **Average:** 20s · **Avg retention:** 94/100
 - **Audience:** Software engineers, cloud, DevOps, and AI developers · **Difficulty:** intermediate
 - **Topics:** Architecture Insight, AWS Tip, Interesting Statistic
 - **SEO keywords:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch, go, aws-lambda, amazon-sqs, amazon-eventbridge, aws-cloudformation, software-architecture, cloud-computing

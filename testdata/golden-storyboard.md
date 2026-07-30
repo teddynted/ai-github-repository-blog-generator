@@ -3,7 +3,9 @@
 _acme/widget · release v1.0.0 · 6 scenes · ~1:25 (short, 9:16)_
 
 **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS  
-**Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Production:** high · **Animation:** low
+**Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Production:** medium · **Animation:** low
+
+> **Notes:** the release blog has no Mermaid diagram; architecture scenes have no diagram references
 
 ---
 
@@ -29,16 +31,10 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:25 (short, 9:16)_
 - **Objective:** Explain the system architecture and how components interact.
 - **Timing:** 23s recommended (20–28s, slow)
 - **Narration:** Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching events into an Amazon SQS queue, which provides durable buffering and retries; a dead-letter queue captures poison messages. - A scheduled EC2 worker drains the queue during its window and processes each widget.
-- **Visual:** The architecture diagram () centred on canvas, building and highlighting nodes as narration proceeds. Assets: Architecture Diagram, AWS Icons.
+- **Visual:** An architecture canvas illustrating the components and how they connect. Assets: Architecture Diagram, AWS Icons.
 - **Camera:** Diagram Focus — Frame the diagram; move to each highlighted node.
 - **Animation:**
   1. Fade In → scene
-  2. Diagram Build — Build the diagram edge by edge.
-  3. Highlight Node → Webhook — Highlight and label the node as narration reaches it.
-  4. Highlight Node → EventBridge — Highlight and label the node as narration reaches it.
-  5. Highlight Node → SQS — Highlight and label the node as narration reaches it.
-  6. Highlight Node → Worker — Highlight and label the node as narration reaches it.
-  7. Draw Arrow — Trace the data/control flow between nodes.
 - **Overlays:**
   - [Title] The architecture
   - [AWS Service Label] AWS Lambda
@@ -46,8 +42,6 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:25 (short, 9:16)_
   - [AWS Service Label] Amazon SQS
   - [AWS Service Label] Amazon EC2
   - [AWS Service Label] AWS CloudFormation
-- **Diagrams:**
-  -  (flowchart) — Diagram Build; highlight: Webhook, EventBridge, SQS, Worker
 - **Assets:** Architecture Diagram, AWS Icons
 - **Transition:** Cross Dissolve (0.6s)
 - **Music:** calm, focused

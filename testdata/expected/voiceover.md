@@ -48,7 +48,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
   - [medium, 600ms] before-diagram — Pause before introducing the diagram; let it build.
   - [short, 300ms] closing — Brief pause before the transition.
 - **Sync:**
-  - [Diagram Reveal] Begin the explanation only after the diagram has built; name each node as it highlights.
+  - [Diagram Reveal] Begin the explanation only after the diagram has built; name each node as it highlights. (release architecture diagram)
   - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Diagram Focus)
   - [Overlay] Land the on-screen text as you say it. (Architecture)
   - [Overlay] Land the on-screen text as you say it. (AWS Lambda)
@@ -78,7 +78,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
   - [medium, 600ms] before-diagram — Pause before introducing the diagram; let it build.
   - [short, 300ms] closing — Brief pause before the transition.
 - **Sync:**
-  - [Diagram Reveal] Begin the explanation only after the diagram has built; name each node as it highlights.
+  - [Diagram Reveal] Begin the explanation only after the diagram has built; name each node as it highlights. (release architecture diagram)
   - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Diagram Focus)
   - [Overlay] Land the on-screen text as you say it. (Architecture Diagrams)
   - [Overlay] Land the on-screen text as you say it. (AWS Lambda)

@@ -41,8 +41,6 @@ _acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and c
 > Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching events into an Amazon SQS queue, which provides durable buffering and retries; a dead-letter queue captures poison messages. - A scheduled EC2 worker drains the queue during its window and processes each widget. Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. On the AWS side we lean on AWS Lambda, Amazon EventBridge, Amazon SQS, and Amazon EC2. webhook-handler handles validate and publish inbound events. worker handles drain SQS and process widgets. The flow works like this: webhook → EventBridge → SQS → EC2 worker.
 
 - **Visual references:** Diagram: ; AWS service icons: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
-**Demonstration:**
-  1. Reveal the diagram — Build  node by node as you narrate.
 **Callouts:**
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
