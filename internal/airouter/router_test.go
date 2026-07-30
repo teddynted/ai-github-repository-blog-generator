@@ -31,13 +31,13 @@ func TestDefaultPolicyRoutesHighValueToClaudeRestToOllama(t *testing.T) {
 	r := New(m, DefaultRules(), ProviderOllama, ProviderOllama, nil)
 
 	// High-value → Claude.
-	for _, k := range []string{"blog", "architecture", "linkedin", "x-thread", "architecture-diagram-spec"} {
+	for _, k := range []string{"blog", "architecture", "linkedin", "x-thread", "architecture-diagram-spec", "storyboard"} {
 		if got, _ := r.ModelFor(k).Generate(context.Background(), "p"); got != "claude-out" {
 			t.Errorf("%s routed to %q, want claude", k, got)
 		}
 	}
 	// Commodity → Ollama (default).
-	for _, k := range []string{"seo-metadata", "visual-assets", "youtube-shorts", "tiktok", "storyboard", "voiceover", "youtube"} {
+	for _, k := range []string{"seo-metadata", "visual-assets", "youtube-shorts", "tiktok", "voiceover", "youtube"} {
 		if got, _ := r.ModelFor(k).Generate(context.Background(), "p"); got != "ollama-out" {
 			t.Errorf("%s routed to %q, want ollama", k, got)
 		}
