@@ -72,7 +72,11 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 			Type:        typ,
 			Objective:   objectiveFor(typ, sec.Title),
 		}
-		sc.Narration = g.narration(ctx, sec, typ)
+		nextTitle := ""
+		if i+1 < len(sections) {
+			nextTitle = sections[i+1].Title
+		}
+		sc.Narration = g.narration(ctx, sec, typ, nextTitle)
 		sc.Duration = planDuration(sc.Narration, g.WordsPerSecond)
 		sc.Diagrams = planDiagrams(typ, releaseDiagrams)
 		sc.Code = planCode(sec.Body)

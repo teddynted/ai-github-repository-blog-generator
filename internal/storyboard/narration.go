@@ -10,12 +10,12 @@ import (
 // draft from the section prose (grounded, never invented) and, when a Model is
 // configured, asks it to polish the draft into natural spoken narration — never
 // to add facts. On any model error it falls back to the draft.
-func (g *Generator) narration(ctx context.Context, sec section, typ string) string {
+func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle string) string {
 	draft := narrationDraft(sec.Body, typ, sec.Title)
 	if g.Model == nil || strings.TrimSpace(draft) == "" {
 		return draft
 	}
-	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, draft))
+	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, nextTitle, draft))
 	if err != nil {
 		return draft
 	}
@@ -127,9 +127,20 @@ func containsWord(text, word string) bool {
 // sensible fallback line when the section has no prose (e.g. a diagram-only
 // section). Baseline platform components are scoped out so the draft stays on the
 // release's subject.
+// isDeepTechnical reports whether a scene type warrants a fuller narration —
+// implementation and infrastructure scenes carry the concrete detail (identifiers,
+// tags, manifests) that a 3-sentence draft would truncate.
+func isDeepTechnical(typ string) bool {
+	return typ == "implementation" || typ == "cloudformation"
+}
+
 func narrationDraft(body, typ, title string) string {
+	sentences, maxW := 3, 60
+	if isDeepTechnical(typ) {
+		sentences, maxW = 5, 100
+	}
 	p := scopeToRelease(prose(body))
-	if d := firstSentences(p, 3, 60); d != "" {
+	if d := firstSentences(p, sentences, maxW); d != "" {
 		return d
 	}
 	switch typ {
@@ -155,15 +166,29 @@ func visualHint(typ string) string {
 	}
 }
 
-func narrationPrompt(title, typ, draft string) string {
+func narrationPrompt(title, typ, nextTitle, draft string) string {
+	target := "2–4 short, spoken sentences (about 35–55 words total"
+	deepHint := ""
+	if isDeepTechnical(typ) {
+		// Deep-technical scenes carry the concrete detail — give them room to name
+		// each mechanism (version resolution, duplicate checks, manifest, tagging).
+		target = "3–5 short, spoken sentences (about 55–85 words total"
+		deepHint = "This is a deep-technical scene: briefly cover EACH distinct mechanism the DRAFT names — the viewer should come away knowing the full set of steps, not just the first one explained at length. Give each mechanism a sentence or clause; do not dwell on only the opening point.\n"
+	}
+	bridge := ""
+	if strings.TrimSpace(nextTitle) != "" {
+		bridge = fmt.Sprintf("The next scene is %q. If it moves to a genuinely NEW topic, you MAY end with exactly one "+
+			"short bridging sentence that hands the viewer off to it — a natural lead-in, not a summary or a teaser. If "+
+			"the next scene simply continues this point, add no bridge.\n", nextTitle)
+	}
 	return fmt.Sprintf(
 		"You are a senior AWS platform engineer narrating one scene of a technical explainer video for an "+
 			"audience of software and DevOps engineers — the tone of a re:Invent speaker or a technical YouTube educator.\n"+
 			"Scene: %q (type: %s).\n"+
-			"%s\n"+
-			"Rewrite the DRAFT below into 2–4 short, spoken sentences (about 35–55 words total, roughly 12–18 words per "+
-			"sentence). Be clear, confident, conversational, and technically precise. Prefer present tense and active "+
-			"voice; keep each sentence to a single idea rather than long compound clauses.\n"+
+			"%s%s%s\n"+
+			"Rewrite the DRAFT below into %s, roughly 12–18 words per sentence). Be clear, confident, conversational, and "+
+			"technically precise. Prefer present tense and active voice; keep each sentence to a single idea rather than "+
+			"long compound clauses.\n"+
 			"Ground every claim in the DRAFT: use ONLY the facts, AWS services, and mechanisms it states — never invent "+
 			"features, numbers, or components, and never substitute a different AWS service for the one named (for example, "+
 			"do not say ECS when the draft says EC2).\n"+
@@ -176,7 +201,7 @@ func narrationPrompt(title, typ, draft string) string {
 			"Output ONLY the spoken sentences — no preamble, no quotation marks, no scene labels, and no framing such as "+
 			"\"Here is\" or \"rewritten version\". Begin directly with the first spoken word.\n\n"+
 			"DRAFT:\n%s",
-		title, typ, visualHint(typ), draft,
+		title, typ, visualHint(typ), bridge, deepHint, target, draft,
 	)
 }
 
