@@ -1,0 +1,253 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 908 1696" width="908" height="1696" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="AI content generation workflow">
+<defs><pattern id="g" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1.3" cy="1.3" r="1.3" fill="#26262F"/></pattern></defs>
+<rect x="1" y="1" width="906" height="1694" rx="16" fill="#17171E" stroke="#2A2B34"/>
+<rect x="1" y="1" width="906" height="1694" rx="16" fill="url(#g)"/>
+<g><rect x="108" y="44" width="266" height="60" rx="8" fill="#3A3620" stroke="#55502F"/>
+<text x="122" y="66" fill="#E6D98F" font-size="11" font-weight="700" letter-spacing="0.6">SOURCE</text>
+<text x="122" y="86" fill="#E6D98F" font-size="12" font-weight="600">Developer → GitHub Repository</text></g>
+<rect x="343" y="581" width="272" height="474" rx="14" fill="#2C1F26" stroke="#EA4B71" stroke-opacity="0.5" stroke-dasharray="7 6"/>
+<text x="359" y="603" fill="#EA4B71" font-size="11" font-weight="700" letter-spacing="1.4">AI BLOG ORCHESTRATOR</text>
+<path d="M243,185 C243,217 479,217 479,249" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="243" cy="185" r="3.6" fill="#EA4B71"/>
+<circle cx="479" cy="249" r="3.6" fill="#5A5D6E"/>
+<path d="M479,185 C479,217 479,217 479,249" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="185" r="3.6" fill="#EA4B71"/>
+<circle cx="479" cy="249" r="3.6" fill="#5A5D6E"/>
+<path d="M715,185 C715,217 479,217 479,249" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="715" cy="185" r="3.6" fill="#EA4B71"/>
+<circle cx="479" cy="249" r="3.6" fill="#5A5D6E"/>
+<path d="M479,307 C479,339 479,339 479,371" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="307" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="371" r="3.6" fill="#5A5D6E"/>
+<path d="M479,429 C479,461 479,461 479,493" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="429" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="493" r="3.6" fill="#5A5D6E"/>
+<path d="M479,551 C479,583 479,583 479,615" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="551" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="615" r="3.6" fill="#5A5D6E"/>
+<path d="M479,673 C479,705 479,705 479,737" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="673" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="737" r="3.6" fill="#5A5D6E"/>
+<path d="M479,795 C479,827 479,827 479,859" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="795" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="859" r="3.6" fill="#5A5D6E"/>
+<path d="M479,917 C479,949 479,949 479,981" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="917" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="981" r="3.6" fill="#5A5D6E"/>
+<path d="M593.5,888 C633.5,888 616,870 656,870" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="593.5" cy="888" r="3.6" fill="#5A5D6E"/>
+<circle cx="656" cy="870" r="3.6" fill="#5A5D6E"/>
+<path d="M593.5,888 C633.5,888 613.5,940 653.5,940" fill="none" stroke="#4C4E5C" stroke-width="1.7" stroke-dasharray="5 5"/>
+<circle cx="593.5" cy="888" r="3.6" fill="#5A5D6E"/>
+<circle cx="653.5" cy="940" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1039 C479,1071 182,1071 182,1103" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1039" r="3.6" fill="#5A5D6E"/>
+<circle cx="182" cy="1103" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1039 C479,1071 382,1071 382,1103" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1039" r="3.6" fill="#5A5D6E"/>
+<circle cx="382" cy="1103" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1039 C479,1071 579,1071 579,1103" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1039" r="3.6" fill="#5A5D6E"/>
+<circle cx="579" cy="1103" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1039 C479,1071 773,1071 773,1103" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1039" r="3.6" fill="#5A5D6E"/>
+<circle cx="773" cy="1103" r="3.6" fill="#5A5D6E"/>
+<path d="M182,1161 C182,1193 479,1193 479,1225" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="182" cy="1161" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="1225" r="3.6" fill="#5A5D6E"/>
+<path d="M382,1161 C382,1193 479,1193 479,1225" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="382" cy="1161" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="1225" r="3.6" fill="#5A5D6E"/>
+<path d="M579,1161 C579,1193 479,1193 479,1225" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="579" cy="1161" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="1225" r="3.6" fill="#5A5D6E"/>
+<path d="M773,1161 C773,1193 479,1193 479,1225" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="773" cy="1161" r="3.6" fill="#5A5D6E"/>
+<circle cx="479" cy="1225" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1283 C479,1315 479,1315 479,1347" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1283" r="3.6" fill="#EA4B71"/>
+<circle cx="479" cy="1347" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1405 C479,1437 364,1437 364,1469" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1405" r="3.6" fill="#EA4B71"/>
+<circle cx="364" cy="1469" r="3.6" fill="#5A5D6E"/>
+<path d="M479,1405 C479,1437 616.5,1437 616.5,1469" fill="none" stroke="#6A6D7E" stroke-width="2"/>
+<circle cx="479" cy="1405" r="3.6" fill="#EA4B71"/>
+<circle cx="616.5" cy="1469" r="3.6" fill="#5A5D6E"/>
+<path d="M52,400 L52,1626 L369,1626" fill="none" stroke="#7C8494" stroke-width="1.5" stroke-dasharray="2 6" stroke-opacity="0.7"/>
+<path d="M393,400 L52,400" fill="none" stroke="#7C8494" stroke-width="1.5" stroke-dasharray="2 6" stroke-opacity="0.7"/>
+<path d="M378,522 L52,522" fill="none" stroke="#7C8494" stroke-width="1.5" stroke-dasharray="2 6" stroke-opacity="0.7"/>
+<path d="M372,1010 L52,1010" fill="none" stroke="#7C8494" stroke-width="1.5" stroke-dasharray="2 6" stroke-opacity="0.7"/>
+<path d="M381,1376 L52,1376" fill="none" stroke="#7C8494" stroke-width="1.5" stroke-dasharray="2 6" stroke-opacity="0.7"/>
+<text x="50" y="388" fill="#9AA0AE" font-size="10" font-weight="600">telemetry</text>
+<text x="497" y="586" fill="#9AA0AE" font-size="10" font-weight="600" text-anchor="start">async job</text>
+<text x="624.75" y="866" fill="#9AA0AE" font-size="10" font-weight="600" text-anchor="middle">ai model</text>
+<text x="479" y="1585" fill="#9AA0AE" font-size="10" font-weight="600" text-anchor="middle">monitors Lambda · SQS · Orchestrator · Bedrock · n8n</text>
+<g>
+<rect x="148" y="130" width="190" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="148" y="127" width="190" height="58" rx="12" fill="#23242E" stroke="#EA4B71" stroke-width="1.6"/>
+<rect x="158" y="137" width="38" height="38" rx="9" fill="#EA4B71"/>
+<text x="177" y="160" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">⚡</text>
+<text x="208" y="153" fill="#E7E8F0" font-size="13" font-weight="600">GitHub Webhook</text>
+<text x="208" y="169" fill="#9AA0AE" font-size="10" font-weight="500">push event</text>
+</g>
+<g>
+<rect x="384" y="130" width="190" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="384" y="127" width="190" height="58" rx="12" fill="#23242E" stroke="#EA4B71" stroke-width="1.6"/>
+<rect x="394" y="137" width="38" height="38" rx="9" fill="#EA4B71"/>
+<text x="413" y="160" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">⚡</text>
+<text x="444" y="153" fill="#E7E8F0" font-size="13" font-weight="600">GitHub Release</text>
+<text x="444" y="169" fill="#9AA0AE" font-size="10" font-weight="500">release event</text>
+</g>
+<g>
+<rect x="620" y="130" width="190" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="620" y="127" width="190" height="58" rx="12" fill="#23242E" stroke="#EA4B71" stroke-width="1.6"/>
+<rect x="630" y="137" width="38" height="38" rx="9" fill="#EA4B71"/>
+<text x="649" y="160" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">⚡</text>
+<text x="680" y="153" fill="#E7E8F0" font-size="13" font-weight="600">GitHub Actions</text>
+<text x="680" y="169" fill="#9AA0AE" font-size="10" font-weight="500">workflow event</text>
+</g>
+<g>
+<rect x="368.5" y="252" width="221" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="368.5" y="249" width="221" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="378.5" y="259" width="38" height="38" rx="9" fill="#2563EB"/>
+<text x="397.5" y="282" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">EB</text>
+<text x="428.5" y="275" fill="#E7E8F0" font-size="13" font-weight="600">Amazon EventBridge</text>
+<text x="428.5" y="291" fill="#9AA0AE" font-size="10" font-weight="500">event ingestion</text>
+</g>
+<g>
+<rect x="393" y="374" width="172" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="393" y="371" width="172" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="403" y="381" width="38" height="38" rx="9" fill="#2563EB"/>
+<text x="422" y="404" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">λ</text>
+<text x="453" y="397" fill="#E7E8F0" font-size="13" font-weight="600">AWS Lambda</text>
+<text x="453" y="413" fill="#9AA0AE" font-size="10" font-weight="500">webhook handler</text>
+</g>
+<g>
+<rect x="378" y="496" width="202" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="378" y="493" width="202" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="388" y="503" width="38" height="38" rx="9" fill="#2563EB"/>
+<text x="407" y="526" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">SQS</text>
+<text x="438" y="519" fill="#E7E8F0" font-size="13" font-weight="600">Amazon SQS</text>
+<text x="438" y="535" fill="#9AA0AE" font-size="10" font-weight="500">queue · backpressure</text>
+</g>
+<g>
+<rect x="364.5" y="618" width="229" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="364.5" y="615" width="229" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="374.5" y="625" width="38" height="38" rx="9" fill="#7C3AED"/>
+<text x="393.5" y="648" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">01</text>
+<text x="424.5" y="641" fill="#E7E8F0" font-size="13" font-weight="600">Repository Analyzer</text>
+<text x="424.5" y="657" fill="#9AA0AE" font-size="10" font-weight="500">README · arch · diff</text>
+</g>
+<g>
+<rect x="361" y="740" width="236" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="361" y="737" width="236" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="371" y="747" width="38" height="38" rx="9" fill="#7C3AED"/>
+<text x="390" y="770" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">02</text>
+<text x="421" y="763" fill="#E7E8F0" font-size="13" font-weight="600">Content Intelligence</text>
+<text x="421" y="779" fill="#9AA0AE" font-size="10" font-weight="500">SEO · summary · audience</text>
+</g>
+<g>
+<rect x="364.5" y="862" width="229" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="364.5" y="859" width="229" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="374.5" y="869" width="38" height="38" rx="9" fill="#7C3AED"/>
+<text x="393.5" y="892" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">03</text>
+<text x="424.5" y="885" fill="#E7E8F0" font-size="13" font-weight="600">Prompt Orchestrator</text>
+<text x="424.5" y="901" fill="#9AA0AE" font-size="10" font-weight="500">blog · diagram · social</text>
+</g>
+<g>
+<rect x="372" y="984" width="214" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="372" y="981" width="214" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="382" y="991" width="38" height="38" rx="9" fill="#7C3AED"/>
+<text x="401" y="1014" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">04</text>
+<text x="432" y="1007" fill="#E7E8F0" font-size="13" font-weight="600">Quality Gate</text>
+<text x="432" y="1023" fill="#9AA0AE" font-size="10" font-weight="500">markdown · frontmatter</text>
+</g>
+<g>
+<rect x="656" y="844" width="208" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="656" y="841" width="208" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="666" y="851" width="38" height="38" rx="9" fill="#7C3AED"/>
+<text x="685" y="874" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">BR</text>
+<text x="716" y="867" fill="#E7E8F0" font-size="13" font-weight="600">Amazon Bedrock</text>
+<text x="716" y="883" fill="#9AA0AE" font-size="10" font-weight="500">Claude · Nova · Titan</text>
+</g>
+<g>
+<rect x="653.5" y="914" width="213" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="653.5" y="911" width="213" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4" stroke-dasharray="6 4"/>
+<rect x="663.5" y="921" width="38" height="38" rx="9" fill="#7C3AED"/>
+<text x="682.5" y="944" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">OL</text>
+<text x="713.5" y="937" fill="#E7E8F0" font-size="13" font-weight="600">Ollama — optional</text>
+<text x="713.5" y="953" fill="#9AA0AE" font-size="10" font-weight="500">Llama 3 · DeepSeek</text>
+</g>
+<g>
+<rect x="108" y="1106" width="148" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="108" y="1103" width="148" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="118" y="1113" width="38" height="38" rx="9" fill="#6366F1"/>
+<text x="137" y="1136" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">MD</text>
+<text x="168" y="1129" fill="#E7E8F0" font-size="13" font-weight="600">Blog</text>
+<text x="168" y="1145" fill="#9AA0AE" font-size="10" font-weight="500">SEO · notes</text>
+</g>
+<g>
+<rect x="302" y="1106" width="160" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="302" y="1103" width="160" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="312" y="1113" width="38" height="38" rx="9" fill="#6366F1"/>
+<text x="331" y="1136" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">SVG</text>
+<text x="362" y="1129" fill="#E7E8F0" font-size="13" font-weight="600">Visuals</text>
+<text x="362" y="1145" fill="#9AA0AE" font-size="10" font-weight="500">AWS · Mermaid</text>
+</g>
+<g>
+<rect x="508" y="1106" width="142" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="508" y="1103" width="142" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="518" y="1113" width="38" height="38" rx="9" fill="#6366F1"/>
+<text x="537" y="1136" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">MP4</text>
+<text x="568" y="1129" fill="#E7E8F0" font-size="13" font-weight="600">Video</text>
+<text x="568" y="1145" fill="#9AA0AE" font-size="10" font-weight="500">storyboard</text>
+</g>
+<g>
+<rect x="696" y="1106" width="154" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="696" y="1103" width="154" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="706" y="1113" width="38" height="38" rx="9" fill="#6366F1"/>
+<text x="725" y="1136" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">SOC</text>
+<text x="756" y="1129" fill="#E7E8F0" font-size="13" font-weight="600">Social</text>
+<text x="756" y="1145" fill="#9AA0AE" font-size="10" font-weight="500">LinkedIn · X</text>
+</g>
+<g>
+<rect x="399" y="1228" width="160" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="399" y="1225" width="160" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="409" y="1235" width="38" height="38" rx="9" fill="#64748B"/>
+<text x="428" y="1258" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">S3</text>
+<text x="459" y="1251" fill="#E7E8F0" font-size="13" font-weight="600">Amazon S3</text>
+<text x="459" y="1267" fill="#9AA0AE" font-size="10" font-weight="500">draft storage</text>
+</g>
+<g>
+<rect x="381" y="1350" width="196" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="381" y="1347" width="196" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="391" y="1357" width="38" height="38" rx="9" fill="#EA4B71"/>
+<text x="410" y="1380" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">n8n</text>
+<text x="441" y="1373" fill="#E7E8F0" font-size="13" font-weight="600">n8n</text>
+<text x="441" y="1389" fill="#9AA0AE" font-size="10" font-weight="500">workflow automation</text>
+</g>
+<g>
+<rect x="249.5" y="1472" width="229" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="249.5" y="1469" width="229" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="259.5" y="1479" width="38" height="38" rx="9" fill="#10B981"/>
+<text x="278.5" y="1502" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">PR</text>
+<text x="309.5" y="1495" fill="#E7E8F0" font-size="13" font-weight="600">GitHub Pull Request</text>
+<text x="309.5" y="1511" fill="#9AA0AE" font-size="10" font-weight="500">human review</text>
+</g>
+<g>
+<rect x="524.5" y="1472" width="184" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="524.5" y="1469" width="184" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="534.5" y="1479" width="38" height="38" rx="9" fill="#10B981"/>
+<text x="553.5" y="1502" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">WEB</text>
+<text x="584.5" y="1495" fill="#E7E8F0" font-size="13" font-weight="600">Blog Platform</text>
+<text x="584.5" y="1511" fill="#9AA0AE" font-size="10" font-weight="500">scheduled publish</text>
+</g>
+<g>
+<rect x="369" y="1600" width="220" height="58" rx="12" fill="#000000" opacity="0.27"/>
+<rect x="369" y="1597" width="220" height="58" rx="12" fill="#23242E" stroke="#373845" stroke-width="1.4"/>
+<rect x="379" y="1607" width="38" height="38" rx="9" fill="#64748B"/>
+<text x="398" y="1630" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">CW</text>
+<text x="429" y="1623" fill="#E7E8F0" font-size="13" font-weight="600">Amazon CloudWatch</text>
+<text x="429" y="1639" fill="#9AA0AE" font-size="10" font-weight="500">logs · metrics · alarms</text>
+</g>
+</svg>

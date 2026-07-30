@@ -34,6 +34,7 @@
 - [Features](#features)
 - [Repository Registration](#repository-registration)
 - [Publishing Trigger](#publishing-trigger)
+- [Content Generation Workflow](#content-generation-workflow)
 - [Architecture](#architecture)
 - [AI Workflow](#ai-workflow)
 - [Technology Stack](#technology-stack)
@@ -266,6 +267,21 @@ The default is `blog:`, but each repository can set its own **Trigger Pattern** 
 - `regex:^(blog|post):` — a `regex:`-prefixed regular expression
 
 Pass `trigger_pattern` when registering; invalid regexes are rejected. Additional entry points (releases, tags, PR labels, manual runs, scheduled summaries) remain [planned](#roadmap).
+
+---
+
+## Content Generation Workflow
+
+> **Conceptual reference** of the end-to-end AI content pipeline — a GitHub event flows through ingestion, the AI Blog Orchestrator, hybrid LLM inference, artifact generation, and human-reviewed publishing. This is a high-level target overview; for the exact MVP request lifecycle and the components actually deployed, see [Architecture](#architecture) below. An interactive, theme-aware version lives at [`docs/orchestration-diagram.html`](./docs/orchestration-diagram.html).
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/orchestration-diagram-dark.svg">
+  <img alt="AI content generation workflow: GitHub triggers into EventBridge, Lambda and SQS, through the AI Blog Orchestrator and hybrid Bedrock/Ollama inference, fanning out to blog, visual, video and social artifacts, then Amazon S3, n8n and publishing to a pull request and blog platform, with CloudWatch monitoring." src="./docs/assets/orchestration-diagram-light.svg" width="620">
+</picture>
+
+</div>
 
 ---
 
