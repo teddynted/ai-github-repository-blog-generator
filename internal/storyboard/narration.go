@@ -91,7 +91,7 @@ func splitSentences(s string) []string {
 	var out []string
 	start := 0
 	for i := 0; i < len(s); i++ {
-		if s[i] == '.' || s[i] == '!' || s[i] == '?' {
+		if isSentenceBoundary(s, i) {
 			if seg := strings.TrimSpace(s[start : i+1]); seg != "" {
 				out = append(out, seg)
 			}

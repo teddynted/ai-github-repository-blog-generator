@@ -62,6 +62,17 @@ func prose(body string) string {
 	return cleanInline(strings.Join(out, " "))
 }
 
+// isSentenceBoundary reports whether s[i] ends a sentence: a '.', '!' or '?'
+// followed by whitespace or end-of-text. Requiring the trailing space avoids
+// splitting inside decimals and version numbers like "1.0.0", where the dot is
+// followed by a digit rather than a space.
+func isSentenceBoundary(s string, i int) bool {
+	if c := s[i]; c != '.' && c != '!' && c != '?' {
+		return false
+	}
+	return i+1 >= len(s) || s[i+1] == ' ' || s[i+1] == '\t' || s[i+1] == '\n'
+}
+
 // firstSentences returns up to n sentences of s, also capped at maxWords.
 func firstSentences(s string, n, maxWords int) string {
 	s = strings.Join(strings.Fields(s), " ")
@@ -72,7 +83,7 @@ func firstSentences(s string, n, maxWords int) string {
 	count := 0
 	start := 0
 	for i := 0; i < len(s); i++ {
-		if s[i] == '.' || s[i] == '!' || s[i] == '?' {
+		if isSentenceBoundary(s, i) {
 			out = append(out, strings.TrimSpace(s[start:i+1]))
 			start = i + 1
 			count++

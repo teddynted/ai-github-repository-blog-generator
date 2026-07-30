@@ -1,6 +1,6 @@
 # Storyboard: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 6 scenes · ~1:25 (short, 9:16)_
+_acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 
 **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS  
 **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Production:** medium · **Animation:** low
@@ -103,8 +103,8 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:25 (short, 9:16)_
 ## Scene 6 — Wrapping up
 
 - **Objective:** Summarise the takeaways and point to what's next.
-- **Timing:** 10s recommended (7–15s, medium)
-- **Narration:** Widget v1. 0. 0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
+- **Timing:** 9s recommended (6–14s, medium)
+- **Narration:** Widget v1.0.0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
 - **Visual:** Closing title card recapping key takeaways with a subtle call to action. Assets: Repository Logo, Title Card.
 - **Camera:** Slow Zoom Out — Zoom out to close the video calmly.
 - **Animation:**

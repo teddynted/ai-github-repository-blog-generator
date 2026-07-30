@@ -1,8 +1,8 @@
 # YouTube Script: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and cloud practitioners · intermediate_
+_acme/widget · release v1.0.0 · long-form · ~1:39 · Software engineers and cloud practitioners · intermediate_
 
-> **Notes:** runtime 1:40 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
+> **Notes:** runtime 1:39 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
 
 ## Hook (`00:00–00:15`, showcase)
 
@@ -97,18 +97,18 @@ _acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and c
 
 ## Chapter 6 — Wrapping up
 
-- **Timestamp:** `01:30–01:40` (target 10s; 5–25s)
+- **Timestamp:** `01:30–01:39` (target 9s; 5–24s)
 - **Storyboard scenes:** 6 · **Voice-over scenes:** 6
 
 ### Narration
 
-> Widget v1. 0. 0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
+> Widget v1.0.0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
 
 - **Transition:** That's the release end to end — thanks for watching.
 
 ---
 
-## Conclusion (`01:30–01:40`)
+## Conclusion (`01:30–01:39`)
 
 > So that's acme/widget v1.0.0 end to end. Next up: we keep building the pipeline release by release. Thanks for watching.
 
@@ -132,7 +132,7 @@ _acme/widget · release v1.0.0 · long-form · ~1:40 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 1:40 · **Speaking time:** 3:04 · **Words:** 460
+- **Estimated runtime:** 1:39 · **Speaking time:** 3:03 · **Words:** 458
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 - **Alternative titles:** How acme/widget v1.0.0 Actually Works; Building v1.0.0: A Full Architecture Walkthrough
