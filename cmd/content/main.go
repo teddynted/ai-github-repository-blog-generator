@@ -34,6 +34,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/config"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
@@ -136,7 +137,7 @@ func generate(args []string) int {
 	fs.BoolVar(&o.verbose, "verbose", false, "verbose logging")
 	fs.BoolVar(&o.noCache, "no-cache", false, "bypass the local response cache")
 	fs.BoolVar(&o.noHistory, "no-history", false, "do not archive this run under <output>/releases/<version>/history/<stamp>/")
-	fs.BoolVar(&o.hybrid, "hybrid", false, "hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default llama3.2:1b). Best with --artifact all")
+	fs.BoolVar(&o.hybrid, "hybrid", false, fmt.Sprintf("hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default %s). Best with --artifact all", config.DefaultOllamaModel))
 	fs.StringVar(&o.fromBlog, "from-blog", "", "generate downstream artifacts from an EXISTING blog.md (skip blog regeneration). Requires --artifact != blog; pair with --artifact all or a specific downstream kind")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
@@ -244,7 +245,7 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		if o.hybrid {
 			om := o.model
 			if om == "" {
-				om = envOr("OLLAMA_MODEL", "llama3.2:1b")
+				om = envOr("OLLAMA_MODEL", config.DefaultOllamaModel)
 			}
 			printHybridPolicy(om)
 		}
@@ -549,7 +550,7 @@ func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
 	}
 	ollamaModel := o.model
 	if ollamaModel == "" {
-		ollamaModel = envOr("OLLAMA_MODEL", "llama3.2:1b")
+		ollamaModel = envOr("OLLAMA_MODEL", config.DefaultOllamaModel)
 	}
 	var claudeM, ollamaM Model = premium, ollama.New(ollamaModel, ollamaOpts(o)...)
 	if !o.noCache {
