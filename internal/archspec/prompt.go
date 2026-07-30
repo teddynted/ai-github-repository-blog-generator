@@ -66,9 +66,9 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	fmt.Fprintf(&b, "- Diagram Version: %s\n", DiagramVersion)
 	b.WriteString("- Output Formats: SVG\n\n")
 	b.WriteString("## Components\n")
-	b.WriteString("List every component the evidence supports. For each, provide: Name; Type (e.g. compute, storage, messaging, serverless, networking, IAM, external); AWS Service (or External System); Purpose (why it exists); Relationships (adjacent components, inputs, outputs, dependencies); Repository Evidence (the specific template/resource/file that proves it exists).\n\n")
+	b.WriteString("List every component the evidence supports. Give each a stable, role-based canonical Name (e.g. \"Build Artifact Bucket\", \"AMI Builder Instance\", \"Compute Schedule\", \"Start/Stop Function\", \"Runtime Compute Host\") rather than the bare AWS service name, and use that exact Name for the component everywhere else in this document. If the release's workflow has distinct phases (for example an out-of-band build/provisioning path versus a scheduled runtime path), group the components under `### ` plane subsections named for those phases plus a `### Cross-cutting` subsection for shared IAM/observability; if there is only one phase, list them under a single `### ` group. For each component, provide: Name; Type (e.g. compute, storage, messaging, serverless, networking, IAM, external); AWS Service (or External System); Purpose (why it exists); Relationships (adjacent components, inputs, outputs, dependencies); Repository Evidence (the specific template/resource/file that proves it exists).\n\n")
 	b.WriteString("## Connections\n")
-	b.WriteString("Describe every connection between components. For each: Source; Target; Protocol/mechanism (e.g. event, SQS message, HTTPS, IAM-scoped API call); Purpose; Direction; Repository Evidence.\n\n")
+	b.WriteString("Describe every connection between components. Source and Target MUST each be the exact canonical component Name defined in Components above — never a raw AWS service name, and never with a parenthetical qualifier appended (put any qualifier in Purpose instead). If two components interact in several ways, emit ONE connection and summarize the mechanisms in Purpose rather than repeating the pair. For each: Source; Target; Protocol/mechanism (e.g. event, SQS message, HTTPS, IAM-scoped API call); Purpose; Direction (written Source → Target); Repository Evidence.\n\n")
 	b.WriteString("## Security\n")
 	b.WriteString("IAM boundaries; network boundaries (VPC/subnets/security groups, if present); which resources are private vs public; encryption; authentication; authorization. Only what the evidence supports.\n\n")
 	b.WriteString("## Operational Flow\n")
@@ -76,7 +76,7 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("## Failure Handling\n")
 	b.WriteString("Retries; dead-letter queues; fallbacks; timeouts; monitoring. Only what the evidence supports; omit categories with no evidence.\n\n")
 	b.WriteString("## Rendering Notes\n")
-	b.WriteString("Notes a deterministic renderer needs to lay this out as an SVG using AWS Architecture Icons: suggested grouping (e.g. VPC boundary, account boundary), left-to-right vs top-down flow, which components are primary vs supporting, and a suggested SVG canvas/viewBox aspect ratio. Be concrete enough that no further interpretation is required.\n\n")
+	b.WriteString("Notes a deterministic renderer needs to lay this out as an SVG using AWS Architecture Icons. If the components fall into distinct planes (as grouped in Components), lay them out as stacked horizontal planes with left-to-right flow inside each plane, and draw the single most important cross-plane hand-off as one prominent emphasized edge. Render IAM as a badge/annotation and observability (CloudWatch) as a supporting node attached to what it governs — not as inline flow steps. Do NOT draw a VPC boundary, subnets/security groups, or a general-purpose event bus unless the engineering topic is explicitly about them. Name which components are primary vs supporting and suggest an SVG canvas/viewBox aspect ratio. Be concrete enough that no further interpretation is required.\n\n")
 
 	b.WriteString("CRITICAL RULES:\n")
 	b.WriteString("- Do NOT output an SVG, XML, Graphviz/DOT, Mermaid, or any rendered or diagram-markup form. Output ONLY the Markdown specification above.\n")
@@ -84,8 +84,40 @@ func (g *Generator) prompt(pkg ReleasePackage) string {
 	b.WriteString("- Ground every component, connection, and security boundary in the evidence; cite the specific repository evidence. If you cannot cite evidence, omit the item.\n")
 	b.WriteString("- Never present planned or roadmap work as implemented. Describe only what exists in the evidence.\n")
 	b.WriteString("- Do NOT emit permanent, repository-wide platform labels or classifications (e.g. \"Event-driven AI Agent Platform\", \"Serverless hybrid AI platform\", \"AWS-native AI platform\", \"Repository-level architecture overview\", \"overall platform architecture\") in the Title, Primary Engineering Topic, or anywhere else — UNLESS the engineering topic itself is explicitly about that. Scope every statement to the change this release introduces, so the same instructions work for any future release regardless of its architecture style.\n")
+	b.WriteString("- Include ONLY the components central to the engineering topic plus the minimal supporting cross-cutting services (IAM, observability) needed to explain them. Do NOT include generic platform ingress or event-routing — webhook ingestion, a general-purpose event bus, unrelated queues/functions — unless the topic is specifically about it. Prefer the specific trigger the release uses (e.g. a scheduled rule) over a generic bus. If a service is not required to explain the release's change, omit it even when it appears in the evidence.\n")
+	b.WriteString("- Rendering Notes must lay out only the release's change (its primary components + minimal cross-cutting IAM/observability). Do not describe a generic platform bus, ingress, VPC, or repository-wide topology unless it is explicitly part of the change.\n")
+	b.WriteString("- Do NOT reference these repository-wide runtime/platform components unless the engineering topic is explicitly about them — even if the blog names them as background: Amazon Bedrock, Ollama, OpenClaw (claw), n8n, Kafka, a general-purpose EventBridge event bus, webhook ingestion, or networking primitives (VPC, subnets, security groups, NAT/internet gateways). Scope every service to THIS release's workflow — e.g. describe S3 as staging the build's scripts/artifacts, not as \"storage for the platform\", and scope IAM to the permissions the release's own EC2/Lambda/S3/AMI operations need.\n")
+	b.WriteString("- Do NOT infer a tool from the blog's frontmatter tags or metadata — a \"github-actions\" tag does not establish that the build is GitHub Actions-driven. Name a specific tool only when the blog BODY describes it as part of the change; otherwise describe it generically (e.g. \"external build driver that invokes the AWS APIs for the workflow\").\n")
+	b.WriteString("- Describe each component's purpose in terms of THIS release's change, not the baseline platform's posture. For a scheduled start/stop control path, say it bounds COMPUTE cost for the on-demand host and preserves the release's runtime control flow — do NOT describe it as \"keeping ingestion/the front door/inference/always-on services available\" (that is pre-existing platform behaviour, not this release's contribution).\n")
 
 	return b.String()
+}
+
+// baselineComponentTerms name repository-wide runtime components that are NOT the
+// subject of a typical release. Blog lines mentioning them are dropped from the
+// evidence so the spec can't cite baseline platform detail. Only specific product
+// names are listed — never generic words like "inference" that a future release
+// might legitimately be about.
+var baselineComponentTerms = []string{"claw", "openclaw", "ollama", "bedrock", "n8n", "kafka"}
+
+// filterBaselineComponents removes blog lines that mention a baseline component,
+// keeping the rest of the article intact.
+func filterBaselineComponents(md string) string {
+	var out []string
+	for _, ln := range strings.Split(md, "\n") {
+		low := strings.ToLower(ln)
+		drop := false
+		for _, t := range baselineComponentTerms {
+			if strings.Contains(low, t) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, ln)
+		}
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 // evidenceBlock assembles the deterministic, repository-grounded evidence the
@@ -112,7 +144,7 @@ func evidenceBlock(pkg ReleasePackage) string {
 	if t := releaseTopic(pkg.Blog.Title); t != "" {
 		fmt.Fprintf(&b, "Release topic: %s\n", t)
 	}
-	if body := strings.TrimSpace(pkg.Blog.Markdown); body != "" {
+	if body := filterBaselineComponents(strings.TrimSpace(pkg.Blog.Markdown)); body != "" {
 		b.WriteString("\nBlog content:\n")
 		b.WriteString(body + "\n")
 	}
