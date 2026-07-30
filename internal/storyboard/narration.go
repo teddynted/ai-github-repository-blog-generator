@@ -55,11 +55,80 @@ func stripNarrationPreamble(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// baselineComponentTerms name repository-wide runtime components that are not the
+// subject of a typical release. Narration sentences mentioning them are dropped so
+// a release-scoped scene (e.g. "The Existing Architecture" for an AMI release)
+// narrates the release's own components — EventBridge Scheduler, Lambda, EC2,
+// CloudWatch — instead of the baseline AI platform. Mirrors the archspec filter of
+// the same name; keep the two lists in sync. Only specific product names are
+// listed, never generic words a future release might legitimately be about.
+var baselineComponentTerms = []string{"claw", "openclaw", "ollama", "bedrock", "n8n", "kafka", "efs"}
+
+// scopeToRelease drops whole sentences that mention a baseline platform component,
+// keeping narration on the release's subject. Returns "" if nothing survives, so
+// the caller falls back to a title-based line.
+func scopeToRelease(text string) string {
+	var kept []string
+	for _, s := range splitSentences(text) {
+		low := strings.ToLower(s)
+		drop := false
+		for _, t := range baselineComponentTerms {
+			if containsWord(low, t) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			kept = append(kept, s)
+		}
+	}
+	return strings.TrimSpace(strings.Join(kept, " "))
+}
+
+// splitSentences splits text into sentences on ., ! and ? boundaries.
+func splitSentences(s string) []string {
+	s = strings.Join(strings.Fields(s), " ")
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' || s[i] == '!' || s[i] == '?' {
+			if seg := strings.TrimSpace(s[start : i+1]); seg != "" {
+				out = append(out, seg)
+			}
+			start = i + 1
+		}
+	}
+	if tail := strings.TrimSpace(s[start:]); tail != "" {
+		out = append(out, tail)
+	}
+	return out
+}
+
+// containsWord reports whether text contains word bounded by non-word characters
+// (letters/digits are word characters). Both arguments must be lowercase.
+func containsWord(text, word string) bool {
+	isWord := func(b byte) bool { return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' }
+	for idx := 0; ; {
+		i := strings.Index(text[idx:], word)
+		if i < 0 {
+			return false
+		}
+		i += idx
+		before := i == 0 || !isWord(text[i-1])
+		after := i+len(word) >= len(text) || !isWord(text[i+len(word)])
+		if before && after {
+			return true
+		}
+		idx = i + 1
+	}
+}
+
 // narrationDraft produces grounded narration from the section prose, with a
 // sensible fallback line when the section has no prose (e.g. a diagram-only
-// section).
+// section). Baseline platform components are scoped out so the draft stays on the
+// release's subject.
 func narrationDraft(body, typ, title string) string {
-	p := prose(body)
+	p := scopeToRelease(prose(body))
 	if d := firstSentences(p, 3, 60); d != "" {
 		return d
 	}
