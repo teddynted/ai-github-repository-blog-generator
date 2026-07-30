@@ -31,6 +31,25 @@ func cleanMermaidLabel(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// parseParticipant reads a sequence-diagram "participant <id> as <label>" or
+// "actor <id> as <label>" line (label optional), returning the id and cleaned
+// label. ok is false for any other line.
+func parseParticipant(line string) (id, label string, ok bool) {
+	for _, kw := range []string{"participant ", "actor "} {
+		if !strings.HasPrefix(line, kw) {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(line, kw))
+		if i := strings.Index(rest, " as "); i >= 0 {
+			return strings.TrimSpace(rest[:i]), cleanMermaidLabel(rest[i+4:]), true
+		}
+		if rest != "" {
+			return rest, "", true
+		}
+	}
+	return "", "", false
+}
+
 // analyzeMermaid extracts and parses every fenced ```mermaid block from the
 // markdown inventory.
 // AnalyzeMarkdown parses the Mermaid diagrams from a single markdown document,
@@ -104,6 +123,18 @@ func parseMermaid(block string) MermaidDiagram {
 		t := strings.TrimSpace(ln)
 		if t == "" || t == header || strings.HasPrefix(t, "%%") {
 			continue
+		}
+		// Sequence-diagram participant declarations: "participant B as Builder"
+		// (or "actor …"). Capture the human label so consumers surface "Builder",
+		// not the cryptic id "B", and register the participant as a node.
+		if seq {
+			if id, lbl, ok := parseParticipant(t); ok {
+				nodes[id] = true
+				if lbl != "" && labels[id] == "" {
+					labels[id] = lbl
+				}
+				continue
+			}
 		}
 		// Capture human labels from node definitions (inline or standalone):
 		// "GH[GitHub Release]", "APIGW(API Gateway)", "T{Valid?}".
