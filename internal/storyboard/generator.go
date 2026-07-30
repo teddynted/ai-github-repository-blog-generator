@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
@@ -64,6 +65,7 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 	releaseDiagrams := rc.AnalyzeMarkdown(post.Markdown, "release architecture diagram")
 
 	scenes := make([]Scene, 0, len(sections))
+	var priorNarration []string // what earlier scenes already said, for de-duplication
 	for i, sec := range sections {
 		typ := sceneType(sec.Title)
 		sc := Scene{
@@ -76,7 +78,10 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		if i+1 < len(sections) {
 			nextTitle = sections[i+1].Title
 		}
-		sc.Narration = g.narration(ctx, sec, typ, nextTitle)
+		sc.Narration = g.narration(ctx, sec, typ, nextTitle, strings.Join(priorNarration, " "))
+		if strings.TrimSpace(sc.Narration) != "" {
+			priorNarration = append(priorNarration, sc.Narration)
+		}
 		sc.Duration = planDuration(sc.Narration, g.WordsPerSecond)
 		sc.Diagrams = planDiagrams(typ, releaseDiagrams)
 		sc.Code = planCode(sec.Body)

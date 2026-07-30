@@ -10,12 +10,12 @@ import (
 // draft from the section prose (grounded, never invented) and, when a Model is
 // configured, asks it to polish the draft into natural spoken narration — never
 // to add facts. On any model error it falls back to the draft.
-func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle string) string {
+func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle, prior string) string {
 	draft := narrationDraft(sec.Body, typ, sec.Title)
 	if g.Model == nil || strings.TrimSpace(draft) == "" {
 		return draft
 	}
-	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, nextTitle, draft))
+	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, nextTitle, prior, draft))
 	if err != nil {
 		return draft
 	}
@@ -166,7 +166,7 @@ func visualHint(typ string) string {
 	}
 }
 
-func narrationPrompt(title, typ, nextTitle, draft string) string {
+func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 	target := "2–4 short, spoken sentences (about 35–55 words total"
 	sceneHint := ""
 	if isDeepTechnical(typ) {
@@ -186,17 +186,25 @@ func narrationPrompt(title, typ, nextTitle, draft string) string {
 			"short bridging sentence that hands the viewer off to it — a natural lead-in, not a summary or a teaser. If "+
 			"the next scene simply continues this point, add no bridge.\n", nextTitle)
 	}
+	dedup := ""
+	if p := strings.TrimSpace(prior); p != "" {
+		// Keep only the most recent context so the prompt stays bounded.
+		dedup = fmt.Sprintf("EARLIER SCENES ALREADY SAID (do NOT repeat these points; where this scene's draft overlaps "+
+			"them, cover only the NEW angle this scene adds — for example a runtime-problem scene, a one-line mental "+
+			"model, and a step-by-step walkthrough must each say something distinct): %s\n", capWords(p, 220))
+	}
 	return fmt.Sprintf(
 		"You are a senior AWS platform engineer narrating one scene of a technical explainer video for an "+
 			"audience of software and DevOps engineers — the tone of a re:Invent speaker or a technical YouTube educator.\n"+
 			"Scene: %q (type: %s).\n"+
-			"%s%s%s\n"+
+			"%s%s%s%s\n"+
 			"Rewrite the DRAFT below into %s, roughly 12–18 words per sentence). Be clear, confident, conversational, and "+
 			"technically precise. Prefer present tense and active voice; keep each sentence to a single idea rather than "+
 			"long compound clauses.\n"+
 			"Vary your sentence openings for spoken rhythm: do not begin consecutive sentences with the same word or the "+
-			"same subject (for example repeated \"The pipeline\", \"The builder\", \"The host\"), and never start a "+
-			"sentence with \"So\".\n"+
+			"same subject (for example repeated \"The pipeline\", \"The builder\", \"The host\", \"This\", or \"That\"), "+
+			"and never start a sentence with \"So\", \"Then\", or \"Think of it as\". Prefer short declarative sentences of "+
+			"about 10–16 spoken words.\n"+
 			"Ground every claim in the DRAFT: use ONLY the facts, AWS services, and mechanisms it states — never invent "+
 			"features, numbers, or components, and never substitute a different AWS service for the one named (for example, "+
 			"do not say ECS when the draft says EC2).\n"+
@@ -209,7 +217,7 @@ func narrationPrompt(title, typ, nextTitle, draft string) string {
 			"Output ONLY the spoken sentences — no preamble, no quotation marks, no scene labels, and no framing such as "+
 			"\"Here is\" or \"rewritten version\". Begin directly with the first spoken word.\n\n"+
 			"DRAFT:\n%s",
-		title, typ, visualHint(typ), bridge, sceneHint, target, draft,
+		title, typ, visualHint(typ), bridge, sceneHint, dedup, target, draft,
 	)
 }
 
