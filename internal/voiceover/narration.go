@@ -42,11 +42,17 @@ func (g *Generator) narration(ctx context.Context, base, sceneTitle, sceneType, 
 // that the refined narration still fits its allocation, so the voice-over never
 // reports a scene "over". Keeps whole leading sentences that fit (always at least
 // the first); returns the input unchanged when it already fits.
+//
+// The budget includes fitToleranceSec so it matches the "fits" test exactly:
+// narration that would already pass (est <= allocated + tolerance) is never
+// trimmed. Using the bare allocation here dropped a whole trailing sentence for
+// being a word or two over, collapsing narration well below its slot and leaving
+// dead air — only narration that genuinely would NOT fit should be cut.
 func fitNarrationToBudget(narration string, allocatedSec, wpm int) string {
 	if allocatedSec <= 0 {
 		return narration
 	}
-	budget := int(float64(allocatedSec) * wordsPerSecond(wpm))
+	budget := int(float64(allocatedSec+fitToleranceSec) * wordsPerSecond(wpm))
 	if budget < 1 || wordCount(narration) <= budget {
 		return narration
 	}

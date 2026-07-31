@@ -444,6 +444,23 @@ func TestModelMayNotShortenBelowBase(t *testing.T) {
 	}
 }
 
+func TestFitNarrationRespectsTolerance(t *testing.T) {
+	// Two sentences totalling ~28 words ≈ 12s at 145 wpm, in a 10s slot: within
+	// the 2s fit tolerance, so nothing should be trimmed. The old bare-allocation
+	// budget clipped this to the first sentence, leaving dead air.
+	s := "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu. " +
+		"Omicron pi rho sigma tau upsilon phi chi psi omega one two three four five."
+	got := fitNarrationToBudget(s, 10, 145)
+	if wordCount(got) != wordCount(collapse(s)) {
+		t.Errorf("within-tolerance narration was clipped: kept %d of %d words: %q",
+			wordCount(got), wordCount(collapse(s)), got)
+	}
+	// Sanity: the corresponding scene still fits.
+	if d := planDuration(got, 10, 145); !d.Fits {
+		t.Errorf("expected fit: est=%ds allocated=%ds", d.EstimatedSpeechSec, d.AllocatedSec)
+	}
+}
+
 type errModel struct{}
 
 func (errModel) Generate(_ context.Context, _ string) (string, error) {
