@@ -91,7 +91,7 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		// Enforce the per-scene timing budget on sentence boundaries so the spoken
 		// narration always fits its allocated slot (the voice-over never marks it
 		// "over"). Trim before timing and dedup so both see the final words.
-		sc.Narration = fitToSceneBudget(sc.Narration, g.rate())
+		sc.Narration = capitalizeFirst(fitToSceneBudget(sc.Narration, g.rate()))
 		if strings.TrimSpace(sc.Narration) != "" {
 			priorNarration = append(priorNarration, sc.Narration)
 		}

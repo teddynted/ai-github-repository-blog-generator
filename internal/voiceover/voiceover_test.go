@@ -461,6 +461,20 @@ func TestFitNarrationRespectsTolerance(t *testing.T) {
 	}
 }
 
+func TestCapitalizeFirst(t *testing.T) {
+	cases := map[string]string{
+		"every time this machine starts": "Every time this machine starts",
+		"Already capitalized.":           "Already capitalized.",
+		"\"quoted opener\"":              "\"Quoted opener\"",
+		"":                               "",
+	}
+	for in, want := range cases {
+		if got := capitalizeFirst(in); got != want {
+			t.Errorf("capitalizeFirst(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestStripPreamble(t *testing.T) {
 	cases := map[string]string{
 		"Here's the refined narration: Once a host can boot fast, a door opens.": "Once a host can boot fast, a door opens.",

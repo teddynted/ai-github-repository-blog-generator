@@ -1,6 +1,24 @@
 package storyboard
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
+
+// capitalizeFirst upper-cases the first letter of s so a scene's narration never
+// opens on a lower-case word. Leading non-letters are skipped; already
+// capitalized text is returned unchanged.
+func capitalizeFirst(s string) string {
+	for i, r := range s {
+		if unicode.IsLetter(r) {
+			if !unicode.IsUpper(r) {
+				s = s[:i] + string(unicode.ToUpper(r)) + s[i+len(string(r)):]
+			}
+			break
+		}
+	}
+	return s
+}
 
 // codeBlock is a fenced code block extracted from Markdown.
 type codeBlock struct {
