@@ -461,6 +461,22 @@ func TestFitNarrationRespectsTolerance(t *testing.T) {
 	}
 }
 
+func TestNormalizeForSpeechSpellsVersions(t *testing.T) {
+	cases := map[string]string{
+		"the pipeline bumps 1.0.0 to 1.0.1": "the pipeline bumps one point zero point zero to one point zero point one",
+		"schema 12.5 ships":                 "schema twelve point five ships",
+		"release 2.10.0 today":              "release two point ten point zero today",
+		"no numbers here":                   "no numbers here",
+		"a plain 42 integer stays":          "a plain 42 integer stays", // no dot: untouched
+		"build 2024.100.0 is odd":           "build 2024.100.0 is odd",  // 100 out of range: untouched
+	}
+	for in, want := range cases {
+		if got := normalizeForSpeech(in); got != want {
+			t.Errorf("normalizeForSpeech(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 type errModel struct{}
 
 func (errModel) Generate(_ context.Context, _ string) (string, error) {
