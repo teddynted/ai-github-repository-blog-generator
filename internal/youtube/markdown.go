@@ -16,9 +16,10 @@ func (s YouTubeScript) Markdown() string {
 		s.Metadata.Repository, s.Metadata.Release, s.Video.Format,
 		s.Video.Duration, s.Video.Audience, s.Video.Difficulty)
 
-	if len(s.Warnings) > 0 {
-		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(s.Warnings, "; "))
-	}
+	// s.Warnings are internal pipeline QA diagnostics (under-run, thin upstream,
+	// fit warnings). They are kept on the struct for JSON/provenance and logged
+	// at generation, but MUST NOT surface in the viewer-facing artifact — so they
+	// are deliberately not rendered here.
 
 	// Hook
 	fmt.Fprintf(&b, "## Hook (`%s`, %s)\n\n", s.Hook.Timestamp.Label, s.Hook.Type)
