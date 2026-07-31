@@ -461,6 +461,26 @@ func TestFitNarrationRespectsTolerance(t *testing.T) {
 	}
 }
 
+func TestExpandAbbreviations(t *testing.T) {
+	cases := map[string]string{
+		"as code, not config":                 "as code, not configuration",
+		"stops config from diverging":         "stops configuration from diverging",
+		"Config drift is caught":              "Configuration drift is caught",
+		"pull from the repo and its repos":    "pull from the repository and its repositories",
+		"configuration stays untouched":       "configuration stays untouched",       // already expanded, no double-expand
+		"reconfigure the preconfigured thing": "reconfigure the preconfigured thing", // word-bounded: no inner match
+	}
+	for in, want := range cases {
+		if got := expandAbbreviations(in); got != want {
+			t.Errorf("expandAbbreviations(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// Word count is unchanged (timing-safe).
+	if got, want := wordCount(expandAbbreviations("tweak the config now")), wordCount("tweak the config now"); got != want {
+		t.Errorf("expansion changed word count: %d != %d", got, want)
+	}
+}
+
 func TestCapitalizeFirst(t *testing.T) {
 	cases := map[string]string{
 		"every time this machine starts": "Every time this machine starts",

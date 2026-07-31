@@ -241,7 +241,9 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 			"\"This approach\", \"several key benefits\", \"the system's capacity is depleted\", \"guards are deployed\", "+
 			"\"no two starts produced the same machine\", \"a critical phase of production\", \"streamline the "+
 			"experience\", \"at the center\", \"in kind\", \"everything downstream stays the same\", \"the payoff is\", "+
-			"\"that marks this as\", \"applied broadly\", \"hides choices worth a closer look\", and a sentence "+
+			"\"that marks this as\", \"applied broadly\", \"hides choices worth a closer look\", \"comes into view\", "+
+			"\"lands faster\", \"pull these threads together\", using \"deterministic\" as if it were an adverb "+
+			"(say \"more predictable\" or \"more consistent\" instead), and a sentence "+
 			"starting with \"Now\". State what actually happens, in plain engineering language.\n"+
 			"Output ONLY the spoken sentences — no preamble, no quotation marks, no scene labels, and no framing such as "+
 			"\"Here is\" or \"rewritten version\". Begin directly with the first spoken word.\n\n"+

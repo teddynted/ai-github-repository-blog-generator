@@ -1,9 +1,38 @@
 package voiceover
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+// speechExpansions maps developer shorthand to the full word a narrator/TTS
+// engine should speak. Each expansion is a single word, so word count — and
+// therefore scene timing — is unchanged. Keep entries unambiguous.
+var speechExpansions = map[string]string{
+	"config":  "configuration",
+	"configs": "configurations",
+	"repo":    "repository",
+	"repos":   "repositories",
+}
+
+var abbrevRe = regexp.MustCompile(`(?i)\b(config|configs|repo|repos)\b`)
+
+// expandAbbreviations rewrites known shorthand to its spoken form ("config" ->
+// "configuration"), preserving the leading capital. Word-count-neutral, so it
+// never affects timing.
+func expandAbbreviations(s string) string {
+	return abbrevRe.ReplaceAllStringFunc(s, func(m string) string {
+		exp := speechExpansions[strings.ToLower(m)]
+		if exp == "" {
+			return m
+		}
+		if unicode.IsUpper(rune(m[0])) {
+			exp = strings.ToUpper(exp[:1]) + exp[1:]
+		}
+		return exp
+	})
+}
 
 // wordCount counts whitespace-separated words.
 func wordCount(s string) int { return len(strings.Fields(s)) }

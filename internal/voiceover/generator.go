@@ -91,7 +91,7 @@ func (g *Generator) VoiceOver(ctx context.Context, sb storyboard.Storyboard) (Vo
 		if base := collapse(sc.Narration); wordCount(narration) < wordCount(base) {
 			narration = base
 		}
-		narration = capitalizeFirst(narration)
+		narration = expandAbbreviations(capitalizeFirst(narration))
 		pron := planPronunciation(narration)
 		for _, p := range pron {
 			uniqueTerms[lower(p.Term)] = true
