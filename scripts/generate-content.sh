@@ -9,7 +9,7 @@
 # Defaults to v0.14.0; override with env vars:
 #   RELEASE=v0.14.0                       release tag (folder + fixture name)
 #   CONTEXT=fixtures/designing-<rel>.json Release Context fixture
-#   OLLAMA_MODEL=llama3.2:1b              Ollama transform model
+#   OLLAMA_MODEL=qwen2.5:7b              Ollama transform model
 #   FORCE_BLOG=1                          regenerate blog even if it exists
 #   FAST=1                                one `--artifact all` run instead of
 #                                         per-artifact steps (storyboard once;
@@ -26,7 +26,7 @@ CTX="${CONTEXT:-fixtures/designing-${RELEASE}.json}"
 BLOG="output/releases/${RELEASE}/blog.md"
 FORCE_BLOG="${FORCE_BLOG:-0}"
 FAST="${FAST:-0}"
-MODEL="${OLLAMA_MODEL:-llama3.2:1b}"
+MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
 
 cd "$(git rev-parse --show-toplevel)"
 [ -f "$CTX" ] || { printf '\033[1;31m✗ context not found: %s\033[0m\n' "$CTX" >&2; exit 1; }

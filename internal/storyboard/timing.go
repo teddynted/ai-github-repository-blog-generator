@@ -2,8 +2,11 @@ package storyboard
 
 import "math"
 
-// defaultWordsPerSecond is a natural narration pace (~156 wpm).
-const defaultWordsPerSecond = 2.6
+// defaultWordsPerSecond is a natural narration pace (145 wpm). It MUST match the
+// voice-over estimator (voiceover.defaultWordsPerMinute) so a scene's allocated
+// duration and its estimated spoken time are computed on the same clock — that
+// equality is what guarantees narration never exceeds its allocation.
+const defaultWordsPerSecond = 145.0 / 60.0
 
 // sceneMinSec / sceneMaxSec bound a single scene's recommended duration.
 const (

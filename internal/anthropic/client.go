@@ -25,8 +25,9 @@ const (
 	// DefaultBaseURL is Anthropic's API endpoint.
 	DefaultBaseURL = "https://api.anthropic.com"
 	// DefaultModel is a strong, cost-effective default for long-form technical
-	// writing. Override with Config.Model / ANTHROPIC_MODEL.
-	DefaultModel = "claude-sonnet-4-5"
+	// writing — near-Opus quality on writing/agentic work at Sonnet pricing.
+	// Override with Config.Model / ANTHROPIC_MODEL.
+	DefaultModel = "claude-sonnet-5"
 	// apiVersion is the pinned Anthropic API version header.
 	apiVersion = "2023-06-01"
 )

@@ -24,10 +24,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 )
 
-// DefaultModelID is a widely-available Bedrock Claude model. Override with the
-// model your account has access to (see NewFromAWS / Config.ModelID) — Bedrock
-// model ids and inference-profile ids are account- and region-specific.
-const DefaultModelID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+// DefaultModelID is the fallback Bedrock Claude model — Sonnet 5, near-Opus
+// quality at Sonnet pricing. This bare, current-generation id is only a
+// fallback: for on-demand InvokeModel most accounts must use a cross-region
+// inference-profile id ("us.anthropic.claude-sonnet-5" in US regions,
+// "eu."/"apac." elsewhere, or the region-agnostic "global.anthropic.claude-sonnet-5").
+// Sonnet 5 dropped the dated "-YYYYMMDD-v1:0" suffix earlier models used.
+// Override with the id your account/region uses via BEDROCK_MODEL_ID
+// (see NewFromAWS / Config.ModelID).
+const DefaultModelID = "anthropic.claude-sonnet-5"
 
 // WriterPersona is the default system prompt for the technical-writer stage. It
 // steers Claude to write as the engineer who built the platform — a narrative,

@@ -19,10 +19,14 @@ func planDiagrams(typ string, diagrams []rc.MermaidDiagram) []DiagramRef {
 		return nil
 	}
 	d := diagrams[0]
-	nodes := topStrings(d.Nodes, maxHighlightNodes)
+	ids := topStrings(d.Nodes, maxHighlightNodes)
+	nodes := make([]string, len(ids))
+	for i, id := range ids {
+		nodes[i] = nodeLabel(d, id)
+	}
 	zoom := ""
 	if len(d.Nodes) > 0 {
-		zoom = d.Nodes[0]
+		zoom = nodeLabel(d, d.Nodes[0])
 	}
 	anim := "Diagram Build"
 	if d.Type == "sequence" {
@@ -35,4 +39,14 @@ func planDiagrams(typ string, diagrams []rc.MermaidDiagram) []DiagramRef {
 		Animation:      anim,
 		ZoomTarget:     zoom,
 	}}
+}
+
+// nodeLabel returns the diagram's human label for a node id when one exists
+// (e.g. a sequence participant "B as Builder" → "Builder"), else the id itself —
+// so scene highlights never surface a cryptic mermaid id.
+func nodeLabel(d rc.MermaidDiagram, id string) string {
+	if lbl := d.NodeLabels[id]; lbl != "" {
+		return lbl
+	}
+	return id
 }

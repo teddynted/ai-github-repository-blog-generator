@@ -34,6 +34,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/config"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
@@ -136,7 +137,7 @@ func generate(args []string) int {
 	fs.BoolVar(&o.verbose, "verbose", false, "verbose logging")
 	fs.BoolVar(&o.noCache, "no-cache", false, "bypass the local response cache")
 	fs.BoolVar(&o.noHistory, "no-history", false, "do not archive this run under <output>/releases/<version>/history/<stamp>/")
-	fs.BoolVar(&o.hybrid, "hybrid", false, "hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default llama3.2:1b). Best with --artifact all")
+	fs.BoolVar(&o.hybrid, "hybrid", false, fmt.Sprintf("hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default %s). Best with --artifact all", config.DefaultOllamaModel))
 	fs.StringVar(&o.fromBlog, "from-blog", "", "generate downstream artifacts from an EXISTING blog.md (skip blog regeneration). Requires --artifact != blog; pair with --artifact all or a specific downstream kind")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
@@ -244,7 +245,7 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		if o.hybrid {
 			om := o.model
 			if om == "" {
-				om = envOr("OLLAMA_MODEL", "llama3.2:1b")
+				om = envOr("OLLAMA_MODEL", config.DefaultOllamaModel)
 			}
 			printHybridPolicy(om)
 		}
@@ -492,6 +493,15 @@ func ollamaOpts(o options) []ollama.Option {
 }
 
 func buildModel(ctx context.Context, o options) (Model, []string, error) {
+	// raw is the bare provider client; label names it for the progress log. Every
+	// provider is wrapped in loggingModel below so a direct (non-hybrid) run —
+	// e.g. `--provider ollama` driving the storyboard — shows per-call start,
+	// 15s heartbeats, and finish timing on stderr instead of going silent for
+	// minutes. The cache (added by the caller) stays OUTSIDE this wrapper, so a
+	// cache hit short-circuits without logging a phantom "generating" line.
+	var raw Model
+	var label string
+	var fp []string
 	switch o.provider {
 	case "anthropic":
 		key := os.Getenv("ANTHROPIC_API_KEY")
@@ -506,7 +516,7 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return cl, fingerprint("anthropic", model, o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = cl, "anthropic:"+model, fingerprint("anthropic", model, o.system, o.temperature, o.maxTokens)
 	case "bedrock":
 		if o.model == "" {
 			return nil, nil, fmt.Errorf("--model (a Bedrock model id) is required for --provider bedrock")
@@ -515,13 +525,13 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return cl, fingerprint("bedrock", o.model, o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = cl, "bedrock:"+o.model, fingerprint("bedrock", o.model, o.system, o.temperature, o.maxTokens)
 	case "ollama":
 		model := o.model
 		if model == "" {
 			model = envOr("OLLAMA_MODEL", "qwen2.5:7b")
 		}
-		return ollama.New(model, ollamaOpts(o)...), fingerprint("ollama", model, o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = ollama.New(model, ollamaOpts(o)...), "ollama:"+model, fingerprint("ollama", model, o.system, o.temperature, o.maxTokens)
 	case "claude-code":
 		// Local-dev only: generate via the Claude Code subscription (`claude -p`)
 		// instead of Anthropic API credits.
@@ -529,10 +539,11 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return m, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = m, "claude-code", fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens)
 	default:
 		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, ollama, or claude-code)", o.provider)
 	}
+	return loggingModel{inner: raw, label: label, logger: suiteLogger()}, fp, nil
 }
 
 // buildHybrid builds a per-kind router for local hybrid generation: premium
@@ -549,7 +560,7 @@ func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
 	}
 	ollamaModel := o.model
 	if ollamaModel == "" {
-		ollamaModel = envOr("OLLAMA_MODEL", "llama3.2:1b")
+		ollamaModel = envOr("OLLAMA_MODEL", config.DefaultOllamaModel)
 	}
 	var claudeM, ollamaM Model = premium, ollama.New(ollamaModel, ollamaOpts(o)...)
 	if !o.noCache {

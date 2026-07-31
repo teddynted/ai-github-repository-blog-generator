@@ -105,6 +105,39 @@ go run ./cmd/storyboard --context ctx.json --format json --out board.json
 Flags: `--context` (required), `--blog`, `--format md|json`, `--model`
 (`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
 
+### Via the unified `content` CLI (recommended)
+
+`cmd/content` is the suite entrypoint. Use `--from-blog` to derive the storyboard
+from an existing `blog.md` (skipping the expensive blog regeneration) and
+`--provider` to choose where the per-scene narration is polished:
+
+```bash
+# Fast: polish narration via the Claude Code subscription (`claude -p`).
+# A few minutes; no ANTHROPIC_API_KEY needed.
+go run ./cmd/content \
+  --artifact storyboard \
+  --from-blog output/releases/v0.6.0/blog.md \
+  --no-history \
+  --no-cache \
+  --context fixtures/designing-v0.6.0.json \
+  --provider claude-code
+
+# Local-only: polish narration via Ollama (default provider).
+# Slower on CPU (~2 min/scene); watch the per-scene progress logs on stderr.
+go run ./cmd/content \
+  --artifact storyboard \
+  --from-blog output/releases/v0.6.0/blog.md \
+  --no-history \
+  --no-cache \
+  --context fixtures/designing-v0.6.0.json \
+  --provider ollama
+```
+
+Both write `output/releases/<version>/storyboard.md`, where `<version>` comes
+from the `--context` fixture. Progress is logged per scene and per model call
+(`storyboard narrating scene 3 of 13`, plus a 15s "… still generating"
+heartbeat), so a long CPU-bound Ollama run never goes silent.
+
 ## 7. Status
 
 **Implemented:** the storyboard engine (scene extraction, timing, camera,

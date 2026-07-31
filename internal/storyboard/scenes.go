@@ -88,8 +88,10 @@ func sceneType(title string) string {
 	switch {
 	case containsAny(t, "introduction", "intro", "overview") && !strings.Contains(t, "architecture"):
 		return "introduction"
-	case containsAny(t, "background", "context", "problem", "motivation", "challenge"):
+	case containsAny(t, "background", "context", "problem", "motivation", "challenge", "why this matters", "why it matters"):
 		return "problem"
+	case containsAny(t, "constraint", "limitation", "bottleneck"):
+		return "constraint"
 	case containsAny(t, "architecture diagram", "diagrams"):
 		return "diagram"
 	case containsAny(t, "architecture", "design", "system"):
@@ -100,8 +102,16 @@ func sceneType(title string) string {
 		return "repository"
 	case containsAny(t, "implementation", "how it works", "under the hood", "deep dive"):
 		return "implementation"
+	case containsAny(t, "solution", "the fix", "the approach", "pre-baked", "pre baked"):
+		return "solution"
+	case containsAny(t, "decision", "rationale", "why these", "why we chose", "why chosen"):
+		return "decisions"
 	case containsAny(t, "results", "benefits", "outcomes", "impact", "performance"):
 		return "results"
+	case containsAny(t, "tradeoff", "trade-off", "trade off"):
+		return "tradeoffs"
+	case containsAny(t, "enables next", "what this enables", "unlocks", "future work", "roadmap"):
+		return "future"
 	case containsAny(t, "lessons", "best practice", "takeaway", "how to use", "extend"):
 		return "lessons"
 	case containsAny(t, "conclusion", "summary", "wrap", "next steps", "what's next"):
@@ -118,6 +128,10 @@ func objectiveFor(typ, title string) string {
 		return "Hook the viewer and frame what the release is about."
 	case "problem":
 		return "Establish the problem and why this change matters."
+	case "constraint":
+		return "Pin down the hard engineering constraint the design must satisfy."
+	case "solution":
+		return "State the core mechanism that resolves the constraint."
 	case "architecture":
 		return "Explain the system architecture and how components interact."
 	case "diagram":
@@ -128,8 +142,14 @@ func objectiveFor(typ, title string) string {
 		return "Tour the repository and the code that changed."
 	case "implementation":
 		return "Explain how the feature was implemented."
+	case "decisions":
+		return "Explain each design decision and the tradeoff behind it."
 	case "results":
 		return "Show the outcomes, benefits, and impact."
+	case "tradeoffs":
+		return "Weigh the costs the design accepts in exchange for its benefits."
+	case "future":
+		return "Show what this design now makes possible."
 	case "lessons":
 		return "Share practical guidance and how to use or extend it."
 	case "conclusion":

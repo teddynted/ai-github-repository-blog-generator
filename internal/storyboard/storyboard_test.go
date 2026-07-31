@@ -3,6 +3,7 @@ package storyboard
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -125,6 +126,84 @@ func TestPlanDuration(t *testing.T) {
 	}
 }
 
+func TestFirstSentencesNeverTruncatesMidSentence(t *testing.T) {
+	// A three-sentence draft whose third sentence pushes past the word cap must
+	// drop that whole sentence, not clip it mid-clause with an ellipsis.
+	body := "The host boots from a stock image. It then runs a full provisioning pass every time. " +
+		"That pass performs an operating-system update and then installs Docker, Go, Node.js, Python, and the CloudWatch agent before the host can begin processing any queued work at all."
+	got := firstSentences(body, 3, 60)
+	if strings.Contains(got, "…") {
+		t.Errorf("narration draft must not contain a mid-sentence ellipsis: %q", got)
+	}
+	if n := len(got); n == 0 || (got[n-1] != '.' && got[n-1] != '!' && got[n-1] != '?') {
+		t.Errorf("draft must end on a complete sentence, got %q", got)
+	}
+
+	// A single sentence longer than the cap is kept whole rather than clipped —
+	// spoken narration must never end on a dangling clause.
+	long := "The builder resolves the semantic version, refuses any duplicate that already exists, captures the machine image together with its EBS snapshot, and tags both with the project, component, and version so every artifact is traceable and immutable across the fleet."
+	if out := firstSentences(long, 3, 60); strings.Contains(out, "…") {
+		t.Errorf("a long single sentence must not be clipped mid-word: %q", out)
+	}
+}
+
+func TestEverySceneNarrationFitsItsAllocation(t *testing.T) {
+	// A blog whose sections carry very long prose must still yield scenes whose
+	// spoken time never exceeds the allocated slot — the hard timing contract the
+	// voice-over relies on. Build a deep-technical section (implementation) with
+	// far more than a single scene's worth of narration.
+	longBody := strings.Repeat("The builder resolves the semantic version and refuses duplicates. "+
+		"It captures the image with its snapshot and tags both by project. ", 8)
+	post := releasegen.BlogPost{
+		Title:    "Timing stress",
+		Markdown: "# Timing stress\n\n## Key Implementation Details\n\n" + longBody + "\n\n## Conclusion\n\nThat is the pattern.\n",
+	}
+	sb, err := (&Generator{}).Storyboard(context.Background(), post, sampleContext())
+	if err != nil {
+		t.Fatalf("Storyboard: %v", err)
+	}
+	budget := int(math.Floor(float64(sceneMaxSec) * defaultWordsPerSecond))
+	for _, sc := range sb.Scenes {
+		w := wordCount(sc.Narration)
+		if w > budget {
+			t.Errorf("scene %d narration = %d words, over budget %d: %q", sc.SceneNumber, w, budget, sc.Narration)
+		}
+		if sc.Duration.RecommendedSec > sceneMaxSec {
+			t.Errorf("scene %d allocated %ds exceeds sceneMaxSec %ds", sc.SceneNumber, sc.Duration.RecommendedSec, sceneMaxSec)
+		}
+		// est speech time at the pacing rate must not exceed the allocation.
+		if est := int(math.Round(float64(w) / defaultWordsPerSecond)); est > sc.Duration.RecommendedSec {
+			t.Errorf("scene %d est %ds > allocated %ds", sc.SceneNumber, est, sc.Duration.RecommendedSec)
+		}
+	}
+}
+
+func TestFitToSceneBudgetKeepsNarrationWithinAllocation(t *testing.T) {
+	// A narration far longer than a single scene's slot must be trimmed to whole
+	// sentences that fit, so its planned duration never exceeds sceneMaxSec.
+	long := "The builder resolves the semantic version. It refuses any duplicate that already exists. " +
+		"The machine image is captured together with its snapshot. Both are tagged with project, component, and version. " +
+		"Scripts are pulled from object storage. The toolchain is installed once at build time. " +
+		"Nothing about this runs on the startup path anymore. The host boots ready to work."
+	rate := defaultWordsPerSecond
+	got := fitToSceneBudget(long, rate)
+	budget := int(float64(sceneMaxSec) * rate)
+	if wordCount(got) > budget {
+		t.Errorf("fitted narration = %d words, budget %d: %q", wordCount(got), budget, got)
+	}
+	if strings.Contains(got, "…") {
+		t.Errorf("must trim on sentence boundaries, no ellipsis: %q", got)
+	}
+	if d := planDuration(got, rate); d.RecommendedSec > sceneMaxSec {
+		t.Errorf("recommended %ds exceeds sceneMaxSec %ds", d.RecommendedSec, sceneMaxSec)
+	}
+	// A short narration is returned unchanged.
+	short := "One short line. Two short lines."
+	if fitToSceneBudget(short, rate) != short {
+		t.Errorf("short narration should be untouched")
+	}
+}
+
 func TestPlanDiagramsUsesRealDiagramsOnly(t *testing.T) {
 	dgs := sampleContext().Mermaid
 	// Non-architecture scene: no diagram references.
@@ -160,7 +239,7 @@ func TestPlanCode(t *testing.T) {
 
 func TestPlanAnimationsHighlightsRealNodes(t *testing.T) {
 	refs := planDiagrams("architecture", sampleContext().Mermaid)
-	anims := planAnimations("architecture", refs, nil)
+	anims := planAnimations("architecture", refs, nil, false)
 	var highlighted []string
 	for _, a := range anims {
 		if a.Type == "Highlight Node" {

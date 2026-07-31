@@ -5,6 +5,9 @@ const (
 	pauseShortMs  = 300
 	pauseMediumMs = 600
 	pauseLongMs   = 1000
+	// pauseFinalFadeMs holds the audio open through the closing logo fade on the
+	// final scene, so the render resolves before the track ends.
+	pauseFinalFadeMs = 1500
 )
 
 // pauseInput carries the storyboard facts the pause planner needs.
@@ -61,6 +64,15 @@ func planPauses(in pauseInput) []Pause {
 		Type: "short", Position: "closing", DurationMs: pauseShortMs,
 		Note: "Brief pause before the transition.",
 	})
+
+	// The final scene ends the audio file rather than handing to a transition —
+	// hold through the logo fade so the render resolves before the track cuts.
+	if in.IsLast {
+		out = append(out, Pause{
+			Type: "long", Position: "final fade", DurationMs: pauseFinalFadeMs,
+			Note: "Hold through the logo fade before ending the audio file.",
+		})
+	}
 
 	return dedupePauses(out)
 }

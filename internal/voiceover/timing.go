@@ -2,10 +2,11 @@ package voiceover
 
 import "math"
 
-// defaultWordsPerMinute is a natural spoken-narration rate for technical
-// content (~2.6 words/second), matching the storyboard's pacing model so the
-// voice-over and storyboard timelines stay consistent.
-const defaultWordsPerMinute = 156
+// defaultWordsPerMinute is the spoken-narration rate for technical content. It
+// MUST match the storyboard pacing rate (storyboard.defaultWordsPerSecond × 60)
+// so a scene's allocated duration and its estimated spoken time share one clock
+// and a scene can never be reported "over".
+const defaultWordsPerMinute = 145
 
 // fitToleranceSec is how far the estimated speech time may exceed the allocated
 // scene time before the narration is considered not to fit. A small tolerance

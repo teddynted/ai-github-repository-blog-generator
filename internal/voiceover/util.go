@@ -1,15 +1,60 @@
 package voiceover
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+// speechExpansions maps developer shorthand to the full word a narrator/TTS
+// engine should speak. Each expansion is a single word, so word count — and
+// therefore scene timing — is unchanged. Keep entries unambiguous.
+var speechExpansions = map[string]string{
+	"config":  "configuration",
+	"configs": "configurations",
+	"repo":    "repository",
+	"repos":   "repositories",
+}
+
+var abbrevRe = regexp.MustCompile(`(?i)\b(config|configs|repo|repos)\b`)
+
+// expandAbbreviations rewrites known shorthand to its spoken form ("config" ->
+// "configuration"), preserving the leading capital. Word-count-neutral, so it
+// never affects timing.
+func expandAbbreviations(s string) string {
+	return abbrevRe.ReplaceAllStringFunc(s, func(m string) string {
+		exp := speechExpansions[strings.ToLower(m)]
+		if exp == "" {
+			return m
+		}
+		if unicode.IsUpper(rune(m[0])) {
+			exp = strings.ToUpper(exp[:1]) + exp[1:]
+		}
+		return exp
+	})
+}
 
 // wordCount counts whitespace-separated words.
 func wordCount(s string) int { return len(strings.Fields(s)) }
 
 // collapse squeezes runs of whitespace into single spaces.
 func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// capitalizeFirst upper-cases the first letter of s so narration never opens on
+// a lower-case word (a refinement model occasionally returns "every time..."
+// instead of "Every time..."). Leading non-letters (quotes) are skipped; already
+// capitalized text is returned unchanged.
+func capitalizeFirst(s string) string {
+	for i, r := range s {
+		if unicode.IsLetter(r) {
+			if !unicode.IsUpper(r) {
+				s = s[:i] + string(unicode.ToUpper(r)) + s[i+len(string(r)):]
+			}
+			break
+		}
+	}
+	return s
+}
 
 // clampInt bounds v to [lo, hi].
 func clampInt(v, lo, hi int) int {

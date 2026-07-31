@@ -79,6 +79,19 @@ func (g *Generator) VoiceOver(ctx context.Context, sb storyboard.Storyboard) (Vo
 		dir := directionFor(sc.Type)
 
 		narration := g.narration(ctx, sc.Narration, sc.Title, sc.Type, dir.Direction)
+		// A narration model may refine the base into more words than the scene's
+		// slot allows; trim (on sentence boundaries) so the spoken estimate never
+		// exceeds the storyboard's allocated duration — the video timeline stays
+		// authoritative and no scene is reported "over".
+		narration = fitNarrationToBudget(narration, sc.Duration.RecommendedSec, g.wpm())
+		// If trimming the refinement had to drop a whole trailing sentence and fell
+		// below the slot-sized base narration, use the base instead. The base is
+		// derived FROM this scene's allocation, so it fills the slot and fits — this
+		// avoids under-filling with dead air when the model overshot the budget.
+		if base := collapse(sc.Narration); wordCount(narration) < wordCount(base) {
+			narration = base
+		}
+		narration = expandAbbreviations(capitalizeFirst(narration))
 		pron := planPronunciation(narration)
 		for _, p := range pron {
 			uniqueTerms[lower(p.Term)] = true

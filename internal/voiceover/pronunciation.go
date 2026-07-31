@@ -24,6 +24,8 @@ var lexicon = []Pronunciation{
 	{Term: "EC2", Phonetic: "E-C-two", SayAs: "as-written"},
 	{Term: "S3", Phonetic: "S-three", SayAs: "as-written"},
 	{Term: "IAM", Phonetic: "I-A-M", SayAs: "spell-out"},
+	{Term: "AMI", Phonetic: "A-M-I", SayAs: "spell-out", Note: "Amazon Machine Image — never say \"ah-mee\"."},
+	{Term: "SSM", Phonetic: "S-S-M", SayAs: "spell-out", Note: "AWS Systems Manager."},
 	{Term: "Bedrock", Phonetic: "BED-rock", SayAs: "as-written"},
 	{Term: "Amazon Polly", Phonetic: "AM-uh-zon PALL-ee", SayAs: "as-written"},
 	{Term: "Polly", Phonetic: "PALL-ee", SayAs: "as-written"},

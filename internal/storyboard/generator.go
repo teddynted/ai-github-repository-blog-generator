@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
@@ -64,6 +65,8 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 	releaseDiagrams := rc.AnalyzeMarkdown(post.Markdown, "release architecture diagram")
 
 	scenes := make([]Scene, 0, len(sections))
+	var priorNarration []string // what earlier scenes already said, for de-duplication
+	diagramIntroduced := false  // the primary diagram is built once, then recalled
 	for i, sec := range sections {
 		typ := sceneType(sec.Title)
 		sc := Scene{
@@ -76,15 +79,36 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		if i+1 < len(sections) {
 			nextTitle = sections[i+1].Title
 		}
-		sc.Narration = g.narration(ctx, sec, typ, nextTitle)
+		// Narration is one (potentially slow) model call per scene; log position so
+		// a long CPU-bound run — e.g. Ollama polishing every scene — shows steady
+		// scene-by-scene progress rather than going silent between the whole-run
+		// start and finish lines.
+		if g.Logger != nil && g.Model != nil {
+			g.Logger.Info("storyboard narrating scene",
+				slog.Int("scene", i+1), slog.Int("of", len(sections)), slog.String("title", sec.Title))
+		}
+		sc.Narration = g.narration(ctx, sec, typ, nextTitle, strings.Join(priorNarration, " "))
+		// Enforce the per-scene timing budget on sentence boundaries so the spoken
+		// narration always fits its allocated slot (the voice-over never marks it
+		// "over"). Trim before timing and dedup so both see the final words.
+		sc.Narration = capitalizeFirst(fitToSceneBudget(sc.Narration, g.rate()))
+		if strings.TrimSpace(sc.Narration) != "" {
+			priorNarration = append(priorNarration, sc.Narration)
+		}
 		sc.Duration = planDuration(sc.Narration, g.WordsPerSecond)
 		sc.Diagrams = planDiagrams(typ, releaseDiagrams)
+		// Build the diagram from scratch only on its first appearance; later
+		// architecture scenes recall it instead of rebuilding the same graph.
+		repeatDiagram := len(sc.Diagrams) > 0 && diagramIntroduced
+		if len(sc.Diagrams) > 0 {
+			diagramIntroduced = true
+		}
 		sc.Code = planCode(sec.Body)
 		sc.Camera = planCamera(typ)
-		sc.Animations = planAnimations(typ, sc.Diagrams, sc.Code)
+		sc.Animations = planAnimations(typ, sc.Diagrams, sc.Code, repeatDiagram)
 		sc.Overlays = planOverlays(typ, sec.Title, rctx)
 		sc.Assets = planAssets(typ)
-		sc.Visuals = planVisuals(typ, sec.Title, sc.Assets, sc.Diagrams)
+		sc.Visuals = planVisuals(typ, sec.Title, sc.Assets, sc.Diagrams, repeatDiagram)
 		sc.MusicMood, sc.SoundEffects = planMood(typ)
 		scenes = append(scenes, sc)
 	}
