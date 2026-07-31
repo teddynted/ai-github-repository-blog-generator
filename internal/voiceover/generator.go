@@ -79,10 +79,10 @@ func (g *Generator) VoiceOver(ctx context.Context, sb storyboard.Storyboard) (Vo
 		dir := directionFor(sc.Type)
 
 		narration := g.narration(ctx, sc.Narration, sc.Title, sc.Type, dir.Direction)
-		// Speak file paths naturally ("an /etc/x" -> "the file /etc/x"). This adds
-		// a word, so it runs BEFORE the fit-trim below so the extra word is counted
-		// against the slot rather than overflowing it.
-		narration = speakFilePaths(narration)
+		// Normalize spoken form ("manifest. json" -> "manifest.json", then
+		// "an /etc/x" -> "the file /etc/x"). Runs BEFORE the fit-trim below so any
+		// word change is counted against the slot rather than overflowing it.
+		narration = speakFilePaths(joinFileExtensions(narration))
 		// A narration model may refine the base into more words than the scene's
 		// slot allows; trim (on sentence boundaries) so the spoken estimate never
 		// exceeds the storyboard's allocated duration — the video timeline stays
@@ -92,7 +92,7 @@ func (g *Generator) VoiceOver(ctx context.Context, sb storyboard.Storyboard) (Vo
 		// below the slot-sized base narration, use the base instead. The base is
 		// derived FROM this scene's allocation, so it fills the slot and fits — this
 		// avoids under-filling with dead air when the model overshot the budget.
-		if base := speakFilePaths(collapse(sc.Narration)); wordCount(narration) < wordCount(base) {
+		if base := speakFilePaths(joinFileExtensions(collapse(sc.Narration))); wordCount(narration) < wordCount(base) {
 			narration = base
 		}
 		narration = expandAbbreviations(capitalizeFirst(narration))

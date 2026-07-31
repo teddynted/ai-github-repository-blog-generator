@@ -6,6 +6,17 @@ import (
 	"unicode"
 )
 
+// splitExtension matches a filename whose extension was separated by a stray
+// space ("ami-manifest. json"), which TTS reads with an awkward pause and breaks
+// path detection. Lowercase extensions only, so a real sentence boundary
+// ("...the config. JSON output...") is left alone.
+var splitExtension = regexp.MustCompile(`([A-Za-z0-9_-])\.\s+(json|ya?ml|sh|go|py|toml|cfg|env|txt|md|lock)\b`)
+
+// joinFileExtensions rejoins a filename split from its extension by a stray space
+// ("manifest. json" -> "manifest.json"). Must run before file-path handling and
+// before timing.
+func joinFileExtensions(s string) string { return splitExtension.ReplaceAllString(s, "$1.$2") }
+
 // filePathArticle matches an indefinite article before an absolute file path
 // ("an /etc/ami-manifest.json"), which neural TTS reads awkwardly.
 var filePathArticle = regexp.MustCompile(`(?i)\b(an?)\s+(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)

@@ -461,6 +461,21 @@ func TestFitNarrationRespectsTolerance(t *testing.T) {
 	}
 }
 
+func TestJoinFileExtensions(t *testing.T) {
+	cases := map[string]string{
+		"records /etc/ami-manifest. json here":      "records /etc/ami-manifest.json here",
+		"reads config. yaml and provision. sh":      "reads config.yaml and provision.sh",
+		"the manifest.json is fine":                 "the manifest.json is fine",                 // already joined
+		"we ship it. Json parsing follows":          "we ship it. Json parsing follows",          // real sentence boundary (uppercase) left alone
+		"end of thing. The next sentence continues": "end of thing. The next sentence continues", // not an extension
+	}
+	for in, want := range cases {
+		if got := joinFileExtensions(in); got != want {
+			t.Errorf("joinFileExtensions(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestSpeakFilePaths(t *testing.T) {
 	cases := map[string]string{
 		"Each image records an /etc/ami-manifest.json, and its AMI carries tags.": "Each image records the file /etc/ami-manifest.json, and its AMI carries tags.",
