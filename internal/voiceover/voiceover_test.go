@@ -477,6 +477,22 @@ func TestNormalizeForSpeechSpellsVersions(t *testing.T) {
 	}
 }
 
+func TestStripPreamble(t *testing.T) {
+	cases := map[string]string{
+		"Here's the refined narration: Once a host can boot fast, a door opens.": "Once a host can boot fast, a door opens.",
+		"Here is the rewritten version: The pipeline resolves the version.":      "The pipeline resolves the version.",
+		"\"The host boots fast from the image.\"":                                "The host boots fast from the image.",
+		// A legitimate mid-sentence colon must NOT be treated as a preamble.
+		"The result is clear: provisioning moves off the boot path.": "The result is clear: provisioning moves off the boot path.",
+		"Plain narration with no framing at all.":                    "Plain narration with no framing at all.",
+	}
+	for in, want := range cases {
+		if got := stripPreamble(in); got != want {
+			t.Errorf("stripPreamble(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 type errModel struct{}
 
 func (errModel) Generate(_ context.Context, _ string) (string, error) {

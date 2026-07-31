@@ -21,7 +21,7 @@ func (g *Generator) narration(ctx context.Context, base, sceneTitle, sceneType, 
 	if err != nil {
 		return base
 	}
-	if r := collapse(strings.TrimSpace(out)); r != "" {
+	if r := stripPreamble(collapse(strings.TrimSpace(out))); r != "" {
 		// Refinement polishes spoken delivery — it must not SHORTEN the narration.
 		// The storyboard narration is already sized to fill the scene's slot, so a
 		// shorter rewrite under-fills the allocation and leaves dead air. Keep the
@@ -33,6 +33,36 @@ func (g *Generator) narration(ctx context.Context, base, sceneTitle, sceneType, 
 		return r
 	}
 	return base
+}
+
+// stripPreamble removes assistant-style framing a refinement model prepends to
+// the narration ("Here's the refined narration:", "Here is the rewritten
+// version:") plus a single pair of wrapping quotes, leaving only the spoken
+// words. Without this the framing leaks verbatim into the TTS script. Mirrors
+// storyboard.stripNarrationPreamble.
+func stripPreamble(s string) string {
+	s = strings.TrimSpace(s)
+	// Drop a short leading clause ending at the first ':' when it reads as the
+	// model describing what it produced rather than the narration itself.
+	if i := strings.IndexByte(s, ':'); i > 0 && i < 160 {
+		head := strings.ToLower(s[:i])
+		for _, m := range []string{"here is", "here's", "here are", "sure", "certainly",
+			"refined", "rewritten", "rewrite", "revised", "version of", "as requested",
+			"spoken", "narration", "the draft", "the base"} {
+			if strings.Contains(head, m) {
+				s = strings.TrimSpace(s[i+1:])
+				break
+			}
+		}
+	}
+	s = strings.TrimSpace(s)
+	for _, q := range []struct{ open, close string }{{"\"", "\""}, {"'", "'"}, {"“", "”"}} {
+		if strings.HasPrefix(s, q.open) && strings.HasSuffix(s, q.close) && len(s) > len(q.open)+len(q.close) {
+			s = strings.TrimSpace(s[len(q.open) : len(s)-len(q.close)])
+			break
+		}
+	}
+	return s
 }
 
 // fitNarrationToBudget trims narration to the words speakable within a scene's
