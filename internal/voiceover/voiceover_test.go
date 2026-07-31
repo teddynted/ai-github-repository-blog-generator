@@ -461,6 +461,21 @@ func TestFitNarrationRespectsTolerance(t *testing.T) {
 	}
 }
 
+func TestSpeakFilePaths(t *testing.T) {
+	cases := map[string]string{
+		"Each image records an /etc/ami-manifest.json, and its AMI carries tags.": "Each image records the file /etc/ami-manifest.json, and its AMI carries tags.",
+		"writes a /var/log/app.log every run":                                     "writes the file /var/log/app.log every run",
+		"An /opt/bin/tool runs first.":                                            "The file /opt/bin/tool runs first.",
+		"pulls provision.sh from Amazon S3":                                       "pulls provision.sh from Amazon S3",       // no leading article + path
+		"an application, a database, and a queue":                                 "an application, a database, and a queue", // no path: untouched
+	}
+	for in, want := range cases {
+		if got := speakFilePaths(in); got != want {
+			t.Errorf("speakFilePaths(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestExpandAbbreviations(t *testing.T) {
 	cases := map[string]string{
 		"as code, not config":                 "as code, not configuration",

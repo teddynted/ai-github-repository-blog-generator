@@ -16,6 +16,25 @@ var speechExpansions = map[string]string{
 	"repos":   "repositories",
 }
 
+// filePathArticle matches an indefinite article before an absolute file path
+// ("an /etc/ami-manifest.json"), which neural TTS reads awkwardly.
+var filePathArticle = regexp.MustCompile(`(?i)\b(an?)\s+(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
+
+// speakFilePaths rewrites "a|an <path>" to "the file <path>" so a narrator/TTS
+// reads it naturally. It adds one word, so it MUST run before scene timing is
+// computed (never after the fit-trim) — otherwise it can push a scene past its
+// slot, the way the reverted version-number spelling did.
+func speakFilePaths(s string) string {
+	return filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
+		sub := filePathArticle.FindStringSubmatch(m)
+		the := "the"
+		if sub[1][0] == 'A' {
+			the = "The"
+		}
+		return the + " file " + sub[2]
+	})
+}
+
 var abbrevRe = regexp.MustCompile(`(?i)\b(config|configs|repo|repos)\b`)
 
 // expandAbbreviations rewrites known shorthand to its spoken form ("config" ->

@@ -1,9 +1,28 @@
 package storyboard
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+// filePathArticle matches an indefinite article before an absolute file path
+// ("an /etc/ami-manifest.json"), which neural TTS reads awkwardly.
+var filePathArticle = regexp.MustCompile(`(?i)\b(an?)\s+(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
+
+// speakFilePaths rewrites "a|an <path>" to "the file <path>" so narration reads
+// naturally aloud. It adds one word, so it must run before scene timing so the
+// extra word is counted against the slot.
+func speakFilePaths(s string) string {
+	return filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
+		sub := filePathArticle.FindStringSubmatch(m)
+		the := "the"
+		if sub[1][0] == 'A' {
+			the = "The"
+		}
+		return the + " file " + sub[2]
+	})
+}
 
 // capitalizeFirst upper-cases the first letter of s so a scene's narration never
 // opens on a lower-case word. Leading non-letters are skipped; already
