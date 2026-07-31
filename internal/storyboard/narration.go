@@ -228,7 +228,8 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 			"Vary your sentence openings for spoken rhythm: do not begin consecutive sentences with the same word or the "+
 			"same subject (for example repeated \"The pipeline\", \"The builder\", \"The host\", \"This\", or \"That\"), "+
 			"and never start a sentence with \"So\", \"Then\", \"Because\", or \"Think of it as\". Keep EVERY sentence under 20 spoken "+
-			"words — if one runs longer, split it into two so it reads in a single breath.\n"+
+			"words and to at most two commas — if one runs longer or stacks more clauses, split it into two so it reads in a "+
+			"single breath.\n"+
 			"Vary distinctive phrasing across sentences: introduce a signature term once (a central verb or noun), then "+
 			"prefer natural technical variations instead of leaning on the same word every sentence. Do not reuse the exact "+
 			"same distinctive phrase that EARLIER SCENES already used (below) — say it a different way.\n"+
