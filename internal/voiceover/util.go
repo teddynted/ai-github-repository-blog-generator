@@ -31,18 +31,36 @@ func joinFileExtensions(s string) string { return splitExtension.ReplaceAllStrin
 // ("an /etc/ami-manifest.json"), which neural TTS reads awkwardly.
 var filePathArticle = regexp.MustCompile(`(?i)\b(an?)\s+(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
 
-// speakFilePaths rewrites "a|an <path>" to "the file <path>" so a narrator/TTS
-// reads it naturally. It adds one word, so it MUST run before scene timing is
-// computed (never after the fit-trim) — otherwise it can push a scene past its
-// slot, the way the reverted version-number spelling did.
+// bareAbsPath matches an absolute path at a word boundary with no leading
+// article. The leading-slash requirement keeps it off mid-token slashes like
+// "and/or", "24/7", or "TCP/IP".
+var bareAbsPath = regexp.MustCompile(`(^|\s)(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
+
+// spellPath renders an absolute file path as spoken words so TTS reads it
+// cleanly: "/etc/ami-manifest.json" -> "slash etc slash ami-manifest dot json".
+func spellPath(p string) string {
+	p = strings.ReplaceAll(p, "/", " slash ")
+	p = strings.ReplaceAll(p, ".", " dot ")
+	return strings.Join(strings.Fields(p), " ")
+}
+
+// speakFilePaths converts absolute file paths into their spoken form: an article
+// before a path becomes "the file <spelled path>", and a bare path is spelled in
+// place. It adds words, so it MUST run before scene timing is computed (never
+// after the fit-trim) so the extra words are counted against the slot rather
+// than overflowing it (the failure mode of the reverted version-number spelling).
 func speakFilePaths(s string) string {
-	return filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
+	s = filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
 		sub := filePathArticle.FindStringSubmatch(m)
 		the := "the"
 		if sub[1][0] == 'A' {
 			the = "The"
 		}
-		return the + " file " + sub[2]
+		return the + " file " + spellPath(sub[2])
+	})
+	return bareAbsPath.ReplaceAllStringFunc(s, func(m string) string {
+		sub := bareAbsPath.FindStringSubmatch(m)
+		return sub[1] + spellPath(sub[2])
 	})
 }
 

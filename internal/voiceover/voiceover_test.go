@@ -478,11 +478,12 @@ func TestJoinFileExtensions(t *testing.T) {
 
 func TestSpeakFilePaths(t *testing.T) {
 	cases := map[string]string{
-		"Each image records an /etc/ami-manifest.json, and its AMI carries tags.": "Each image records the file /etc/ami-manifest.json, and its AMI carries tags.",
-		"writes a /var/log/app.log every run":                                     "writes the file /var/log/app.log every run",
-		"An /opt/bin/tool runs first.":                                            "The file /opt/bin/tool runs first.",
-		"pulls provision.sh from Amazon S3":                                       "pulls provision.sh from Amazon S3",       // no leading article + path
-		"an application, a database, and a queue":                                 "an application, a database, and a queue", // no path: untouched
+		"Each image records an /etc/ami-manifest.json, and its AMI carries tags.": "Each image records the file slash etc slash ami-manifest dot json, and its AMI carries tags.",
+		"the builder writes /var/log/app.log every run":                           "the builder writes slash var slash log slash app dot log every run",
+		"An /opt/bin/tool runs first.":                                            "The file slash opt slash bin slash tool runs first.",
+		"pulls provision.sh from Amazon S3":                                       "pulls provision.sh from Amazon S3",         // relative filename, no leading /: untouched
+		"weigh cost and/or latency for 24/7 uptime":                               "weigh cost and/or latency for 24/7 uptime", // mid-token slashes untouched
+		"an application, a database, and a queue":                                 "an application, a database, and a queue",   // no path: untouched
 	}
 	for in, want := range cases {
 		if got := speakFilePaths(in); got != want {

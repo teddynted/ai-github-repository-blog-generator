@@ -21,17 +21,34 @@ func joinFileExtensions(s string) string { return splitExtension.ReplaceAllStrin
 // ("an /etc/ami-manifest.json"), which neural TTS reads awkwardly.
 var filePathArticle = regexp.MustCompile(`(?i)\b(an?)\s+(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
 
-// speakFilePaths rewrites "a|an <path>" to "the file <path>" so narration reads
-// naturally aloud. It adds one word, so it must run before scene timing so the
-// extra word is counted against the slot.
+// bareAbsPath matches an absolute path at a word boundary with no leading
+// article. The leading-slash requirement keeps it off mid-token slashes like
+// "and/or" or "24/7".
+var bareAbsPath = regexp.MustCompile(`(^|\s)(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
+
+// spellPath renders an absolute file path as spoken words:
+// "/etc/ami-manifest.json" -> "slash etc slash ami-manifest dot json".
+func spellPath(p string) string {
+	p = strings.ReplaceAll(p, "/", " slash ")
+	p = strings.ReplaceAll(p, ".", " dot ")
+	return strings.Join(strings.Fields(p), " ")
+}
+
+// speakFilePaths converts absolute file paths into spoken form ("an <path>" ->
+// "the file <spelled path>", bare paths spelled in place). It adds words, so it
+// must run before scene timing so they are counted against the slot.
 func speakFilePaths(s string) string {
-	return filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
+	s = filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
 		sub := filePathArticle.FindStringSubmatch(m)
 		the := "the"
 		if sub[1][0] == 'A' {
 			the = "The"
 		}
-		return the + " file " + sub[2]
+		return the + " file " + spellPath(sub[2])
+	})
+	return bareAbsPath.ReplaceAllStringFunc(s, func(m string) string {
+		sub := bareAbsPath.FindStringSubmatch(m)
+		return sub[1] + spellPath(sub[2])
 	})
 }
 
