@@ -79,24 +79,36 @@ func firstSentences(s string, n, maxWords int) string {
 	if s == "" {
 		return ""
 	}
-	var out []string
-	count := 0
+	// Collect up to n whole sentences.
+	var sents []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := 0; i < len(s) && len(sents) < n; i++ {
 		if isSentenceBoundary(s, i) {
-			out = append(out, strings.TrimSpace(s[start:i+1]))
+			sents = append(sents, strings.TrimSpace(s[start:i+1]))
 			start = i + 1
-			count++
-			if count >= n {
-				break
-			}
 		}
 	}
-	if count == 0 {
-		out = []string{s}
+	if len(sents) == 0 {
+		sents = []string{s}
 	}
-	joined := strings.TrimSpace(strings.Join(out, " "))
-	return capWords(joined, maxWords)
+	// Bound length to maxWords on SENTENCE boundaries — never mid-sentence. A
+	// hard word-cap here used to clip the draft mid-clause with an ellipsis
+	// ("…an OS update, then installs of…"), which is unspeakable as narration
+	// and, worse, drops the very facts the model needs (it then either reproduces
+	// the truncation or is forced to invent). Keep whole sentences until the next
+	// would blow the budget; always keep the first sentence complete, even if it
+	// alone exceeds the cap.
+	out := []string{sents[0]}
+	words := wordCount(sents[0])
+	for _, sent := range sents[1:] {
+		w := wordCount(sent)
+		if words+w > maxWords {
+			break
+		}
+		out = append(out, sent)
+		words += w
+	}
+	return strings.TrimSpace(strings.Join(out, " "))
 }
 
 func capWords(s string, max int) string {

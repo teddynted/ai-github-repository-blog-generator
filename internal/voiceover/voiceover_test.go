@@ -105,6 +105,21 @@ func TestVoiceOverEndToEnd(t *testing.T) {
 	}
 }
 
+func TestSceneFitsWhenAllocatedUsesSharedRate(t *testing.T) {
+	// The storyboard now allocates a scene's duration at the SAME rate the
+	// voice-over estimates (150 wpm). When allocated is that shared-rate speech
+	// time, the scene must always be reported as fitting — no "over" warning.
+	narration := strings.TrimSpace(strings.Repeat("word ", 60))
+	allocated := speechSeconds(60, defaultWordsPerMinute)
+	d := planDuration(narration, allocated, defaultWordsPerMinute)
+	if !d.Fits {
+		t.Errorf("scene should fit on the shared clock: est=%ds allocated=%ds", d.EstimatedSpeechSec, d.AllocatedSec)
+	}
+	if d.EstimatedSpeechSec > d.AllocatedSec {
+		t.Errorf("est %ds must not exceed allocated %ds on the shared clock", d.EstimatedSpeechSec, d.AllocatedSec)
+	}
+}
+
 func TestTimelineSequentialAndGapFree(t *testing.T) {
 	script, _ := newGen().VoiceOver(context.Background(), sampleStoryboard())
 	prevEnd := 0
@@ -178,6 +193,25 @@ func TestPronunciationGroundedAndUnique(t *testing.T) {
 	}
 }
 
+func TestPronunciationCoversAMIandSSM(t *testing.T) {
+	// AMI-centric content must get spell-out entries for AMI and SSM (an all-caps
+	// acronym read as a word — "ah-mee" — is a common neural-TTS failure).
+	p := planPronunciation("The AMI is captured, then SSM confirms the host is ready.")
+	got := map[string]string{}
+	for _, e := range p {
+		got[e.Term] = e.SayAs
+	}
+	for _, term := range []string{"AMI", "SSM"} {
+		if got[term] != "spell-out" {
+			t.Errorf("%s must be present with say-as spell-out, got %q (all: %v)", term, got[term], got)
+		}
+	}
+	// Word-bounded matching must not fire AMI inside ordinary words.
+	if p := planPronunciation("The dynamic ceramic tile stayed in Miami."); len(p) != 0 {
+		t.Errorf("AMI must not match inside dynamic/ceramic/Miami: %+v", p)
+	}
+}
+
 func TestPronunciationEmptyText(t *testing.T) {
 	if p := planPronunciation("Just some plain prose with no jargon at all."); len(p) != 0 {
 		t.Errorf("expected no pronunciation entries, got %+v", p)
@@ -228,6 +262,29 @@ func TestPausesPurposeful(t *testing.T) {
 			t.Errorf("duplicate pause position %q", x.Position)
 		}
 		seen[x.Position] = true
+	}
+}
+
+func TestFinalSceneGetsFinalFadePause(t *testing.T) {
+	// The last scene ends the audio file — it must carry a long final-fade hold.
+	p := planPauses(pauseInput{SceneType: "conclusion", Narration: "That's the pattern.", IsLast: true})
+	var fade *Pause
+	for i := range p {
+		if p[i].Position == "final fade" {
+			fade = &p[i]
+		}
+	}
+	if fade == nil {
+		t.Fatalf("final scene missing a final-fade pause: %+v", p)
+	}
+	if fade.Type != "long" || fade.DurationMs != pauseFinalFadeMs {
+		t.Errorf("final fade = {%s, %dms}, want {long, %dms}", fade.Type, fade.DurationMs, pauseFinalFadeMs)
+	}
+	// A non-final conclusion (defensive: conclusion is normally last) gets no fade.
+	for _, x := range planPauses(pauseInput{SceneType: "conclusion", Narration: "Mid.", IsLast: false}) {
+		if x.Position == "final fade" {
+			t.Errorf("non-final scene should not get a final-fade pause")
+		}
 	}
 }
 
@@ -310,9 +367,14 @@ func TestMarkdownRenders(t *testing.T) {
 
 type fakeModel struct{ calls int }
 
+// refinedNarration is a polish of scene 1's base that keeps (not shortens) its
+// length, so the "don't shorten below the base" guard accepts it, and stays
+// within scene 1's slot so the fit-trim leaves it intact.
+const refinedNarration = "Welcome to this release. It ships a Release Context builder for GitHub, and it grounds every downstream artifact in real repository facts."
+
 func (f *fakeModel) Generate(_ context.Context, _ string) (string, error) {
 	f.calls++
-	return "Refined engineer-to-engineer narration for this scene.", nil
+	return refinedNarration, nil
 }
 
 func TestModelPolishesNarration(t *testing.T) {
@@ -325,8 +387,60 @@ func TestModelPolishesNarration(t *testing.T) {
 	if fm.calls != len(script.Scenes) {
 		t.Errorf("model called %d times, want %d (one per scene)", fm.calls, len(script.Scenes))
 	}
-	if script.Scenes[0].Narration != "Refined engineer-to-engineer narration for this scene." {
+	if script.Scenes[0].Narration != refinedNarration {
 		t.Errorf("narration not taken from model: %q", script.Scenes[0].Narration)
+	}
+}
+
+// verboseModel returns narration far longer than any sample scene's slot,
+// mimicking a refinement model (e.g. Claude) that overshoots "roughly the same
+// length".
+type verboseModel struct{}
+
+func (verboseModel) Generate(_ context.Context, _ string) (string, error) {
+	return "The builder resolves the semantic version and refuses duplicates. " +
+		"It captures the machine image together with its EBS snapshot. " +
+		"Both are tagged by project, component, and version for drift prevention. " +
+		"None of this provisioning runs on the startup path anymore. " +
+		"The host now boots ready to accept work immediately.", nil
+}
+
+func TestModelExpandedNarrationStillFitsAllocation(t *testing.T) {
+	g := &Generator{Model: verboseModel{}, Now: newGen().Now}
+	script, err := g.VoiceOver(context.Background(), sampleStoryboard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every scene must fit its allocation despite the model's overshoot.
+	for _, sc := range script.Scenes {
+		if !sc.Duration.Fits {
+			t.Errorf("scene %d over: est %ds > allocated %ds — %q",
+				sc.SceneNumber, sc.Duration.EstimatedSpeechSec, sc.Duration.AllocatedSec, sc.Narration)
+		}
+	}
+	if probs := script.Validate(); len(probs) != 0 {
+		t.Errorf("validation should be clean, got: %v", probs)
+	}
+}
+
+type terseModel struct{}
+
+func (terseModel) Generate(_ context.Context, _ string) (string, error) {
+	return "Too short.", nil // fewer words than any base narration
+}
+
+func TestModelMayNotShortenBelowBase(t *testing.T) {
+	// A refinement that drops words must be rejected in favour of the base, so the
+	// narration keeps filling its slot instead of leaving dead air.
+	g := &Generator{Model: terseModel{}, Now: newGen().Now}
+	script, err := g.VoiceOver(context.Background(), sampleStoryboard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, sc := range script.Scenes {
+		if sc.Narration == "Too short." {
+			t.Errorf("scene %d took the shortening rewrite instead of the base", i+1)
+		}
 	}
 }
 

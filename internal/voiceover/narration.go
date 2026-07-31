@@ -22,9 +22,51 @@ func (g *Generator) narration(ctx context.Context, base, sceneTitle, sceneType, 
 		return base
 	}
 	if r := collapse(strings.TrimSpace(out)); r != "" {
+		// Refinement polishes spoken delivery — it must not SHORTEN the narration.
+		// The storyboard narration is already sized to fill the scene's slot, so a
+		// shorter rewrite under-fills the allocation and leaves dead air. Keep the
+		// base when the rewrite drops words; a longer rewrite is bounded later by
+		// fitNarrationToBudget.
+		if wordCount(r) < wordCount(base) {
+			return base
+		}
 		return r
 	}
 	return base
+}
+
+// fitNarrationToBudget trims narration to the words speakable within a scene's
+// allocated slot at the given rate, on sentence boundaries only (never
+// mid-sentence). The narration model is asked for "roughly the same length" but
+// can still return more than the storyboard's base — this is the hard guarantee
+// that the refined narration still fits its allocation, so the voice-over never
+// reports a scene "over". Keeps whole leading sentences that fit (always at least
+// the first); returns the input unchanged when it already fits.
+func fitNarrationToBudget(narration string, allocatedSec, wpm int) string {
+	if allocatedSec <= 0 {
+		return narration
+	}
+	budget := int(float64(allocatedSec) * wordsPerSecond(wpm))
+	if budget < 1 || wordCount(narration) <= budget {
+		return narration
+	}
+	var kept []string
+	used := 0
+	for _, s := range sentences(narration) {
+		w := wordCount(s)
+		if len(kept) > 0 && used+w > budget {
+			break
+		}
+		kept = append(kept, s)
+		used += w
+		if used >= budget {
+			break
+		}
+	}
+	if len(kept) == 0 {
+		return narration
+	}
+	return collapse(strings.Join(kept, " "))
 }
 
 func narrationPrompt(title, sceneType, dir, base string) string {

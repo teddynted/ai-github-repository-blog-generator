@@ -25,6 +25,26 @@ func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle, 
 	return draft
 }
 
+// fitToSceneBudget trims narration to the words that can be spoken within a
+// single scene's maximum allotted time (sceneMaxSec) at the pacing rate. It cuts
+// on sentence boundaries only — spoken narration is never clipped mid-sentence —
+// so the estimated speech time never exceeds the scene's allocated duration.
+// This is the hard timing contract the voice-over relies on: with narration
+// bounded to the slot, the duration clamp never bites and no scene is ever
+// reported "over".
+func fitToSceneBudget(narration string, wordsPerSecond float64) string {
+	if wordsPerSecond <= 0 {
+		wordsPerSecond = defaultWordsPerSecond
+	}
+	budget := int(float64(sceneMaxSec) * wordsPerSecond)
+	if budget < 1 || wordCount(narration) <= budget {
+		return narration
+	}
+	// A very large sentence cap: keep whole sentences, bounded only by the word
+	// budget (firstSentences always keeps at least the first sentence intact).
+	return firstSentences(narration, 1<<30, budget)
+}
+
 // stripNarrationPreamble removes the assistant-style framing that small models
 // prepend to voice-over ("Here is a rewritten version of the draft in 2-3
 // sentences:") and the surrounding quotes they often add, leaving only the

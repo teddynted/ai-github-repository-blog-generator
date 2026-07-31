@@ -261,7 +261,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	// --- M4 Storyboard (blog + context) ---
 	if run("storyboard") {
 		s.record(o.run("storyboard", 4, "02-storyboard.md", func() (string, error) {
-			sb, err := (&storyboard.Generator{Model: o.model("storyboard")}).Storyboard(ctx, s.Blog, rctx)
+			sb, err := (&storyboard.Generator{Model: o.model("storyboard"), Logger: o.Logger}).Storyboard(ctx, s.Blog, rctx)
 			s.Storyboard = sb
 			return sb.Markdown(), err
 		}))

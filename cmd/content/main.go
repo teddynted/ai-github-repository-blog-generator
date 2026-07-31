@@ -493,6 +493,15 @@ func ollamaOpts(o options) []ollama.Option {
 }
 
 func buildModel(ctx context.Context, o options) (Model, []string, error) {
+	// raw is the bare provider client; label names it for the progress log. Every
+	// provider is wrapped in loggingModel below so a direct (non-hybrid) run —
+	// e.g. `--provider ollama` driving the storyboard — shows per-call start,
+	// 15s heartbeats, and finish timing on stderr instead of going silent for
+	// minutes. The cache (added by the caller) stays OUTSIDE this wrapper, so a
+	// cache hit short-circuits without logging a phantom "generating" line.
+	var raw Model
+	var label string
+	var fp []string
 	switch o.provider {
 	case "anthropic":
 		key := os.Getenv("ANTHROPIC_API_KEY")
@@ -507,7 +516,7 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return cl, fingerprint("anthropic", model, o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = cl, "anthropic:"+model, fingerprint("anthropic", model, o.system, o.temperature, o.maxTokens)
 	case "bedrock":
 		if o.model == "" {
 			return nil, nil, fmt.Errorf("--model (a Bedrock model id) is required for --provider bedrock")
@@ -516,13 +525,13 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return cl, fingerprint("bedrock", o.model, o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = cl, "bedrock:"+o.model, fingerprint("bedrock", o.model, o.system, o.temperature, o.maxTokens)
 	case "ollama":
 		model := o.model
 		if model == "" {
 			model = envOr("OLLAMA_MODEL", "qwen2.5:7b")
 		}
-		return ollama.New(model, ollamaOpts(o)...), fingerprint("ollama", model, o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = ollama.New(model, ollamaOpts(o)...), "ollama:"+model, fingerprint("ollama", model, o.system, o.temperature, o.maxTokens)
 	case "claude-code":
 		// Local-dev only: generate via the Claude Code subscription (`claude -p`)
 		// instead of Anthropic API credits.
@@ -530,10 +539,11 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return m, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens), nil
+		raw, label, fp = m, "claude-code", fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens)
 	default:
 		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, ollama, or claude-code)", o.provider)
 	}
+	return loggingModel{inner: raw, label: label, logger: suiteLogger()}, fp, nil
 }
 
 // buildHybrid builds a per-kind router for local hybrid generation: premium

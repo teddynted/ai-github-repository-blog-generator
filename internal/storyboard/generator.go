@@ -79,7 +79,19 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		if i+1 < len(sections) {
 			nextTitle = sections[i+1].Title
 		}
+		// Narration is one (potentially slow) model call per scene; log position so
+		// a long CPU-bound run — e.g. Ollama polishing every scene — shows steady
+		// scene-by-scene progress rather than going silent between the whole-run
+		// start and finish lines.
+		if g.Logger != nil && g.Model != nil {
+			g.Logger.Info("storyboard narrating scene",
+				slog.Int("scene", i+1), slog.Int("of", len(sections)), slog.String("title", sec.Title))
+		}
 		sc.Narration = g.narration(ctx, sec, typ, nextTitle, strings.Join(priorNarration, " "))
+		// Enforce the per-scene timing budget on sentence boundaries so the spoken
+		// narration always fits its allocated slot (the voice-over never marks it
+		// "over"). Trim before timing and dedup so both see the final words.
+		sc.Narration = fitToSceneBudget(sc.Narration, g.rate())
 		if strings.TrimSpace(sc.Narration) != "" {
 			priorNarration = append(priorNarration, sc.Narration)
 		}
