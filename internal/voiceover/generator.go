@@ -91,9 +91,6 @@ func (g *Generator) VoiceOver(ctx context.Context, sb storyboard.Storyboard) (Vo
 		if base := collapse(sc.Narration); wordCount(narration) < wordCount(base) {
 			narration = base
 		}
-		// Spell TTS-hostile tokens (version numbers, decimals) into their spoken
-		// form so neural voices read "one point zero point one", not "1.0.1".
-		narration = normalizeForSpeech(narration)
 		pron := planPronunciation(narration)
 		for _, p := range pron {
 			uniqueTerms[lower(p.Term)] = true
