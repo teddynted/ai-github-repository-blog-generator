@@ -117,10 +117,13 @@ func TestYouTubeEndToEnd(t *testing.T) {
 	if s.Hook.Script == "" || s.Introduction.Script == "" || s.Conclusion.Script == "" || s.CallToAction.Script == "" {
 		t.Error("framing sections must be populated")
 	}
-	// Runtime is internally consistent.
+	// Runtime is internally consistent: max(hook+chapters, spoken-narration time).
 	computed := s.Hook.DurationSec
 	for _, ch := range s.Chapters {
 		computed += ch.Duration.TargetSec
+	}
+	if speaking := speakingSeconds(totalWords(s), defaultWordsPerMinute); speaking > computed {
+		computed = speaking
 	}
 	if computed != s.Video.DurationSec {
 		t.Errorf("runtime %d != computed %d", s.Video.DurationSec, computed)
@@ -299,6 +302,77 @@ func TestMarkdownRenders(t *testing.T) {
 	}
 }
 
+type verboseChapterModel struct{}
+
+func (verboseChapterModel) Generate(_ context.Context, _ string) (string, error) {
+	// ~90 sentences of filler — far over every chapter cap.
+	return strings.Repeat("The system leans on IAM, Lambda, CloudWatch, and EC2 in a clean layout. ", 40), nil
+}
+
+func TestChapterCapsAndRuntimeConsistency(t *testing.T) {
+	g := &Generator{Model: verboseChapterModel{}, Now: newGen().Now}
+	s, err := g.YouTube(context.Background(), samplePackage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// #6: every chapter is capped to its budget (120/140/180 by title).
+	for _, ch := range s.Chapters {
+		if cap := chapterWordCap(ch.Title); ch.WordCount > cap {
+			t.Errorf("chapter %q = %d words, over cap %d", ch.Title, ch.WordCount, cap)
+		}
+	}
+	// #4: runtime metadata is consistent — the impossible combo can't occur.
+	if hasRuntimeProblem(s) {
+		t.Errorf("runtime inconsistent: durationSec=%d words=%d", s.Video.DurationSec, totalWords(s))
+	}
+	if probs := s.Validate(len(samplePackage().Storyboard.Scenes)); len(probs) != 0 {
+		t.Errorf("validation problems: %v", probs)
+	}
+}
+
+func TestDedupeMarkers(t *testing.T) {
+	in := []ChapterMarker{
+		{Timestamp: "0:00", Title: "Intro / Hook"},
+		{Timestamp: "4:31", Title: "Conclusion"},
+		{Timestamp: "4:31", Title: "Conclusion"}, // duplicate timestamp
+	}
+	out := dedupeMarkers(in)
+	if len(out) != 2 {
+		t.Fatalf("expected 2 markers after dedup, got %d: %+v", len(out), out)
+	}
+	if !markersUnique(out) {
+		t.Error("markers still share a timestamp after dedup")
+	}
+}
+
+func TestPublishReadinessPASSandYAML(t *testing.T) {
+	s, _ := newGen().YouTube(context.Background(), samplePackage())
+	p := s.PublishReadiness()
+	if p.Status != "PASS" {
+		t.Fatalf("expected PASS, got %s: %v", p.Status, p.Errors)
+	}
+	yaml := p.YAML()
+	for _, want := range []string{"validation:", "status: PASS", "runtime_consistent: true", "qa_notes_removed: true"} {
+		if !strings.Contains(yaml, want) {
+			t.Errorf("YAML missing %q:\n%s", want, yaml)
+		}
+	}
+}
+
+func TestPublishReadinessFAIL(t *testing.T) {
+	s, _ := newGen().YouTube(context.Background(), samplePackage())
+	s.Video.DurationSec = 1 // force runtime inconsistency
+	s.ContentIntelligence.SuggestedTags = []string{"one"}
+	p := s.PublishReadiness()
+	if p.Status != "FAIL" {
+		t.Fatalf("expected FAIL")
+	}
+	yaml := p.YAML()
+	if !strings.Contains(yaml, "status: FAIL") || !strings.Contains(yaml, "errors:") {
+		t.Errorf("FAIL YAML malformed:\n%s", yaml)
+	}
+}
+
 func TestWarningsNeverLeakIntoMarkdown(t *testing.T) {
 	// Internal QA diagnostics must never surface in the viewer-facing artifact.
 	s, _ := newGen().YouTube(context.Background(), samplePackage())
@@ -378,7 +452,7 @@ func TestValidateCatchesProblems(t *testing.T) {
 	}
 	probs := bad.Validate(3)
 	joined := strings.Join(probs, "\n")
-	for _, want := range []string{"missing introduction", "missing conclusion", "missing call to action", "empty narration", "runtime mismatch", "not represented"} {
+	for _, want := range []string{"missing introduction", "missing conclusion", "missing call to action", "empty narration", "runtime 999 != max", "not represented"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("expected problem %q in:\n%s", want, joined)
 		}

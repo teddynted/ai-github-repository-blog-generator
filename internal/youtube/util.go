@@ -112,6 +112,45 @@ func topStrings(list []string, n int) []string {
 // firstSentences returns up to n sentences of s. A '.'/'!'/'?' ends a sentence
 // only when it is followed by whitespace or the end of the string, so version
 // numbers and identifiers like "v0.2.0" are never split.
+// capWordsAtSentence trims s to at most maxWords, cutting only on sentence
+// boundaries (never mid-sentence) and always keeping the first sentence. Returns
+// s unchanged when it already fits or maxWords <= 0.
+func capWordsAtSentence(s string, maxWords int) string {
+	s = collapse(s)
+	if maxWords <= 0 || wordCount(s) <= maxWords {
+		return s
+	}
+	var sents []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] != '.' && s[i] != '!' && s[i] != '?' {
+			continue
+		}
+		if i+1 < len(s) && s[i+1] != ' ' { // mid-token dot (e.g. v0.2.0) — not a boundary
+			continue
+		}
+		sents = append(sents, strings.TrimSpace(s[start:i+1]))
+		start = i + 1
+	}
+	if tail := strings.TrimSpace(s[start:]); tail != "" {
+		sents = append(sents, tail)
+	}
+	if len(sents) == 0 {
+		return s
+	}
+	out := []string{sents[0]}
+	w := wordCount(sents[0])
+	for _, sent := range sents[1:] {
+		n := wordCount(sent)
+		if w+n > maxWords {
+			break
+		}
+		out = append(out, sent)
+		w += n
+	}
+	return strings.TrimSpace(strings.Join(out, " "))
+}
+
 func firstSentences(s string, n int) string {
 	s = collapse(s)
 	if s == "" {

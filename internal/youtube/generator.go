@@ -95,6 +95,15 @@ func (g *Generator) YouTube(ctx context.Context, pkg ReleasePackage) (YouTubeScr
 	// 4. Call to action.
 	script.CallToAction = g.planCTA(pkg)
 
+	// Runtime must never be shorter than the time it takes to speak every
+	// narration block (#4). Chapters are already sized to their words; the
+	// intro/conclusion/CTA overlay chapters, so fold their spoken time in too. The
+	// result keeps EstimatedRuntime and SpeakingTime consistent instead of the old
+	// 4:54-vs-12:40 split.
+	if s := speakingSeconds(totalWords(script), g.wpm()); s > runtimeSec {
+		runtimeSec = s
+	}
+
 	// 5. Video envelope.
 	script.Video = Video{
 		Title:               suggestedTitle(pkg),
