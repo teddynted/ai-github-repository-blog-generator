@@ -19,7 +19,7 @@ func (g *Generator) script(ctx context.Context, t topic, hook, engagement, cta s
 
 	if g.Model != nil && collapse(solution) != "" {
 		if out, err := g.Model.Generate(ctx, scriptPrompt(t.Topic, hook, problem, solution, takeaway, engagement, cta)); err == nil {
-			if r := collapse(strings.TrimSpace(out)); r != "" {
+			if r := stripReasoning(collapse(strings.TrimSpace(out))); r != "" {
 				full = r
 			}
 		}
