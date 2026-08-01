@@ -14,6 +14,24 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/visualassets"
 )
 
+func TestSummarySkipsReleaseStatsFraming(t *testing.T) {
+	pkg := ReleasePackage{
+		Context: &rc.ReleaseContext{
+			Repository:          rc.Repository{Name: "widget", FullName: "acme/widget"},
+			Release:             rc.Release{Tag: "v0.6.0"},
+			ContentIntelligence: rc.ContentIntelligence{Summary: "widget v0.6.0 delivers 7 analyzed changes (0 features, 0 fixes) across 24 files."},
+		},
+		Blog: releasegen.BlogPost{MetaDescription: "Pre-baked custom AMIs cut EC2 startup latency by moving boot-time provisioning into versioned images."},
+	}
+	got := summary(pkg)
+	if strings.Contains(strings.ToLower(got), "0 features") || strings.Contains(strings.ToLower(got), "analyzed changes") {
+		t.Errorf("summary should skip release-stats framing; got %q", got)
+	}
+	if !strings.Contains(strings.ToLower(got), "ami") {
+		t.Errorf("summary should fall back to the topic-led meta description; got %q", got)
+	}
+}
+
 func samplePackage() ReleasePackage {
 	ctx := &rc.ReleaseContext{
 		SchemaVersion: "1.0.0",
