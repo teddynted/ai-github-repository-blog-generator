@@ -15,6 +15,7 @@ var baseDeveloperKeywords = []string{
 func planKeywords(pkg ReleasePackage) Keywords {
 	aws := awsServices(pkg)
 	tech := technologies(pkg)
+	awsSet := lowerSet(aws)
 
 	var technical []string
 	if c := pkg.Context; c != nil {
@@ -26,20 +27,28 @@ func planKeywords(pkg ReleasePackage) Keywords {
 
 	developer := dedupe(baseDeveloperKeywords)
 
-	// Primary: the most important, grounded terms — the headline feature (unless
-	// it is the generic "this release" placeholder), the top AWS service, and the
-	// strongest technical terms. Generic terms ("agent", "ai", "release") are
-	// dropped — they have no search signal and dilute the primary set.
-	var primary []string
+	// Primary keywords represent SEARCH INTENT — the engineering problem the
+	// release solves and its technical approach — NOT the AWS service inventory.
+	// Topic candidates come from the headline feature and the grounded technical/
+	// SEO terms, with bare AWS service names excluded (they are supporting
+	// entities, so they belong in Secondary). buildPrimary then caps AWS service
+	// names at half of the primary set: a service leads only when the release is
+	// genuinely about it. Generic terms ("agent", "ai", "release") are dropped —
+	// no search signal, and they dilute the set.
+	var topicCandidates []string
 	if f := firstSentences(featureName(pkg), 1); !isGenericKeyword(f) {
-		primary = append(primary, f)
+		topicCandidates = append(topicCandidates, f)
 	}
-	primary = append(primary, topStrings(aws, 1)...)
-	primary = append(primary, topStrings(technical, 2)...)
-	primary = topStrings(dropGeneric(dedupe(primary)), 5)
+	topicCandidates = append(topicCandidates, technical...)
+	topicCandidates = dropAWSServices(dropGeneric(dedupe(topicCandidates)), awsSet)
+	topicCandidates = topStrings(topicCandidates, 5)
 
-	// Secondary: the remaining grounded technical + technology terms.
-	secondary := topStrings(dedupe(append(append([]string{}, tech...), technical...)), 10)
+	relevantAWS := centralAWS(aws, topicSignals(pkg))
+	primary := buildPrimary(topicCandidates, relevantAWS, aws, awsSet, 5)
+
+	// Secondary: the supporting entities — AWS services first, then technologies
+	// and the remaining grounded technical terms.
+	secondary := topStrings(dedupe(append(append(append([]string{}, aws...), tech...), technical...)), 10)
 	secondary = subtract(secondary, primary)
 
 	return Keywords{

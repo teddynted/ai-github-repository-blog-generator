@@ -26,7 +26,7 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 			"@type": "Organization",
 			"name":  repoShortName(pkg),
 		},
-		"about":         topStrings(k.Primary, 5),
+		"about":         aboutEntities(k),
 		"datePublished": firstNonEmpty(published, generatedAt),
 		"dateModified":  generatedAt,
 	}
@@ -57,6 +57,17 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 	}
 
 	return StructuredData{SchemaType: "TechArticle", JSONLD: jsonld, RSS: rss, Sitemap: sitemap}
+}
+
+// aboutEntities is the schema.org "about" set: what the article is about. It
+// leads with the topic (primary keywords) and then names the concrete AWS
+// service entities from the architecture, so "about" represents both the subject
+// and its supporting entities — not a raw service inventory.
+func aboutEntities(k Keywords) []string {
+	var out []string
+	out = append(out, topStrings(k.Primary, 3)...)
+	out = append(out, topStrings(k.AWS, 3)...)
+	return topStrings(dedupe(out), 5)
 }
 
 func publishedDate(pkg ReleasePackage) string {

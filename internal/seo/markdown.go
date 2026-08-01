@@ -55,6 +55,7 @@ func writeValidationReport(b *strings.Builder, m SEOMetadata) {
 	fmt.Fprintf(b, "- **YouTube description leads with topic keyword:** %s (first 150 chars)\n",
 		yn(descLeadsWithKeyword(m.YouTube.Description, m.Keywords.Primary)))
 	fmt.Fprintf(b, "- **Duplicate chapter timestamps:** %s\n", yn(!hasDuplicateChapters(m.YouTube.ChapterTitles)))
+	fmt.Fprintf(b, "- **Primary keywords topic-led (≤50%% AWS services):** %s\n", yn(primaryTopicLed(m.Keywords.Primary)))
 	fmt.Fprintf(b, "- **JSON-LD valid:** %s\n", yn(jsonLDValid(m.StructuredData.JSONLD)))
 	fmt.Fprintf(b, "- **Canonical URL present:** %s\n", yn(canonical))
 	fmt.Fprintf(b, "- **OG/Twitter parity:** %s\n\n", yn(ogParity))
@@ -86,6 +87,18 @@ func descLeadsWithKeyword(desc string, primary []string) bool {
 		}
 	}
 	return false
+}
+
+// primaryTopicLed reports whether the primary keywords are led by the topic
+// rather than the AWS service inventory: at most half may be service names. It
+// classifies against the canonical service set (the report has no release
+// context), which covers the common services.
+func primaryTopicLed(primary []string) bool {
+	n := len(primary)
+	if n == 0 {
+		return false
+	}
+	return countAWSServiceNames(primary, nil)*2 <= n
 }
 
 func jsonLDValid(ld map[string]interface{}) bool {

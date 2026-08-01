@@ -358,6 +358,121 @@ func TestKeywordsGroundedAndDeduped(t *testing.T) {
 	}
 }
 
+// topicPackage builds a minimal package for a given engineering topic so keyword
+// extraction can be asserted against real search intent.
+func topicPackage(feature string, seoKeywords, highlights, awsServices, blogTags []string) ReleasePackage {
+	ctx := &rc.ReleaseContext{
+		SchemaVersion: "1.0.0",
+		Repository:    rc.Repository{Name: "platform", FullName: "acme/platform", Language: "Go"},
+		Release:       rc.Release{Tag: "v0.6.0"},
+		Architecture:  rc.Architecture{Overview: feature, AWSServices: awsServices},
+		Changelog:     rc.ChangelogAnalysis{Found: true, Features: []string{feature}},
+		Technologies:  []rc.Technology{{Name: "Go"}, {Name: "AWS CloudFormation"}},
+		ContentIntelligence: rc.ContentIntelligence{
+			Summary:             feature,
+			SEOKeywords:         seoKeywords,
+			TechnicalHighlights: highlights,
+		},
+	}
+	return ReleasePackage{Context: ctx, Blog: releasegen.BlogPost{Title: feature, Tags: blogTags}}
+}
+
+func TestPrimaryKeywordsPreferTopicOverServiceInventory_AMI(t *testing.T) {
+	// "Replacing EC2 UserData provisioning with custom AMIs" — the primary
+	// keywords must be the topic, not the detected service inventory.
+	pkg := topicPackage(
+		"Pre-baked AMIs cut EC2 startup time for AI agents by replacing UserData provisioning",
+		[]string{"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI"},
+		[]string{"immutable machine images"},
+		[]string{"Amazon EC2", "AWS IAM", "Amazon CloudWatch", "AWS Lambda", "Amazon EventBridge"},
+		[]string{"aws", "ec2"},
+	)
+	k := planKeywords(pkg)
+
+	for _, want := range []string{"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI"} {
+		if !containsFold(k.Primary, want) {
+			t.Errorf("primary missing topic keyword %q; got %v", want, k.Primary)
+		}
+	}
+	for _, reject := range []string{"AWS IAM", "Amazon CloudWatch", "AWS Lambda"} {
+		if containsFold(k.Primary, reject) {
+			t.Errorf("primary should not contain service inventory %q; got %v", reject, k.Primary)
+		}
+	}
+	if c, n := countAWSServiceNames(k.Primary, lowerSet(awsServices(pkg))), len(k.Primary); c*2 > n {
+		t.Errorf("AWS services are %d of %d primary keywords (>50%%): %v", c, n, k.Primary)
+	}
+	// Services are demoted to Secondary, not dropped.
+	if !containsFold(k.Secondary, "AWS Lambda") {
+		t.Errorf("expected AWS Lambda in secondary; got %v", k.Secondary)
+	}
+}
+
+func TestPrimaryKeywordsKeepCentralService_Bedrock(t *testing.T) {
+	// "Hybrid Claude + Bedrock inference routing" — Bedrock IS a service but the
+	// article is about it, so it stays primary; incidental Lambda/S3 do not.
+	pkg := topicPackage(
+		"Hybrid Claude and Bedrock inference routing across providers",
+		[]string{"AI inference routing", "Amazon Bedrock", "Claude integration"},
+		nil,
+		[]string{"AWS Lambda", "Amazon S3", "Amazon Bedrock"},
+		[]string{"ai", "bedrock"},
+	)
+	k := planKeywords(pkg)
+
+	for _, want := range []string{"AI inference routing", "Amazon Bedrock", "Claude integration"} {
+		if !containsFold(k.Primary, want) {
+			t.Errorf("primary missing %q; got %v", want, k.Primary)
+		}
+	}
+	for _, reject := range []string{"AWS Lambda", "Amazon S3"} {
+		if containsFold(k.Primary, reject) {
+			t.Errorf("primary should not contain incidental service %q; got %v", reject, k.Primary)
+		}
+	}
+	if c, n := countAWSServiceNames(k.Primary, lowerSet(awsServices(pkg))), len(k.Primary); c*2 > n {
+		t.Errorf("AWS services are %d of %d primary keywords (>50%%): %v", c, n, k.Primary)
+	}
+}
+
+func TestIsAWSServiceNameWholeStringOnly(t *testing.T) {
+	det := lowerSet([]string{"Amazon EC2", "AWS Lambda"})
+	if !isAWSServiceName("Amazon EC2", det) || !isAWSServiceName("aws iam", nil) {
+		t.Error("expected service names to be recognized")
+	}
+	// Topic phrases that merely contain a service token are NOT services.
+	for _, topic := range []string{"EC2 startup optimization", "AWS Custom AMI", "pre-baked AMI"} {
+		if isAWSServiceName(topic, det) {
+			t.Errorf("%q wrongly classified as an AWS service", topic)
+		}
+	}
+}
+
+func TestTopicClustersAreDomainDerived(t *testing.T) {
+	pkg := topicPackage(
+		"Pre-baked AMIs cut EC2 startup time via an event-driven pipeline",
+		[]string{"EC2 startup optimization"}, nil,
+		[]string{"Amazon EC2", "Amazon EventBridge"}, nil)
+	got := topicClusters(pkg)
+	joined := strings.ToLower(strings.Join(got, "|"))
+	// Must reflect the actual domain, not this project's hardcoded topics.
+	if strings.Contains(joined, "content generation") || strings.Contains(joined, "github release automation") {
+		t.Errorf("clusters leaked hardcoded project topics: %v", got)
+	}
+	if !strings.Contains(joined, "startup optimization") && !strings.Contains(joined, "event-driven") {
+		t.Errorf("clusters do not reflect the release domain: %v", got)
+	}
+}
+
+func TestSanitizeModelTextDropsCommentary(t *testing.T) {
+	if got := sanitizeModelText("The draft is weak because there are no facts here.", "Fallback Title"); got != "Fallback Title" {
+		t.Errorf("commentary leaked: %q", got)
+	}
+	if got := sanitizeModelText("  Faster EC2 Startup with Custom AMIs  ", "fb"); got != "Faster EC2 Startup with Custom AMIs" {
+		t.Errorf("clean output altered: %q", got)
+	}
+}
+
 func TestHashtagsPerPlatformDeduped(t *testing.T) {
 	m, _ := newGen().SEO(context.Background(), samplePackage())
 	h := m.Hashtags

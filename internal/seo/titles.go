@@ -19,9 +19,7 @@ func (g *Generator) planBlogTitle(ctx context.Context, pkg ReleasePackage) strin
 	title := base
 	if g.Model != nil {
 		if out, err := g.Model.Generate(ctx, blogTitlePrompt(base, releaseTag(pkg))); err == nil {
-			if r := collapse(strings.TrimSpace(out)); r != "" {
-				title = r
-			}
+			title = sanitizeModelText(out, title)
 		}
 	}
 	return boundTitle(title, blogTitleMax, base)
@@ -58,12 +56,73 @@ func blogCategory(pkg ReleasePackage) string {
 	return "Software Engineering"
 }
 
-// topicClusters groups the release into SEO topic clusters (grounded).
+// topicClusters groups the release into SEO topic clusters that represent the
+// content DOMAIN, derived from grounded signals in the release (feature, summary,
+// architecture, services, highlights) — not a fixed list of this project's own
+// topics. A cluster is emitted only when the release actually exhibits it.
 func topicClusters(pkg ReleasePackage) []string {
+	hay := clusterSignals(pkg)
 	var out []string
 	if len(awsServices(pkg)) > 0 {
 		out = append(out, "AWS & Cloud Infrastructure")
 	}
-	out = append(out, "AI-Powered Content Generation", "Clean Architecture in Go", "GitHub Release Automation")
+	for _, r := range clusterRules {
+		if containsAnyTerm(hay, r.terms) {
+			out = append(out, r.cluster)
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, "Software Engineering")
+	}
 	return topStrings(dedupe(out), 5)
+}
+
+// clusterRules map grounded content signals to a domain cluster.
+var clusterRules = []struct {
+	cluster string
+	terms   []string
+}{
+	{"Event-Driven Architecture", []string{"event-driven", "event driven", "eventbridge", "sqs", "sns", "kafka", "event bus", "pub/sub", "pubsub", "message queue"}},
+	{"Compute & Startup Optimization", []string{"ami", "machine image", "spot instance", "startup", "cold start", "provision", "boot time", "instance launch", "userdata", "user data", "pre-bake", "prebake"}},
+	{"AI Agent Platforms", []string{"agent", "inference", "bedrock", "llm", "model routing", "prompt", "claude", "genai", "rag "}},
+	{"Infrastructure Automation", []string{"pipeline", "workflow", "automation", "ci/cd", "cicd", "orchestrat", "provisioning", "deploy"}},
+	{"Software Architecture", []string{"clean architecture", "hexagonal", "domain-driven", "ddd", "microservice", "modular", "ports and adapters"}},
+}
+
+// clusterSignals is the lower-cased haystack of grounded text used to classify
+// the release's domain.
+func clusterSignals(pkg ReleasePackage) string {
+	parts := []string{featureName(pkg), summary(pkg), pkg.Blog.Title}
+	if c := pkg.Context; c != nil {
+		parts = append(parts, c.Architecture.Overview)
+		parts = append(parts, c.ContentIntelligence.TechnicalHighlights...)
+		parts = append(parts, c.ContentIntelligence.SEOKeywords...)
+		parts = append(parts, c.Architecture.AWSServices...)
+	}
+	parts = append(parts, pkg.Blog.Tags...)
+	return strings.ToLower(strings.Join(parts, " "))
+}
+
+// topicSignals is the lower-cased haystack of grounded TOPIC text — feature,
+// summary, title, overview, highlights, SEO keywords, tags — deliberately
+// EXCLUDING the raw AWS service inventory, so a service counts as "central" only
+// when the topic itself names it (not merely because it appears in architecture).
+func topicSignals(pkg ReleasePackage) string {
+	parts := []string{featureName(pkg), summary(pkg), pkg.Blog.Title}
+	if c := pkg.Context; c != nil {
+		parts = append(parts, c.Architecture.Overview)
+		parts = append(parts, c.ContentIntelligence.TechnicalHighlights...)
+		parts = append(parts, c.ContentIntelligence.SEOKeywords...)
+	}
+	parts = append(parts, pkg.Blog.Tags...)
+	return strings.ToLower(strings.Join(parts, " "))
+}
+
+func containsAnyTerm(hay string, terms []string) bool {
+	for _, t := range terms {
+		if strings.Contains(hay, t) {
+			return true
+		}
+	}
+	return false
 }

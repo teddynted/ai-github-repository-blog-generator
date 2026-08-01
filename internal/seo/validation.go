@@ -73,6 +73,15 @@ func (m SEOMetadata) Validate(pkg ReleasePackage) []string {
 		problems = append(problems, "hashtags: duplicate hashtags")
 	}
 
+	// Primary keywords must represent search intent, not the service inventory:
+	// at most half of them may be AWS service names.
+	if n := len(m.Keywords.Primary); n > 0 {
+		awsSet := lowerSet(awsServices(pkg))
+		if c := countAWSServiceNames(m.Keywords.Primary, awsSet); c*2 > n {
+			problems = append(problems, fmt.Sprintf("keywords: %d of %d primary keywords are AWS service names (max 50%%)", c, n))
+		}
+	}
+
 	// Grounding: at least one primary keyword must be grounded in the release.
 	grounded := groundedTerms(pkg)
 	if !anyGrounded(m.Keywords.Primary, grounded) && !anyGrounded(m.Blog.Tags, grounded) {
