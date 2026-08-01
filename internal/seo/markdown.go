@@ -52,6 +52,8 @@ func writeValidationReport(b *strings.Builder, m SEOMetadata) {
 	fmt.Fprintf(b, "- **Blog title length:** %d %s (target 50–60)\n", blogLen, yn(blogLen >= 40 && blogLen <= 60))
 	fmt.Fprintf(b, "- **Meta description length:** %d %s (target 150–160)\n", metaLen, yn(metaLen >= 150 && metaLen <= 160))
 	fmt.Fprintf(b, "- **YouTube title length:** %d %s (≤ 70)\n", ytLen, yn(ytLen <= YouTubeTitlePref))
+	fmt.Fprintf(b, "- **YouTube description leads with topic keyword:** %s (first 150 chars)\n",
+		yn(descLeadsWithKeyword(m.YouTube.Description, m.Keywords.Primary)))
 	fmt.Fprintf(b, "- **Duplicate chapter timestamps:** %s\n", yn(!hasDuplicateChapters(m.YouTube.ChapterTitles)))
 	fmt.Fprintf(b, "- **JSON-LD valid:** %s\n", yn(jsonLDValid(m.StructuredData.JSONLD)))
 	fmt.Fprintf(b, "- **Canonical URL present:** %s\n", yn(canonical))
@@ -65,6 +67,23 @@ func hasDuplicateChapters(chapters []ChapterTitle) bool {
 			return true
 		}
 		seen[c.Timestamp] = true
+	}
+	return false
+}
+
+// descLeadsWithKeyword reports whether any primary keyword appears in the first
+// 150 characters of the description — the snippet a viewer and the search index
+// see before "…more". It reports the fact; it never rewrites the copy.
+func descLeadsWithKeyword(desc string, primary []string) bool {
+	lead := desc
+	if r := []rune(desc); len(r) > 150 {
+		lead = string(r[:150])
+	}
+	lead = strings.ToLower(lead)
+	for _, kw := range primary {
+		if kw = strings.ToLower(strings.TrimSpace(kw)); kw != "" && strings.Contains(lead, kw) {
+			return true
+		}
 	}
 	return false
 }

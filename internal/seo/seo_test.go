@@ -132,6 +132,21 @@ func TestDedupeTagsAcrossFormats(t *testing.T) {
 	}
 }
 
+func TestDescLeadsWithKeyword(t *testing.T) {
+	primary := []string{"aws spot startup", "custom ami"}
+	if !descLeadsWithKeyword("Optimizing AWS Spot startup with custom AMIs on EC2.", primary) {
+		t.Error("expected lead keyword to be detected")
+	}
+	// Keyword only appears past the 150-char lead → not front-loaded.
+	late := strings.Repeat("x", 160) + " aws spot startup"
+	if descLeadsWithKeyword(late, primary) {
+		t.Error("keyword past 150 chars should not count as front-loaded")
+	}
+	if descLeadsWithKeyword("Generic release notes for v0.6.0.", primary) {
+		t.Error("no primary keyword present should be false")
+	}
+}
+
 func TestMainEntityOfPageIsObject(t *testing.T) {
 	blog := BlogSEO{Title: "T", MetaDescription: "D", Canonical: Canonical{URL: "https://example.com/blog/x"}}
 	sd := planStructuredData(samplePackage(), blog, Keywords{Primary: []string{"aws"}}, "2026-01-01T00:00:00Z")
