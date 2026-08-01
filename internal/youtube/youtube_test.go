@@ -299,6 +299,21 @@ func TestMarkdownRenders(t *testing.T) {
 	}
 }
 
+func TestWarningsNeverLeakIntoMarkdown(t *testing.T) {
+	// Internal QA diagnostics must never surface in the viewer-facing artifact.
+	s, _ := newGen().YouTube(context.Background(), samplePackage())
+	s.Warnings = []string{
+		"runtime 4:54 is under the 10-minute long-form target",
+		"the upstream blog/storyboard may be too thin for a full long-form video",
+	}
+	md := s.Markdown()
+	for _, banned := range []string{"**Notes:**", "under the", "too thin", "upstream blog"} {
+		if strings.Contains(md, banned) {
+			t.Errorf("QA diagnostic leaked into markdown: %q", banned)
+		}
+	}
+}
+
 type fakeModel struct{ calls int }
 
 func (f *fakeModel) Generate(_ context.Context, _ string) (string, error) {
