@@ -35,11 +35,8 @@ func playground(args []string) int {
 
 	o := options{
 		artifact: art, provider: provider, ctxPath: filepath.Join(fixturesDir, fixture),
-		outDir: "output", cacheDir: ".cache", ollamaURL: envOr("OLLAMA_URL", "http://127.0.0.1:11434"),
+		outDir: "output", cacheDir: ".cache",
 		region: envOr("AWS_REGION", "us-east-1"), verbose: true, timeout: 15 * time.Minute,
-	}
-	if o.provider == "ollama" {
-		o.model = envOr("OLLAMA_MODEL", "qwen2.5:7b")
 	}
 
 	rctx, err := loadContext(o.ctxPath)
