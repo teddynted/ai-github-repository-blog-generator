@@ -13,6 +13,7 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	title = shortenYouTubeTitle(title)
 
 	desc := firstNonEmpty(ci.SuggestedDescription, summary(pkg))
+	desc = leadWithTopic(desc, k.Primary, pkg.Blog.Title)
 
 	var chapters []ChapterTitle
 	for _, m := range ci.Chapters {
@@ -25,11 +26,19 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	}
 	playlists = append(playlists, "Release Deep Dives", "AWS & Cloud Engineering")
 
+	// Thumbnail text carries the TOPIC, not a generic "THE ARCHITECTURE" tile.
 	var thumb []string
 	if ci.SuggestedThumbnail != "" {
 		thumb = append(thumb, ci.SuggestedThumbnail)
 	}
-	thumb = append(thumb, "THE ARCHITECTURE", releaseTagUpper(pkg))
+	if t := thumbnailTopic(k); t != "" {
+		thumb = append(thumb, t)
+	}
+	thumb = append(thumb, releaseTagUpper(pkg))
+
+	// Hashtags lead with the article's central AWS services and topic, not the
+	// full detected service inventory.
+	topicTags := prependHash(dedupe(concatStrings(centralAWS(k.AWS, topicSignals(pkg)), k.Primary)))
 
 	return YouTubeSEO{
 		Title:             title,
@@ -37,12 +46,39 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 		Description:       desc,
 		Keywords:          topStrings(allKeywords(k), 15),
 		Tags:              planYouTubeTags(pkg, k),
-		Hashtags:          topStrings(reuseHashtags(youtubeHashtags(pkg), prependHash(k.AWS), ytHashtagMax), ytHashtagMax),
+		Hashtags:          topStrings(reuseHashtags(youtubeHashtags(pkg), topicTags, ytHashtagMax), ytHashtagMax),
 		ChapterTitles:     chapters,
 		PinnedComment:     firstNonEmpty(ci.PinnedComment, defaultPinned(pkg)),
 		Playlists:         topStrings(dedupePlaylists(playlists), 4),
 		ThumbnailText:     topStrings(dedupe(thumb), 4),
 	}
+}
+
+// leadWithTopic guarantees the description opens on the article's topic: if no
+// primary keyword appears in the first 150 characters, it prepends the (grounded)
+// blog title as a lead sentence. It never invents copy — the lead is the title.
+func leadWithTopic(desc string, primary []string, title string) string {
+	if descLeadsWithKeyword(desc, primary) {
+		return desc
+	}
+	lead := strings.TrimRight(collapse(title), " .:—-")
+	if lead == "" || strings.HasPrefix(strings.ToLower(collapse(desc)), strings.ToLower(lead)) {
+		return desc
+	}
+	return lead + ". " + collapse(desc)
+}
+
+// thumbnailTopic returns a short, upper-cased topic label for the thumbnail from
+// the primary keyword (first few words), or "" when there is no topic.
+func thumbnailTopic(k Keywords) string {
+	if len(k.Primary) == 0 {
+		return ""
+	}
+	words := strings.Fields(k.Primary[0])
+	if len(words) > 4 {
+		words = words[:4]
+	}
+	return strings.ToUpper(strings.Join(words, " "))
 }
 
 func releaseTagUpper(pkg ReleasePackage) string {

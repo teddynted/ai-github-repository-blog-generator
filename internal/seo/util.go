@@ -4,6 +4,15 @@ import "strings"
 
 func wordCount(s string) int { return len(strings.Fields(s)) }
 
+// concatStrings appends the given slices into one (nil-safe), preserving order.
+func concatStrings(lists ...[]string) []string {
+	var out []string
+	for _, l := range lists {
+		out = append(out, l...)
+	}
+	return out
+}
+
 func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func dedupe(in []string) []string {

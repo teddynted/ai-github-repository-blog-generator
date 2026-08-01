@@ -1,6 +1,62 @@
 package seo
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+// primaryStopwords are tokens too generic or infrastructural to be a PRIMARY
+// keyword (search intent). They may still appear as tags or secondary keywords —
+// "aws" and "go" are useful there — but they carry no article-topic signal on
+// their own.
+var primaryStopwords = map[string]bool{
+	"aws": true, "go": true, "golang": true, "cloud": true, "api": true,
+	"sdk": true, "cli": true, "framework": true, "library": true,
+	"open source": true, "github": true, "repository": true, "repo": true,
+	"serverless": true, "backend": true, "infrastructure": true,
+}
+
+// versionRE matches version numbers ("1.22", "v0.6", "3.11"); langVersionRE
+// matches a language paired with a version ("Go 1.22", "python3.11", "node 18").
+var (
+	versionRE     = regexp.MustCompile(`\bv?\d+\.\d+`)
+	langVersionRE = regexp.MustCompile(`(?i)\b(go|golang|python|node|nodejs|java|ruby|rust|php|dotnet|\.net|typescript)\s*v?\d`)
+)
+
+// isNoisyPrimaryKeyword reports whether s is unfit to be a primary keyword: a
+// generic/stopword token, an SDK name, a language/version string, or the
+// repository name. Primary keywords must describe article intent, not the
+// dependency/repo inventory.
+func isNoisyPrimaryKeyword(s string, pkg ReleasePackage) bool {
+	k := strings.ToLower(collapse(s))
+	if k == "" || primaryStopwords[k] || isGenericKeyword(k) {
+		return true
+	}
+	if strings.Contains(k, "sdk") {
+		return true
+	}
+	if versionRE.MatchString(k) || langVersionRE.MatchString(k) {
+		return true
+	}
+	if r := strings.ToLower(collapse(repoShortName(pkg))); r != "" && (k == r || strings.Contains(k, r)) {
+		return true
+	}
+	if r := strings.ToLower(collapse(repoName(pkg))); r != "" && k == r {
+		return true
+	}
+	return false
+}
+
+// dropNoisyPrimary removes primary-unfit keywords, preserving order.
+func dropNoisyPrimary(in []string, pkg ReleasePackage) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !isNoisyPrimaryKeyword(s, pkg) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 // baseDeveloperKeywords are evergreen developer/SEO terms this project's content
 // legitimately targets. They are only emitted alongside grounded terms.
@@ -35,12 +91,19 @@ func planKeywords(pkg ReleasePackage) Keywords {
 	// names at half of the primary set: a service leads only when the release is
 	// genuinely about it. Generic terms ("agent", "ai", "release") are dropped —
 	// no search signal, and they dilute the set.
+	// Search-intent terms the author already curated (SEO keywords) lead — they
+	// are concise, searchable phrases. The headline feature follows as a fallback
+	// topic; the rest of the technical terms fill in.
 	var topicCandidates []string
+	if c := pkg.Context; c != nil {
+		topicCandidates = append(topicCandidates, c.ContentIntelligence.SEOKeywords...)
+	}
 	if f := firstSentences(featureName(pkg), 1); !isGenericKeyword(f) {
 		topicCandidates = append(topicCandidates, f)
 	}
 	topicCandidates = append(topicCandidates, technical...)
 	topicCandidates = dropAWSServices(dropGeneric(dedupe(topicCandidates)), awsSet)
+	topicCandidates = dropNoisyPrimary(topicCandidates, pkg)
 	topicCandidates = topStrings(topicCandidates, 5)
 
 	relevantAWS := centralAWS(aws, topicSignals(pkg))

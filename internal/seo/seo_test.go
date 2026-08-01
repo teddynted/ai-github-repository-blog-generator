@@ -435,6 +435,92 @@ func TestPrimaryKeywordsKeepCentralService_Bedrock(t *testing.T) {
 	}
 }
 
+func TestPrimaryKeywordsRejectNoiseTokens(t *testing.T) {
+	pkg := topicPackage(
+		"Custom AMIs speed up EC2 startup",
+		[]string{"EC2 startup optimization", "Go 1.22", "AWS SDK for Go", "aws", "platform", "custom AMI"},
+		nil,
+		[]string{"Amazon EC2"},
+		[]string{"go", "aws"},
+	)
+	k := planKeywords(pkg)
+	for _, reject := range []string{"Go 1.22", "AWS SDK for Go", "aws", "platform"} {
+		if containsFold(k.Primary, reject) {
+			t.Errorf("primary must not contain noise token %q; got %v", reject, k.Primary)
+		}
+	}
+	// The real search-intent terms survive and lead.
+	if !containsFold(k.Primary, "EC2 startup optimization") {
+		t.Errorf("expected search-intent keyword to survive; got %v", k.Primary)
+	}
+}
+
+func TestAboutExcludesIncidentalServices(t *testing.T) {
+	pkg := topicPackage(
+		"Pre-baked AMIs cut EC2 startup time",
+		[]string{"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI"},
+		nil,
+		[]string{"Amazon EC2", "AWS IAM", "Amazon CloudWatch"},
+		nil,
+	)
+	m, err := newGen().SEO(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	about := jsonldAbout(m.StructuredData.JSONLD)
+	joined := strings.ToLower(strings.Join(about, "|"))
+	if strings.Contains(joined, "iam") || strings.Contains(joined, "cloudwatch") {
+		t.Errorf("about leaked incidental services: %v", about)
+	}
+	if !strings.Contains(joined, "ami") && !strings.Contains(joined, "startup") {
+		t.Errorf("about does not reflect the topic: %v", about)
+	}
+}
+
+func TestYouTubeSocialInheritsTopic(t *testing.T) {
+	pkg := topicPackage(
+		"Pre-baked Custom AMIs for faster EC2 startup",
+		[]string{"EC2 startup optimization", "Custom AMI", "pre-baked AMI"},
+		nil,
+		[]string{"Amazon EC2", "AWS IAM"},
+		nil,
+	)
+	m, err := newGen().SEO(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Thumbnail text carries the topic.
+	if !sharesToken(m.YouTube.ThumbnailText, strings.Join(m.Keywords.Primary, " ")) {
+		t.Errorf("thumbnail text does not reflect topic: %v", m.YouTube.ThumbnailText)
+	}
+	// Description leads with the topic keyword.
+	if !descLeadsWithKeyword(m.YouTube.Description, m.Keywords.Primary) {
+		t.Errorf("description does not lead with topic: %q", m.YouTube.Description)
+	}
+	// Hashtags do not surface the incidental IAM service.
+	for _, h := range m.YouTube.Hashtags {
+		if strings.Contains(strings.ToLower(h), "iam") {
+			t.Errorf("hashtags leaked incidental service: %v", m.YouTube.Hashtags)
+		}
+	}
+}
+
+func TestValidationRejectsNoiseAndTopicDrift(t *testing.T) {
+	pkg := samplePackage()
+	m, _ := newGen().SEO(context.Background(), pkg)
+	// Inject a noisy primary keyword and a topic-drifted about.
+	m.Keywords.Primary = append([]string{"aws"}, m.Keywords.Primary...)
+	m.StructuredData.JSONLD["about"] = []string{"Amazon QuantumLedger", "Unrelated Thing"}
+	m.Blog.Title = "Pre-Baked Custom AMIs for Faster EC2 Startup"
+	probs := strings.Join(m.Validate(pkg), " | ")
+	if !strings.Contains(probs, "generic/repo/version/SDK token") {
+		t.Errorf("expected noisy-primary failure; got: %s", probs)
+	}
+	if !strings.Contains(probs, "about shares no topic term") {
+		t.Errorf("expected about/title drift failure; got: %s", probs)
+	}
+}
+
 func TestIsAWSServiceNameWholeStringOnly(t *testing.T) {
 	det := lowerSet([]string{"Amazon EC2", "AWS Lambda"})
 	if !isAWSServiceName("Amazon EC2", det) || !isAWSServiceName("aws iam", nil) {

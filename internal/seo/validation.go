@@ -82,6 +82,30 @@ func (m SEOMetadata) Validate(pkg ReleasePackage) []string {
 		}
 	}
 
+	// Primary keywords must not be generic/repo/version/SDK tokens.
+	for _, kw := range m.Keywords.Primary {
+		if isNoisyPrimaryKeyword(kw, pkg) {
+			problems = append(problems, fmt.Sprintf("keywords: primary keyword %q is a generic/repo/version/SDK token", kw))
+			break
+		}
+	}
+
+	// JSON-LD "about" must share the article's topic: at least one entry must
+	// overlap a significant word in the blog title.
+	if about := jsonldAbout(m.StructuredData.JSONLD); len(about) > 0 && collapse(m.Blog.Title) != "" {
+		if !sharesToken(about, m.Blog.Title) {
+			problems = append(problems, "structuredData: about shares no topic term with the blog title")
+		}
+	}
+
+	// Thumbnail text must not conflict with the topic: it should share a term with
+	// the primary keywords or the title (not be purely generic/version chrome).
+	if tt := m.YouTube.ThumbnailText; len(tt) > 0 && len(m.Keywords.Primary) > 0 {
+		if !sharesToken(tt, strings.Join(m.Keywords.Primary, " ")) && !sharesToken(tt, m.Blog.Title) {
+			problems = append(problems, "youtube: thumbnail text shares no topic term with the primary keywords or title")
+		}
+	}
+
 	// Grounding: at least one primary keyword must be grounded in the release.
 	grounded := groundedTerms(pkg)
 	if !anyGrounded(m.Keywords.Primary, grounded) && !anyGrounded(m.Blog.Tags, grounded) {
@@ -105,6 +129,53 @@ func validSlug(s string) bool {
 		}
 	}
 	return true
+}
+
+// jsonldAbout extracts the JSON-LD "about" list as strings.
+func jsonldAbout(ld map[string]interface{}) []string {
+	raw, ok := ld["about"].([]string)
+	if ok {
+		return raw
+	}
+	var out []string
+	if anys, ok := ld["about"].([]interface{}); ok {
+		for _, a := range anys {
+			if s, ok := a.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+// significantTokens returns lower-cased words of length ≥ 4 (skips stopwords and
+// short chrome like "the", "aws", "v0") for topic-overlap checks.
+func significantTokens(text string) map[string]bool {
+	set := map[string]bool{}
+	for _, w := range strings.Fields(strings.ToLower(text)) {
+		w = strings.Trim(w, ".,:;!?()[]{}\"'`")
+		if len(w) >= 4 && !primaryStopwords[w] {
+			set[w] = true
+		}
+	}
+	return set
+}
+
+// sharesToken reports whether any entry in list shares a significant word with
+// text.
+func sharesToken(list []string, text string) bool {
+	want := significantTokens(text)
+	if len(want) == 0 {
+		return true // nothing meaningful to match against — don't fail
+	}
+	for _, item := range list {
+		for w := range significantTokens(item) {
+			if want[w] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasDup(list []string) bool {
