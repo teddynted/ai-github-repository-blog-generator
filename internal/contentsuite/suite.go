@@ -140,6 +140,24 @@ type Orchestrator struct {
 	// --from-blog per-artifact workflow so requesting one artifact no longer runs
 	// the entire suite. Unknown stage names contribute only themselves.
 	Only map[string]bool
+	// Store, when set with Reuse, lets a DEPENDENCY stage be satisfied from a
+	// previously persisted artifact instead of regenerated — turning a targeted
+	// "--artifact X" run into a single model call for X while its (already-built)
+	// dependencies are reloaded for free. The requested stages (Only) always
+	// regenerate. When Store is nil the orchestrator behaves exactly as before, so
+	// the cloud pipeline is unaffected unless it opts in.
+	Store ArtifactStore
+	Reuse bool
+}
+
+// ArtifactStore persists and reloads a stage's STRUCTURED output (not its
+// rendered Markdown) so a later run can reuse a dependency rather than pay to
+// regenerate it. Load reports whether a FRESH artifact was found and decoded
+// into v; a stale or missing artifact returns found=false so the stage
+// regenerates. Implementations decide freshness (e.g. newer than the source blog).
+type ArtifactStore interface {
+	Load(stage string, v any) (found bool, err error)
+	Save(stage string, v any) error
 }
 
 // stageDeps maps each stage to the stages whose output it consumes, mirroring the
@@ -260,20 +278,24 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// --- M4 Storyboard (blog + context) ---
 	if run("storyboard") {
-		s.record(o.run("storyboard", 4, "02-storyboard.md", func() (string, error) {
-			sb, err := (&storyboard.Generator{Model: o.model("storyboard"), Logger: o.Logger}).Storyboard(ctx, s.Blog, rctx)
-			s.Storyboard = sb
-			return sb.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "storyboard", 4, "02-storyboard.md", &s.Storyboard,
+			func(v storyboard.Storyboard) string { return v.Markdown() },
+			func() (string, error) {
+				sb, err := (&storyboard.Generator{Model: o.model("storyboard"), Logger: o.Logger}).Storyboard(ctx, s.Blog, rctx)
+				s.Storyboard = sb
+				return sb.Markdown(), err
+			}))
 	}
 
 	// --- M5 Voice-over (storyboard) ---
 	if run("voiceover") {
-		s.record(o.run("voiceover", 5, "03-voiceover.md", func() (string, error) {
-			vo, err := (&voiceover.Generator{Model: o.model("voiceover")}).VoiceOver(ctx, s.Storyboard)
-			s.VoiceOver = vo
-			return vo.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "voiceover", 5, "03-voiceover.md", &s.VoiceOver,
+			func(v voiceover.VoiceOverScript) string { return v.Markdown() },
+			func() (string, error) {
+				vo, err := (&voiceover.Generator{Model: o.model("voiceover")}).VoiceOver(ctx, s.Storyboard)
+				s.VoiceOver = vo
+				return vo.Markdown(), err
+			}))
 	}
 
 	// --- M11 Architecture (context+blog+storyboard) runs CONCURRENTLY with the
@@ -287,73 +309,85 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			archOut = o.run("architecture", 11, "09-architecture.md", func() (string, error) {
-				col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
-					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
+			archOut = reuseOrRun(o, "architecture", 11, "09-architecture.md", &s.Architecture,
+				func(v architecture.ArchitectureCollection) string { return architecture.ReleaseScopedMarkdown(v, rctx, s.Blog) },
+				func() (string, error) {
+					col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
+						Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,
+					})
+					s.Architecture = col
+					// Emit the RELEASE-SCOPED architecture document — derived from this
+					// release's blog, titled with the release version, scoped to what the
+					// release documents. The same rendering is produced locally and in the
+					// cloud, and stays structured for the downstream diagram-spec stage.
+					return architecture.ReleaseScopedMarkdown(col, rctx, s.Blog), err
 				})
-				s.Architecture = col
-				// Emit the RELEASE-SCOPED architecture document — derived from this
-				// release's blog, titled with the release version, scoped to what the
-				// release documents. The same rendering is produced locally and in the
-				// cloud, and stays structured for the downstream diagram-spec stage.
-				return architecture.ReleaseScopedMarkdown(col, rctx, s.Blog), err
-			})
 		}()
 	}
 
 	// --- M6 YouTube script (context+blog+storyboard+voiceover) ---
 	if run("youtube") {
-		s.record(o.run("youtube", 6, "04-youtube-script.md", func() (string, error) {
-			sc, err := (&youtube.Generator{Model: o.model("youtube")}).YouTube(ctx, youtube.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver,
-			})
-			s.YouTube = sc
-			return sc.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "youtube", 6, "04-youtube-script.md", &s.YouTube,
+			func(v youtube.YouTubeScript) string { return v.Markdown() },
+			func() (string, error) {
+				sc, err := (&youtube.Generator{Model: o.model("youtube")}).YouTube(ctx, youtube.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver,
+				})
+				s.YouTube = sc
+				return sc.Markdown(), err
+			}))
 	}
 
 	// --- M7 YouTube Shorts (+youtube) ---
 	if run("youtube-shorts") {
-		s.record(o.run("youtube-shorts", 7, "05-youtube-shorts.md", func() (string, error) {
-			col, err := (&shorts.Generator{Model: o.model("youtube-shorts"), MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-			})
-			s.Shorts = col
-			return col.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "youtube-shorts", 7, "05-youtube-shorts.md", &s.Shorts,
+			func(v shorts.ShortsCollection) string { return v.Markdown() },
+			func() (string, error) {
+				col, err := (&shorts.Generator{Model: o.model("youtube-shorts"), MaxShorts: o.MaxShorts}).YouTubeShorts(ctx, shorts.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+				})
+				s.Shorts = col
+				return col.Markdown(), err
+			}))
 	}
 
 	// --- M8 TikTok (+shorts) ---
 	if run("tiktok") {
-		s.record(o.run("tiktok", 8, "06-tiktok.md", func() (string, error) {
-			col, err := (&tiktok.Generator{Model: o.model("tiktok"), MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts,
-			})
-			s.TikTok = col
-			return col.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "tiktok", 8, "06-tiktok.md", &s.TikTok,
+			func(v tiktok.TikTokCollection) string { return v.Markdown() },
+			func() (string, error) {
+				col, err := (&tiktok.Generator{Model: o.model("tiktok"), MaxVideos: o.MaxVideos}).TikTok(ctx, tiktok.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts,
+				})
+				s.TikTok = col
+				return col.Markdown(), err
+			}))
 	}
 
 	// --- M9 Visual Assets (+tiktok) ---
 	if run("visual-assets") {
-		s.record(o.run("visual-assets", 9, "07-visual-assets.md", func() (string, error) {
-			col, err := (&visualassets.Generator{Model: o.model("visual-assets"), MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok,
-			})
-			s.VisualAssets = col
-			return col.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "visual-assets", 9, "07-visual-assets.md", &s.VisualAssets,
+			func(v visualassets.VisualAssetCollection) string { return v.Markdown() },
+			func() (string, error) {
+				col, err := (&visualassets.Generator{Model: o.model("visual-assets"), MaxAssets: o.MaxAssets}).VisualAssets(ctx, visualassets.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok,
+				})
+				s.VisualAssets = col
+				return col.Markdown(), err
+			}))
 	}
 
 	// --- M10 SEO metadata (+visual assets) ---
 	if run("seo-metadata") {
-		s.record(o.run("seo-metadata", 10, "08-seo-metadata.md", func() (string, error) {
-			m, err := (&seo.Generator{Model: o.model("seo-metadata")}).SEO(ctx, seo.ReleasePackage{
-				Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets,
-			})
-			s.SEO = m
-			return m.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "seo-metadata", 10, "08-seo-metadata.md", &s.SEO,
+			func(v seo.SEOMetadata) string { return v.Markdown() },
+			func() (string, error) {
+				m, err := (&seo.Generator{Model: o.model("seo-metadata")}).SEO(ctx, seo.ReleasePackage{
+					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube, Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets,
+				})
+				s.SEO = m
+				return m.Markdown(), err
+			}))
 	}
 
 	// Join the architecture branch and record it at its canonical position (11).
@@ -530,6 +564,43 @@ type stageOutcome struct {
 	status        StageStatus
 	err           error
 	md            string
+}
+
+// reuseDep reports whether a stage may be satisfied from a persisted artifact
+// instead of regenerated. Only DEPENDENCIES qualify: a stage the caller
+// explicitly requested (in Only) is always regenerated, since that is the one
+// being iterated on. Requires opt-in (Reuse) and a Store.
+func (o *Orchestrator) reuseDep(name string) bool {
+	return o.Reuse && o.Store != nil && len(o.Only) > 0 && !o.Only[name]
+}
+
+// reuseOrRun returns a persisted artifact's outcome when name is a reusable
+// dependency with a fresh artifact — loading it into dst and re-rendering its
+// Markdown via render, with NO model call. Otherwise it runs gen (the existing
+// generation closure, which populates dst and returns Markdown) and persists the
+// fresh struct for the next run. It is safe to call from concurrent goroutines.
+func reuseOrRun[T any](o *Orchestrator, name string, milestone int, filename string, dst *T, render func(T) string, gen func() (string, error)) stageOutcome {
+	if o.reuseDep(name) {
+		if found, err := o.Store.Load(name, dst); err == nil && found {
+			if o.Logger != nil {
+				o.Logger.Info("content stage reused (no model call)", slog.String("stage", name), slog.Int("milestone", milestone))
+			}
+			out := stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: render(*dst)}
+			if o.Provenance != nil {
+				out.provider, out.model, out.promptVersion = o.Provenance(name)
+			}
+			return out
+		} else if err != nil && o.Logger != nil {
+			o.Logger.Warn("content stage reuse failed; regenerating", slog.String("stage", name), slog.String("error", err.Error()))
+		}
+	}
+	out := o.run(name, milestone, filename, gen)
+	if out.status == StageOK && o.Store != nil {
+		if err := o.Store.Save(name, *dst); err != nil && o.Logger != nil {
+			o.Logger.Warn("content stage persist failed", slog.String("stage", name), slog.String("error", err.Error()))
+		}
+	}
+	return out
 }
 
 // run executes one generator and returns its outcome WITHOUT touching shared
