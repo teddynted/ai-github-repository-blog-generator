@@ -13,12 +13,23 @@ func planSlug(pkg ReleasePackage) (string, []string) {
 
 	var alts []string
 	repo := repoShortName(pkg)
-	feat := firstSentences(featureName(pkg), 1)
-	alts = append(alts, boundSlug(repo+" "+feat))
-	if aws := awsServices(pkg); len(aws) > 0 {
-		alts = append(alts, boundSlug(aws[0]+" "+feat))
+	feat := strings.TrimSpace(firstSentences(featureName(pkg), 1))
+	// A featureless (e.g. maintenance) release yields the placeholder
+	// "this release"; grounding slugs in it produced junk like
+	// "release-release-v0-6-0" and "aws-iam-release". Fall back to repo + AWS
+	// topic + tag instead, and never repeat the word "release".
+	if feat == "" || strings.EqualFold(feat, "this release") {
+		alts = append(alts, boundSlug(repo+" "+releaseTag(pkg)))
+		if aws := awsServices(pkg); len(aws) > 0 {
+			alts = append(alts, boundSlug(aws[0]+" "+releaseTag(pkg)))
+		}
+	} else {
+		alts = append(alts, boundSlug(repo+" "+feat))
+		if aws := awsServices(pkg); len(aws) > 0 {
+			alts = append(alts, boundSlug(aws[0]+" "+feat))
+		}
+		alts = append(alts, boundSlug(feat+" "+releaseTag(pkg)))
 	}
-	alts = append(alts, boundSlug(feat+" release "+releaseTag(pkg)))
 
 	// De-duplicate and drop the primary from the alternatives.
 	alts = dedupe(alts)

@@ -119,6 +119,43 @@ func TestSEOEndToEnd(t *testing.T) {
 	}
 }
 
+func TestShortenYouTubeTitle(t *testing.T) {
+	long := "Optimizing Spot Startup on AWS: Pre-Baked Custom AMIs for an Event-Driven AI Agent Platform"
+	got := shortenYouTubeTitle(long)
+	if got != "Optimizing Spot Startup on AWS" {
+		t.Errorf("colon title should use the headline, got %q", got)
+	}
+	if len(got) > YouTubeTitlePref {
+		t.Errorf("title %d chars exceeds preferred %d", len(got), YouTubeTitlePref)
+	}
+	// No colon → word-boundary truncate within the preferred length.
+	noColon := strings.Repeat("word ", 30)
+	if s := shortenYouTubeTitle(noColon); len(s) > YouTubeTitlePref {
+		t.Errorf("no-colon title not truncated: %d chars", len(s))
+	}
+	// Already short → unchanged.
+	if shortenYouTubeTitle("Short title") != "Short title" {
+		t.Error("short title should be unchanged")
+	}
+}
+
+func TestSlugNoDoubleReleaseForFeaturelessRelease(t *testing.T) {
+	pkg := samplePackage()
+	// Featureless (maintenance) release → featureName returns "this release".
+	pkg.Context.Changelog = rc.ChangelogAnalysis{Found: true}
+	pkg.Context.Implementation.WhatChanged = nil
+	pkg.Blog.Title = "" // force the feature-based path
+	_, alts := planSlug(pkg)
+	for _, a := range alts {
+		if strings.Contains(a, "release-release") {
+			t.Errorf("slug still doubles 'release': %q", a)
+		}
+		if strings.Contains(a, "this-release") {
+			t.Errorf("slug contains placeholder 'this release': %q", a)
+		}
+	}
+}
+
 func TestJSONLDIsValidJSON(t *testing.T) {
 	m, _ := newGen().SEO(context.Background(), samplePackage())
 	md := m.Markdown()

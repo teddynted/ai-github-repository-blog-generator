@@ -1,5 +1,7 @@
 package seo
 
+import "strings"
+
 // planYouTube assembles the YouTube SEO by reusing the YouTube script's own
 // content intelligence (titles, description, chapters, pinned comment, playlist)
 // and normalizing it: title bounded to the platform limit, tags/keywords/
@@ -8,9 +10,7 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	ci := pkg.YouTube.ContentIntelligence
 
 	title := firstNonEmpty(ci.SuggestedTitle, pkg.YouTube.Video.Title, repoShortName(pkg)+" "+releaseTag(pkg)+" — Full Walkthrough")
-	if len(title) > YouTubeTitleMax {
-		title = truncateChars(title, YouTubeTitleMax)
-	}
+	title = shortenYouTubeTitle(title)
 
 	desc := firstNonEmpty(ci.SuggestedDescription, summary(pkg))
 
@@ -64,4 +64,25 @@ func releaseTagUpper(pkg ReleasePackage) string {
 func defaultPinned(pkg ReleasePackage) string {
 	return "📌 Everything in this video is generated from " + repoShortName(pkg) + " " + releaseTag(pkg) +
 		"'s own Release Context. Repo + docs in the description. What should the next deep dive cover?"
+}
+
+// shortenYouTubeTitle keeps a YouTube title within the preferred display length
+// (YouTubeTitlePref, 70). A "Headline: subtitle" title uses the headline — a
+// natural short title — rather than a mid-phrase cut; otherwise it truncates on
+// a word boundary. It never exceeds the hard YouTubeTitleMax.
+func shortenYouTubeTitle(title string) string {
+	title = collapse(title)
+	if len(title) <= YouTubeTitlePref {
+		return title
+	}
+	if i := strings.Index(title, ": "); i >= 15 && i <= YouTubeTitlePref {
+		return strings.TrimSpace(title[:i])
+	}
+	// Word-boundary cut with no ellipsis — a title reads better clipped cleanly,
+	// and this keeps the result within the preferred byte length.
+	cut := title[:YouTubeTitlePref]
+	if i := strings.LastIndex(cut, " "); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,.;:—-")
 }
