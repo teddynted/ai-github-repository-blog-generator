@@ -16,7 +16,24 @@ func planBlogTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.Technology...)
 	tags = append(tags, k.AWS...)
 	tags = dedupeTags(dropPlatformConcepts(dropJunk(dropGeneric(tags), pkg), pkg))
-	return capServiceShare(tags, pkg, blogTagMax)
+	return slugTags(capServiceShare(tags, pkg, blogTagMax))
+}
+
+// slugTags renders tags in the conventional tag form: lowercase, hyphen-
+// separated slugs (no spaces, no ellipses, no marketing capitalization), deduped.
+// It formats the topic-led tag set without changing which tags are chosen.
+func slugTags(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	seen := map[string]bool{}
+	for _, t := range tags {
+		s := slugify(t)
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 // planYouTubeTags returns YouTube tags (reusing the YouTube script's suggested
@@ -31,7 +48,7 @@ func planYouTubeTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Developer...)
 	tags = dedupeTags(dropPlatformConcepts(dropJunk(dropGeneric(tags), pkg), pkg))
-	return capServiceShare(tags, pkg, 15)
+	return slugTags(capServiceShare(tags, pkg, 15))
 }
 
 // capServiceShare caps the list at max, keeping topic (non-service) tags freely

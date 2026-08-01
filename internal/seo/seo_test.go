@@ -789,6 +789,26 @@ func TestKeyphrasesFromText(t *testing.T) {
 	}
 }
 
+func TestTagsAreLowercaseHyphenSlugs(t *testing.T) {
+	m, err := newGen().SEO(context.Background(), serviceOnlySEOPackage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tags := range map[string][]string{"blog": m.Blog.Tags, "youtube": m.YouTube.Tags} {
+		for _, tag := range tags {
+			if tag != strings.ToLower(tag) {
+				t.Errorf("%s tag not lowercase: %q", name, tag)
+			}
+			if strings.ContainsAny(tag, " …_") {
+				t.Errorf("%s tag has space/ellipsis/underscore: %q", name, tag)
+			}
+			if !validSlug(tag) {
+				t.Errorf("%s tag is not a valid slug: %q", name, tag)
+			}
+		}
+	}
+}
+
 func TestChaptersDedupedByTimestamp(t *testing.T) {
 	pkg := samplePackage()
 	pkg.YouTube.ContentIntelligence.Chapters = []youtube.ChapterMarker{
