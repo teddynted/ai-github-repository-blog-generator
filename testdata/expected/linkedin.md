@@ -2,8 +2,6 @@
 
 _5 posts · avg engagement 79/100 · avg confidence 80/100_
 
-> **Notes:** post 1 (Release Announcement) has no technical highlights; the release context may be thin; post 4 (Developer Productivity Tip) has no technical highlights; the release context may be thin; post 5 (Behind-the-Build) has no technical highlights; the release context may be thin
-
 ---
 
 ## Release Announcement
