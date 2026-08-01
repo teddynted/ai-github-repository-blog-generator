@@ -404,28 +404,32 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			liOut = o.run("linkedin", 12, "10-linkedin.md", func() (string, error) {
-				col, err := (&linkedin.Generator{Model: o.model("linkedin"), MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
-					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-					Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+			liOut = reuseOrRun(o, "linkedin", 12, "10-linkedin.md", &s.LinkedIn,
+				func(v linkedin.LinkedInCollection) string { return v.Markdown() },
+				func() (string, error) {
+					col, err := (&linkedin.Generator{Model: o.model("linkedin"), MaxPosts: o.MaxPosts}).LinkedIn(ctx, linkedin.ReleasePackage{
+						Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+						Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+					})
+					s.LinkedIn = col
+					return col.Markdown(), err
 				})
-				s.LinkedIn = col
-				return col.Markdown(), err
-			})
 		}()
 	}
 	if xtActive {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			xtOut = o.run("x-thread", 13, "11-x-thread.md", func() (string, error) {
-				col, err := (&xthread.Generator{Model: o.model("x-thread"), MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
-					Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
-					Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+			xtOut = reuseOrRun(o, "x-thread", 13, "11-x-thread.md", &s.XThread,
+				func(v xthread.XThreadCollection) string { return v.Markdown() },
+				func() (string, error) {
+					col, err := (&xthread.Generator{Model: o.model("x-thread"), MaxThreads: o.MaxThreads, PostsPerThread: o.PostsPerThread}).XThread(ctx, xthread.ReleasePackage{
+						Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard, VoiceOver: s.VoiceOver, YouTube: s.YouTube,
+						Shorts: s.Shorts, TikTok: s.TikTok, VisualAssets: s.VisualAssets, SEO: s.SEO, Architecture: s.Architecture,
+					})
+					s.XThread = col
+					return col.Markdown(), err
 				})
-				s.XThread = col
-				return col.Markdown(), err
-			})
 		}()
 	}
 	wg.Wait()
@@ -441,16 +445,18 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 	// repository-grounded spec a downstream pipeline turns into an AWS diagram.
 	// Skipped gracefully when the repository has no groundable AWS evidence.
 	if run("architecture-diagram-spec") {
-		s.record(o.run("architecture-diagram-spec", 14, "12-architecture-diagram-spec.md", func() (string, error) {
-			spec, err := (&archspec.Generator{Model: o.model("architecture-diagram-spec"), Logger: o.Logger}).Spec(ctx, archspec.ReleasePackage{
-				Context: rctx, Blog: s.Blog,
-				// Derive the spec from the release-scoped architecture.md (the
-				// authoritative release interpretation) when it was produced.
-				ArchitectureDoc: architecture.ReleaseScopedMarkdown(s.Architecture, rctx, s.Blog),
-			})
-			s.DiagramSpec = spec
-			return spec.Markdown(), err
-		}))
+		s.record(reuseOrRun(o, "architecture-diagram-spec", 14, "12-architecture-diagram-spec.md", &s.DiagramSpec,
+			func(v archspec.Spec) string { return v.Markdown() },
+			func() (string, error) {
+				spec, err := (&archspec.Generator{Model: o.model("architecture-diagram-spec"), Logger: o.Logger}).Spec(ctx, archspec.ReleasePackage{
+					Context: rctx, Blog: s.Blog,
+					// Derive the spec from the release-scoped architecture.md (the
+					// authoritative release interpretation) when it was produced.
+					ArchitectureDoc: architecture.ReleaseScopedMarkdown(s.Architecture, rctx, s.Blog),
+				})
+				s.DiagramSpec = spec
+				return spec.Markdown(), err
+			}))
 	}
 
 	// --- M15 Architecture diagram (SVG) ---
