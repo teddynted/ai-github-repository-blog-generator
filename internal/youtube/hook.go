@@ -27,31 +27,50 @@ func (g *Generator) hook(ctx context.Context, pkg ReleasePackage) Hook {
 // every line is built from the Release Context / summary.
 func hookDraft(pkg ReleasePackage) (string, string) {
 	c := pkg.Context
-	repo := repoName(pkg)
-	tag := releaseTag(pkg)
-	summary := ""
-	if c != nil {
-		summary = firstSentences(c.ContentIntelligence.Summary, 1)
-	}
+	summary := hookSummary(pkg)
 
 	switch {
 	case c != nil && c.ContentIntelligence.ImplementationComplexity == "high":
 		return "problem", fmt.Sprintf(
-			"Shipping %s in %s meant solving a genuinely hard problem — and the way it's built is worth understanding. %s",
-			featureName(pkg), repo, summary)
+			"This one meant solving a genuinely hard problem — and the way it's built is worth understanding. %s",
+			summary)
 	case c != nil && len(c.ContentIntelligence.ArchitectureHighlights) > 0:
 		return "insight", fmt.Sprintf(
-			"Here's something most engineers get wrong about this kind of system — and how %s gets it right. %s",
-			repo, firstSentences(c.ContentIntelligence.ArchitectureHighlights[0], 1))
+			"Here's something most engineers get wrong about this kind of system — and how this architecture gets it right. %s",
+			firstSentences(c.ContentIntelligence.ArchitectureHighlights[0], 1))
 	case c != nil && len(c.Architecture.AWSServices) >= 2:
 		return "showcase", fmt.Sprintf(
-			"In this release we wire up %s into one clean, event-driven pipeline. %s",
+			"This wires up %s into one clean, event-driven pipeline. %s",
 			joinAnd(topStrings(c.Architecture.AWSServices, 3)), summary)
 	default:
 		return "outcome", fmt.Sprintf(
-			"By the end of this video you'll understand exactly what shipped in %s %s, and how it was built. %s",
-			repo, tag, summary)
+			"By the end of this video you'll understand exactly how this is built. %s",
+			summary)
 	}
+}
+
+// hookSummary is the grounded one-liner for the hook — the release summary unless
+// it is low-value count-based framing ("0 features, 0 fixes"), in which case the
+// blog's topic-led meta description is used instead. Keeps the hook focused on
+// what the work DOES, not on release stats.
+func hookSummary(pkg ReleasePackage) string {
+	if c := pkg.Context; c != nil {
+		if s := firstSentences(c.ContentIntelligence.Summary, 1); s != "" && !isReleaseStatsFraming(s) {
+			return s
+		}
+	}
+	return firstSentences(pkg.Blog.MetaDescription, 1)
+}
+
+// isReleaseStatsFraming flags count-based auto-generated release summaries.
+func isReleaseStatsFraming(s string) bool {
+	lc := strings.ToLower(s)
+	for _, m := range []string{"0 features", "0 fixes", "analyzed changes", "maintenance changes", "no new user-facing", "just maintenance"} {
+		if strings.Contains(lc, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func hookPrompt(typ, draft string) string {
