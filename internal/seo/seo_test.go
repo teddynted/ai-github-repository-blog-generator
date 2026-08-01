@@ -789,6 +789,31 @@ func TestKeyphrasesFromText(t *testing.T) {
 	}
 }
 
+func TestChaptersDedupedByTimestamp(t *testing.T) {
+	pkg := samplePackage()
+	pkg.YouTube.ContentIntelligence.Chapters = []youtube.ChapterMarker{
+		{Timestamp: "00:00", Title: "Intro"},
+		{Timestamp: "04:29", Title: "Conclusion"},
+		{Timestamp: "04:29", Title: "Conclusion"},
+	}
+	m, err := newGen().SEO(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, c := range m.YouTube.ChapterTitles {
+		if c.Timestamp == "04:29" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("expected exactly one 04:29 chapter, got %d: %v", n, m.YouTube.ChapterTitles)
+	}
+	if hasDuplicateChapters(m.YouTube.ChapterTitles) {
+		t.Error("generated chapters still contain a duplicate timestamp")
+	}
+}
+
 func TestDuplicateChapterTimestampsFailValidation(t *testing.T) {
 	pkg := spotPackage()
 	m, _ := newGen().SEO(context.Background(), pkg)

@@ -16,7 +16,14 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	desc = leadWithTopic(desc, k.Primary, pkg.Blog.Title)
 
 	var chapters []ChapterTitle
+	seenTS := map[string]bool{}
 	for _, m := range ci.Chapters {
+		// Drop duplicate timestamps (e.g. a repeated "04:29 Conclusion") — keep the
+		// first. A duplicate chapter marker is broken metadata, so it never renders.
+		if seenTS[m.Timestamp] {
+			continue
+		}
+		seenTS[m.Timestamp] = true
 		chapters = append(chapters, ChapterTitle{Timestamp: m.Timestamp, Title: m.Title})
 	}
 
