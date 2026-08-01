@@ -20,12 +20,14 @@ func (col VisualAssetCollection) Markdown() string {
 	}
 
 	writeBranding(&b, col.Branding)
+	writeSharedConstraints(&b)
 
 	for _, a := range col.Assets {
-		writeAsset(&b, a)
+		writeAsset(&b, a, col.Metadata.Release)
 	}
 
 	writeIntelligence(&b, col.ContentIntelligence)
+	writeValidationMatrix(&b, col.Assets)
 	return b.String()
 }
 
@@ -42,7 +44,7 @@ func writeBranding(b *strings.Builder, br Branding) {
 	fmt.Fprintf(b, "- **Visual tone:** %s\n\n", br.VisualTone)
 }
 
-func writeAsset(b *strings.Builder, a Asset) {
+func writeAsset(b *strings.Builder, a Asset, release string) {
 	fmt.Fprintf(b, "---\n\n## %s\n\n", a.Type)
 	fmt.Fprintf(b, "- **Platform:** %s · **Aspect ratio:** %s", a.Platform, a.AspectRatio)
 	if a.Dimensions != "" {
@@ -72,6 +74,83 @@ func writeAsset(b *strings.Builder, a Asset) {
 	}
 	if len(a.References) > 0 {
 		fmt.Fprintf(b, "- **Grounded in:** %s\n", strings.Join(a.References, ", "))
+	}
+
+	b.WriteString("\n### Quality Checklist\n\n")
+	for _, c := range qualityChecklist() {
+		fmt.Fprintf(b, "- %s\n", c)
+	}
+
+	complexity, reliability, models := renderGuidance(a.Type)
+	b.WriteString("\n### Render Guidance\n\n")
+	fmt.Fprintf(b, "- **Complexity:** %s · **Reliability:** %d/5 · **Best suited for:** %s\n",
+		complexity, reliability, strings.Join(models, ", "))
+
+	if notes := platformNotes(a.Type); len(notes) > 0 {
+		b.WriteString("\n### Platform Optimization\n\n")
+		for _, n := range notes {
+			fmt.Fprintf(b, "- %s\n", n)
+		}
+	}
+
+	if v := diagrammaticVariant(a.Type); v != "" {
+		fmt.Fprintf(b, "\n### Diagrammatic Variant\n\n```text\n%s\n```\n", v)
+	}
+
+	if v := compactVariant(a.Type); v != "" {
+		fmt.Fprintf(b, "\n### Compact Prompt Variant\n\n```text\n%s\n```\n", v)
+	}
+
+	fmt.Fprintf(b, "\n### Automation Metadata\n\n```yaml\n%s\n```\n", automationMeta(a.Type, release))
+
+	if m := motionHandoff(a.Type); m != "" {
+		fmt.Fprintf(b, "\n### Motion Handoff\n\n```yaml\n%s\n```\n", m)
+	}
+
+	b.WriteString("\n")
+}
+
+// writeValidationMatrix appends the end-of-document readiness matrix (#6),
+// computed from each asset's existing content.
+func writeValidationMatrix(b *strings.Builder, assets []Asset) {
+	b.WriteString("---\n\n# Final Validation Matrix\n\n")
+	b.WriteString("| Asset | Text-safe zones | Mobile-safe | Docs-safe | Animation-ready |\n")
+	b.WriteString("| --- | :---: | :---: | :---: | :---: |\n")
+	for _, a := range assets {
+		fmt.Fprintf(b, "| %s | %s | %s | %s | %s |\n",
+			a.Type, yn(len(a.TextPlaceholders) > 0), yn(mobileSafe(a.Type)), yn(docsSafe(a.Type)), yn(motionHandoff(a.Type) != ""))
+	}
+	b.WriteString("\n")
+}
+
+func yn(v bool) string {
+	if v {
+		return "✅"
+	}
+	return "—"
+}
+
+func mobileSafe(assetType string) bool {
+	c, _, _ := renderGuidance(assetType)
+	return len(platformNotes(assetType)) > 0 || c != "High"
+}
+
+func docsSafe(assetType string) bool {
+	for _, k := range []string{"Architecture", "Workflow", "Blog", "Dev.to", "Medium", "Hero", "GitHub"} {
+		if strings.Contains(assetType, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// writeSharedConstraints renders the reusable render rules once, so each asset
+// prompt can reference them implicitly instead of repeating the boilerplate.
+func writeSharedConstraints(b *strings.Builder) {
+	b.WriteString("---\n\n## Shared Render Constraints\n\n")
+	b.WriteString("_Applied to every asset below — referenced by each prompt, not repeated verbatim._\n\n")
+	for _, c := range sharedRenderConstraints() {
+		fmt.Fprintf(b, "- %s\n", c)
 	}
 	b.WriteString("\n")
 }
