@@ -20,7 +20,7 @@ func planIntelligence(scenes []Scene, post releasegen.BlogPost, rctx *rc.Release
 		ProductionComplexity: productionComplexity(scenes),
 		VoiceoverDurationSec: video.VoiceoverDurationSec,
 		ThumbnailConcept:     thumbnailConcept(rctx),
-		SuggestedTitle:       orDefault(post.Title, rctx.Repository.Name+" "+rctx.Release.Tag),
+		SuggestedTitle:       orDefault(post.Title, "AWS Architecture Walkthrough"),
 		Chapters:             chapters,
 		SEOKeywords:          seoKeywords(post, rctx),
 	}

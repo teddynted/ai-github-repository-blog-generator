@@ -7,30 +7,33 @@ import (
 )
 
 // title returns a professional, non-clickbait post title for a candidate.
+// title is the per-post title/label — evergreen and type-based, never naming the
+// repository or release version.
 func title(pkg ReleasePackage, c postCandidate) string {
-	repo := repoShort(pkg)
-	t := tag(pkg)
 	switch c.Type {
 	case "Release Announcement":
-		return fmt.Sprintf("Shipping %s %s", repo, t)
+		return "An infrastructure update worth sharing"
 	case "Feature Spotlight":
-		return "A closer look at " + lowerFirst(firstSentences(c.Seed, 1))
+		if s := firstSentences(c.Seed, 1); s != "" && !namesReleaseIdentity(s, pkg) {
+			return "A closer look at " + lowerFirst(s)
+		}
+		return "A closer look at a recent design choice"
 	case "Architecture Deep Dive":
-		return fmt.Sprintf("How %s %s is architected", repo, t)
+		return "How this architecture fits together"
 	case "AWS Best Practice":
 		return "An AWS pattern worth sharing"
 	case "AI Engineering Highlight":
 		return "Grounded AI engineering, in practice"
 	case "Engineering Lesson":
-		return "A lesson from building " + repo + " " + t
+		return "A lesson from recent infrastructure work"
 	case "Developer Productivity Tip":
-		return "A small workflow win from " + repo
+		return "A small workflow win worth sharing"
 	case "Behind-the-Build":
-		return "Behind the build: " + repo + " " + t
+		return "Behind the build"
 	case "Performance Improvement":
-		return "Making " + repo + " more reliable"
+		return "Reliability work that quietly pays off"
 	default:
-		return repo + " " + t + " — technical notes"
+		return "A few technical notes"
 	}
 }
 
@@ -59,8 +62,9 @@ func bodyDraft(pkg ReleasePackage, c postCandidate, highlights []string, engagem
 	// Opening line by type.
 	fmt.Fprintf(&b, "%s\n\n", openingLine(c, repo, t))
 
-	// Grounded context.
-	if seed := firstSentences(c.Seed, 2); seed != "" {
+	// Grounded context — but only when it doesn't name the repository or release
+	// version (posts stay evergreen; the substance is carried by the highlights).
+	if seed := firstSentences(c.Seed, 2); seed != "" && !namesReleaseIdentity(seed, pkg) {
 		fmt.Fprintf(&b, "%s\n\n", seed)
 	}
 
@@ -88,20 +92,25 @@ func bodyDraft(pkg ReleasePackage, c postCandidate, highlights []string, engagem
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func openingLine(c postCandidate, repo, t string) string {
+// openingLine is a type-appropriate, PROBLEM-FIRST opener. It deliberately does
+// NOT name the repository or release version — a LinkedIn post should stand on
+// its own and read as an engineering reflection, not a changelog line. (The repo
+// link lives in the CTA.) The repo/tag args are retained for signature stability
+// but intentionally unused.
+func openingLine(c postCandidate, _, _ string) string {
 	switch c.Type {
 	case "Release Announcement":
-		return fmt.Sprintf("Just shipped %s %s.", repo, t)
+		return "Some infrastructure work worth sharing."
 	case "Feature Spotlight":
-		return "One feature I'm genuinely happy with in this release:"
+		return "One design choice from recent work I keep coming back to:"
 	case "Architecture Deep Dive":
 		return "A note on the architecture behind this one."
 	case "AWS Best Practice":
 		return "Sharing an AWS pattern that's been working well."
 	case "AI Engineering Highlight":
-		return "Some notes on the AI-engineering side of this project."
+		return "Some notes on the AI-engineering side of this work."
 	case "Engineering Lesson":
-		return "A lesson worth writing down from this release."
+		return "A lesson worth writing down from recent infrastructure work."
 	case "Developer Productivity Tip":
 		return "Small thing, real time saved:"
 	case "Behind-the-Build":
@@ -109,7 +118,7 @@ func openingLine(c postCandidate, repo, t string) string {
 	case "Performance Improvement":
 		return "Reliability work that quietly pays off:"
 	default:
-		return "A few technical notes on " + repo + " " + t + "."
+		return "A few technical notes from recent work."
 	}
 }
 
@@ -117,8 +126,14 @@ func bodyPrompt(c postCandidate, draft string) string {
 	return fmt.Sprintf(
 		"You are an experienced software engineer writing a LinkedIn post (type: %s) for %s.\n\n"+
 			"Rewrite the DRAFT into an authentic, professional LinkedIn post: educational, technically accurate, and "+
-			"approachable. NO marketing hype, NO clickbait, NO exaggerated or performance claims, NO buzzword stuffing. "+
-			"Keep the bullet highlights, the engagement question, and the CTA. Use ONLY the facts in the draft — invent "+
-			"nothing. Output only the post text.\n\nDRAFT:\n%s",
-		c.Type, c.Audience, draft)
+			"approachable. Follow these rules:\n"+
+			"- OPEN with a hook — a problem, an insight, or an architecture-curiosity question — NOT \"Just shipped …\" or a changelog line.\n"+
+			"- Keep the post EVERGREEN: do NOT mention the repository name, the release version, any version number (e.g. v0.6.0), or \"release\"/\"changelog\" framing. A reader should not need to know which repo or release this came from.\n"+
+			"- Do NOT frame it by counts (never \"0 features\", \"0 fixes\", \"maintenance changes\"); frame it by the engineering value.\n"+
+			"- Make this post distinct to its type (%s): lead with that angle; do not restate the same architecture sentence a reader would see on every post.\n"+
+			"- Short paragraphs (1–3 sentences) for mobile readability; keep the bullet highlights (max 4), the engagement question, and the CTA.\n"+
+			"- NO marketing hype, NO clickbait, NO exaggerated or performance/latency/cost claims, NO buzzword stuffing.\n"+
+			"- Use ONLY the facts in the draft — invent nothing (no metrics, no services, no features not present).\n\n"+
+			"Output only the post text.\n\nDRAFT:\n%s",
+		c.Type, c.Audience, c.Type, draft)
 }

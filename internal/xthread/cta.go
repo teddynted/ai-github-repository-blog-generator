@@ -1,7 +1,5 @@
 package xthread
 
-import "fmt"
-
 // planCTA returns a concise, professional call to action grounded in the Release
 // Context / SEO (blog canonical URL, repo URL).
 func planCTA(pkg ReleasePackage, c threadCandidate) string {
@@ -31,5 +29,6 @@ func planCTA(pkg ReleasePackage, c threadCandidate) string {
 	if repoURLv != "" {
 		return "Explore the repo 👉 " + repoURLv
 	}
-	return fmt.Sprintf("Follow for more on %s.", repoShort(pkg))
+	// Neutral prose fallback — no repository name in the copy.
+	return "Following along for more infrastructure notes 👇"
 }

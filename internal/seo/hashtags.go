@@ -1,22 +1,30 @@
 package seo
 
-// Per-platform hashtag caps (platform norms differ).
+// Per-platform hashtag caps (platform norms differ). Kept deliberately tight —
+// a handful of broad, relevant tags out-performs a spammy tag wall on every
+// platform (YouTube counts only the first few; X/LinkedIn reward restraint).
 const (
-	ytHashtagMax       = 5
-	tiktokHashtagMax   = 6
+	ytHashtagMax       = 3
+	tiktokHashtagMax   = 5
 	linkedinHashtagMax = 5
-	xHashtagMax        = 4
+	xHashtagMax        = 3
 )
 
 // planHashtags builds platform-specific hashtag sets, grounded in the release's
 // keywords and reusing what the video generators already produced. It dedupes
 // and caps per platform (spammy tag walls hurt reach).
 func planHashtags(pkg ReleasePackage, k Keywords) PlatformTags {
-	// Grounded tokens shared across platforms.
-	grounded := dedupe(append(append([]string{}, k.AWS...), append(k.Technology, k.Primary...)...))
+	// Grounded tokens shared across platforms, TOPIC-LED: the article's central
+	// AWS services (e.g. EC2) and primary topic first, then technologies and any
+	// remaining services as fill — not a hashtag wall of the whole inventory.
+	central := centralAWS(k.AWS, topicSignals(pkg))
+	grounded := dedupe(concatStrings(central, k.Primary, k.Technology, k.AWS))
 	groundedTags := prependHash(grounded)
 
-	yt := reuseHashtags(youtubeHashtags(pkg), groundedTags, ytHashtagMax)
+	// YouTube hashtags lead with the grounded topic/central-service set, then the
+	// video's own suggested hashtags — so the topic is not buried under the
+	// service inventory.
+	yt := reuseHashtags(groundedTags, youtubeHashtags(pkg), ytHashtagMax)
 	tk := reuseHashtags(tiktokHashtags(pkg), append([]string{"#TechTok"}, groundedTags...), tiktokHashtagMax)
 	li := reuseHashtags(nil, append([]string{"#SoftwareEngineering", "#CloudComputing", "#AIEngineering"}, groundedTags...), linkedinHashtagMax)
 	x := reuseHashtags(nil, append([]string{"#DevOps", "#AWS"}, groundedTags...), xHashtagMax)

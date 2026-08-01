@@ -116,7 +116,7 @@ type options struct {
 	fromBlog                                                              string
 	temperature                                                           float64
 	maxTokens                                                             int
-	dryRun, verbose, noCache, noHistory, hybrid                           bool
+	dryRun, verbose, noCache, noHistory, hybrid, noReuse                  bool
 	repoLevel                                                             bool
 	repo                                                                  string
 	cacheDir                                                              string
@@ -140,6 +140,7 @@ func generate(args []string) int {
 	fs.BoolVar(&o.hybrid, "hybrid", false, fmt.Sprintf("hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default %s). Best with --artifact all", config.DefaultOllamaModel))
 	fs.StringVar(&o.fromBlog, "from-blog", "", "generate downstream artifacts from an EXISTING blog.md (skip blog regeneration). Requires --artifact != blog; pair with --artifact all or a specific downstream kind")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
+	fs.BoolVar(&o.noReuse, "no-reuse", false, "regenerate dependency artifacts instead of reusing persisted ones. By default, a targeted --artifact run reuses existing artifacts from a prior run (no model call) for every dependency, regenerating only the requested artifact")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
 	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
 	fs.StringVar(&o.region, "region", envOr("AWS_REGION", "us-east-1"), "AWS region (Bedrock)")
@@ -287,7 +288,22 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		fmt.Fprintf(os.Stderr, "using existing blog (%s, %d words) — skipping blog regeneration\n", o.fromBlog, bp.WordCount)
 	}
 
-	artifacts, err := produce(ctx, o.artifact, rctx, model, modelFor, preBlog)
+	// Per-release layout: every release version gets its own folder under
+	// <output>/releases/<version>/. Compute it up front so the artifact store can
+	// persist/reload structured stage outputs beneath it.
+	releaseDir := filepath.Join(o.outDir, "releases", releaseSlug(rctx.Release.Tag))
+
+	// Artifact reuse (default on): a targeted --artifact run reloads its already
+	// built dependencies from <releaseDir>/.artifacts instead of regenerating them
+	// (no model call). --no-reuse, --artifact all, or a full run regenerates
+	// everything. The blog's modtime is the freshness reference — a newer blog
+	// invalidates the downstream chain.
+	var store *artifactStore
+	if !o.noReuse {
+		store = newArtifactStore(releaseDir, o.fromBlog)
+	}
+
+	artifacts, err := produce(ctx, o.artifact, rctx, model, modelFor, preBlog, store)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: generate %s: %v\n", o.artifact, err)
 		return 1
@@ -301,10 +317,9 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		return 0
 	}
 
-	// Per-release layout: every release version gets its own folder under
-	// <output>/releases/<version>/, holding the latest <kind>.<ext> plus a
-	// history/<stamp>/ archive — so drafts for different releases never mix.
-	releaseDir := filepath.Join(o.outDir, "releases", releaseSlug(rctx.Release.Tag))
+	// Per-release layout: <output>/releases/<version>/ holds the latest
+	// <kind>.<ext> plus a history/<stamp>/ archive — so drafts for different
+	// releases never mix. (releaseDir was computed above for the artifact store.)
 	if err := os.MkdirAll(releaseDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error: create output dir: %v\n", err)
 		return 1
@@ -344,7 +359,7 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 		}
 	}
 
-	logRun(o, artifacts, cache, releaseDir, histDir, time.Since(start))
+	logRun(o, artifacts, cache, store, releaseDir, histDir, time.Since(start))
 	if failed {
 		return 1
 	}
@@ -360,7 +375,7 @@ type artifact struct {
 // (the common prompt-iteration path — one model, no downstream chain); anything
 // else runs the full suite (which resolves inter-artifact dependencies) and
 // selects the requested output(s).
-func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model Model, modelFor func(string) releasegen.Model, blog *releasegen.BlogPost) ([]artifact, error) {
+func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model Model, modelFor func(string) releasegen.Model, blog *releasegen.BlogPost, store contentsuite.ArtifactStore) ([]artifact, error) {
 	if target == "blog" {
 		post, err := (&releasegen.Generator{Model: modelFor("blog")}).Blog(ctx, rctx)
 		if err != nil {
@@ -387,9 +402,15 @@ func produce(ctx context.Context, target string, rctx *rc.ReleaseContext, model 
 	// it uses the supplied blog verbatim and only runs the downstream stages.
 	orch := &contentsuite.Orchestrator{Model: model, ModelFor: modelFor, Logger: suiteLogger()}
 	// A single --artifact runs only that stage plus its real dependencies (not the
-	// whole suite); --artifact all runs everything.
+	// whole suite); --artifact all runs everything. With a store, dependencies are
+	// reused from a prior run instead of regenerated — only the requested artifact
+	// calls the model.
 	if target != "all" {
 		orch.Only = map[string]bool{target: true}
+		if store != nil {
+			orch.Store = store
+			orch.Reuse = true
+		}
 	}
 	suite := orch.Run(ctx, rctx, blog)
 	var out []artifact
@@ -445,7 +466,7 @@ func loadBlogPost(path string) (releasegen.BlogPost, error) {
 	return bp, nil
 }
 
-func logRun(o options, arts []artifact, cache *aicache.Cache, releaseDir, histDir string, dur time.Duration) {
+func logRun(o options, arts []artifact, cache *aicache.Cache, store *artifactStore, releaseDir, histDir string, dur time.Duration) {
 	fmt.Fprintf(os.Stderr, "\n──────── run summary ────────\n")
 	fmt.Fprintf(os.Stderr, "provider:   %s%s\n", o.provider, modelSuffix(o))
 	fmt.Fprintf(os.Stderr, "artifact:   %s (%d written)\n", o.artifact, len(arts))
@@ -455,6 +476,10 @@ func logRun(o options, arts []artifact, cache *aicache.Cache, releaseDir, histDi
 		fmt.Fprintf(os.Stderr, "cache:      %d hit / %d miss\n", h, m)
 	} else {
 		fmt.Fprintf(os.Stderr, "cache:      disabled\n")
+	}
+	if store != nil {
+		reused, saved := store.Stats()
+		fmt.Fprintf(os.Stderr, "reuse:      %d dependency artifact(s) reused (no model call), %d persisted\n", reused, saved)
 	}
 	var totalOut int
 	for _, a := range arts {

@@ -15,9 +15,9 @@ func (col LinkedInCollection) Markdown() string {
 	fmt.Fprintf(&b, "_%d posts · avg engagement %d/100 · avg confidence %d/100_\n\n",
 		col.Metadata.PostCount, col.ContentIntelligence.AverageEngagementScore, col.ContentIntelligence.AverageProfessionalConfidence)
 
-	if len(col.Warnings) > 0 {
-		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(col.Warnings, "; "))
-	}
+	// Warnings (e.g. "post 3 has no technical highlights") are internal QA signals
+	// kept on the struct for CI/manifest — they must NOT render into the published
+	// artifact, where they read as broken copy.
 
 	for _, p := range col.Posts {
 		writePost(&b, p)

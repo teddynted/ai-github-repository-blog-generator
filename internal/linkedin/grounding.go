@@ -80,15 +80,68 @@ func programmingLanguages(pkg ReleasePackage) []string {
 }
 
 func summary(pkg ReleasePackage) string {
+	// Prefer the release's own summary, but SKIP low-value auto-generated
+	// release-stats framing ("delivers N analyzed changes (0 features, 0 fixes)",
+	// "just maintenance changes") — that frames the release by counts, not by the
+	// engineering value. The blog meta description (the article's topic-led
+	// description) is the better frame in that case.
 	if c := pkg.Context; c != nil {
-		if s := firstSentences(c.ContentIntelligence.Summary, 1); s != "" {
-			return s
-		}
-		if s := firstSentences(c.Architecture.Overview, 1); s != "" {
+		if s := firstSentences(c.ContentIntelligence.Summary, 1); s != "" && !isReleaseStatsFraming(s) {
 			return s
 		}
 	}
-	return firstNonEmpty(pkg.Blog.MetaDescription, repoShort(pkg)+" "+tag(pkg))
+	if d := firstSentences(pkg.Blog.MetaDescription, 1); d != "" {
+		return d
+	}
+	if c := pkg.Context; c != nil {
+		if s := firstSentences(c.Architecture.Overview, 1); s != "" && !isReleaseStatsFraming(s) {
+			return s
+		}
+	}
+	return repoShort(pkg) + " " + tag(pkg)
+}
+
+// namesReleaseIdentity reports whether text mentions the repository name or the
+// release version — the identifiers a post must stay free of to be evergreen.
+func namesReleaseIdentity(text string, pkg ReleasePackage) bool {
+	lc := strings.ToLower(text)
+	if strings.Contains(lc, "this release") || strings.Contains(lc, "the release") {
+		return true
+	}
+	for _, id := range []string{repoShort(pkg), repoName(pkg), tag(pkg)} {
+		if id != "" && strings.Contains(lc, strings.ToLower(id)) {
+			return true
+		}
+	}
+	return false
+}
+
+// proseOnly drops URL/link lines from a post body, leaving the prose — a CTA link
+// legitimately points at a repo/blog and is not "body copy".
+func proseOnly(body string) string {
+	var out []string
+	for _, ln := range strings.Split(body, "\n") {
+		if strings.Contains(ln, "://") || strings.Contains(ln, "{{") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, "\n")
+}
+
+// isReleaseStatsFraming flags low-value, count-based auto-generated release
+// summaries so they never frame a LinkedIn post.
+func isReleaseStatsFraming(s string) bool {
+	lc := strings.ToLower(s)
+	for _, m := range []string{
+		"0 features", "0 fixes", "analyzed changes", "maintenance changes",
+		"no new user-facing", "just maintenance",
+	} {
+		if strings.Contains(lc, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func featureName(pkg ReleasePackage) string {

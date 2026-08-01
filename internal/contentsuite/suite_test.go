@@ -2,6 +2,7 @@ package contentsuite
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -270,3 +271,97 @@ type fakeModel struct{}
 func (fakeModel) Generate(_ context.Context, _ string) (string, error) {
 	return "# Generated blog\n\n## Overview\n\nIt works.\n", nil
 }
+
+// fakeStore is an in-memory ArtifactStore for reuse tests.
+type fakeStore struct {
+	data  map[string][]byte
+	loads int
+	saves int
+}
+
+func (f *fakeStore) Load(stage string, v any) (bool, error) {
+	b, ok := f.data[stage]
+	if !ok {
+		return false, nil
+	}
+	f.loads++
+	return true, jsonUnmarshal(b, v)
+}
+
+func (f *fakeStore) Save(stage string, v any) error {
+	if f.data == nil {
+		f.data = map[string][]byte{}
+	}
+	b, err := jsonMarshal(v)
+	if err != nil {
+		return err
+	}
+	f.data[stage] = b
+	f.saves++
+	return nil
+}
+
+type reuseDoc struct{ Title string }
+
+func TestReuseOrRun(t *testing.T) {
+	fs := &fakeStore{data: map[string][]byte{}}
+	b, _ := jsonMarshal(reuseDoc{Title: "reused"})
+	fs.data["dep"] = b
+	o := &Orchestrator{Only: map[string]bool{"target": true}, Reuse: true, Store: fs}
+	render := func(d reuseDoc) string { return d.Title }
+
+	// A dependency (not requested) with a fresh artifact is reused — gen never runs.
+	genCalls := 0
+	var dst reuseDoc
+	out := reuseOrRun(o, "dep", 1, "dep.md", &dst, render, func() (string, error) {
+		genCalls++
+		dst = reuseDoc{Title: "generated"}
+		return "generated", nil
+	})
+	if genCalls != 0 {
+		t.Errorf("gen called for a reusable dependency")
+	}
+	if dst.Title != "reused" || out.md != "reused" || out.status != StageOK {
+		t.Errorf("dependency not reused: dst=%+v md=%q status=%v", dst, out.md, out.status)
+	}
+
+	// The requested target always regenerates and is persisted.
+	genCalls = 0
+	before := fs.saves
+	out = reuseOrRun(o, "target", 1, "t.md", &dst, render, func() (string, error) {
+		genCalls++
+		dst = reuseDoc{Title: "fresh"}
+		return "fresh", nil
+	})
+	if genCalls != 1 || out.md != "fresh" {
+		t.Errorf("requested target should regenerate: calls=%d md=%q", genCalls, out.md)
+	}
+	if fs.saves != before+1 {
+		t.Errorf("freshly generated target should be persisted")
+	}
+
+	// With no Only (full run) nothing is a reusable dependency — everything regenerates.
+	o2 := &Orchestrator{Reuse: true, Store: fs}
+	genCalls = 0
+	reuseOrRun(o2, "dep", 1, "dep.md", &dst, render, func() (string, error) { genCalls++; return "x", nil })
+	if genCalls != 1 {
+		t.Errorf("with no Only set, dependencies must regenerate")
+	}
+}
+
+func TestReuseDep(t *testing.T) {
+	o := &Orchestrator{Only: map[string]bool{"seo-metadata": true}, Reuse: true, Store: &fakeStore{}}
+	if !o.reuseDep("visual-assets") {
+		t.Error("a dependency should be reusable")
+	}
+	if o.reuseDep("seo-metadata") {
+		t.Error("the requested stage must never be reused")
+	}
+	o.Reuse = false
+	if o.reuseDep("visual-assets") {
+		t.Error("reuse must be off when Reuse=false")
+	}
+}
+
+func jsonMarshal(v any) ([]byte, error)   { return json.Marshal(v) }
+func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }

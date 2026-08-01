@@ -78,15 +78,60 @@ func programmingLanguages(pkg ReleasePackage) []string {
 }
 
 func summary(pkg ReleasePackage) string {
+	// Skip low-value auto-generated release-stats framing; prefer the blog meta
+	// description (topic-led) so threads focus on what the release DOES.
 	if c := pkg.Context; c != nil {
-		if s := firstSentences(c.ContentIntelligence.Summary, 1); s != "" {
-			return s
-		}
-		if s := firstSentences(c.Architecture.Overview, 1); s != "" {
+		if s := firstSentences(c.ContentIntelligence.Summary, 1); s != "" && !isReleaseStatsFraming(s) {
 			return s
 		}
 	}
-	return firstNonEmpty(pkg.Blog.MetaDescription, repoShort(pkg)+" "+tag(pkg))
+	if d := firstSentences(pkg.Blog.MetaDescription, 1); d != "" {
+		return d
+	}
+	if c := pkg.Context; c != nil {
+		if s := firstSentences(c.Architecture.Overview, 1); s != "" && !isReleaseStatsFraming(s) {
+			return s
+		}
+	}
+	return repoShort(pkg) + " " + tag(pkg)
+}
+
+// isReleaseStatsFraming flags count-based auto-generated release summaries.
+func isReleaseStatsFraming(s string) bool {
+	lc := strings.ToLower(s)
+	for _, m := range []string{"0 features", "0 fixes", "analyzed changes", "maintenance changes", "no new user-facing", "just maintenance"} {
+		if strings.Contains(lc, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// namesReleaseIdentity reports whether text names the repository or release
+// version — identifiers a thread must stay free of to be evergreen.
+func namesReleaseIdentity(text string, pkg ReleasePackage) bool {
+	lc := strings.ToLower(text)
+	if strings.Contains(lc, "this release") || strings.Contains(lc, "the release") {
+		return true
+	}
+	for _, id := range []string{repoShort(pkg), repoName(pkg), tag(pkg)} {
+		if id != "" && strings.Contains(lc, strings.ToLower(id)) {
+			return true
+		}
+	}
+	return false
+}
+
+// proseOnly drops URL/link lines so a CTA link isn't treated as body copy.
+func proseOnly(body string) string {
+	var out []string
+	for _, ln := range strings.Split(body, "\n") {
+		if strings.Contains(ln, "://") || strings.Contains(ln, "{{") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, "\n")
 }
 
 func featureName(pkg ReleasePackage) string {

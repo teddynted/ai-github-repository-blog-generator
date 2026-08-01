@@ -56,7 +56,7 @@ _acme/widget · release v1.0.0 · 3 videos_
 - **Engagement:** Would you have designed it differently? Tell me how.
 - **CTA:** Full architecture walkthrough on YouTube — link in bio.
 - **Hashtags:** #SystemDesign #Architecture #CloudArchitecture #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
-- **Caption:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video + repo in bio.
+- **Caption:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video in bio.
 
 ---
 
@@ -109,11 +109,11 @@ _acme/widget · release v1.0.0 · 3 videos_
 - **Engagement:** Which AWS service would you reach for here?
 - **CTA:** Repo's in the description. Go build it.
 - **Hashtags:** #AWS #CloudComputing #DevOps #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
-- **Caption:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video + repo in bio.
+- **Caption:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video in bio.
 
 ---
 
-## Video 3 — The numbers behind v1.0.0
+## Video 3 — The numbers behind the build
 
 - **Topic:** Interesting Statistic · **Duration:** 0:20 (20s) · **Retention:** 91/100 · **Words:** 27
 - **Hook:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -135,7 +135,7 @@ _acme/widget · release v1.0.0 · 3 videos_
 
 **Scene 3** (5s) — _Pan · Fade · Slide_
   - Visual: End card: the repository.
-  - Narration: Here's the fix: this release analyzed 5 commits.
+  - Narration: Here's the fix: the work here spans 5 commits.
 
 **Scene 4** (5s) — _Pull Out · Slide · Fade_
   - Visual: End card: the repository.
@@ -162,7 +162,7 @@ _acme/widget · release v1.0.0 · 3 videos_
 - **Engagement:** Does that number surprise you?
 - **CTA:** Read the deep-dive blog — link in bio.
 - **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
-- **Caption:** This release analyzed 5 commits. Full video + repo in bio.
+- **Caption:** The work here spans 5 commits. Full video in bio.
 
 ---
 

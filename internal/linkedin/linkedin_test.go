@@ -14,6 +14,98 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/visualassets"
 )
 
+func TestDistinctHighlightsReducesCrossPostRepetition(t *testing.T) {
+	used := map[string]bool{}
+	a := distinctHighlights([]string{"event-driven pipeline", "sqs buffer", "ec2 worker"}, used)
+	b := distinctHighlights([]string{"event-driven pipeline", "sqs buffer", "cloudwatch alarms", "dlq"}, used)
+	overlap := 0
+	for _, x := range b {
+		for _, y := range a {
+			if strings.EqualFold(collapse(x), collapse(y)) {
+				overlap++
+			}
+		}
+	}
+	if overlap > 2 {
+		t.Errorf("too much cross-post highlight repetition: a=%v b=%v", a, b)
+	}
+	if len(b) == 0 {
+		t.Error("a post must still have highlights")
+	}
+}
+
+func TestPostBodiesAreEvergreen(t *testing.T) {
+	// samplePackage names "widget" / "v0.2.0" in its summary + meta; the generated
+	// post bodies must not surface that in the prose.
+	pkg := samplePackage()
+	col, err := newGen().LinkedIn(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range col.Posts {
+		if prose := proseOnly(p.Body); namesReleaseIdentity(prose, pkg) {
+			t.Errorf("post %d prose names the repo/version (must be evergreen):\n%s", p.ID, prose)
+		}
+	}
+}
+
+func TestNamesReleaseIdentityAndProseOnly(t *testing.T) {
+	pkg := samplePackage() // repo "widget", tag "v0.2.0"
+	if !namesReleaseIdentity("built during widget v0.2.0", pkg) {
+		t.Error("should detect repo/version")
+	}
+	if namesReleaseIdentity("moving provisioning into pre-baked AMIs", pkg) {
+		t.Error("should not flag neutral engineering text")
+	}
+	got := proseOnly("A neutral line.\nMore: https://example.dev/widget\nAnother line.")
+	if strings.Contains(got, "https://") || strings.Contains(got, "widget") {
+		t.Errorf("proseOnly should drop URL lines: %q", got)
+	}
+}
+
+func TestOpeningLineHasNoRepoOrVersion(t *testing.T) {
+	for _, typ := range []string{"Release Announcement", "Engineering Lesson", "AI Engineering Highlight", "Technical Insight"} {
+		got := openingLine(postCandidate{Type: typ}, "designing-an-ai-agent-platform-on-aws", "v0.6.0")
+		lc := strings.ToLower(got)
+		if strings.Contains(lc, "v0.6.0") || strings.Contains(lc, "designing-an-ai-agent") || strings.Contains(lc, "just shipped") {
+			t.Errorf("opener for %q leaks repo/version/changelog framing: %q", typ, got)
+		}
+	}
+}
+
+func TestWarningsNotRenderedInArtifact(t *testing.T) {
+	col := LinkedInCollection{
+		Metadata: Metadata{Repository: "acme/widget", Release: "v0.6.0", PostCount: 1},
+		Warnings: []string{"post 3 (Engineering Lesson) has no technical highlights; the release context may be thin"},
+		Posts:    []Post{{ID: 1, Type: "Release Announcement", Body: "A grounded engineering update."}},
+	}
+	md := col.Markdown()
+	if strings.Contains(md, "Notes:") || strings.Contains(strings.ToLower(md), "no technical highlights") {
+		t.Errorf("internal warnings leaked into the published artifact:\n%s", md)
+	}
+	if len(col.Warnings) == 0 {
+		t.Error("warnings should remain on the struct for CI/manifest")
+	}
+}
+
+func TestSummarySkipsReleaseStatsFraming(t *testing.T) {
+	pkg := ReleasePackage{
+		Context: &rc.ReleaseContext{
+			Repository:          rc.Repository{Name: "widget", FullName: "acme/widget"},
+			Release:             rc.Release{Tag: "v0.6.0"},
+			ContentIntelligence: rc.ContentIntelligence{Summary: "widget v0.6.0 delivers 7 analyzed changes (0 features, 0 fixes) across 24 files."},
+		},
+		Blog: releasegen.BlogPost{MetaDescription: "Pre-baked custom AMIs cut EC2 startup latency by moving boot-time provisioning into versioned images."},
+	}
+	got := summary(pkg)
+	if strings.Contains(strings.ToLower(got), "0 features") || strings.Contains(strings.ToLower(got), "analyzed changes") {
+		t.Errorf("summary should skip release-stats framing; got %q", got)
+	}
+	if !strings.Contains(strings.ToLower(got), "ami") {
+		t.Errorf("summary should fall back to the topic-led meta description; got %q", got)
+	}
+}
+
 func samplePackage() ReleasePackage {
 	ctx := &rc.ReleaseContext{
 		SchemaVersion: "1.0.0",

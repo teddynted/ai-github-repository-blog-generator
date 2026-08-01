@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
@@ -53,9 +54,13 @@ func (g *Generator) LinkedIn(ctx context.Context, pkg ReleasePackage) (LinkedInC
 		},
 	}
 
+	// Rotate highlights across posts so the same grounded highlight (e.g. the
+	// event-driven "EventBridge → Lambda → EC2" line) doesn't lead every post.
+	used := map[string]bool{}
 	posts := make([]Post, 0, len(cands))
 	for i, c := range cands {
-		posts = append(posts, g.buildPost(ctx, pkg, c, i))
+		highlights := distinctHighlights(planHighlights(pkg, c.Type), used)
+		posts = append(posts, g.buildPost(ctx, pkg, c, i, highlights))
 	}
 
 	collection.Posts = posts
@@ -74,9 +79,36 @@ func (g *Generator) LinkedIn(ctx context.Context, pkg ReleasePackage) (LinkedInC
 	return collection, nil
 }
 
-// buildPost assembles one LinkedIn post from a discovered candidate.
-func (g *Generator) buildPost(ctx context.Context, pkg ReleasePackage, c postCandidate, index int) Post {
-	highlights := planHighlights(pkg, c.Type)
+// distinctHighlights reduces cross-post repetition: it prefers highlights not yet
+// used by an earlier post, but always keeps at least two so a post is never
+// highlight-less, then records what it used. Capped at four (the body renders up
+// to four).
+func distinctHighlights(hs []string, used map[string]bool) []string {
+	var fresh, seen []string
+	for _, h := range hs {
+		if used[strings.ToLower(collapse(h))] {
+			seen = append(seen, h)
+		} else {
+			fresh = append(fresh, h)
+		}
+	}
+	out := fresh
+	for _, h := range seen {
+		if len(out) >= 2 {
+			break
+		}
+		out = append(out, h)
+	}
+	out = topStrings(out, 4)
+	for _, h := range out {
+		used[strings.ToLower(collapse(h))] = true
+	}
+	return out
+}
+
+// buildPost assembles one LinkedIn post from a discovered candidate, using the
+// (already cross-post-deduped) highlights.
+func (g *Generator) buildPost(ctx context.Context, pkg ReleasePackage, c postCandidate, index int, highlights []string) Post {
 	engagement := engagementPrompt(c)
 	cta := planCTA(pkg, c)
 

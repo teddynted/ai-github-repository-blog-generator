@@ -1,14 +1,14 @@
 # YouTube Script: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and cloud practitioners · intermediate_
+_acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and cloud practitioners · intermediate_
 
-> **Notes:** runtime 0:55 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
+> **Notes:** runtime 0:59 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
 
 ## Hook (`00:00–00:15`, showcase)
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
-## Introduction (`00:15–00:25`)
+## Introduction (`00:15–00:26`)
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
@@ -20,7 +20,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 ## Chapter 1 — Introduction
 
-- **Timestamp:** `00:15–00:25` (target 10s; 5–25s)
+- **Timestamp:** `00:15–00:26` (target 11s; 6–26s)
 - **Storyboard scenes:** 1 · **Voice-over scenes:** 1
 
 ### Narration
@@ -33,7 +33,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 ## Chapter 2 — Architecture
 
-- **Timestamp:** `00:25–00:35` (target 10s; 5–25s)
+- **Timestamp:** `00:26–00:37` (target 11s; 6–26s)
 - **Storyboard scenes:** 2 · **Voice-over scenes:** 2
 
 ### Narration
@@ -52,7 +52,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 ## Chapter 3 — Architecture Diagrams
 
-- **Timestamp:** `00:35–00:45` (target 10s; 5–25s)
+- **Timestamp:** `00:37–00:48` (target 11s; 6–26s)
 - **Storyboard scenes:** 3 · **Voice-over scenes:** 3
 
 ### Narration
@@ -72,18 +72,18 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 ## Chapter 4 — Conclusion
 
-- **Timestamp:** `00:45–00:55` (target 10s; 5–25s)
+- **Timestamp:** `00:48–00:59` (target 11s; 6–26s)
 - **Storyboard scenes:** 4 · **Voice-over scenes:** 4
 
 ### Narration
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
-- **Transition:** That's the release end to end — thanks for watching.
+- **Transition:** That's the architecture end to end — thanks for watching.
 
 ---
 
-## Conclusion (`00:45–00:55`)
+## Conclusion (`00:48–00:59`)
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
@@ -94,10 +94,10 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 ## Call to Action
 
-> If you got something out of this, do three quick things: star acme/widget so you can find it again, subscribe so you catch the next release deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
+> If you got something out of this, do three quick things: star acme/widget so you can find it again, subscribe so you catch the next deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
 
 - **GitHub Repository** — Star and explore acme/widget (https://github.com/acme/widget)
-- **Subscribe** — Subscribe for the next release deep dive
+- **Subscribe** — Subscribe for the next deep dive
 - **Like** — Like the video if the walkthrough helped
 - **Comment** — Comment with how you'd build this differently
 - **Future Releases** — Follow along as the pipeline grows release by release
@@ -107,11 +107,11 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 0:55 · **Speaking time:** 1:37 · **Words:** 242
+- **Estimated runtime:** 0:59 · **Speaking time:** 1:36 · **Words:** 241
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
-- **Alternative titles:** How acme/widget v1.0.0 Actually Works; Building v1.0.0: A Full Architecture Walkthrough
-- **Thumbnail text:** V1.0.0 · AWS Lambda
+- **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
+- **Thumbnail text:** AWS LAMBDA · ARCHITECTURE
 - **Playlist:** acme/widget — Release Deep Dives
 - **Technical topics:** AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; Go
 - **SEO keywords:** go; aws-lambda; amazon-sqs; amazon-eventbridge; aws-cloudformation; software-architecture; cloud-computing; AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch
@@ -119,11 +119,11 @@ _acme/widget · release v1.0.0 · long-form · ~0:55 · Software engineers and c
 - **Chapter markers:**
   - `00:00` Intro / Hook
   - `00:15` Introduction
-  - `00:25` Architecture
-  - `00:35` Architecture Diagrams
-  - `00:45` Conclusion
-  - `00:45` Conclusion
-- **Pinned comment:** 📌 acme/widget v1.0.0 — everything in this video is generated from the repository's own Release Context. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
+  - `00:26` Architecture
+  - `00:37` Architecture Diagrams
+  - `00:48` Conclusion
+  - `00:48` Conclusion
+- **Pinned comment:** 📌 Everything in this video is generated from the project's own release analysis. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
 
 ### Suggested Description
 
@@ -133,10 +133,10 @@ Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ing
 ⏱ Chapters:
 00:00 Intro / Hook
 00:15 Introduction
-00:25 Architecture
-00:35 Architecture Diagrams
-00:45 Conclusion
-00:45 Conclusion
+00:26 Architecture
+00:37 Architecture Diagrams
+00:48 Conclusion
+00:48 Conclusion
 
 🔗 Repository: https://github.com/acme/widget
 

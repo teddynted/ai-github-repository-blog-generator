@@ -1,8 +1,8 @@
 package seo
 
 import (
+	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -15,9 +15,9 @@ func (m SEOMetadata) Markdown() string {
 	fmt.Fprintf(&b, "_%s · release %s · SEO confidence %d/100_\n\n",
 		m.Metadata.Repository, m.Metadata.Release, m.ContentIntelligence.SEOConfidenceScore)
 
-	if len(m.Warnings) > 0 {
-		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(m.Warnings, "; "))
-	}
+	// m.Warnings are internal QA diagnostics (title too long, thin content). They
+	// stay on the struct for JSON/provenance and are logged at generation, but
+	// must not surface in the viewer-facing artifact — so they are not rendered.
 
 	writeBlog(&b, m.Blog)
 	writeYouTube(&b, m.YouTube)
@@ -28,7 +28,85 @@ func (m SEOMetadata) Markdown() string {
 	writeOpenGraph(&b, m.OpenGraph)
 	writeStructured(&b, m.StructuredData)
 	writeIntelligence(&b, m.ContentIntelligence)
+	writeValidationReport(&b, m)
 	return b.String()
+}
+
+// writeValidationReport renders a CI-checkable self-audit of the artifact so an
+// automation step can gate publishing on it.
+func writeValidationReport(b *strings.Builder, m SEOMetadata) {
+	b.WriteString("---\n\n## Validation Report\n\n")
+	yn := func(ok bool) string {
+		if ok {
+			return "✅"
+		}
+		return "⚠️"
+	}
+	blogLen := len([]rune(m.Blog.Title))
+	metaLen := len([]rune(m.Blog.MetaDescription))
+	ytLen := len([]rune(m.YouTube.Title))
+	canonical := strings.TrimSpace(m.Blog.Canonical.URL) != ""
+	ogParity := m.OpenGraph.Title == m.OpenGraph.Twitter.Title &&
+		m.OpenGraph.Description == m.OpenGraph.Twitter.Description
+
+	fmt.Fprintf(b, "- **Blog title length:** %d %s (target 50–60)\n", blogLen, yn(blogLen >= 40 && blogLen <= 60))
+	fmt.Fprintf(b, "- **Meta description length:** %d %s (target 150–160)\n", metaLen, yn(metaLen >= 150 && metaLen <= 160))
+	fmt.Fprintf(b, "- **YouTube title length:** %d %s (≤ 70)\n", ytLen, yn(ytLen <= YouTubeTitlePref))
+	fmt.Fprintf(b, "- **YouTube description leads with topic keyword:** %s (first 150 chars)\n",
+		yn(descLeadsWithKeyword(m.YouTube.Description, m.Keywords.Primary)))
+	fmt.Fprintf(b, "- **Duplicate chapter timestamps:** %s\n", yn(!hasDuplicateChapters(m.YouTube.ChapterTitles)))
+	fmt.Fprintf(b, "- **Primary keywords topic-led (≤50%% AWS services):** %s\n", yn(primaryTopicLed(m.Keywords.Primary)))
+	fmt.Fprintf(b, "- **JSON-LD valid:** %s\n", yn(jsonLDValid(m.StructuredData.JSONLD)))
+	fmt.Fprintf(b, "- **Canonical URL present:** %s\n", yn(canonical))
+	fmt.Fprintf(b, "- **OG/Twitter parity:** %s\n\n", yn(ogParity))
+}
+
+func hasDuplicateChapters(chapters []ChapterTitle) bool {
+	seen := make(map[string]bool, len(chapters))
+	for _, c := range chapters {
+		if seen[c.Timestamp] {
+			return true
+		}
+		seen[c.Timestamp] = true
+	}
+	return false
+}
+
+// descLeadsWithKeyword reports whether any primary keyword appears in the first
+// 150 characters of the description — the snippet a viewer and the search index
+// see before "…more". It reports the fact; it never rewrites the copy.
+func descLeadsWithKeyword(desc string, primary []string) bool {
+	lead := desc
+	if r := []rune(desc); len(r) > 150 {
+		lead = string(r[:150])
+	}
+	lead = strings.ToLower(lead)
+	for _, kw := range primary {
+		if kw = strings.ToLower(strings.TrimSpace(kw)); kw != "" && strings.Contains(lead, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// primaryTopicLed reports whether the primary keywords are led by the topic
+// rather than the AWS service inventory: at most half may be service names. It
+// classifies against the canonical service set (the report has no release
+// context), which covers the common services.
+func primaryTopicLed(primary []string) bool {
+	n := len(primary)
+	if n == 0 {
+		return false
+	}
+	return countAWSServiceNames(primary, nil)*2 <= n
+}
+
+func jsonLDValid(ld map[string]interface{}) bool {
+	if len(ld) == 0 {
+		return false
+	}
+	_, err := json.Marshal(ld)
+	return err == nil
 }
 
 func writeBlog(b *strings.Builder, s BlogSEO) {
@@ -169,23 +247,18 @@ func writeStructured(b *strings.Builder, sd StructuredData) {
 	b.WriteString("\n```\n\n")
 }
 
-// writeJSONLD renders the JSON-LD map deterministically (sorted keys) without a
-// json import dependency in the renderer.
+// writeJSONLD renders the JSON-LD object as valid, indented JSON. The previous
+// hand-rolled renderer used %v, which emitted unquoted strings and Go's
+// map[...] / [slice] syntax for nested values — invalid JSON that failed the
+// Google Rich Results Test. encoding/json quotes correctly and sorts map keys,
+// so the output stays valid AND deterministic.
 func writeJSONLD(b *strings.Builder, ld map[string]interface{}) {
-	keys := make([]string, 0, len(ld))
-	for k := range ld {
-		keys = append(keys, k)
+	out, err := json.MarshalIndent(ld, "", "  ")
+	if err != nil {
+		b.WriteString("{}")
+		return
 	}
-	sort.Strings(keys)
-	b.WriteString("{\n")
-	for i, k := range keys {
-		fmt.Fprintf(b, "  %q: %v", k, ld[k])
-		if i < len(keys)-1 {
-			b.WriteString(",")
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString("}")
+	b.Write(out)
 }
 
 func writeIntelligence(b *strings.Builder, ci Intelligence) {

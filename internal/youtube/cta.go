@@ -21,7 +21,7 @@ func (g *Generator) planCTA(pkg ReleasePackage) CallToAction {
 		items = append(items, CTAItem{Kind: "Documentation", Text: "Read the docs to go deeper", URL: docs})
 	}
 	items = append(items,
-		CTAItem{Kind: "Subscribe", Text: "Subscribe for the next release deep dive"},
+		CTAItem{Kind: "Subscribe", Text: "Subscribe for the next deep dive"},
 		CTAItem{Kind: "Like", Text: "Like the video if the walkthrough helped"},
 		CTAItem{Kind: "Comment", Text: "Comment with how you'd build this differently"},
 		CTAItem{Kind: "Future Releases", Text: "Follow along as the pipeline grows release by release"},
@@ -35,16 +35,14 @@ func (g *Generator) planCTA(pkg ReleasePackage) CallToAction {
 func ctaScript(repo string) string {
 	return collapse(fmt.Sprintf(
 		"If you got something out of this, do three quick things: star %s so you can find it again, "+
-			"subscribe so you catch the next release deep dive, and drop a comment with how you'd approach it "+
+			"subscribe so you catch the next deep dive, and drop a comment with how you'd approach it "+
 			"differently — I read them. Links to the repo and the docs are in the description.", repo))
 }
 
 // pinnedComment is a short, useful pinned comment grounded in the release.
 func pinnedComment(pkg ReleasePackage) string {
-	repo := repoName(pkg)
-	tag := releaseTag(pkg)
 	var b strings.Builder
-	fmt.Fprintf(&b, "📌 %s %s — everything in this video is generated from the repository's own Release Context.", repo, tag)
+	b.WriteString("📌 Everything in this video is generated from the project's own release analysis.")
 	if url := repoURL(pkg); url != "" {
 		fmt.Fprintf(&b, " Repo: %s", url)
 	}

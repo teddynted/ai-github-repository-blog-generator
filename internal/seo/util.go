@@ -4,6 +4,15 @@ import "strings"
 
 func wordCount(s string) int { return len(strings.Fields(s)) }
 
+// concatStrings appends the given slices into one (nil-safe), preserving order.
+func concatStrings(lists ...[]string) []string {
+	var out []string
+	for _, l := range lists {
+		out = append(out, l...)
+	}
+	return out
+}
+
 func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func dedupe(in []string) []string {
@@ -107,17 +116,48 @@ func slugify(s string) string {
 }
 
 // hashify turns a phrase into a CamelCase hashtag token (no leading #).
+// canonicalHashtagBody maps grounded AWS tokens to their canonical, hyphen-free
+// hashtag body with correct casing (a hashtag can't contain a hyphen, and
+// "#Aws-iam" is wrong for both display and search).
+var canonicalHashtagBody = map[string]string{
+	"aws-iam":                      "AWSIAM",
+	"aws-lambda":                   "AWSLambda",
+	"aws-cloudformation":           "AWSCloudFormation",
+	"amazon-ec2":                   "AmazonEC2",
+	"amazon-s3":                    "AmazonS3",
+	"amazon-cloudwatch":            "AmazonCloudWatch",
+	"amazon-eventbridge":           "AmazonEventBridge",
+	"amazon-eventbridge-scheduler": "AmazonEventBridgeScheduler",
+	"amazon-sqs":                   "AmazonSQS",
+	"amazon-sns":                   "AmazonSNS",
+	"github-actions":               "GitHubActions",
+}
+
+// hashtagAcronyms are word parts that should be fully upper-cased in a hashtag.
+var hashtagAcronyms = map[string]string{
+	"aws": "AWS", "iam": "IAM", "ec2": "EC2", "s3": "S3", "api": "API",
+	"sdk": "SDK", "cli": "CLI", "sqs": "SQS", "sns": "SNS", "ai": "AI",
+	"ci": "CI", "cd": "CD",
+}
+
+// hashify turns a grounded token into a hyphen-free hashtag body with canonical
+// AWS casing: "aws-iam" -> "AWSIAM", "amazon-ec2" -> "AmazonEC2",
+// "event-driven" -> "EventDriven".
 func hashify(s string) string {
+	key := strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(s, "-", " ")), "-"))
+	if body, ok := canonicalHashtagBody[key]; ok {
+		return body
+	}
 	var b strings.Builder
-	for _, f := range strings.Fields(s) {
-		f = strings.TrimFunc(f, func(r rune) bool {
-			return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
-		})
-		if f == "" {
+	for _, part := range strings.FieldsFunc(s, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+	}) {
+		if a, ok := hashtagAcronyms[strings.ToLower(part)]; ok {
+			b.WriteString(a)
 			continue
 		}
-		b.WriteString(strings.ToUpper(f[:1]))
-		b.WriteString(f[1:])
+		b.WriteString(strings.ToUpper(part[:1]))
+		b.WriteString(part[1:])
 	}
 	return b.String()
 }

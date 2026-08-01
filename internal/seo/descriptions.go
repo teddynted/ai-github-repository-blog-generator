@@ -3,7 +3,6 @@ package seo
 import (
 	"context"
 	"fmt"
-	"strings"
 )
 
 // planMetaDescription returns the blog meta description, bounded to the platform
@@ -11,13 +10,11 @@ import (
 // the Model, and always falls back to a grounded summary.
 func (g *Generator) planMetaDescription(ctx context.Context, pkg ReleasePackage) string {
 	base := firstNonEmpty(pkg.Blog.MetaDescription, summary(pkg),
-		repoShortName(pkg)+" "+releaseTag(pkg)+": "+lowerFirst(featureName(pkg)))
+		firstSentences(featureName(pkg), 1))
 	desc := base
 	if g.Model != nil {
 		if out, err := g.Model.Generate(ctx, metaDescPrompt(base)); err == nil {
-			if r := collapse(strings.TrimSpace(out)); r != "" {
-				desc = r
-			}
+			desc = sanitizeModelText(out, desc)
 		}
 	}
 	if len(desc) > BlogDescMax {
