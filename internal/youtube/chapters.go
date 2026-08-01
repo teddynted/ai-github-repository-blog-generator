@@ -25,10 +25,14 @@ func (g *Generator) chapters(ctx context.Context, pkg ReleasePackage, startSec i
 
 	for _, sc := range pkg.Storyboard.Scenes {
 		vo := voMap[sc.SceneNumber]
-		dur := chapterDuration(sc.Duration.RecommendedSec)
 
 		base := chapterBase(sc, vo, c)
 		script := g.expandChapter(ctx, sc, base)
+		// Compress an over-long expansion (#6) so a chapter never runs away — with
+		// tighter caps for the two summary chapters — then size the slot to the
+		// capped narration so timeline and metadata stay consistent (#4).
+		script = capWordsAtSentence(script, chapterWordCap(sc.Title))
+		dur := chapterDurationFromScript(script, g.wpm())
 
 		isBody := sc.Type != "introduction" && sc.Type != "conclusion"
 		if isBody {
@@ -55,6 +59,20 @@ func (g *Generator) chapters(ctx context.Context, pkg ReleasePackage, startSec i
 		running += dur.TargetSec
 	}
 	return chapters
+}
+
+// chapterWordCap is the maximum spoken words a chapter may carry. The two
+// summary chapters are held tighter (they otherwise re-list the same components);
+// every other chapter is bounded so a runaway expansion is compressed.
+func chapterWordCap(title string) int {
+	switch t := strings.ToLower(title); {
+	case strings.Contains(t, "architecture summary"):
+		return 120
+	case strings.Contains(t, "architecture diagram"):
+		return 140
+	default:
+		return 180
+	}
 }
 
 // chapterBase assembles the grounded teaching narration for a chapter: the

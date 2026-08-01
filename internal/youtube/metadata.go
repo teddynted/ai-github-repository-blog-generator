@@ -142,7 +142,25 @@ func chapterMarkers(s YouTubeScript) []ChapterMarker {
 	if s.Conclusion.Timestamp.EndSec > s.Conclusion.Timestamp.StartSec {
 		markers = append(markers, ChapterMarker{Timestamp: clock(s.Conclusion.Timestamp.StartSec), Title: "Conclusion"})
 	}
-	return markers
+	return dedupeMarkers(markers)
+}
+
+// dedupeMarkers keeps one marker per timestamp, preserving order. Because the
+// markers are appended in increasing-time order, keeping the first at each
+// timestamp both removes duplicates (#2 — e.g. a Conclusion chapter plus the
+// appended Conclusion marker at the same time) and guarantees strictly
+// increasing timestamps (#3).
+func dedupeMarkers(in []ChapterMarker) []ChapterMarker {
+	seen := make(map[string]bool, len(in))
+	out := make([]ChapterMarker, 0, len(in))
+	for _, m := range in {
+		if seen[m.Timestamp] {
+			continue
+		}
+		seen[m.Timestamp] = true
+		out = append(out, m)
+	}
+	return out
 }
 
 func description(pkg ReleasePackage, markers []ChapterMarker, keywords []string) string {

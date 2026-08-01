@@ -33,13 +33,19 @@ func speakingSeconds(words, wpm int) int {
 	return int(math.Round(float64(words) / (float64(wpm) / 60.0)))
 }
 
-// chapterDuration derives a chapter's timing window from the storyboard's
-// allocated seconds, expanded modestly for the fuller teaching narration a
-// long-form video carries.
-func chapterDuration(storyboardSec int) Duration {
-	target := storyboardSec
-	if target <= 0 {
-		target = 20
+// minChapterSec floors a chapter's slot so a very short chapter still reads.
+const minChapterSec = 8
+
+// chapterDurationFromScript sizes a chapter's slot to the time it takes to speak
+// its (already length-capped) narration. Deriving the slot from the actual words
+// — rather than the storyboard's much shorter voice-over slot — keeps the video
+// timeline and the "speaking time"/"runtime" metadata consistent (they were
+// 4:54 vs 12:40 when the slot came from the short storyboard timing but the
+// chapter narration had been expanded for long-form).
+func chapterDurationFromScript(script string, wpm int) Duration {
+	target := speakingSeconds(wordCount(script), wpm)
+	if target < minChapterSec {
+		target = minChapterSec
 	}
 	return Duration{
 		MinSec:    clampInt(target-5, 5, target),

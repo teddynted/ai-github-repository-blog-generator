@@ -72,13 +72,21 @@ func (s YouTubeScript) Validate(sceneCount int) []string {
 		}
 	}
 
-	// Runtime must be internally consistent: hook + all chapter durations.
-	computed := s.Hook.DurationSec
+	// Runtime must equal max(hook+chapters timeline, spoken-narration time) — it
+	// may never be shorter than the words take to speak (#4). This rejects the
+	// old impossible combination (runtime 4:54 while speaking time was 12:40).
+	timeline := s.Hook.DurationSec
 	for _, ch := range s.Chapters {
-		computed += ch.Duration.TargetSec
+		timeline += ch.Duration.TargetSec
 	}
-	if computed != s.Video.DurationSec {
-		problems = append(problems, fmt.Sprintf("runtime mismatch: video.durationSec %d != hook+chapters %d", s.Video.DurationSec, computed))
+	speaking := speakingSeconds(totalWords(s), defaultWordsPerMinute)
+	want := timeline
+	if speaking > want {
+		want = speaking
+	}
+	if s.Video.DurationSec != want {
+		problems = append(problems, fmt.Sprintf(
+			"runtime %d != max(timeline %d, speaking %d)", s.Video.DurationSec, timeline, speaking))
 	}
 
 	return problems
