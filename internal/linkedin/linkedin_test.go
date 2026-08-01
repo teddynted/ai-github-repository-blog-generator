@@ -14,6 +14,21 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/visualassets"
 )
 
+func TestWarningsNotRenderedInArtifact(t *testing.T) {
+	col := LinkedInCollection{
+		Metadata: Metadata{Repository: "acme/widget", Release: "v0.6.0", PostCount: 1},
+		Warnings: []string{"post 3 (Engineering Lesson) has no technical highlights; the release context may be thin"},
+		Posts:    []Post{{ID: 1, Type: "Release Announcement", Body: "A grounded engineering update."}},
+	}
+	md := col.Markdown()
+	if strings.Contains(md, "Notes:") || strings.Contains(strings.ToLower(md), "no technical highlights") {
+		t.Errorf("internal warnings leaked into the published artifact:\n%s", md)
+	}
+	if len(col.Warnings) == 0 {
+		t.Error("warnings should remain on the struct for CI/manifest")
+	}
+}
+
 func TestSummarySkipsReleaseStatsFraming(t *testing.T) {
 	pkg := ReleasePackage{
 		Context: &rc.ReleaseContext{
