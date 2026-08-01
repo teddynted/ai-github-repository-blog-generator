@@ -103,18 +103,18 @@ func clusterSignals(pkg ReleasePackage) string {
 	return strings.ToLower(strings.Join(parts, " "))
 }
 
-// topicSignals is the lower-cased haystack of grounded TOPIC text — feature,
-// summary, title, overview, highlights, SEO keywords, tags — deliberately
-// EXCLUDING the raw AWS service inventory, so a service counts as "central" only
-// when the topic itself names it (not merely because it appears in architecture).
+// topicSignals is the lower-cased haystack of grounded TOPIC PROSE — feature,
+// summary, title, architecture overview, highlights. It deliberately excludes
+// both the raw AWS service inventory AND keyword/tag dumps (SEO keywords, blog
+// tags), which can list a service verbatim: a service counts as "central" only
+// when the article's prose actually discusses it, not because someone dumped its
+// name into a keyword list.
 func topicSignals(pkg ReleasePackage) string {
 	parts := []string{featureName(pkg), summary(pkg), pkg.Blog.Title}
 	if c := pkg.Context; c != nil {
 		parts = append(parts, c.Architecture.Overview)
 		parts = append(parts, c.ContentIntelligence.TechnicalHighlights...)
-		parts = append(parts, c.ContentIntelligence.SEOKeywords...)
 	}
-	parts = append(parts, pkg.Blog.Tags...)
 	return strings.ToLower(strings.Join(parts, " "))
 }
 

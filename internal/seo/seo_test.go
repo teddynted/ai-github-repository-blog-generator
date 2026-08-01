@@ -521,6 +521,123 @@ func TestValidationRejectsNoiseAndTopicDrift(t *testing.T) {
 	}
 }
 
+// amiPackage reproduces the real contaminated AMI-startup release: a long repo
+// name whose fragments leak ("designing", "an"), and junk SEO keywords/tags
+// ("changelog", "aws lambda (go runtime)", "aws sdk for go v2", "AWS IAM").
+func amiPackage() ReleasePackage {
+	junk := []string{
+		"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI",
+		"AWS Spot Instance optimization",
+		"an", "changelog", "designing", "aws lambda (go runtime)",
+		"aws sdk for go v2", "AWS IAM",
+	}
+	ctx := &rc.ReleaseContext{
+		SchemaVersion: "1.0.0",
+		Repository:    rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
+		Release:       rc.Release{Tag: "v0.6.0"},
+		Architecture:  rc.Architecture{Overview: "Pre-baked custom AMIs remove UserData provisioning from EC2 boot to speed up Spot startup.", AWSServices: []string{"Amazon EC2", "AWS IAM", "Amazon CloudWatch", "AWS Lambda", "Amazon EventBridge", "AWS CloudFormation"}},
+		Changelog:     rc.ChangelogAnalysis{Found: true, Features: []string{"Pre-baked AMIs speed up AWS Spot startup by baking dependencies into the image"}},
+		Technologies:  []rc.Technology{{Name: "Go"}, {Name: "AWS CloudFormation"}},
+		ContentIntelligence: rc.ContentIntelligence{
+			Summary:     "Pre-baked custom AMIs speed up AWS Spot startup.",
+			SEOKeywords: junk,
+		},
+	}
+	post := releasegen.BlogPost{
+		Title:           "Pre-Baked AMIs to Speed Up AWS Spot Startup",
+		MetaDescription: "Versioned pre-baked custom AMIs move EC2 provisioning into image creation for faster, deterministic Spot startup.",
+		Tags:            []string{"aws", "ec2", "an", "changelog"},
+	}
+	yt := youtube.YouTubeScript{
+		SchemaVersion:       youtube.SchemaVersion,
+		Metadata:            youtube.Metadata{Repository: "teddynted/designing-an-ai-agent-platform-on-aws", Release: "v0.6.0"},
+		ContentIntelligence: youtube.Intelligence{SuggestedTags: junk, SuggestedThumbnail: "AWS IAM / AN / V0.6.0"},
+	}
+	return ReleasePackage{Context: ctx, Blog: post, YouTube: yt}
+}
+
+func TestAMIScenarioNoContamination(t *testing.T) {
+	pkg := amiPackage()
+	m, err := newGen().SEO(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	banned := []string{"an", "changelog", "designing", "aws lambda (go runtime)", "aws sdk for go v2", "aws iam"}
+
+	contains := func(list []string, term string) bool { return containsFold(list, term) }
+
+	// Primary keywords: topic only, no contamination.
+	for _, b := range banned {
+		if contains(m.Keywords.Primary, b) {
+			t.Errorf("primary contains banned token %q: %v", b, m.Keywords.Primary)
+		}
+	}
+	if !contains(m.Keywords.Primary, "AWS Custom AMI") {
+		t.Errorf("primary missing topic keyword: %v", m.Keywords.Primary)
+	}
+
+	// YouTube tags / JSON-LD keywords / blog keywords: no junk substrings.
+	fields := map[string][]string{
+		"youtube.tags":  m.YouTube.Tags,
+		"blog.keywords": m.Blog.Keywords,
+		"youtube.kw":    m.YouTube.Keywords,
+	}
+	for name, list := range fields {
+		joined := strings.ToLower(strings.Join(list, " | "))
+		for _, bad := range []string{"changelog", "designing", "runtime", "(go runtime)", "sdk", " an "} {
+			if strings.Contains(" "+joined+" ", bad) {
+				t.Errorf("%s leaked %q: %v", name, bad, list)
+			}
+		}
+	}
+
+	// JSON-LD about: concept-level, no incidental services.
+	about := strings.ToLower(strings.Join(jsonldAbout(m.StructuredData.JSONLD), " | "))
+	if strings.Contains(about, "iam") || strings.Contains(about, "cloudwatch") {
+		t.Errorf("about leaked incidental services: %s", about)
+	}
+
+	// Thumbnail: no IAM / AN / repo fragments.
+	if bad := offTopicThumbnailToken(m.YouTube.ThumbnailText, pkg, m.Blog.Title); bad != "" {
+		t.Errorf("thumbnail off-topic token %q: %v", bad, m.YouTube.ThumbnailText)
+	}
+	if strings.Contains(strings.ToLower(strings.Join(m.YouTube.ThumbnailText, " ")), "iam") {
+		t.Errorf("thumbnail contains IAM: %v", m.YouTube.ThumbnailText)
+	}
+
+	// Alt slugs: topic-aligned, no aws-iam.
+	for _, s := range m.Blog.AlternativeSlugs {
+		if strings.Contains(s, "iam") {
+			t.Errorf("alt slug off-topic: %q", s)
+		}
+	}
+
+	// Canonical: template placeholder when no homepage.
+	if !strings.HasPrefix(m.Blog.Canonical.URL, "{{site_url}}/") {
+		t.Errorf("canonical placeholder missing: %q", m.Blog.Canonical.URL)
+	}
+
+	// The clean artifact must validate.
+	if probs := m.Validate(pkg); len(probs) != 0 {
+		t.Errorf("clean AMI artifact failed validation: %v", probs)
+	}
+}
+
+func TestValidationFailsOnReintroducedJunk(t *testing.T) {
+	pkg := amiPackage()
+	m, _ := newGen().SEO(context.Background(), pkg)
+	// Re-introduce the exact junk the pipeline must never emit.
+	m.Keywords.Primary = append([]string{"an"}, m.Keywords.Primary...)
+	if probs := m.Validate(pkg); len(probs) == 0 {
+		t.Error("validation should fail when 'an' is a primary keyword")
+	}
+	m2, _ := newGen().SEO(context.Background(), pkg)
+	m2.Keywords.Primary = []string{"changelog"}
+	if probs := m2.Validate(pkg); len(probs) == 0 {
+		t.Error("validation should fail when 'changelog' is a primary keyword")
+	}
+}
+
 func TestIsAWSServiceNameWholeStringOnly(t *testing.T) {
 	det := lowerSet([]string{"Amazon EC2", "AWS Lambda"})
 	if !isAWSServiceName("Amazon EC2", det) || !isAWSServiceName("aws iam", nil) {

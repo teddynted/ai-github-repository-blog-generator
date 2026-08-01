@@ -13,7 +13,7 @@ func planBlogTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.Primary...)
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Technology...)
-	return topStrings(dedupeTags(dropGeneric(tags)), blogTagMax)
+	return topStrings(dedupeTags(dropJunk(dropGeneric(tags), pkg)), blogTagMax)
 }
 
 // planYouTubeTags returns YouTube tags (reusing the YouTube script's suggested
@@ -25,7 +25,7 @@ func planYouTubeTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Technical...)
 	tags = append(tags, k.Developer...)
-	return topStrings(dedupeTags(dropGeneric(tags)), 15)
+	return topStrings(dedupeTags(dropJunk(dropGeneric(tags), pkg)), 15)
 }
 
 // dedupeTags removes tags that are the same term in a different format —

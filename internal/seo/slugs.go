@@ -18,15 +18,18 @@ func planSlug(pkg ReleasePackage) (string, []string) {
 	// "this release"; grounding slugs in it produced junk like
 	// "release-release-v0-6-0" and "aws-iam-release". Fall back to repo + AWS
 	// topic + tag instead, and never repeat the word "release".
+	// Slugs use the CENTRAL AWS service (the article's actual topic), not the
+	// first detected service — which produced off-topic slugs like "aws-iam-...".
+	central := centralAWS(awsServices(pkg), topicSignals(pkg))
 	if feat == "" || strings.EqualFold(feat, "this release") {
 		alts = append(alts, boundSlug(repo+" "+releaseTag(pkg)))
-		if aws := awsServices(pkg); len(aws) > 0 {
-			alts = append(alts, boundSlug(aws[0]+" "+releaseTag(pkg)))
+		if len(central) > 0 {
+			alts = append(alts, boundSlug(central[0]+" "+releaseTag(pkg)))
 		}
 	} else {
 		alts = append(alts, boundSlug(repo+" "+feat))
-		if aws := awsServices(pkg); len(aws) > 0 {
-			alts = append(alts, boundSlug(aws[0]+" "+feat))
+		if len(central) > 0 {
+			alts = append(alts, boundSlug(central[0]+" "+feat))
 		}
 		alts = append(alts, boundSlug(feat+" "+releaseTag(pkg)))
 	}

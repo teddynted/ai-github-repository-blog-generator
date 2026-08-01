@@ -26,15 +26,11 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	}
 	playlists = append(playlists, "Release Deep Dives", "AWS & Cloud Engineering")
 
-	// Thumbnail text carries the TOPIC, not a generic "THE ARCHITECTURE" tile.
-	var thumb []string
-	if ci.SuggestedThumbnail != "" {
-		thumb = append(thumb, ci.SuggestedThumbnail)
-	}
-	if t := thumbnailTopic(k); t != "" {
-		thumb = append(thumb, t)
-	}
-	thumb = append(thumb, releaseTagUpper(pkg))
+	// Thumbnail text is built from the TOPIC — release tag + up to two short topic
+	// lines — rather than reusing the (often contaminated) suggested thumbnail or
+	// a generic "THE ARCHITECTURE" tile. Max 3 lines.
+	thumb := append([]string{releaseTagUpper(pkg)}, thumbnailTopicLines(k)...)
+	thumb = topStrings(dedupe(thumb), 3)
 
 	// Hashtags lead with the article's central AWS services and topic, not the
 	// full detected service inventory.
@@ -44,7 +40,7 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 		Title:             title,
 		AlternativeTitles: topStrings(dedupe(ci.AlternativeTitles), 5),
 		Description:       desc,
-		Keywords:          topStrings(allKeywords(k), 15),
+		Keywords:          topStrings(dropJunk(allKeywords(k), pkg), 15),
 		Tags:              planYouTubeTags(pkg, k),
 		Hashtags:          topStrings(reuseHashtags(youtubeHashtags(pkg), topicTags, ytHashtagMax), ytHashtagMax),
 		ChapterTitles:     chapters,
@@ -68,17 +64,23 @@ func leadWithTopic(desc string, primary []string, title string) string {
 	return lead + ". " + collapse(desc)
 }
 
-// thumbnailTopic returns a short, upper-cased topic label for the thumbnail from
-// the primary keyword (first few words), or "" when there is no topic.
-func thumbnailTopic(k Keywords) string {
-	if len(k.Primary) == 0 {
-		return ""
+// thumbnailTopicLines returns up to two short, upper-cased topic labels for the
+// thumbnail, drawn from the primary keywords (≤ 3 words each).
+func thumbnailTopicLines(k Keywords) []string {
+	var lines []string
+	for _, p := range k.Primary {
+		words := strings.Fields(p)
+		if len(words) > 3 {
+			words = words[:3]
+		}
+		if line := strings.ToUpper(strings.Join(words, " ")); line != "" {
+			lines = append(lines, line)
+		}
+		if len(lines) >= 2 {
+			break
+		}
 	}
-	words := strings.Fields(k.Primary[0])
-	if len(words) > 4 {
-		words = words[:4]
-	}
-	return strings.ToUpper(strings.Join(words, " "))
+	return lines
 }
 
 func releaseTagUpper(pkg ReleasePackage) string {

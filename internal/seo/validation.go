@@ -104,6 +104,18 @@ func (m SEOMetadata) Validate(pkg ReleasePackage) []string {
 		if !sharesToken(tt, strings.Join(m.Keywords.Primary, " ")) && !sharesToken(tt, m.Blog.Title) {
 			problems = append(problems, "youtube: thumbnail text shares no topic term with the primary keywords or title")
 		}
+		if bad := offTopicThumbnailToken(tt, pkg, m.Blog.Title); bad != "" {
+			problems = append(problems, fmt.Sprintf("youtube: thumbnail text contains off-topic token %q", bad))
+		}
+	}
+
+	// Topic alignment: the primary keywords must overlap the title / meta
+	// description (the article's own nouns), or they are not describing this
+	// article.
+	if len(m.Keywords.Primary) > 0 {
+		if topic := collapse(m.Blog.Title + " " + m.Blog.MetaDescription); topic != "" && !sharesToken(m.Keywords.Primary, topic) {
+			problems = append(problems, "keywords: primary keywords share no term with the title or meta description")
+		}
 	}
 
 	// Grounding: at least one primary keyword must be grounded in the release.
@@ -129,6 +141,30 @@ func validSlug(s string) bool {
 		}
 	}
 	return true
+}
+
+// offTopicThumbnailToken returns the first thumbnail token that is off-topic — a
+// stop word ("AN"), or a repository-name fragment ("designing") that does not
+// itself appear in the article title (so a genuinely topical "AWS" is allowed).
+// Release-tag chrome ("V0.6.0") and topical words pass.
+func offTopicThumbnailToken(tt []string, pkg ReleasePackage, title string) string {
+	frags := repoFragments(pkg)
+	lt := strings.ToLower(title)
+	for _, line := range tt {
+		for _, raw := range strings.Fields(strings.ToLower(line)) {
+			w := strings.Trim(raw, ".,·/|:—-")
+			if len(w) < 2 {
+				continue
+			}
+			if stopWords[w] {
+				return w
+			}
+			if frags[w] && !strings.Contains(lt, w) {
+				return w
+			}
+		}
+	}
+	return ""
 }
 
 // jsonldAbout extracts the JSON-LD "about" list as strings.

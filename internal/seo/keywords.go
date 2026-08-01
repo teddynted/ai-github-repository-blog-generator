@@ -23,19 +23,55 @@ var (
 	langVersionRE = regexp.MustCompile(`(?i)\b(go|golang|python|node|nodejs|java|ruby|rust|php|dotnet|\.net|typescript)\s*v?\d`)
 )
 
-// isNoisyPrimaryKeyword reports whether s is unfit to be a primary keyword: a
-// generic/stopword token, an SDK name, a language/version string, or the
-// repository name. Primary keywords must describe article intent, not the
-// dependency/repo inventory.
-func isNoisyPrimaryKeyword(s string, pkg ReleasePackage) bool {
+// isJunkKeyword reports whether s is dependency/repo/release noise that must not
+// appear in ANY keyword field (primary, secondary, tags, JSON-LD): stop words
+// ("an", "the"), changelog/runtime/SDK identifiers, parenthetical runtime tags
+// ("aws lambda (go runtime)"), version strings, and repository-name fragments
+// ("designing", "platform"). It is the shared, lenient filter — it keeps valid
+// technology names like "Go" and "AWS Lambda".
+func isJunkKeyword(s string, pkg ReleasePackage) bool {
 	k := strings.ToLower(collapse(s))
-	if k == "" || primaryStopwords[k] || isGenericKeyword(k) {
+	if k == "" || stopWords[k] {
 		return true
 	}
-	if strings.Contains(k, "sdk") {
+	if strings.Contains(k, "changelog") || strings.Contains(k, "runtime") || strings.Contains(k, "sdk") {
+		return true
+	}
+	if strings.ContainsAny(k, "()") {
+		return true
+	}
+	// A keyword is a search term, not a sentence — drop long prose (e.g. a full
+	// changelog feature line leaking in as a "keyword").
+	if len(strings.Fields(k)) > 6 {
 		return true
 	}
 	if versionRE.MatchString(k) || langVersionRE.MatchString(k) {
+		return true
+	}
+	return repoFragments(pkg)[k]
+}
+
+// dropJunk removes junk keywords from any field, preserving order.
+func dropJunk(in []string, pkg ReleasePackage) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !isJunkKeyword(s, pkg) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// isNoisyPrimaryKeyword is the STRICT filter for primary keywords (search
+// intent): junk, plus anything under 3 chars, a primary stopword ("aws", "go",
+// "cloud"), a generic term, or the repository name. Primary keywords must
+// describe article intent, not the dependency/repo inventory.
+func isNoisyPrimaryKeyword(s string, pkg ReleasePackage) bool {
+	k := strings.ToLower(collapse(s))
+	if isJunkKeyword(s, pkg) {
+		return true
+	}
+	if len(k) < 3 || primaryStopwords[k] || isGenericKeyword(k) {
 		return true
 	}
 	if r := strings.ToLower(collapse(repoShortName(pkg))); r != "" && (k == r || strings.Contains(k, r)) {
@@ -56,6 +92,25 @@ func dropNoisyPrimary(in []string, pkg ReleasePackage) []string {
 		}
 	}
 	return out
+}
+
+// repoFragments is the set of individual words in the repository name — e.g.
+// "designing-an-ai-agent-platform-on-aws" → {designing, an, ai, agent, platform,
+// on, aws}. These are repository metadata, never article keywords, so they are
+// filtered from keyword fields (matched whole-word, so multi-word topics like
+// "AI Agent Platforms" are unaffected).
+func repoFragments(pkg ReleasePackage) map[string]bool {
+	set := map[string]bool{}
+	for _, name := range []string{repoName(pkg), repoShortName(pkg)} {
+		for _, w := range strings.FieldsFunc(strings.ToLower(name), func(r rune) bool {
+			return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+		}) {
+			if len(w) >= 2 {
+				set[w] = true
+			}
+		}
+	}
+	return set
 }
 
 // baseDeveloperKeywords are evergreen developer/SEO terms this project's content
@@ -110,9 +165,9 @@ func planKeywords(pkg ReleasePackage) Keywords {
 	primary := buildPrimary(topicCandidates, relevantAWS, aws, awsSet, 5)
 
 	// Secondary: the supporting entities — AWS services first, then technologies
-	// and the remaining grounded technical terms.
-	secondary := topStrings(dedupe(append(append(append([]string{}, aws...), tech...), technical...)), 10)
-	secondary = subtract(secondary, primary)
+	// and the remaining grounded technical terms (junk filtered out).
+	secondary := dropJunk(dedupe(append(append(append([]string{}, aws...), tech...), technical...)), pkg)
+	secondary = topStrings(subtract(secondary, primary), 10)
 
 	return Keywords{
 		Primary:    primary,

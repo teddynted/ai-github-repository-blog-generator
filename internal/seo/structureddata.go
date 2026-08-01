@@ -14,7 +14,7 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 		"@type":          "TechArticle",
 		"headline":       blog.Title,
 		"description":    blog.MetaDescription,
-		"keywords":       strings.Join(topStrings(allKeywords(k), 12), ", "),
+		"keywords":       strings.Join(topStrings(dropJunk(allKeywords(k), pkg), 12), ", "),
 		"articleSection": blog.Category,
 		"inLanguage":     "en",
 		"wordCount":      wordCount(blogProse(pkg)),
@@ -26,7 +26,7 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 			"@type": "Organization",
 			"name":  repoShortName(pkg),
 		},
-		"about":         aboutEntities(k, centralAWS(k.AWS, topicSignals(pkg))),
+		"about":         aboutEntities(k, centralAWS(k.AWS, topicSignals(pkg)), topicClusters(pkg)),
 		"datePublished": firstNonEmpty(published, generatedAt),
 		"dateModified":  generatedAt,
 	}
@@ -60,14 +60,16 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 }
 
 // aboutEntities is the schema.org "about" set: the article's concepts. It leads
-// with the topic (primary keywords) and names only the CENTRAL AWS entities —
-// the services the article is actually about — never the full detected
-// dependency inventory (go.mod, SDK imports, CloudFormation resources).
-func aboutEntities(k Keywords, central []string) []string {
+// with the topic (primary keywords), names only the CENTRAL AWS entities — the
+// services the article is actually about — and adds the domain topic clusters as
+// concept-level entities. It never emits the full detected dependency inventory
+// (go.mod, SDK imports, CloudFormation resources).
+func aboutEntities(k Keywords, central, clusters []string) []string {
 	var out []string
 	out = append(out, topStrings(k.Primary, 3)...)
 	out = append(out, topStrings(central, 2)...)
-	return topStrings(dedupe(out), 5)
+	out = append(out, topStrings(clusters, 2)...)
+	return topStrings(dedupe(out), 6)
 }
 
 func publishedDate(pkg ReleasePackage) string {

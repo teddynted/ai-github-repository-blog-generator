@@ -24,7 +24,7 @@ func (g *Generator) planBlog(ctx context.Context, pkg ReleasePackage, k Keywords
 	return BlogSEO{
 		Title:                title,
 		MetaDescription:      meta,
-		Keywords:             topStrings(allKeywords(k), 12),
+		Keywords:             topStrings(dropJunk(allKeywords(k), pkg), 12),
 		Tags:                 planBlogTags(pkg, k),
 		Slug:                 slug,
 		AlternativeSlugs:     altSlugs,
@@ -58,10 +58,15 @@ func readingMinutes(pkg ReleasePackage) int {
 	return m
 }
 
-// canonicalURL builds a canonical blog URL from the repo homepage when known.
+// canonicalURL builds a canonical blog URL from the repo homepage when known,
+// and otherwise emits a template placeholder ("{{site_url}}/<slug>/") so the
+// publishing system always has a canonical to fill — never a blank "—".
 func canonicalURL(pkg ReleasePackage, slug string) string {
 	if pkg.Context != nil && pkg.Context.Repository.Homepage != "" {
 		return trimSlash(pkg.Context.Repository.Homepage) + "/blog/" + slug
+	}
+	if slug != "" {
+		return "{{site_url}}/" + slug + "/"
 	}
 	return ""
 }
