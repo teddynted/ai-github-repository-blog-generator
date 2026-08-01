@@ -20,6 +20,7 @@ func (col VisualAssetCollection) Markdown() string {
 	}
 
 	writeBranding(&b, col.Branding)
+	writeSharedConstraints(&b)
 
 	for _, a := range col.Assets {
 		writeAsset(&b, a)
@@ -72,6 +73,28 @@ func writeAsset(b *strings.Builder, a Asset) {
 	}
 	if len(a.References) > 0 {
 		fmt.Fprintf(b, "- **Grounded in:** %s\n", strings.Join(a.References, ", "))
+	}
+
+	b.WriteString("\n### Quality Checklist\n\n")
+	for _, c := range qualityChecklist() {
+		fmt.Fprintf(b, "- %s\n", c)
+	}
+
+	complexity, reliability, models := renderGuidance(a.Type)
+	b.WriteString("\n### Render Guidance\n\n")
+	fmt.Fprintf(b, "- **Complexity:** %s · **Reliability:** %d/5 · **Best suited for:** %s\n",
+		complexity, reliability, strings.Join(models, ", "))
+
+	b.WriteString("\n")
+}
+
+// writeSharedConstraints renders the reusable render rules once, so each asset
+// prompt can reference them implicitly instead of repeating the boilerplate.
+func writeSharedConstraints(b *strings.Builder) {
+	b.WriteString("---\n\n## Shared Render Constraints\n\n")
+	b.WriteString("_Applied to every asset below — referenced by each prompt, not repeated verbatim._\n\n")
+	for _, c := range sharedRenderConstraints() {
+		fmt.Fprintf(b, "- %s\n", c)
 	}
 	b.WriteString("\n")
 }

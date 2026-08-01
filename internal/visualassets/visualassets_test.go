@@ -50,6 +50,68 @@ func newGen() *Generator {
 	return &Generator{Now: func() time.Time { return time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC) }}
 }
 
+func TestPRASectionsAndGrounding(t *testing.T) {
+	col, err := newGen().VisualAssets(context.Background(), samplePackage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := col.Markdown()
+	// #2 shared constraints rendered once; #5 checklist + #6 guidance per asset.
+	for _, want := range []string{
+		"## Shared Render Constraints",
+		"No text, letters, numbers, logos, watermarks",
+		"### Quality Checklist",
+		"Single clear focal point",
+		"### Render Guidance",
+		"**Complexity:**",
+		"Best suited for:",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("markdown missing %q", want)
+		}
+	}
+	// Shared constraints appear once, not repeated per asset.
+	if n := strings.Count(md, "## Shared Render Constraints"); n != 1 {
+		t.Errorf("shared constraints should render once, got %d", n)
+	}
+	// One Render Guidance block per asset.
+	if g := strings.Count(md, "### Render Guidance"); g != len(col.Assets) {
+		t.Errorf("render guidance count %d != assets %d", g, len(col.Assets))
+	}
+	// #4 conceptual roles grounded into architecture-depicting prompts.
+	var archPrompt string
+	for _, a := range col.Assets {
+		if depictsArchitecture(a.Type) {
+			archPrompt = a.Prompt
+			break
+		}
+	}
+	if archPrompt == "" {
+		t.Fatal("no architecture-depicting asset found")
+	}
+	for _, role := range conceptualRoles {
+		if !strings.Contains(archPrompt, role) {
+			t.Errorf("architecture prompt missing conceptual role %q", role)
+		}
+	}
+}
+
+func TestRenderGuidanceMapping(t *testing.T) {
+	cases := map[string]string{
+		"Architecture Illustration": "High",
+		"AWS Workflow Diagram":      "High",
+		"YouTube Thumbnail":         "Medium",
+		"TikTok Cover":              "Medium",
+		"GitHub Social Card":        "Low",
+		"LinkedIn Banner":           "Low",
+	}
+	for typ, wantC := range cases {
+		if c, r, models := renderGuidance(typ); c != wantC || r < 1 || r > 5 || len(models) == 0 {
+			t.Errorf("renderGuidance(%q) = (%q,%d,%v), want complexity %q", typ, c, r, models, wantC)
+		}
+	}
+}
+
 func TestVisualAssetsEndToEnd(t *testing.T) {
 	pkg := samplePackage()
 	col, err := newGen().VisualAssets(context.Background(), pkg)
