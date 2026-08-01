@@ -61,13 +61,17 @@ func buildPrompt(c candidate, style Style, b Branding, placeholders []TextPlaceh
 
 func promptRewrite(c candidate, draft string) string {
 	return fmt.Sprintf(
-		"You are an art director writing a single, vivid AI image-generation prompt for a %s (%s, %s).\n\n"+
-			"Rewrite the DRAFT into one fluent, richly descriptive prompt that works across image models "+
-			"(GPT Image, DALL·E, Stable Diffusion, Midjourney, Nova Canvas, Flux). Keep every concrete detail "+
-			"about THIS asset (subject, focal hierarchy, composition, perspective, aspect ratio, reserved text "+
-			"zones). A shared render-constraints block already covers lighting, flat-vector style, isometric "+
-			"depth, layered planes, the brand palette, and the no-text rule — reference these implicitly; do NOT "+
-			"restate them. Add NO new architecture, services, or facts, and never embed literal text. Output only "+
-			"the prompt.\n\nDRAFT:\n%s",
+		"You are an art director writing a single AI image-generation prompt for a %s (%s, %s).\n\n"+
+			"Rewrite the DRAFT into one clear prompt that renders reliably across image models (GPT Image, "+
+			"DALL·E, Stable Diffusion, Midjourney, Nova Canvas, Flux). Keep every concrete detail about THIS "+
+			"asset (subject, focal hierarchy, composition, perspective, aspect ratio, reserved text zones). "+
+			"A shared render-constraints block already covers lighting, flat-vector style, isometric depth, "+
+			"layered planes, the brand palette, and the no-text rule — reference these implicitly; do NOT "+
+			"restate them.\n"+
+			"Use concrete, literal visual instructions, not metaphors — avoid words like \"living\", "+
+			"\"reactive\", \"constellation\", \"orbits\", \"radiates\", \"choreography\", \"heroic\", "+
+			"\"celebratory energy\". Do not use provider-specific syntax (no \"--ar\", weights, or camera "+
+			"jargon). Keep it under about 170 words, with no redundant adjectives. Add NO new architecture, "+
+			"services, or facts, and never embed literal text. Output only the prompt.\n\nDRAFT:\n%s",
 		c.Type, c.Platform, c.AspectRatio, draft)
 }
