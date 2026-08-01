@@ -37,10 +37,8 @@ func (g *Generator) introduction(ctx context.Context, pkg ReleasePackage, chapte
 }
 
 func introDraft(pkg ReleasePackage, techs, agenda []string) string {
-	repo := repoName(pkg)
-	tag := releaseTag(pkg)
 	var b strings.Builder
-	fmt.Fprintf(&b, "Welcome back. In this video we're doing a deep dive into %s %s.", repo, tag)
+	fmt.Fprintf(&b, "Welcome back. In this video we're doing a deep dive into this architecture.")
 	if pkg.Context != nil {
 		if s := firstSentences(pkg.Context.ContentIntelligence.Summary, 2); s != "" {
 			fmt.Fprintf(&b, " %s", s)

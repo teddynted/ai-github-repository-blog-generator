@@ -94,10 +94,10 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ## Call to Action
 
-> If you got something out of this, do three quick things: star acme/widget so you can find it again, subscribe so you catch the next release deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
+> If you got something out of this, do three quick things: star acme/widget so you can find it again, subscribe so you catch the next deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
 
 - **GitHub Repository** — Star and explore acme/widget (https://github.com/acme/widget)
-- **Subscribe** — Subscribe for the next release deep dive
+- **Subscribe** — Subscribe for the next deep dive
 - **Like** — Like the video if the walkthrough helped
 - **Comment** — Comment with how you'd build this differently
 - **Future Releases** — Follow along as the pipeline grows release by release
@@ -107,7 +107,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 0:59 · **Speaking time:** 1:37 · **Words:** 242
+- **Estimated runtime:** 0:59 · **Speaking time:** 1:36 · **Words:** 241
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 - **Alternative titles:** How acme/widget v1.0.0 Actually Works; Building v1.0.0: A Full Architecture Walkthrough
@@ -123,7 +123,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
   - `00:37` Architecture Diagrams
   - `00:48` Conclusion
   - `00:48` Conclusion
-- **Pinned comment:** 📌 acme/widget v1.0.0 — everything in this video is generated from the repository's own Release Context. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
+- **Pinned comment:** 📌 Everything in this video is generated from the project's own release analysis. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
 
 ### Suggested Description
 

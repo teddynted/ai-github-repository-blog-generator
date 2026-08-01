@@ -36,7 +36,7 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
   - `00:48` Conclusion
 - **Playlists:** acme/widget — Release Deep Dives, AWS & Cloud Engineering
 - **Thumbnail text:** V1.0.0 / EVENT-DRIVEN PIPELINE / PRODUCTION-READY EVENT-DRIVEN PIPELINE
-- **Pinned comment:** 📌 acme/widget v1.0.0 — everything in this video is generated from the repository's own Release Context. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
+- **Pinned comment:** 📌 Everything in this video is generated from the project's own release analysis. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
 
 ---
 
