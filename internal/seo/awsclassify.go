@@ -41,7 +41,9 @@ func lowerSet(in []string) map[string]bool {
 // string against the release's detected services and the canonical service set —
 // never a substring, so "EC2 startup optimization" stays a topic, not a service.
 func isAWSServiceName(s string, detected map[string]bool) bool {
-	key := strings.ToLower(collapse(s))
+	// normKey folds hyphens/underscores to spaces so a hyphenated tag form
+	// ("aws-iam") is recognized as the service "aws iam".
+	key := normKey(s)
 	if key == "" {
 		return false
 	}

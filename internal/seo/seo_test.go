@@ -389,9 +389,10 @@ func TestPrimaryKeywordsPreferTopicOverServiceInventory_AMI(t *testing.T) {
 	)
 	k := planKeywords(pkg)
 
-	for _, want := range []string{"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI"} {
-		if !containsFold(k.Primary, want) {
-			t.Errorf("primary missing topic keyword %q; got %v", want, k.Primary)
+	primaryText := strings.ToLower(strings.Join(k.Primary, " | "))
+	for _, concept := range []string{"ami", "startup"} {
+		if !strings.Contains(primaryText, concept) {
+			t.Errorf("primary missing core concept %q; got %v", concept, k.Primary)
 		}
 	}
 	for _, reject := range []string{"AWS IAM", "Amazon CloudWatch", "AWS Lambda"} {
@@ -572,8 +573,8 @@ func TestAMIScenarioNoContamination(t *testing.T) {
 			t.Errorf("primary contains banned token %q: %v", b, m.Keywords.Primary)
 		}
 	}
-	if !contains(m.Keywords.Primary, "AWS Custom AMI") {
-		t.Errorf("primary missing topic keyword: %v", m.Keywords.Primary)
+	if !strings.Contains(strings.ToLower(strings.Join(m.Keywords.Primary, " | ")), "ami") {
+		t.Errorf("primary missing AMI topic concept: %v", m.Keywords.Primary)
 	}
 
 	// YouTube tags / JSON-LD keywords / blog keywords: no junk substrings.
@@ -677,13 +678,20 @@ func TestPlatformConceptsRejectedFromPrimaryAndAbout(t *testing.T) {
 			t.Errorf("primary must not contain platform concept %q: %v", b, m.Keywords.Primary)
 		}
 	}
-	for _, want := range []string{"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI", "EC2 UserData optimization"} {
-		if !containsFold(m.Keywords.Primary, want) {
-			t.Errorf("primary missing topic keyword %q: %v", want, m.Keywords.Primary)
+	// Primary keywords represent the article's optimization topic (mined from the
+	// title/meta): they carry the core AMI/startup/UserData concepts.
+	primaryText := strings.ToLower(strings.Join(m.Keywords.Primary, " | "))
+	for _, concept := range []string{"ami", "startup", "userdata"} {
+		if !strings.Contains(primaryText, concept) {
+			t.Errorf("primary missing core concept %q: %v", concept, m.Keywords.Primary)
 		}
 	}
 	if len(m.Keywords.Primary) > 5 {
 		t.Errorf("primary exceeds 5: %v", m.Keywords.Primary)
+	}
+	// At least two primary keywords overlap the article title (topic alignment).
+	if !sharesToken(m.Keywords.Primary, m.Blog.Title) {
+		t.Errorf("primary keywords do not overlap the title: %v", m.Keywords.Primary)
 	}
 	// about is topic-aligned: no platform concepts, no incidental IAM.
 	about := strings.ToLower(strings.Join(jsonldAbout(m.StructuredData.JSONLD), " | "))
@@ -707,6 +715,77 @@ func TestPlatformConceptsRejectedFromPrimaryAndAbout(t *testing.T) {
 	}
 	if probs := m.Validate(pkg); len(probs) != 0 {
 		t.Errorf("clean spot-startup artifact failed validation: %v", probs)
+	}
+}
+
+// serviceOnlySEOPackage mirrors the real designing-v0.6.0 fixture: the upstream
+// SEO keyword list is ENTIRELY service inventory + junk, so primary keywords must
+// be mined from the article title/meta, not fall back to the service list.
+func serviceOnlySEOPackage() ReleasePackage {
+	junkSEO := []string{"agent", "ai", "amazon cloudwatch", "amazon ec2", "amazon eventbridge", "amazon s3", "an", "aws", "aws iam", "aws lambda", "aws lambda (go runtime)", "aws sdk for go v2", "changelog", "designing", "event-driven architecture", "github actions", "go", "go modules", "infrastructure as code"}
+	ctx := &rc.ReleaseContext{
+		SchemaVersion: "1.0.0",
+		Repository:    rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
+		Release:       rc.Release{Tag: "v0.6.0"},
+		Architecture:  rc.Architecture{Overview: "An event-driven, AWS-native system on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge.", AWSServices: []string{"AWS IAM", "AWS Lambda", "Amazon CloudWatch", "Amazon EC2", "Amazon EventBridge", "Amazon S3"}},
+		ContentIntelligence: rc.ContentIntelligence{Summary: "release v0.6.0 delivers 7 analyzed changes across 24 files.", SEOKeywords: junkSEO},
+	}
+	post := releasegen.BlogPost{
+		Title:           "Optimizing Spot Startup on AWS: Pre-Baked Custom AMIs for an Event-Driven AI Agent Platform",
+		MetaDescription: "How an event-driven AI agent platform on AWS trades boot-time UserData provisioning for versioned, pre-baked custom AMIs to make on-demand EC2 startup fast.",
+		Tags:            []string{"aws-iam", "aws-lambda", "amazon-cloudwatch", "amazon-ec2", "amazon-eventbridge", "amazon-s3", "github-actions"},
+	}
+	return ReleasePackage{Context: ctx, Blog: post}
+}
+
+func TestPrimaryMinedFromTitleWhenSEOKeywordsAreServiceOnly(t *testing.T) {
+	pkg := serviceOnlySEOPackage()
+	m, err := newGen().SEO(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Primary must NOT be the service inventory (the pre-fix failure mode).
+	for _, svc := range []string{"aws-iam", "aws iam", "aws-lambda", "aws lambda", "amazon-cloudwatch", "amazon cloudwatch"} {
+		if containsFold(m.Keywords.Primary, svc) {
+			t.Errorf("primary fell back to service inventory %q: %v", svc, m.Keywords.Primary)
+		}
+	}
+	// It must carry the article's optimization concepts, mined from the title/meta.
+	primaryText := strings.ToLower(strings.Join(m.Keywords.Primary, " | "))
+	for _, concept := range []string{"ami", "startup"} {
+		if !strings.Contains(primaryText, concept) {
+			t.Errorf("primary missing core concept %q: %v", concept, m.Keywords.Primary)
+		}
+	}
+	// At most 50% of primary may be AWS service names.
+	if c, n := countAWSServiceNames(m.Keywords.Primary, lowerSet(awsServices(pkg))), len(m.Keywords.Primary); c*2 > n {
+		t.Errorf("primary is majority services (%d/%d): %v", c, n, m.Keywords.Primary)
+	}
+	// about + thumbnail carry the topic, not the service inventory.
+	about := strings.ToLower(strings.Join(jsonldAbout(m.StructuredData.JSONLD), " | "))
+	if strings.Contains(about, "iam") || strings.Contains(about, "cloudwatch") {
+		t.Errorf("about leaked service inventory: %s", about)
+	}
+	if !sharesToken(m.YouTube.ThumbnailText, m.Blog.Title) {
+		t.Errorf("thumbnail not topic-aligned: %v", m.YouTube.ThumbnailText)
+	}
+	if probs := m.Validate(pkg); len(probs) != 0 {
+		t.Errorf("clean artifact failed validation: %v", probs)
+	}
+}
+
+func TestKeyphrasesFromText(t *testing.T) {
+	pkg := serviceOnlySEOPackage()
+	got := keyphrasesFromText(pkg.Blog.Title+". "+pkg.Blog.MetaDescription, pkg)
+	joined := strings.ToLower(strings.Join(got, " | "))
+	// Extracted phrases must be clean (no interior connectors, no services).
+	for _, bad := range []string{" on aws", "aws iam", "aws lambda", " for an", " to make"} {
+		if strings.Contains(" "+joined+" ", bad) {
+			t.Errorf("keyphrase not clean, leaked %q: %v", bad, got)
+		}
+	}
+	if !strings.Contains(joined, "ami") || !strings.Contains(joined, "startup") {
+		t.Errorf("keyphrases missing topic anchors: %v", got)
 	}
 }
 

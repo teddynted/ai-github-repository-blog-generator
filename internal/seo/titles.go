@@ -110,9 +110,12 @@ func clusterSignals(pkg ReleasePackage) string {
 // when the article's prose actually discusses it, not because someone dumped its
 // name into a keyword list.
 func topicSignals(pkg ReleasePackage) string {
-	parts := []string{featureName(pkg), summary(pkg), pkg.Blog.Title}
+	// Title + meta description + feature + summary + highlights are the article's
+	// own prose. The architecture OVERVIEW is deliberately excluded: it is often an
+	// auto-generated service inventory ("… on AWS IAM, AWS Lambda, Amazon EC2 …"),
+	// which would make every service look "central".
+	parts := []string{featureName(pkg), summary(pkg), pkg.Blog.Title, pkg.Blog.MetaDescription}
 	if c := pkg.Context; c != nil {
-		parts = append(parts, c.Architecture.Overview)
 		parts = append(parts, c.ContentIntelligence.TechnicalHighlights...)
 	}
 	return strings.ToLower(strings.Join(parts, " "))

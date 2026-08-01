@@ -15,7 +15,7 @@ func planBlogTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, pkg.Blog.Tags...)
 	tags = append(tags, k.Technology...)
 	tags = append(tags, k.AWS...)
-	tags = dedupeTags(dropJunk(dropGeneric(tags), pkg))
+	tags = dedupeTags(dropPlatformConcepts(dropJunk(dropGeneric(tags), pkg), pkg))
 	return capServiceShare(tags, pkg, blogTagMax)
 }
 
@@ -30,7 +30,7 @@ func planYouTubeTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.Technical...)
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Developer...)
-	tags = dedupeTags(dropJunk(dropGeneric(tags), pkg))
+	tags = dedupeTags(dropPlatformConcepts(dropJunk(dropGeneric(tags), pkg), pkg))
 	return capServiceShare(tags, pkg, 15)
 }
 

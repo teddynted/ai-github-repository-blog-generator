@@ -151,6 +151,20 @@ func dropNoisyPrimary(in []string, pkg ReleasePackage) []string {
 	return out
 }
 
+// dropPlatformConcepts removes supporting platform/tooling concepts (GitHub
+// Actions, Go Modules, Infrastructure as Code, …) from a tag/keyword list, so
+// topic tags are not diluted by how the project is built. Services are kept (they
+// are legitimate supporting tags, bounded by capServiceShare).
+func dropPlatformConcepts(in []string, pkg ReleasePackage) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !isPlatformConcept(s, pkg) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // repoFragments is the set of individual words in the repository name — e.g.
 // "designing-an-ai-agent-platform-on-aws" → {designing, an, ai, agent, platform,
 // on, aws}. These are repository metadata, never article keywords, so they are
@@ -203,10 +217,14 @@ func planKeywords(pkg ReleasePackage) Keywords {
 	// names at half of the primary set: a service leads only when the release is
 	// genuinely about it. Generic terms ("agent", "ai", "release") are dropped —
 	// no search signal, and they dilute the set.
-	// Search-intent terms the author already curated (SEO keywords) lead — they
-	// are concise, searchable phrases. The headline feature follows as a fallback
-	// topic; the rest of the technical terms fill in.
+	// Primary keyword candidates, in priority order:
+	//  1. Keyphrases mined from the ARTICLE ITSELF (title + meta description) —
+	//     the article's search intent, and the most reliable source when the
+	//     upstream SEO keyword list is polluted with service inventory.
+	//  2. The author-curated SEO keywords (concise, searchable phrases).
+	//  3. The headline feature, then the remaining technical terms.
 	var topicCandidates []string
+	topicCandidates = append(topicCandidates, keyphrasesFromText(pkg.Blog.Title+". "+pkg.Blog.MetaDescription, pkg)...)
 	if c := pkg.Context; c != nil {
 		topicCandidates = append(topicCandidates, c.ContentIntelligence.SEOKeywords...)
 	}
