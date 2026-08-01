@@ -34,6 +34,16 @@ func TestDistinctHighlightsReducesCrossPostRepetition(t *testing.T) {
 	}
 }
 
+func TestOpeningLineHasNoRepoOrVersion(t *testing.T) {
+	for _, typ := range []string{"Release Announcement", "Engineering Lesson", "AI Engineering Highlight", "Technical Insight"} {
+		got := openingLine(postCandidate{Type: typ}, "designing-an-ai-agent-platform-on-aws", "v0.6.0")
+		lc := strings.ToLower(got)
+		if strings.Contains(lc, "v0.6.0") || strings.Contains(lc, "designing-an-ai-agent") || strings.Contains(lc, "just shipped") {
+			t.Errorf("opener for %q leaks repo/version/changelog framing: %q", typ, got)
+		}
+	}
+}
+
 func TestWarningsNotRenderedInArtifact(t *testing.T) {
 	col := LinkedInCollection{
 		Metadata: Metadata{Repository: "acme/widget", Release: "v0.6.0", PostCount: 1},

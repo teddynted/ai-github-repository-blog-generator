@@ -88,20 +88,25 @@ func bodyDraft(pkg ReleasePackage, c postCandidate, highlights []string, engagem
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func openingLine(c postCandidate, repo, t string) string {
+// openingLine is a type-appropriate, PROBLEM-FIRST opener. It deliberately does
+// NOT name the repository or release version — a LinkedIn post should stand on
+// its own and read as an engineering reflection, not a changelog line. (The repo
+// link lives in the CTA.) The repo/tag args are retained for signature stability
+// but intentionally unused.
+func openingLine(c postCandidate, _, _ string) string {
 	switch c.Type {
 	case "Release Announcement":
-		return fmt.Sprintf("Just shipped %s %s.", repo, t)
+		return "Some infrastructure work worth sharing."
 	case "Feature Spotlight":
-		return "One feature I'm genuinely happy with in this release:"
+		return "One design choice from recent work I keep coming back to:"
 	case "Architecture Deep Dive":
 		return "A note on the architecture behind this one."
 	case "AWS Best Practice":
 		return "Sharing an AWS pattern that's been working well."
 	case "AI Engineering Highlight":
-		return "Some notes on the AI-engineering side of this project."
+		return "Some notes on the AI-engineering side of this work."
 	case "Engineering Lesson":
-		return "A lesson worth writing down from this release."
+		return "A lesson worth writing down from recent infrastructure work."
 	case "Developer Productivity Tip":
 		return "Small thing, real time saved:"
 	case "Behind-the-Build":
@@ -109,7 +114,7 @@ func openingLine(c postCandidate, repo, t string) string {
 	case "Performance Improvement":
 		return "Reliability work that quietly pays off:"
 	default:
-		return "A few technical notes on " + repo + " " + t + "."
+		return "A few technical notes from recent work."
 	}
 }
 
