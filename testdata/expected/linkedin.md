@@ -8,7 +8,7 @@ _5 posts · avg engagement 79/100 · avg confidence 80/100_
 
 **Variation:** Long-form Post · **Audience:** Software engineers and engineering managers · **Engagement:** 74/100
 
-**Title:** Shipping widget v1.0.0
+**Title:** An infrastructure update worth sharing
 
 ### Post
 
@@ -42,7 +42,7 @@ _Suggested publish: Tue 8:30am (local) · under 1 min_
 
 **Variation:** Long-form Post · **Audience:** Cloud and solutions architects · **Engagement:** 88/100
 
-**Title:** How widget v1.0.0 is architected
+**Title:** How this architecture fits together
 
 ### Post
 
@@ -116,7 +116,7 @@ _Suggested publish: Thu 9:00am (local) · under 1 min_
 
 **Variation:** Short Update · **Audience:** Working developers · **Engagement:** 74/100
 
-**Title:** A small workflow win from widget
+**Title:** A small workflow win worth sharing
 
 ### Post
 
@@ -149,7 +149,7 @@ _Suggested publish: Tue 5:00pm (local) · under 1 min_
 
 **Variation:** Long-form Post · **Audience:** Developer advocates and the open-source community · **Engagement:** 80/100
 
-**Title:** Behind the build: widget v1.0.0
+**Title:** Behind the build
 
 ### Post
 

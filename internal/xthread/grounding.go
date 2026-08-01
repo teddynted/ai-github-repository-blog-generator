@@ -111,6 +111,9 @@ func isReleaseStatsFraming(s string) bool {
 // version — identifiers a thread must stay free of to be evergreen.
 func namesReleaseIdentity(text string, pkg ReleasePackage) bool {
 	lc := strings.ToLower(text)
+	if strings.Contains(lc, "this release") || strings.Contains(lc, "the release") {
+		return true
+	}
 	for _, id := range []string{repoShort(pkg), repoName(pkg), tag(pkg)} {
 		if id != "" && strings.Contains(lc, strings.ToLower(id)) {
 			return true

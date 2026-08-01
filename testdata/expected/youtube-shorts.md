@@ -99,7 +99,7 @@ _acme/widget · release v1.0.0 · 3 shorts_
 
 ---
 
-## Short 3 — The numbers behind v1.0.0
+## Short 3 — The numbers behind the build
 
 - **Angle:** Interesting Statistic · **Duration:** 0:30 (30s) · **Words:** 27
 - **Hook:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -117,7 +117,7 @@ _acme/widget · release v1.0.0 · 3 shorts_
 
 **Scene 2** (10s) — _Screen Recording · Fade · Slide_
   - Visual: Show the changed files.
-  - Narration: This release analyzed 5 commits.
+  - Narration: The work here spans 5 commits.
 
 **Scene 3** (10s) — _Zoom Out · Slide · Fade_
   - Visual: End card: the repository.

@@ -7,30 +7,33 @@ import (
 )
 
 // title returns a professional, non-clickbait post title for a candidate.
+// title is the per-post title/label — evergreen and type-based, never naming the
+// repository or release version.
 func title(pkg ReleasePackage, c postCandidate) string {
-	repo := repoShort(pkg)
-	t := tag(pkg)
 	switch c.Type {
 	case "Release Announcement":
-		return fmt.Sprintf("Shipping %s %s", repo, t)
+		return "An infrastructure update worth sharing"
 	case "Feature Spotlight":
-		return "A closer look at " + lowerFirst(firstSentences(c.Seed, 1))
+		if s := firstSentences(c.Seed, 1); s != "" && !namesReleaseIdentity(s, pkg) {
+			return "A closer look at " + lowerFirst(s)
+		}
+		return "A closer look at a recent design choice"
 	case "Architecture Deep Dive":
-		return fmt.Sprintf("How %s %s is architected", repo, t)
+		return "How this architecture fits together"
 	case "AWS Best Practice":
 		return "An AWS pattern worth sharing"
 	case "AI Engineering Highlight":
 		return "Grounded AI engineering, in practice"
 	case "Engineering Lesson":
-		return "A lesson from building " + repo + " " + t
+		return "A lesson from recent infrastructure work"
 	case "Developer Productivity Tip":
-		return "A small workflow win from " + repo
+		return "A small workflow win worth sharing"
 	case "Behind-the-Build":
-		return "Behind the build: " + repo + " " + t
+		return "Behind the build"
 	case "Performance Improvement":
-		return "Making " + repo + " more reliable"
+		return "Reliability work that quietly pays off"
 	default:
-		return repo + " " + t + " — technical notes"
+		return "A few technical notes"
 	}
 }
 

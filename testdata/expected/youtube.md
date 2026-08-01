@@ -110,7 +110,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 - **Estimated runtime:** 0:59 · **Speaking time:** 1:36 · **Words:** 241
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
-- **Alternative titles:** How acme/widget v1.0.0 Actually Works; Building v1.0.0: A Full Architecture Walkthrough
+- **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
 - **Thumbnail text:** V1.0.0 · AWS Lambda
 - **Playlist:** acme/widget — Release Deep Dives
 - **Technical topics:** AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; Go

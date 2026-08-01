@@ -108,23 +108,19 @@ _Suggested posting: Thu 8:00am (local) · 0m 48s_
 
 ## Developer Tips
 
-**Audience:** Working developers · **Length:** 4 posts · **Engagement:** 69/100
+**Audience:** Working developers · **Length:** 3 posts · **Engagement:** 69/100
 
-**Post 1/4** _(194 chars)_
+**Post 1/3** _(194 chars)_
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 _Visual: widget-v1-0-0-x-image.png_
 
-**Post 2/4** _(12 chars)_
-
-> this release
-
-**Post 3/4** _(90 chars)_
+**Post 2/3** _(90 chars)_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(126 chars)_
+**Post 3/3** _(126 chars)_
 
 > How would you approach this problem? Code's on GitHub 👉 https://github.com/acme/widget #Coding #DevOps #AWS #AmazonEventBridge
 
@@ -138,7 +134,7 @@ _Visual: widget-v1-0-0-x-image.png_
 - [X Image] widget-v1-0-0-x-image.png _(Visual Assets (M9))_
 - [Release Card] widget-v1-0-0-release-card.png _(Visual Assets (M9))_
 
-_Suggested posting: Tue 4:00pm (local) · 0m 48s_
+_Suggested posting: Tue 4:00pm (local) · 0m 36s_
 
 ---
 

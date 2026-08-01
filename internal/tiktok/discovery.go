@@ -148,7 +148,7 @@ func statisticSeed(pkg ReleasePackage) string {
 	case commits > 0 && files > 0:
 		return fmt.Sprintf("This release landed %d commits across %d changed files.", commits, files)
 	case commits > 0:
-		return fmt.Sprintf("This release analyzed %d commits.", commits)
+		return fmt.Sprintf("The work here spans %d commits.", commits)
 	case len(c.Changelog.Features) > 0:
 		return fmt.Sprintf("This release shipped %d new features.", len(c.Changelog.Features))
 	default:
@@ -213,7 +213,7 @@ func titleFor(t string, pkg ReleasePackage) string {
 	case "AI Workflow":
 		return "The AI workflow behind " + tag
 	case "Interesting Statistic":
-		return "The numbers behind " + tag
+		return "The numbers behind the build"
 	default:
 		return t
 	}

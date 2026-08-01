@@ -87,11 +87,10 @@ func alternativeTitles(pkg ReleasePackage, primary string) []string {
 	if c := pkg.Context; c != nil {
 		out = append(out, c.ContentIntelligence.BlogTitles...)
 	}
-	repo := repoName(pkg)
-	tag := releaseTag(pkg)
+	// Evergreen alternatives — no repository name or version.
 	out = append(out,
-		fmt.Sprintf("How %s %s Actually Works", repo, tag),
-		fmt.Sprintf("Building %s: A Full Architecture Walkthrough", tag),
+		"How This Architecture Actually Works",
+		"An Event-Driven AWS Architecture: A Full Walkthrough",
 	)
 	// Remove the primary title from the alternatives.
 	filtered := out[:0]

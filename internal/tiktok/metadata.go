@@ -30,7 +30,7 @@ func videoCaption(t topic) string {
 	if lead == "" {
 		lead = t.Title + "."
 	}
-	return collapse(lead + " Full video + repo in bio.")
+	return collapse(lead + " Full video in bio.")
 }
 
 // postingSlot staggers a batch across TikTok peak windows for dev audiences.

@@ -24,7 +24,7 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 ## YouTube SEO
 
 - **Title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS (55 chars)
-- **Alternative titles:** How acme/widget v1.0.0 Actually Works; Building v1.0.0: A Full Architecture Walkthrough
+- **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
 - **Description:** Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker. ⏱ Chapters: 00:00 Intro / Hook 00:15 Introduction 00:26…
 - **Tags:** event-driven-pipeline, software-architecture, cloud-computing, amazon-eventbridge, go, aws-lambda, amazon-sqs, aws-cloudformation, amazon-ec2, software-engineering, aws
 - **Hashtags:** #Go #AWSLambda #AmazonSQS
@@ -56,33 +56,33 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 - **Hashtags:** #AWS #CloudComputing #BestPractices #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
 - **CTA:** Full video on the channel. Follow for more.
 
-### YouTube Shorts — The numbers behind v1.0.0
+### YouTube Shorts — The numbers behind the build
 
-- **Description:** This release analyzed 5 commits. Full video + repo in the description. https://github.com/acme/widget
+- **Description:** The work here spans 5 commits. Full video + repo in the description. https://github.com/acme/widget
 - **Caption:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 - **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
 - **CTA:** Star the repo — link below.
 
 ### TikTok — The architecture nobody explains
 
-- **Description:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video + repo in bio.
-- **Caption:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video + repo in bio.
+- **Description:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video in bio.
+- **Caption:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video in bio.
 - **Hashtags:** #SystemDesign #Architecture #CloudArchitecture #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
 - **Engagement:** Would you have designed it differently? Tell me how.
 - **CTA:** Full architecture walkthrough on YouTube — link in bio.
 
 ### TikTok — An AWS tip most devs miss
 
-- **Description:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video + repo in bio.
-- **Caption:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video + repo in bio.
+- **Description:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video in bio.
+- **Caption:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it. Full video in bio.
 - **Hashtags:** #AWS #CloudComputing #DevOps #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
 - **Engagement:** Which AWS service would you reach for here?
 - **CTA:** Repo's in the description. Go build it.
 
-### TikTok — The numbers behind v1.0.0
+### TikTok — The numbers behind the build
 
-- **Description:** This release analyzed 5 commits. Full video + repo in bio.
-- **Caption:** This release analyzed 5 commits. Full video + repo in bio.
+- **Description:** The work here spans 5 commits. Full video in bio.
+- **Caption:** The work here spans 5 commits. Full video in bio.
 - **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
 - **Engagement:** Does that number surprise you?
 - **CTA:** Read the deep-dive blog — link in bio.
