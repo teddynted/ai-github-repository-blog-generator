@@ -81,5 +81,9 @@ func trimSlash(s string) string {
 // thumbnailAlt returns grounded alt text for the social image, reusing a visual
 // asset thumbnail placeholder when present.
 func thumbnailAlt(pkg ReleasePackage) string {
-	return repoShortName(pkg) + " " + releaseTag(pkg) + " — " + lowerFirst(firstSentences(featureName(pkg), 1))
+	// Evergreen, topic-based alt text — describes the content, not the repo/version.
+	if f := firstSentences(featureName(pkg), 1); f != "" && !isGenericKeyword(f) {
+		return f
+	}
+	return "AWS architecture overview"
 }

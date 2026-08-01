@@ -79,7 +79,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
-- **Transition:** That's the release end to end — thanks for watching.
+- **Transition:** That's the architecture end to end — thanks for watching.
 
 ---
 

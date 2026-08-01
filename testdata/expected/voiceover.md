@@ -112,7 +112,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 speaking (145 wpm)_
   - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Slow Zoom Out)
   - [Overlay] Land the on-screen text as you say it. (Conclusion)
 - **Closing cue:** Slow the final line and let it breathe before the fade to black.
-- **Transition:** That's the release end to end — thanks for watching.
+- **Transition:** That's the architecture end to end — thanks for watching.
 
 ---
 

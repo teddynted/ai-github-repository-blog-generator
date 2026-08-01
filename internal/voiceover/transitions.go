@@ -68,7 +68,7 @@ func leadIn(nextType, nextTitle string) string {
 func closingLine(curType string) string {
 	switch curType {
 	case "conclusion":
-		return "That's the release end to end — thanks for watching."
+		return "That's the architecture end to end — thanks for watching."
 	default:
 		return "That brings us to the end — thanks for watching."
 	}
