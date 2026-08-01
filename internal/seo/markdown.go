@@ -28,7 +28,53 @@ func (m SEOMetadata) Markdown() string {
 	writeOpenGraph(&b, m.OpenGraph)
 	writeStructured(&b, m.StructuredData)
 	writeIntelligence(&b, m.ContentIntelligence)
+	writeValidationReport(&b, m)
 	return b.String()
+}
+
+// writeValidationReport renders a CI-checkable self-audit of the artifact so an
+// automation step can gate publishing on it.
+func writeValidationReport(b *strings.Builder, m SEOMetadata) {
+	b.WriteString("---\n\n## Validation Report\n\n")
+	yn := func(ok bool) string {
+		if ok {
+			return "✅"
+		}
+		return "⚠️"
+	}
+	blogLen := len([]rune(m.Blog.Title))
+	metaLen := len([]rune(m.Blog.MetaDescription))
+	ytLen := len([]rune(m.YouTube.Title))
+	canonical := strings.TrimSpace(m.Blog.Canonical.URL) != ""
+	ogParity := m.OpenGraph.Title == m.OpenGraph.Twitter.Title &&
+		m.OpenGraph.Description == m.OpenGraph.Twitter.Description
+
+	fmt.Fprintf(b, "- **Blog title length:** %d %s (target 50–60)\n", blogLen, yn(blogLen >= 40 && blogLen <= 60))
+	fmt.Fprintf(b, "- **Meta description length:** %d %s (target 150–160)\n", metaLen, yn(metaLen >= 150 && metaLen <= 160))
+	fmt.Fprintf(b, "- **YouTube title length:** %d %s (≤ 70)\n", ytLen, yn(ytLen <= YouTubeTitlePref))
+	fmt.Fprintf(b, "- **Duplicate chapter timestamps:** %s\n", yn(!hasDuplicateChapters(m.YouTube.ChapterTitles)))
+	fmt.Fprintf(b, "- **JSON-LD valid:** %s\n", yn(jsonLDValid(m.StructuredData.JSONLD)))
+	fmt.Fprintf(b, "- **Canonical URL present:** %s\n", yn(canonical))
+	fmt.Fprintf(b, "- **OG/Twitter parity:** %s\n\n", yn(ogParity))
+}
+
+func hasDuplicateChapters(chapters []ChapterTitle) bool {
+	seen := make(map[string]bool, len(chapters))
+	for _, c := range chapters {
+		if seen[c.Timestamp] {
+			return true
+		}
+		seen[c.Timestamp] = true
+	}
+	return false
+}
+
+func jsonLDValid(ld map[string]interface{}) bool {
+	if len(ld) == 0 {
+		return false
+	}
+	_, err := json.Marshal(ld)
+	return err == nil
 }
 
 func writeBlog(b *strings.Builder, s BlogSEO) {

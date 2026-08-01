@@ -32,7 +32,12 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 	}
 	if url != "" {
 		jsonld["url"] = url
-		jsonld["mainEntityOfPage"] = url
+		// mainEntityOfPage should be a WebPage object, not a bare URL string
+		// (schema.org best practice; some validators warn on the string form).
+		jsonld["mainEntityOfPage"] = map[string]interface{}{
+			"@type": "WebPage",
+			"@id":   url,
+		}
 	}
 
 	rss := RSSItem{

@@ -119,6 +119,29 @@ func TestSEOEndToEnd(t *testing.T) {
 	}
 }
 
+func TestMainEntityOfPageIsObject(t *testing.T) {
+	blog := BlogSEO{Title: "T", MetaDescription: "D", Canonical: Canonical{URL: "https://example.com/blog/x"}}
+	sd := planStructuredData(samplePackage(), blog, Keywords{Primary: []string{"aws"}}, "2026-01-01T00:00:00Z")
+	me, ok := sd.JSONLD["mainEntityOfPage"].(map[string]interface{})
+	if !ok || me["@type"] != "WebPage" || me["@id"] != "https://example.com/blog/x" {
+		t.Errorf("mainEntityOfPage should be a WebPage object, got %v", sd.JSONLD["mainEntityOfPage"])
+	}
+}
+
+func TestValidationReportRendered(t *testing.T) {
+	m, _ := newGen().SEO(context.Background(), samplePackage())
+	md := m.Markdown()
+	for _, want := range []string{
+		"## Validation Report", "Blog title length:", "Meta description length:",
+		"YouTube title length:", "Duplicate chapter timestamps:", "JSON-LD valid:",
+		"Canonical URL present:", "OG/Twitter parity:",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("validation report missing %q", want)
+		}
+	}
+}
+
 func TestDropGenericKeywords(t *testing.T) {
 	got := dropGeneric([]string{"aws-iam", "agent", "ai", "this release", "serverless", "release"})
 	want := []string{"aws-iam", "serverless"}
