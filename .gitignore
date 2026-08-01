@@ -27,3 +27,5 @@ coverage.*
 # Local run logs (keep the dir, ignore the logs)
 /logs/*
 !/logs/.gitkeep
+/content
+/worker
