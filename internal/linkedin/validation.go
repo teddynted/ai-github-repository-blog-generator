@@ -49,6 +49,18 @@ func (col LinkedInCollection) Validate(pkg ReleasePackage) []string {
 			problems = append(problems, where+": not grounded in the release context")
 		}
 
+		// Neutrality: body PROSE must be evergreen and focus on what the release DOES
+		// — no repository name or release version in the copy. A link URL (the CTA)
+		// is attribution, not body copy, so it is excluded from the check.
+		if prose := proseOnly(p.Body); namesReleaseIdentity(prose, pkg) {
+			if r := repoShort(pkg); r != "" && strings.Contains(strings.ToLower(prose), strings.ToLower(r)) {
+				problems = append(problems, where+": body names the repository (posts must be evergreen)")
+			}
+			if t := tag(pkg); t != "" && strings.Contains(prose, t) {
+				problems = append(problems, where+": body names the release version (posts must be evergreen)")
+			}
+		}
+
 		// Technical claims: every highlight must be grounded.
 		for _, h := range p.TechnicalHighlights {
 			if !termGrounded(h, grounded) {

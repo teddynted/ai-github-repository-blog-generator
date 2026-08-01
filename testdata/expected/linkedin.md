@@ -26,7 +26,7 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** What would you want to see in the next release?
 
-**CTA:** The full technical breakdown is on the blog: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
+**CTA:** The full technical breakdown: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Hashtags:** #Release #DevOps #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
@@ -134,7 +134,7 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** Would this fit into your workflow? What would you change?
 
-**CTA:** Try it — the repo is here: https://github.com/acme/widget
+**CTA:** More detail in the write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Hashtags:** #DeveloperProductivity #Coding #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
@@ -167,7 +167,7 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** What would you have built differently?
 
-**CTA:** The full technical breakdown is on the blog: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
+**CTA:** The full technical breakdown: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Hashtags:** #BuildInPublic #OpenSource #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 

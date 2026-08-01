@@ -101,6 +101,31 @@ func summary(pkg ReleasePackage) string {
 	return repoShort(pkg) + " " + tag(pkg)
 }
 
+// namesReleaseIdentity reports whether text mentions the repository name or the
+// release version — the identifiers a post must stay free of to be evergreen.
+func namesReleaseIdentity(text string, pkg ReleasePackage) bool {
+	lc := strings.ToLower(text)
+	for _, id := range []string{repoShort(pkg), repoName(pkg), tag(pkg)} {
+		if id != "" && strings.Contains(lc, strings.ToLower(id)) {
+			return true
+		}
+	}
+	return false
+}
+
+// proseOnly drops URL/link lines from a post body, leaving the prose — a CTA link
+// legitimately points at a repo/blog and is not "body copy".
+func proseOnly(body string) string {
+	var out []string
+	for _, ln := range strings.Split(body, "\n") {
+		if strings.Contains(ln, "://") || strings.Contains(ln, "{{") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, "\n")
+}
+
 // isReleaseStatsFraming flags low-value, count-based auto-generated release
 // summaries so they never frame a LinkedIn post.
 func isReleaseStatsFraming(s string) bool {

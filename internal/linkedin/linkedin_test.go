@@ -34,6 +34,35 @@ func TestDistinctHighlightsReducesCrossPostRepetition(t *testing.T) {
 	}
 }
 
+func TestPostBodiesAreEvergreen(t *testing.T) {
+	// samplePackage names "widget" / "v0.2.0" in its summary + meta; the generated
+	// post bodies must not surface that in the prose.
+	pkg := samplePackage()
+	col, err := newGen().LinkedIn(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range col.Posts {
+		if prose := proseOnly(p.Body); namesReleaseIdentity(prose, pkg) {
+			t.Errorf("post %d prose names the repo/version (must be evergreen):\n%s", p.ID, prose)
+		}
+	}
+}
+
+func TestNamesReleaseIdentityAndProseOnly(t *testing.T) {
+	pkg := samplePackage() // repo "widget", tag "v0.2.0"
+	if !namesReleaseIdentity("built during widget v0.2.0", pkg) {
+		t.Error("should detect repo/version")
+	}
+	if namesReleaseIdentity("moving provisioning into pre-baked AMIs", pkg) {
+		t.Error("should not flag neutral engineering text")
+	}
+	got := proseOnly("A neutral line.\nMore: https://example.dev/widget\nAnother line.")
+	if strings.Contains(got, "https://") || strings.Contains(got, "widget") {
+		t.Errorf("proseOnly should drop URL lines: %q", got)
+	}
+}
+
 func TestOpeningLineHasNoRepoOrVersion(t *testing.T) {
 	for _, typ := range []string{"Release Announcement", "Engineering Lesson", "AI Engineering Highlight", "Technical Insight"} {
 		got := openingLine(postCandidate{Type: typ}, "designing-an-ai-agent-platform-on-aws", "v0.6.0")

@@ -59,8 +59,9 @@ func bodyDraft(pkg ReleasePackage, c postCandidate, highlights []string, engagem
 	// Opening line by type.
 	fmt.Fprintf(&b, "%s\n\n", openingLine(c, repo, t))
 
-	// Grounded context.
-	if seed := firstSentences(c.Seed, 2); seed != "" {
+	// Grounded context — but only when it doesn't name the repository or release
+	// version (posts stay evergreen; the substance is carried by the highlights).
+	if seed := firstSentences(c.Seed, 2); seed != "" && !namesReleaseIdentity(seed, pkg) {
 		fmt.Fprintf(&b, "%s\n\n", seed)
 	}
 
@@ -124,7 +125,8 @@ func bodyPrompt(c postCandidate, draft string) string {
 			"Rewrite the DRAFT into an authentic, professional LinkedIn post: educational, technically accurate, and "+
 			"approachable. Follow these rules:\n"+
 			"- OPEN with a hook — a problem, an insight, or an architecture-curiosity question — NOT \"Just shipped …\" or a changelog line.\n"+
-			"- Do NOT frame the release by counts (never \"0 features\", \"0 fixes\", \"maintenance changes\"); frame it by the engineering value.\n"+
+			"- Keep the post EVERGREEN: do NOT mention the repository name, the release version, any version number (e.g. v0.6.0), or \"release\"/\"changelog\" framing. A reader should not need to know which repo or release this came from.\n"+
+			"- Do NOT frame it by counts (never \"0 features\", \"0 fixes\", \"maintenance changes\"); frame it by the engineering value.\n"+
 			"- Make this post distinct to its type (%s): lead with that angle; do not restate the same architecture sentence a reader would see on every post.\n"+
 			"- Short paragraphs (1–3 sentences) for mobile readability; keep the bullet highlights (max 4), the engagement question, and the CTA.\n"+
 			"- NO marketing hype, NO clickbait, NO exaggerated or performance/latency/cost claims, NO buzzword stuffing.\n"+
