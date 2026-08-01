@@ -39,7 +39,7 @@ type Repository interface {
 	Platforms() []Platform
 }
 
-// AIInsighter is the grounded AI-insight port (Bedrock/Ollama). It receives the
+// AIInsighter is the grounded AI-insight port (Bedrock/Anthropic). It receives the
 // collected metrics and returns qualitative notes; it must ground everything in
 // those metrics and never invent statistics.
 type AIInsighter interface {

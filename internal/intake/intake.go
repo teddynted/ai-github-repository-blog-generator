@@ -41,7 +41,7 @@ type Event struct {
 	// published (manual re-runs). Carried through for the worker to honour.
 	Force bool `json:"force,omitempty"`
 	// Provider is an optional AI-provider hint (e.g. "bedrock"); the platform
-	// defaults to local Ollama when unset. Carried through for future use.
+	// defaults to the provider router. Carried through for future use.
 	Provider string `json:"provider,omitempty"`
 }
 

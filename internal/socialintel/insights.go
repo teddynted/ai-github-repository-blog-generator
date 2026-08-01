@@ -55,7 +55,7 @@ func deterministicInsights(g InsightGrounding) ([]BusinessInsight, []Recommendat
 	return insights, recs
 }
 
-// ModelInsighter is an AIInsighter backed by releasegen.Model (Bedrock/Ollama).
+// ModelInsighter is an AIInsighter backed by releasegen.Model (Bedrock/Anthropic).
 // It is grounded: the prompt supplies the collected metrics and forbids inventing
 // statistics.
 type ModelInsighter struct {

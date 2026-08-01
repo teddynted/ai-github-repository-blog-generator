@@ -45,7 +45,7 @@ func (DeterministicReasoner) Reason(_ context.Context, input AnalyticsInput, win
 	return r, nil
 }
 
-// ModelReasoner is a ReasoningProvider backed by releasegen.Model (Bedrock/Ollama).
+// ModelReasoner is a ReasoningProvider backed by releasegen.Model (Bedrock/Anthropic).
 // The prompt supplies the collected analytics + detected patterns and forbids
 // inventing statistics. On any error or unparseable output it returns an error so
 // the optimizer falls back to deterministic reasoning — it never fabricates.

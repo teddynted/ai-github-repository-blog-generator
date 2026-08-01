@@ -1,5 +1,5 @@
 // Package idleprobe provides application-level activity checks for the idle
-// detector: it asks n8n and Ollama directly whether they are currently doing
+// detector: it asks n8n directly whether they are currently doing
 // work. Every probe fails safe — an unreachable or malformed response counts as
 // BUSY, so a network blip never contributes to a wrongful stop.
 package idleprobe
@@ -24,7 +24,7 @@ type HTTPProbe struct {
 	logger *slog.Logger
 }
 
-// Name identifies the probe (e.g. "n8n", "ollama").
+// Name identifies the probe (e.g. "n8n").
 func (p *HTTPProbe) Name() string { return p.name }
 
 // Busy performs the check. On any error it returns true (fail-safe).

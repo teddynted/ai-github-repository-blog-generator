@@ -1,5 +1,5 @@
 // Package mcp is the Model Context Protocol integration layer (Milestone 22). It
-// standardizes how AI providers (Amazon Bedrock/Claude, Ollama, and future
+// standardizes how AI providers (Amazon Bedrock/Claude, Anthropic, and future
 // models) interact with repositories, documentation, CloudFormation, databases,
 // AWS resources, and publishing platforms — through discoverable MCP tools and
 // resources instead of bespoke, per-integration code.

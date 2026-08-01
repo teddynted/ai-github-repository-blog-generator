@@ -292,8 +292,8 @@ func TestBlogPromptEnforcesArchitectureFidelity(t *testing.T) {
 // ---- Test 5: Downstream (hybrid-routing) awareness -----------------------
 
 // TestBlogPromptCarriesDownstreamAwareness guards that the blog is written as
-// the upstream SOURCE the Ollama generators transform — optimised for engineers,
-// not for social media. The authoritative Claude-vs-Ollama artifact split is
+// the upstream SOURCE the generators transform — optimised for engineers,
+// not for social media. The authoritative premium-vs-transform artifact split is
 // enforced and tested in internal/airouter/router_test.go; this covers the
 // blog-prompt side of that contract, which router tests cannot see.
 func TestBlogPromptCarriesDownstreamAwareness(t *testing.T) {
@@ -305,7 +305,7 @@ func TestBlogPromptCarriesDownstreamAwareness(t *testing.T) {
 	if !containsFold(article, "for engineers") {
 		t.Error("article prompt no longer directs the writing at engineers")
 	}
-	// Social-media optimisation belongs downstream (Ollama), not in the blog.
+	// Social-media optimisation belongs downstream, not in the blog.
 	for _, phrase := range []string{"hashtags", "calls to action"} {
 		if !forbidsPhrase(article, phrase) {
 			t.Errorf("article prompt no longer keeps social-media device %q out of the blog", phrase)

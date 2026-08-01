@@ -10,11 +10,11 @@ import (
 )
 
 // ModelReviewer is an AIReviewer backed by the shared releasegen.Model port, so
-// it works with Amazon Bedrock (Claude), Ollama, or any future provider. It is
+// it works with Amazon Bedrock or Anthropic (Claude), or any future provider. It is
 // grounded: the prompt supplies the grounding terms and forbids inventing facts.
 type ModelReviewer struct {
 	Model releasegen.Model
-	Name  string // reviewer label, e.g. "claude" or "ollama:qwen"
+	Name  string // reviewer label, e.g. "bedrock" or "anthropic"
 }
 
 // NewModelReviewer wraps a Model as an AIReviewer.

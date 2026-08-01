@@ -30,7 +30,7 @@ type PromptAnalyzer interface {
 }
 
 // ReasoningProvider produces grounded structured reasoning about performance.
-// It is the interchangeable AI port (Bedrock/Ollama); a deterministic
+// It is the interchangeable AI port (Bedrock/Anthropic); a deterministic
 // implementation is always available as a fallback.
 type ReasoningProvider interface {
 	Reason(ctx context.Context, input AnalyticsInput, winning, losing []Pattern) (Reasoning, error)
