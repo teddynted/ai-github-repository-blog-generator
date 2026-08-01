@@ -67,12 +67,42 @@ func planStructuredData(pkg ReleasePackage, blog BlogSEO, k Keywords, generatedA
 // stays semantically aligned with the title.
 func aboutEntities(k Keywords, central, clusters []string, pkg ReleasePackage) []string {
 	var out []string
-	out = append(out, topStrings(k.Primary, 4)...)
+	// Render each primary keyword as a topic ENTITY ("Custom AMI", "EC2 Startup")
+	// rather than an article-phrase fragment ("Optimizing Spot Startup") — schema
+	// "about" describes Things, not headlines.
+	for _, p := range topStrings(k.Primary, 4) {
+		out = append(out, topicEntity(p))
+	}
 	out = append(out, topStrings(central, 1)...)
 	out = append(out, topStrings(clusters, 1)...)
 	// Guard: never let a supporting platform concept describe the article.
 	out = dropNoisyAbout(dedupe(out), pkg)
 	return topStrings(out, 6)
+}
+
+// topicEntity turns a topic keyphrase into an entity-style label: its head noun
+// compound (last two words), a singularized trailing plural, and Title-cased
+// lower-case words (acronyms/mixed-case like EC2, AMI, UserData preserved).
+// "Optimizing Spot Startup" → "Spot Startup"; "Pre-Baked Custom AMIs" →
+// "Custom AMI"; "boot-time UserData provisioning" → "UserData Provisioning".
+func topicEntity(s string) string {
+	words := strings.Fields(s)
+	if len(words) > 2 {
+		words = words[len(words)-2:]
+	}
+	for i, w := range words {
+		if i == len(words)-1 {
+			lc := strings.ToLower(w)
+			if len(w) > 3 && strings.HasSuffix(lc, "s") && !strings.HasSuffix(lc, "ss") {
+				w = w[:len(w)-1]
+			}
+		}
+		if w == strings.ToLower(w) { // fully lower-case → Title-case; leave acronyms/mixed
+			w = strings.ToUpper(w[:1]) + w[1:]
+		}
+		words[i] = w
+	}
+	return strings.Join(words, " ")
 }
 
 // dropNoisyAbout removes junk and supporting platform concepts from the "about"
