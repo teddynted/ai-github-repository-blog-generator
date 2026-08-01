@@ -22,17 +22,21 @@ func planKeywords(pkg ReleasePackage) Keywords {
 		technical = append(technical, c.ContentIntelligence.TechnicalHighlights...)
 	}
 	technical = append(technical, pkg.Blog.Tags...)
-	technical = dedupe(technical)
+	technical = dropGeneric(dedupe(technical))
 
 	developer := dedupe(baseDeveloperKeywords)
 
-	// Primary: the most important, grounded terms — the repo topic, the headline
-	// feature, and the top AWS service.
+	// Primary: the most important, grounded terms — the headline feature (unless
+	// it is the generic "this release" placeholder), the top AWS service, and the
+	// strongest technical terms. Generic terms ("agent", "ai", "release") are
+	// dropped — they have no search signal and dilute the primary set.
 	var primary []string
-	primary = append(primary, firstSentences(featureName(pkg), 1))
+	if f := firstSentences(featureName(pkg), 1); !isGenericKeyword(f) {
+		primary = append(primary, f)
+	}
 	primary = append(primary, topStrings(aws, 1)...)
 	primary = append(primary, topStrings(technical, 2)...)
-	primary = topStrings(dedupe(primary), 5)
+	primary = topStrings(dropGeneric(dedupe(primary)), 5)
 
 	// Secondary: the remaining grounded technical + technology terms.
 	secondary := topStrings(dedupe(append(append([]string{}, tech...), technical...)), 10)
@@ -90,6 +94,29 @@ func subtract(from, remove []string) []string {
 	for _, s := range from {
 		if !drop[strings.ToLower(strings.TrimSpace(s))] {
 			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// genericKeywords are too broad to target: they add no search signal and dilute
+// keyword sets. "this release" is the featureless-release placeholder.
+var genericKeywords = map[string]bool{
+	"this release": true, "the release": true, "release": true,
+	"agent": true, "ai": true, "software": true, "code": true,
+	"app": true, "tool": true, "system": true,
+}
+
+func isGenericKeyword(s string) bool {
+	return genericKeywords[strings.ToLower(strings.TrimSpace(s))]
+}
+
+// dropGeneric removes generic keywords, preserving order.
+func dropGeneric(kw []string) []string {
+	out := make([]string, 0, len(kw))
+	for _, k := range kw {
+		if !isGenericKeyword(k) {
+			out = append(out, k)
 		}
 	}
 	return out

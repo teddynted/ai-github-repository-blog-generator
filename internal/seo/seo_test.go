@@ -119,6 +119,30 @@ func TestSEOEndToEnd(t *testing.T) {
 	}
 }
 
+func TestDropGenericKeywords(t *testing.T) {
+	got := dropGeneric([]string{"aws-iam", "agent", "ai", "this release", "serverless", "release"})
+	want := []string{"aws-iam", "serverless"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("dropGeneric = %v, want %v", got, want)
+	}
+	if isGenericKeyword("AWS Lambda") {
+		t.Error("AWS Lambda should not be generic")
+	}
+}
+
+func TestDedupePlaylists(t *testing.T) {
+	in := []string{"teddynted/repo — Release Deep Dives", "Release Deep Dives", "AWS & Cloud Engineering"}
+	got := dedupePlaylists(in)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 playlists after dedup, got %d: %v", len(got), got)
+	}
+	// The bare "Release Deep Dives" duplicate is gone; the qualified one and the
+	// distinct series remain.
+	if got[0] != "teddynted/repo — Release Deep Dives" || got[1] != "AWS & Cloud Engineering" {
+		t.Errorf("unexpected playlists: %v", got)
+	}
+}
+
 func TestShortenYouTubeTitle(t *testing.T) {
 	long := "Optimizing Spot Startup on AWS: Pre-Baked Custom AMIs for an Event-Driven AI Agent Platform"
 	got := shortenYouTubeTitle(long)

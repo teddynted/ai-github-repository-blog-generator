@@ -40,7 +40,7 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 		Hashtags:          topStrings(reuseHashtags(youtubeHashtags(pkg), prependHash(k.AWS), ytHashtagMax), ytHashtagMax),
 		ChapterTitles:     chapters,
 		PinnedComment:     firstNonEmpty(ci.PinnedComment, defaultPinned(pkg)),
-		Playlists:         topStrings(dedupe(playlists), 4),
+		Playlists:         topStrings(dedupePlaylists(playlists), 4),
 		ThumbnailText:     topStrings(dedupe(thumb), 4),
 	}
 }
@@ -85,4 +85,25 @@ func shortenYouTubeTitle(title string) string {
 		cut = cut[:i]
 	}
 	return strings.TrimRight(cut, " ,.;:—-")
+}
+
+// dedupePlaylists removes playlists that name the same series, keeping the first.
+// The suggested playlist is repo-qualified ("<repo> — Release Deep Dives") while
+// the fallbacks are bare ("Release Deep Dives"); exact-match dedup missed that,
+// so we key on the trailing series name after an em dash.
+func dedupePlaylists(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		key := strings.ToLower(strings.TrimSpace(p))
+		if i := strings.LastIndex(key, "— "); i >= 0 {
+			key = strings.TrimSpace(key[i+len("— "):])
+		}
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
 }
