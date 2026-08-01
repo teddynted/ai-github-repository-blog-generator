@@ -1,6 +1,93 @@
 package visualassets
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// snakeID turns an asset type into a stable snake_case id for automation
+// ("YouTube Thumbnail" -> "youtube_thumbnail").
+func snakeID(s string) string {
+	var b strings.Builder
+	prevUnderscore := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevUnderscore = false
+		default:
+			if !prevUnderscore && b.Len() > 0 {
+				b.WriteByte('_')
+				prevUnderscore = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
+
+// primaryUse classifies an asset's main channel for automation routing (#3).
+func primaryUse(assetType string) string {
+	switch {
+	case strings.Contains(assetType, "YouTube"), strings.Contains(assetType, "TikTok"), strings.Contains(assetType, "Shorts"):
+		return "video"
+	case strings.Contains(assetType, "Architecture"), strings.Contains(assetType, "Workflow"):
+		return "docs"
+	case strings.Contains(assetType, "Repository"), strings.Contains(assetType, "GitHub"):
+		return "repository"
+	default:
+		return "social"
+	}
+}
+
+// renderPriority maps an asset to a coarse render priority (#3).
+func renderPriority(assetType string) string {
+	switch {
+	case strings.Contains(assetType, "Thumbnail"), strings.Contains(assetType, "Hero"), strings.Contains(assetType, "Architecture"):
+		return "high"
+	case strings.Contains(assetType, "Cover"), strings.Contains(assetType, "Social"),
+		strings.Contains(assetType, "Banner"), strings.Contains(assetType, "Promotional"), strings.Contains(assetType, "Workflow"):
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+// automationMeta renders the machine-readable per-asset metadata block (#3).
+func automationMeta(assetType, release string) string {
+	if release == "" {
+		release = "v0.0.0"
+	}
+	return fmt.Sprintf(
+		"asset_id: %s\nversion: %s\ntheme: event_driven_architecture\nrender_priority: %s\nprimary_use: %s",
+		snakeID(assetType), release, renderPriority(assetType), primaryUse(assetType))
+}
+
+// motionHandoff returns optional animation-handoff metadata for the assets that
+// are animated by downstream tooling (#4). Empty for the rest.
+func motionHandoff(assetType string) string {
+	switch assetType {
+	case "YouTube Thumbnail", "GitHub Social Card", "X Image", "YouTube Shorts Cover", "TikTok Cover":
+		return "motion_handoff:\n  parallax_layers: 4\n  animate_connectors: true\n  animate_pulse_dots: true\n  safe_crop_center: true\n  preferred_zoom_anchor: orchestration_hub"
+	}
+	return ""
+}
+
+// isHeroAsset reports whether an asset is a hero-style visual that warrants a
+// compact diffusion-model prompt variant (#5).
+func isHeroAsset(assetType string) bool {
+	return depictsArchitecture(assetType) || strings.Contains(assetType, "Promotional")
+}
+
+// compactVariant is a <40-word prompt tuned for Flux / SDXL / Stable Diffusion,
+// offered for hero-style assets (#5).
+func compactVariant(assetType string) string {
+	if !isHeroAsset(assetType) {
+		return ""
+	}
+	return "event-driven AWS-native architecture, four conceptual modules, orchestration hub focal point, " +
+		"dark navy background, amber and blue accents, flat vector, subtle isometric depth, clean connectors, " +
+		"strong silhouette, empty headline space, high contrast, professional cloud infrastructure illustration"
+}
 
 // conceptualRoles are the fixed, provider-neutral roles every architecture
 // visual should depict, so outputs stay coherent across assets. They replace

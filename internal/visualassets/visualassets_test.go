@@ -129,6 +129,55 @@ func TestPlatformNotesAndDiagrammaticVariant(t *testing.T) {
 	}
 }
 
+func TestAutomationMetadataAndVariants(t *testing.T) {
+	// #3 automation metadata block shape.
+	m := automationMeta("YouTube Thumbnail", "v0.6.0")
+	for _, want := range []string{"asset_id: youtube_thumbnail", "version: v0.6.0", "theme: event_driven_architecture", "render_priority: high", "primary_use: video"} {
+		if !strings.Contains(m, want) {
+			t.Errorf("automationMeta missing %q in:\n%s", want, m)
+		}
+	}
+	// #4 motion handoff only for the five designated assets.
+	for _, typ := range []string{"YouTube Thumbnail", "GitHub Social Card", "X Image", "YouTube Shorts Cover", "TikTok Cover"} {
+		if motionHandoff(typ) == "" {
+			t.Errorf("expected motion handoff for %q", typ)
+		}
+	}
+	if motionHandoff("Architecture Illustration") != "" {
+		t.Error("Architecture Illustration should not carry motion handoff")
+	}
+	// #5 compact variant for hero assets, under 40 words.
+	cv := compactVariant("YouTube Thumbnail")
+	if cv == "" {
+		t.Fatal("expected compact variant for hero asset")
+	}
+	if w := len(strings.Fields(cv)); w >= 40 {
+		t.Errorf("compact variant must be < 40 words, got %d", w)
+	}
+	if compactVariant("Blog Header") != "" {
+		t.Error("non-hero asset should not get a compact variant")
+	}
+
+	// End-to-end: blocks + matrix render.
+	col, err := newGen().VisualAssets(context.Background(), samplePackage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := col.Markdown()
+	for _, want := range []string{
+		"### Automation Metadata", "asset_id:", "### Motion Handoff", "parallax_layers: 4",
+		"### Compact Prompt Variant", "# Final Validation Matrix", "| Asset | Text-safe zones |",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("markdown missing %q", want)
+		}
+	}
+	// One automation block per asset; matrix has a row per asset.
+	if n := strings.Count(md, "### Automation Metadata"); n != len(col.Assets) {
+		t.Errorf("automation metadata blocks %d != assets %d", n, len(col.Assets))
+	}
+}
+
 func TestRenderGuidanceMapping(t *testing.T) {
 	cases := map[string]string{
 		"Architecture Illustration": "High",
