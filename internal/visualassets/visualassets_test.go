@@ -132,10 +132,14 @@ func TestPlatformNotesAndDiagrammaticVariant(t *testing.T) {
 func TestAutomationMetadataAndVariants(t *testing.T) {
 	// #3 automation metadata block shape.
 	m := automationMeta("YouTube Thumbnail", "v0.6.0")
-	for _, want := range []string{"asset_id: youtube_thumbnail", "version: v0.6.0", "theme: event_driven_architecture", "render_priority: high", "primary_use: video"} {
+	for _, want := range []string{"asset_id: youtube_thumbnail", "version: v0.6.0", "theme: event_driven_architecture", "render_priority: high", "primary_use: video", "supports_motion: true"} {
 		if !strings.Contains(m, want) {
 			t.Errorf("automationMeta missing %q in:\n%s", want, m)
 		}
+	}
+	// A non-motion asset reports supports_motion: false.
+	if !strings.Contains(automationMeta("Architecture Illustration", "v0.6.0"), "supports_motion: false") {
+		t.Error("non-motion asset should report supports_motion: false")
 	}
 	// #4 motion handoff only for the five designated assets.
 	for _, typ := range []string{"YouTube Thumbnail", "GitHub Social Card", "X Image", "YouTube Shorts Cover", "TikTok Cover"} {

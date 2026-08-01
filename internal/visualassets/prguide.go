@@ -58,8 +58,8 @@ func automationMeta(assetType, release string) string {
 		release = "v0.0.0"
 	}
 	return fmt.Sprintf(
-		"asset_id: %s\nversion: %s\ntheme: event_driven_architecture\nrender_priority: %s\nprimary_use: %s",
-		snakeID(assetType), release, renderPriority(assetType), primaryUse(assetType))
+		"asset_id: %s\nversion: %s\ntheme: event_driven_architecture\nrender_priority: %s\nprimary_use: %s\nsupports_motion: %t",
+		snakeID(assetType), release, renderPriority(assetType), primaryUse(assetType), motionHandoff(assetType) != "")
 }
 
 // motionHandoff returns optional animation-handoff metadata for the assets that
@@ -174,9 +174,9 @@ func platformNotes(assetType string) []string {
 		}
 	case strings.Contains(assetType, "TikTok") || strings.Contains(assetType, "Shorts"):
 		return []string{
-			"Keep the center clear of platform UI overlays (right-rail icons, bottom caption bar)",
-			"Large simple shapes; high-contrast focal region centered",
-			"Reduced architectural complexity for small-screen viewing",
+			"Keep the center 40% vertical band clear of platform UI overlays; avoid the right-edge interaction rail",
+			"Large simple shapes; high-contrast focal cluster centered and readable at small preview sizes",
+			"Reduced architectural complexity vs. desktop assets for small-screen viewing",
 		}
 	default:
 		return nil
