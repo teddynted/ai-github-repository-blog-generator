@@ -14,6 +14,26 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/visualassets"
 )
 
+func TestDistinctHighlightsReducesCrossPostRepetition(t *testing.T) {
+	used := map[string]bool{}
+	a := distinctHighlights([]string{"event-driven pipeline", "sqs buffer", "ec2 worker"}, used)
+	b := distinctHighlights([]string{"event-driven pipeline", "sqs buffer", "cloudwatch alarms", "dlq"}, used)
+	overlap := 0
+	for _, x := range b {
+		for _, y := range a {
+			if strings.EqualFold(collapse(x), collapse(y)) {
+				overlap++
+			}
+		}
+	}
+	if overlap > 2 {
+		t.Errorf("too much cross-post highlight repetition: a=%v b=%v", a, b)
+	}
+	if len(b) == 0 {
+		t.Error("a post must still have highlights")
+	}
+}
+
 func TestWarningsNotRenderedInArtifact(t *testing.T) {
 	col := LinkedInCollection{
 		Metadata: Metadata{Repository: "acme/widget", Release: "v0.6.0", PostCount: 1},

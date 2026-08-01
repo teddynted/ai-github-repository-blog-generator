@@ -117,8 +117,13 @@ func bodyPrompt(c postCandidate, draft string) string {
 	return fmt.Sprintf(
 		"You are an experienced software engineer writing a LinkedIn post (type: %s) for %s.\n\n"+
 			"Rewrite the DRAFT into an authentic, professional LinkedIn post: educational, technically accurate, and "+
-			"approachable. NO marketing hype, NO clickbait, NO exaggerated or performance claims, NO buzzword stuffing. "+
-			"Keep the bullet highlights, the engagement question, and the CTA. Use ONLY the facts in the draft — invent "+
-			"nothing. Output only the post text.\n\nDRAFT:\n%s",
-		c.Type, c.Audience, draft)
+			"approachable. Follow these rules:\n"+
+			"- OPEN with a hook — a problem, an insight, or an architecture-curiosity question — NOT \"Just shipped …\" or a changelog line.\n"+
+			"- Do NOT frame the release by counts (never \"0 features\", \"0 fixes\", \"maintenance changes\"); frame it by the engineering value.\n"+
+			"- Make this post distinct to its type (%s): lead with that angle; do not restate the same architecture sentence a reader would see on every post.\n"+
+			"- Short paragraphs (1–3 sentences) for mobile readability; keep the bullet highlights (max 4), the engagement question, and the CTA.\n"+
+			"- NO marketing hype, NO clickbait, NO exaggerated or performance/latency/cost claims, NO buzzword stuffing.\n"+
+			"- Use ONLY the facts in the draft — invent nothing (no metrics, no services, no features not present).\n\n"+
+			"Output only the post text.\n\nDRAFT:\n%s",
+		c.Type, c.Audience, c.Type, draft)
 }
