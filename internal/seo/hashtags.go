@@ -19,7 +19,10 @@ func planHashtags(pkg ReleasePackage, k Keywords) PlatformTags {
 	grounded := dedupe(concatStrings(central, k.Primary, k.Technology, k.AWS))
 	groundedTags := prependHash(grounded)
 
-	yt := reuseHashtags(youtubeHashtags(pkg), groundedTags, ytHashtagMax)
+	// YouTube hashtags lead with the grounded topic/central-service set, then the
+	// video's own suggested hashtags — so the topic is not buried under the
+	// service inventory.
+	yt := reuseHashtags(groundedTags, youtubeHashtags(pkg), ytHashtagMax)
 	tk := reuseHashtags(tiktokHashtags(pkg), append([]string{"#TechTok"}, groundedTags...), tiktokHashtagMax)
 	li := reuseHashtags(nil, append([]string{"#SoftwareEngineering", "#CloudComputing", "#AIEngineering"}, groundedTags...), linkedinHashtagMax)
 	x := reuseHashtags(nil, append([]string{"#DevOps", "#AWS"}, groundedTags...), xHashtagMax)

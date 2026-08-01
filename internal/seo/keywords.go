@@ -62,16 +62,73 @@ func dropJunk(in []string, pkg ReleasePackage) []string {
 	return out
 }
 
+// platformConcepts are engineering/tooling/architecture concepts that describe
+// HOW a project is built, not what an article is about — they are supporting
+// technologies, not search intent, so they never lead the primary keyword set
+// (or JSON-LD "about"). They remain eligible as tags/secondary keywords. The one
+// exception is the headline rule in isPlatformConcept: a concept the article is
+// specifically about (named in the title headline) is allowed.
+var platformConcepts = map[string]bool{
+	"github actions": true, "github action": true, "github automation": true,
+	"go modules": true, "go module": true, "go generics": true,
+	"infrastructure as code": true, "iac": true,
+	"ci/cd": true, "cicd": true, "continuous integration": true,
+	"continuous deployment": true, "continuous delivery": true,
+	"event-driven architecture": true, "event driven architecture": true,
+	"clean architecture": true, "hexagonal architecture": true,
+	"domain-driven design": true, "test-driven development": true,
+	"microservices": true, "monorepo": true, "rest api": true, "graphql": true,
+	"devops": true, "serverless": true, "open source": true,
+	"technical blogging": true, "ai content generation": true,
+	"developer productivity": true, "make": true, "makefile": true,
+}
+
+// titleHeadline is the lower-cased headline of the blog title — the part before
+// the first colon (the article's actual subject, before qualifiers). For
+// "Optimizing Spot Startup on AWS: Pre-Baked Custom AMIs …" it is "optimizing
+// spot startup on aws".
+func titleHeadline(pkg ReleasePackage) string {
+	t := strings.ToLower(collapse(pkg.Blog.Title))
+	if i := strings.Index(t, ":"); i > 0 {
+		t = t[:i]
+	}
+	return t
+}
+
+// normKey normalizes a keyword for blocklist lookups: lower-cased, hyphens and
+// other separators folded to single spaces, so "github-actions", "GitHub
+// Actions", and "github_actions" all match the same entry.
+func normKey(s string) string {
+	return strings.ToLower(strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' ' || r == '\t' || r == '/'
+	}), " "))
+}
+
+// isPlatformConcept reports whether s is a supporting platform/tooling concept
+// unfit to be a primary keyword — UNLESS the article is specifically about it
+// (it appears in the title headline).
+func isPlatformConcept(s string, pkg ReleasePackage) bool {
+	k := normKey(s)
+	if !platformConcepts[k] {
+		return false
+	}
+	return !strings.Contains(normKey(titleHeadline(pkg)), k)
+}
+
 // isNoisyPrimaryKeyword is the STRICT filter for primary keywords (search
 // intent): junk, plus anything under 3 chars, a primary stopword ("aws", "go",
-// "cloud"), a generic term, or the repository name. Primary keywords must
-// describe article intent, not the dependency/repo inventory.
+// "cloud"), a generic term, a supporting platform concept, or the repository
+// name. Primary keywords must describe article intent, not the dependency/repo
+// inventory or how the project is built.
 func isNoisyPrimaryKeyword(s string, pkg ReleasePackage) bool {
 	k := strings.ToLower(collapse(s))
 	if isJunkKeyword(s, pkg) {
 		return true
 	}
 	if len(k) < 3 || primaryStopwords[k] || isGenericKeyword(k) {
+		return true
+	}
+	if isPlatformConcept(s, pkg) {
 		return true
 	}
 	if r := strings.ToLower(collapse(repoShortName(pkg))); r != "" && (k == r || strings.Contains(k, r)) {

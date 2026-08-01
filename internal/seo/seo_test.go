@@ -638,6 +638,99 @@ func TestValidationFailsOnReintroducedJunk(t *testing.T) {
 	}
 }
 
+// spotPackage reproduces the "Optimizing Spot Startup on AWS: Pre-Baked Custom
+// AMIs …" article, whose SEO keywords are polluted with platform concepts
+// (GitHub Actions, Go Modules, Infrastructure as Code, Event-Driven Architecture)
+// and a non-central service (AWS IAM).
+func spotPackage() ReleasePackage {
+	seokw := []string{
+		"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI", "EC2 UserData optimization",
+		"GitHub Actions", "Go Modules", "Infrastructure as Code", "Event-Driven Architecture", "AWS IAM",
+	}
+	ctx := &rc.ReleaseContext{
+		SchemaVersion: "1.0.0",
+		Repository:    rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
+		Release:       rc.Release{Tag: "v0.6.0"},
+		Architecture:  rc.Architecture{Overview: "Pre-baked custom AMIs move EC2 UserData provisioning into image creation to cut Spot startup latency.", AWSServices: []string{"Amazon EC2", "AWS IAM", "AWS Lambda", "Amazon CloudWatch", "Amazon EventBridge"}},
+		Changelog:     rc.ChangelogAnalysis{Found: true, Features: []string{"Pre-baked custom AMIs cut EC2 Spot startup latency"}},
+		Technologies:  []rc.Technology{{Name: "Go"}, {Name: "AWS CloudFormation"}},
+		ContentIntelligence: rc.ContentIntelligence{Summary: "Pre-baked custom AMIs cut EC2 Spot startup latency.", SEOKeywords: seokw},
+	}
+	post := releasegen.BlogPost{
+		Title:           "Optimizing Spot Startup on AWS: Pre-Baked Custom AMIs for an Event-Driven AI Agent Platform",
+		MetaDescription: "Replace boot-time EC2 UserData provisioning with versioned pre-baked custom AMIs to cut Spot startup latency.",
+		Tags:            []string{"aws", "ec2", "github-actions", "go-modules"},
+	}
+	yt := youtube.YouTubeScript{SchemaVersion: youtube.SchemaVersion, ContentIntelligence: youtube.Intelligence{SuggestedTags: seokw}}
+	return ReleasePackage{Context: ctx, Blog: post, YouTube: yt}
+}
+
+func TestPlatformConceptsRejectedFromPrimaryAndAbout(t *testing.T) {
+	pkg := spotPackage()
+	m, err := newGen().SEO(context.Background(), pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	banned := []string{"GitHub Actions", "github-actions", "Go Modules", "Infrastructure as Code", "Event-Driven Architecture", "AWS IAM"}
+	for _, b := range banned {
+		if containsFold(m.Keywords.Primary, b) {
+			t.Errorf("primary must not contain platform concept %q: %v", b, m.Keywords.Primary)
+		}
+	}
+	for _, want := range []string{"AWS Custom AMI", "EC2 startup optimization", "pre-baked AMI", "EC2 UserData optimization"} {
+		if !containsFold(m.Keywords.Primary, want) {
+			t.Errorf("primary missing topic keyword %q: %v", want, m.Keywords.Primary)
+		}
+	}
+	if len(m.Keywords.Primary) > 5 {
+		t.Errorf("primary exceeds 5: %v", m.Keywords.Primary)
+	}
+	// about is topic-aligned: no platform concepts, no incidental IAM.
+	about := strings.ToLower(strings.Join(jsonldAbout(m.StructuredData.JSONLD), " | "))
+	for _, bad := range []string{"github actions", "go modules", "infrastructure as code", "event-driven architecture", "iam"} {
+		if strings.Contains(about, bad) {
+			t.Errorf("about leaked %q: %s", bad, about)
+		}
+	}
+	if !strings.Contains(about, "ami") || !strings.Contains(about, "ec2") {
+		t.Errorf("about not topic-aligned: %s", about)
+	}
+	// Thumbnail reflects the primary topic.
+	if !sharesToken(m.YouTube.ThumbnailText, strings.Join(m.Keywords.Primary, " ")) {
+		t.Errorf("thumbnail not topic-aligned: %v", m.YouTube.ThumbnailText)
+	}
+	// Tags are topic-led (≤50% AWS services) on both channels.
+	for name, tags := range map[string][]string{"blog": m.Blog.Tags, "youtube": m.YouTube.Tags} {
+		if n := len(tags); n > 0 && countAWSServiceNames(tags, lowerSet(awsServices(pkg)))*2 > n {
+			t.Errorf("%s tags are majority AWS services: %v", name, tags)
+		}
+	}
+	if probs := m.Validate(pkg); len(probs) != 0 {
+		t.Errorf("clean spot-startup artifact failed validation: %v", probs)
+	}
+}
+
+func TestDuplicateChapterTimestampsFailValidation(t *testing.T) {
+	pkg := spotPackage()
+	m, _ := newGen().SEO(context.Background(), pkg)
+	m.YouTube.ChapterTitles = []ChapterTitle{{Timestamp: "02:40", Title: "A"}, {Timestamp: "02:40", Title: "B"}}
+	if probs := strings.Join(m.Validate(pkg), " | "); !strings.Contains(probs, "duplicate chapter timestamps") {
+		t.Errorf("duplicate chapter timestamps must fail validation; got: %s", probs)
+	}
+}
+
+func TestPlatformConceptAllowedWhenInHeadline(t *testing.T) {
+	// If the article headline IS about the concept, it may be a primary keyword.
+	pkg := spotPackage()
+	pkg.Blog.Title = "Event-Driven Architecture on AWS: A Practical Guide"
+	if isPlatformConcept("Event-Driven Architecture", pkg) {
+		t.Error("a concept named in the headline should be allowed as primary")
+	}
+	if !isPlatformConcept("GitHub Actions", pkg) {
+		t.Error("a concept absent from the headline should be rejected")
+	}
+}
+
 func TestIsAWSServiceNameWholeStringOnly(t *testing.T) {
 	det := lowerSet([]string{"Amazon EC2", "AWS Lambda"})
 	if !isAWSServiceName("Amazon EC2", det) || !isAWSServiceName("aws iam", nil) {

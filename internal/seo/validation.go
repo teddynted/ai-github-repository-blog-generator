@@ -73,6 +73,21 @@ func (m SEOMetadata) Validate(pkg ReleasePackage) []string {
 		problems = append(problems, "hashtags: duplicate hashtags")
 	}
 
+	// Duplicate chapter timestamps are a hard failure (a chapter list with two
+	// "02:40" markers is broken metadata, not a warning).
+	if hasDuplicateChapters(m.YouTube.ChapterTitles) {
+		problems = append(problems, "youtube: duplicate chapter timestamps")
+	}
+
+	// Tags must be topic-led: no more than half may be AWS service names.
+	awsTagSet := lowerSet(awsServices(pkg))
+	if n := len(m.Blog.Tags); n > 0 && countAWSServiceNames(m.Blog.Tags, awsTagSet)*2 > n {
+		problems = append(problems, "blog: more than 50% of tags are AWS service names")
+	}
+	if n := len(m.YouTube.Tags); n > 0 && countAWSServiceNames(m.YouTube.Tags, awsTagSet)*2 > n {
+		problems = append(problems, "youtube: more than 50% of tags are AWS service names")
+	}
+
 	// Primary keywords must represent search intent, not the service inventory:
 	// at most half of them may be AWS service names.
 	if n := len(m.Keywords.Primary); n > 0 {
