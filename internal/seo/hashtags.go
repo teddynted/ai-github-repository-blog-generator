@@ -1,11 +1,13 @@
 package seo
 
-// Per-platform hashtag caps (platform norms differ).
+// Per-platform hashtag caps (platform norms differ). Kept deliberately tight —
+// a handful of broad, relevant tags out-performs a spammy tag wall on every
+// platform (YouTube counts only the first few; X/LinkedIn reward restraint).
 const (
-	ytHashtagMax       = 5
-	tiktokHashtagMax   = 6
+	ytHashtagMax       = 3
+	tiktokHashtagMax   = 5
 	linkedinHashtagMax = 5
-	xHashtagMax        = 4
+	xHashtagMax        = 3
 )
 
 // planHashtags builds platform-specific hashtag sets, grounded in the release's
