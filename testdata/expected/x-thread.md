@@ -24,15 +24,15 @@ _Visual: widget-v1-0-0-x-image.png_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(117 chars)_
+**Post 4/4** _(163 chars)_
 
-> What would you build with this? Explore the repo 👉 https://github.com/acme/widget #OpenSource #DevOps #AWS #AWSLambda
+> What would you build with this? Full breakdown on the blog 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/ #OpenSource #DevOps #AWS #AmazonEventBridge
 
 **Engagement prompt:** What would you build with this?
 
-**CTA:** Explore the repo 👉 https://github.com/acme/widget
+**CTA:** Full breakdown on the blog 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #OpenSource #DevOps #AWS #AWSLambda
+**Hashtags:** #OpenSource #DevOps #AWS #AmazonEventBridge
 
 **Visual references:**
 - [X Image] widget-v1-0-0-x-image.png _(Visual Assets (M9))_
@@ -60,13 +60,13 @@ _Visual: widget v1.0.0 — High-Level AWS Architecture_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(147 chars)_
+**Post 4/4** _(177 chars)_
 
-> What architecture would you choose for this? 👇 Dig into the architecture: https://github.com/acme/widget #Architecture #CloudComputing #DevOps #AWS
+> What architecture would you choose for this? 👇 Full architecture write-up 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/ #Architecture #CloudComputing #DevOps #AWS
 
 **Engagement prompt:** What architecture would you choose for this? 👇
 
-**CTA:** Dig into the architecture: https://github.com/acme/widget
+**CTA:** Full architecture write-up 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Hashtags:** #Architecture #CloudComputing #DevOps #AWS
 
@@ -96,15 +96,15 @@ _Visual: widget v1.0.0 — High-Level AWS Architecture_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(156 chars)_
+**Post 4/4** _(186 chars)_
 
-> What AWS service would you reach for instead — and why? Dig into the architecture: https://github.com/acme/widget #AWS #DevOps #AWSLambda #AmazonEventBridge
+> What AWS service would you reach for instead — and why? Full architecture write-up 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/ #AWS #DevOps #AmazonEventBridge #AWSLambda
 
 **Engagement prompt:** What AWS service would you reach for instead — and why?
 
-**CTA:** Dig into the architecture: https://github.com/acme/widget
+**CTA:** Full architecture write-up 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #AWS #DevOps #AWSLambda #AmazonEventBridge
+**Hashtags:** #AWS #DevOps #AmazonEventBridge #AWSLambda
 
 **Visual references:**
 - [Architecture Diagram] widget v1.0.0 — High-Level AWS Architecture _(Architecture (M11))_
@@ -132,15 +132,15 @@ _Visual: widget-v1-0-0-x-image.png_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(118 chars)_
+**Post 4/4** _(126 chars)_
 
-> How would you approach this problem? Code's on GitHub 👉 https://github.com/acme/widget #Coding #DevOps #AWS #AWSLambda
+> How would you approach this problem? Code's on GitHub 👉 https://github.com/acme/widget #Coding #DevOps #AWS #AmazonEventBridge
 
 **Engagement prompt:** How would you approach this problem?
 
 **CTA:** Code's on GitHub 👉 https://github.com/acme/widget
 
-**Hashtags:** #Coding #DevOps #AWS #AWSLambda
+**Hashtags:** #Coding #DevOps #AWS #AmazonEventBridge
 
 **Visual references:**
 - [X Image] widget-v1-0-0-x-image.png _(Visual Assets (M9))_
@@ -168,15 +168,15 @@ _Visual: widget-v1-0-0-x-image.png_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(143 chars)_
+**Post 4/4** _(151 chars)_
 
-> What would you want to see next? Issues and PRs welcome. Star / contribute 👉 https://github.com/acme/widget #OpenSource #DevOps #AWS #AWSLambda
+> What would you want to see next? Issues and PRs welcome. Star / contribute 👉 https://github.com/acme/widget #OpenSource #DevOps #AWS #AmazonEventBridge
 
 **Engagement prompt:** What would you want to see next? Issues and PRs welcome.
 
 **CTA:** Star / contribute 👉 https://github.com/acme/widget
 
-**Hashtags:** #OpenSource #DevOps #AWS #AWSLambda
+**Hashtags:** #OpenSource #DevOps #AWS #AmazonEventBridge
 
 **Visual references:**
 - [X Image] widget-v1-0-0-x-image.png _(Visual Assets (M9))_
@@ -192,7 +192,7 @@ _Suggested posting: Wed 9:00am (local) · 0m 48s_
 - **Audiences:** Developers and technical communities; Cloud engineers and software architects; AWS and DevOps engineers; Working developers; The open-source community
 - **AWS services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
 - **Technology stack:** Go, AWS Lambda, Amazon SQS, Amazon EventBridge, AWS CloudFormation
-- **SEO keywords:** this release, AWS Lambda, go, aws-lambda
+- **SEO keywords:** Event-Driven Pipeline, production-ready event-driven pipeline, software-architecture, cloud-computing, Amazon EventBridge
 - **Avg engagement:** 73/100 · **Avg technical confidence:** 78/100
 - **Posting cadence:** Post 1 thread per weekday, spaced across morning/lunch windows; lead with the deep dives.
 - **Production notes:**

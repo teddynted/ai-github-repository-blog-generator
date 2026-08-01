@@ -1,6 +1,6 @@
 # Voice-over Script: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
+_acme/widget · release v1.0.0 · 4 scenes · ~0:44 speaking (145 wpm)_
 
 **Voice:** Professional, educational, conversational — _an experienced software engineer teaching another engineer_  
 **Language:** en-US · **Recommended voice:** Neural, en-US, warm and conversational (provider-neutral) · **Default pace:** Conversational
@@ -9,7 +9,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
 
 ## Scene 1 — Introduction
 
-- **Timestamp:** `00:00–00:10` (10s allocated, ~10s spoken)
+- **Timestamp:** `00:00–00:11` (11s allocated, ~11s spoken)
 - **Voice:** Warm and inviting, confident · enthusiastic · energy high · pace Conversational
 - **Opening cue:** Open on the title card; begin speaking as it settles into frame.
 
@@ -33,7 +33,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
 
 ## Scene 2 — Architecture
 
-- **Timestamp:** `00:10–00:20` (10s allocated, ~10s spoken)
+- **Timestamp:** `00:11–00:22` (11s allocated, ~11s spoken)
 - **Voice:** Clear and instructive · focused · energy medium · pace Slow
 - **Opening cue:** Hold a beat as the diagram begins to build, then start narrating.
 
@@ -63,7 +63,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
 
 ## Scene 3 — Architecture Diagrams
 
-- **Timestamp:** `00:20–00:30` (10s allocated, ~10s spoken)
+- **Timestamp:** `00:22–00:33` (11s allocated, ~11s spoken)
 - **Voice:** Clear and instructive · focused · energy medium · pace Slow
 - **Opening cue:** Hold a beat as the diagram begins to build, then start narrating.
 
@@ -93,7 +93,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
 
 ## Scene 4 — Conclusion
 
-- **Timestamp:** `00:30–00:40` (10s allocated, ~10s spoken)
+- **Timestamp:** `00:33–00:44` (11s allocated, ~11s spoken)
 - **Voice:** Warm and resolving · satisfied · energy medium · pace Conversational
 - **Opening cue:** Ease in as the closing card appears.
 
@@ -107,6 +107,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
   - [short, 300ms] opening — Let the opening line settle before continuing.
   - [long, 1000ms] after-key-takeaway — Hold after the key takeaway before moving on.
   - [short, 300ms] closing — Brief pause before the transition.
+  - [long, 1500ms] final fade — Hold through the logo fade before ending the audio file.
 - **Sync:**
   - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Slow Zoom Out)
   - [Overlay] Land the on-screen text as you say it. (Conclusion)
@@ -118,8 +119,8 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:40 speaking (156 wpm)_
 ## Production Intelligence
 
 - **Total words:** 108
-- **Estimated speaking time:** 0:40 (~156 wpm)
-- **Estimated recording time:** 1:12 (incl. retakes)
+- **Estimated speaking time:** 0:44 (~145 wpm)
+- **Estimated recording time:** 1:19 (incl. retakes)
 - **Reading difficulty:** moderate · **Technical density:** medium
 - **Voice style:** Professional, educational, conversational
 - **Recommended TTS voice:** Neural, en-US, warm and conversational (provider-neutral) · **Language:** en-US

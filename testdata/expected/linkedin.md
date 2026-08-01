@@ -28,9 +28,9 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** What would you want to see in the next release?
 
-**CTA:** Repo and release notes: https://github.com/acme/widget
+**CTA:** The full technical breakdown is on the blog: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #Release #DevOps #SoftwareEngineering #CloudComputing #AIEngineering #AWSLambda
+**Hashtags:** #Release #DevOps #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [LinkedIn Banner] widget-v1-0-0-linkedin-banner.png _(Visual Assets (M9))_
@@ -65,9 +65,9 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** How would you approach this architecture? I'd genuinely like to hear other takes.
 
-**CTA:** Explore the architecture in the repo: https://github.com/acme/widget
+**CTA:** Full architecture write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #Architecture #CloudComputing #SystemDesign #SoftwareEngineering #AIEngineering #AWSLambda
+**Hashtags:** #Architecture #CloudComputing #SystemDesign #SoftwareEngineering #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [Architecture Diagram] widget v1.0.0 — High-Level AWS Architecture _(Architecture (M11))_
@@ -102,9 +102,9 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** What AWS service would you reach for here — and why?
 
-**CTA:** Explore the architecture in the repo: https://github.com/acme/widget
+**CTA:** Full architecture write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #AWS #CloudComputing #DevOps #SoftwareEngineering #AIEngineering #AWSLambda
+**Hashtags:** #AWS #CloudComputing #DevOps #SoftwareEngineering #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [Architecture Diagram] widget v1.0.0 — High-Level AWS Architecture _(Architecture (M11))_
@@ -138,7 +138,7 @@ The pattern generalises to event-driven workloads.
 
 **CTA:** Try it — the repo is here: https://github.com/acme/widget
 
-**Hashtags:** #DeveloperProductivity #Coding #SoftwareEngineering #CloudComputing #AIEngineering #AWSLambda
+**Hashtags:** #DeveloperProductivity #Coding #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [LinkedIn Banner] widget-v1-0-0-linkedin-banner.png _(Visual Assets (M9))_
@@ -169,9 +169,9 @@ The pattern generalises to event-driven workloads.
 
 **Engagement prompt:** What would you have built differently?
 
-**CTA:** Repo and release notes: https://github.com/acme/widget
+**CTA:** The full technical breakdown is on the blog: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #BuildInPublic #OpenSource #SoftwareEngineering #CloudComputing #AIEngineering #AWSLambda
+**Hashtags:** #BuildInPublic #OpenSource #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [LinkedIn Banner] widget-v1-0-0-linkedin-banner.png _(Visual Assets (M9))_
@@ -187,7 +187,7 @@ _Suggested publish: Wed 8:00am (local) · under 1 min_
 - **Audiences:** Software engineers and engineering managers; Cloud and solutions architects; AWS and cloud engineers; Working developers; Developer advocates and the open-source community
 - **AWS services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
 - **Technology stack:** Go, AWS Lambda, Amazon SQS, Amazon EventBridge, AWS CloudFormation
-- **SEO keywords:** this release, AWS Lambda, go, aws-lambda
+- **SEO keywords:** Event-Driven Pipeline, production-ready event-driven pipeline, software-architecture, cloud-computing, Amazon EventBridge
 - **Avg engagement:** 79/100 · **Avg confidence:** 80/100
 - **Publish cadence:** Publish 1–2 posts per week, spaced across Tue–Thu peak windows; lead with the deep dives.
 - **Production notes:**
