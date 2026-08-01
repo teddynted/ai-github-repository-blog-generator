@@ -461,6 +461,37 @@ func TestFitNarrationRespectsTolerance(t *testing.T) {
 	}
 }
 
+func TestJoinFileExtensions(t *testing.T) {
+	cases := map[string]string{
+		"records /etc/ami-manifest. json here":      "records /etc/ami-manifest.json here",
+		"reads config. yaml and provision. sh":      "reads config.yaml and provision.sh",
+		"the manifest.json is fine":                 "the manifest.json is fine",                 // already joined
+		"we ship it. Json parsing follows":          "we ship it. Json parsing follows",          // real sentence boundary (uppercase) left alone
+		"end of thing. The next sentence continues": "end of thing. The next sentence continues", // not an extension
+	}
+	for in, want := range cases {
+		if got := joinFileExtensions(in); got != want {
+			t.Errorf("joinFileExtensions(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSpeakFilePaths(t *testing.T) {
+	cases := map[string]string{
+		"Each image records an /etc/ami-manifest.json, and its AMI carries tags.": "Each image records the file slash etc slash ami-manifest dot json, and its AMI carries tags.",
+		"the builder writes /var/log/app.log every run":                           "the builder writes slash var slash log slash app dot log every run",
+		"An /opt/bin/tool runs first.":                                            "The file slash opt slash bin slash tool runs first.",
+		"pulls provision.sh from Amazon S3":                                       "pulls provision.sh from Amazon S3",         // relative filename, no leading /: untouched
+		"weigh cost and/or latency for 24/7 uptime":                               "weigh cost and/or latency for 24/7 uptime", // mid-token slashes untouched
+		"an application, a database, and a queue":                                 "an application, a database, and a queue",   // no path: untouched
+	}
+	for in, want := range cases {
+		if got := speakFilePaths(in); got != want {
+			t.Errorf("speakFilePaths(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestExpandAbbreviations(t *testing.T) {
 	cases := map[string]string{
 		"as code, not config":                 "as code, not configuration",

@@ -1,9 +1,56 @@
 package storyboard
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+// splitExtension matches a filename whose extension was separated by a stray
+// space ("ami-manifest. json"), which TTS reads with an awkward pause and breaks
+// path detection. Lowercase extensions only, so a real sentence boundary
+// ("...the config. JSON output...") is left alone.
+var splitExtension = regexp.MustCompile(`([A-Za-z0-9_-])\.\s+(json|ya?ml|sh|go|py|toml|cfg|env|txt|md|lock)\b`)
+
+// joinFileExtensions rejoins a filename split from its extension by a stray space
+// ("manifest. json" -> "manifest.json"). Must run before file-path handling and
+// before timing.
+func joinFileExtensions(s string) string { return splitExtension.ReplaceAllString(s, "$1.$2") }
+
+// filePathArticle matches an indefinite article before an absolute file path
+// ("an /etc/ami-manifest.json"), which neural TTS reads awkwardly.
+var filePathArticle = regexp.MustCompile(`(?i)\b(an?)\s+(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
+
+// bareAbsPath matches an absolute path at a word boundary with no leading
+// article. The leading-slash requirement keeps it off mid-token slashes like
+// "and/or" or "24/7".
+var bareAbsPath = regexp.MustCompile(`(^|\s)(/[A-Za-z0-9._/-]*[A-Za-z0-9])`)
+
+// spellPath renders an absolute file path as spoken words:
+// "/etc/ami-manifest.json" -> "slash etc slash ami-manifest dot json".
+func spellPath(p string) string {
+	p = strings.ReplaceAll(p, "/", " slash ")
+	p = strings.ReplaceAll(p, ".", " dot ")
+	return strings.Join(strings.Fields(p), " ")
+}
+
+// speakFilePaths converts absolute file paths into spoken form ("an <path>" ->
+// "the file <spelled path>", bare paths spelled in place). It adds words, so it
+// must run before scene timing so they are counted against the slot.
+func speakFilePaths(s string) string {
+	s = filePathArticle.ReplaceAllStringFunc(s, func(m string) string {
+		sub := filePathArticle.FindStringSubmatch(m)
+		the := "the"
+		if sub[1][0] == 'A' {
+			the = "The"
+		}
+		return the + " file " + spellPath(sub[2])
+	})
+	return bareAbsPath.ReplaceAllStringFunc(s, func(m string) string {
+		sub := bareAbsPath.FindStringSubmatch(m)
+		return sub[1] + spellPath(sub[2])
+	})
+}
 
 // capitalizeFirst upper-cases the first letter of s so a scene's narration never
 // opens on a lower-case word. Leading non-letters are skipped; already

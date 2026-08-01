@@ -227,8 +227,9 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 			"long compound clauses.\n"+
 			"Vary your sentence openings for spoken rhythm: do not begin consecutive sentences with the same word or the "+
 			"same subject (for example repeated \"The pipeline\", \"The builder\", \"The host\", \"This\", or \"That\"), "+
-			"and never start a sentence with \"So\", \"Then\", or \"Think of it as\". Keep EVERY sentence under 20 spoken "+
-			"words — if one runs longer, split it into two so it reads in a single breath.\n"+
+			"and never start a sentence with \"So\", \"Then\", \"Because\", or \"Think of it as\". Keep EVERY sentence under 20 spoken "+
+			"words and to at most two commas — if one runs longer or stacks more clauses, split it into two so it reads in a "+
+			"single breath.\n"+
 			"Vary distinctive phrasing across sentences: introduce a signature term once (a central verb or noun), then "+
 			"prefer natural technical variations instead of leaning on the same word every sentence. Do not reuse the exact "+
 			"same distinctive phrase that EARLIER SCENES already used (below) — say it a different way.\n"+
@@ -241,7 +242,8 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 			"\"This approach\", \"several key benefits\", \"the system's capacity is depleted\", \"guards are deployed\", "+
 			"\"no two starts produced the same machine\", \"a critical phase of production\", \"streamline the "+
 			"experience\", \"at the center\", \"in kind\", \"everything downstream stays the same\", \"the payoff is\", "+
-			"\"that marks this as\", \"applied broadly\", \"hides choices worth a closer look\", \"comes into view\", "+
+			"\"the trick is\", \"the thing is\", \"that marks this as\", \"applied broadly\", \"hides choices worth a "+
+			"closer look\", \"comes into view\", "+
 			"\"lands faster\", \"pull these threads together\", using \"deterministic\" as if it were an adverb "+
 			"(say \"more predictable\" or \"more consistent\" instead), and a sentence "+
 			"starting with \"Now\". State what actually happens, in plain engineering language.\n"+
