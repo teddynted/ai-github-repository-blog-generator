@@ -15,7 +15,7 @@ func (g *Generator) hook(ctx context.Context, t topic) string {
 		return draft
 	}
 	if out, err := g.Model.Generate(ctx, hookPrompt(t.Topic, draft)); err == nil {
-		if r := collapse(strings.TrimSpace(out)); r != "" {
+		if r := stripReasoning(collapse(strings.TrimSpace(out))); r != "" {
 			return r
 		}
 	}

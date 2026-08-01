@@ -59,6 +59,29 @@ func newGen() *Generator {
 	return &Generator{Now: func() time.Time { return time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC) }}
 }
 
+func TestStripReasoning(t *testing.T) {
+	// The exact leak seen in Video 3's hook: chain-of-thought embedded mid-text.
+	in := `I stopped renaming files by hand — here's why. Wait, that invents a detail. The draft doesn't say what "this" is. I stopped doing this by hand — here's why.`
+	got := stripReasoning(in)
+	for _, banned := range []string{"Wait, that invents", "the draft doesn't say", "invents a detail"} {
+		if strings.Contains(strings.ToLower(got), strings.ToLower(banned)) {
+			t.Errorf("reasoning leaked through: %q", got)
+		}
+	}
+	if !strings.Contains(got, "I stopped renaming files by hand") {
+		t.Errorf("spoken content was lost: %q", got)
+	}
+	// Clean narration is returned unchanged.
+	clean := "EventBridge Scheduler fires Lambda. Lambda starts and stops EC2."
+	if stripReasoning(clean) != clean {
+		t.Errorf("clean narration altered: %q", stripReasoning(clean))
+	}
+	// All-reasoning input never blanks the field.
+	if stripReasoning("I should rewrite this.") == "" {
+		t.Errorf("must not return empty")
+	}
+}
+
 func TestTikTokEndToEnd(t *testing.T) {
 	pkg := samplePackage()
 	col, err := newGen().TikTok(context.Background(), pkg)

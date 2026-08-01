@@ -112,6 +112,45 @@ func firstSentences(s string, n int) string {
 	return strings.TrimSpace(strings.Join(out, " "))
 }
 
+// reasoningMarkers flag model chain-of-thought / self-correction that must never
+// reach the artifact — e.g. "Wait, that invents a detail. The draft doesn't say
+// what \"this\" is." leaked into a TikTok hook.
+var reasoningMarkers = []string{
+	"wait, that", "invents a detail", "the draft doesn't say", "the draft does not say",
+	"the notes don't say", "the notes do not say", "i should", "let's fix", "let me fix",
+	"let me rewrite", "here's the narration", "here is the narration",
+	"this needs to be changed", "the output should", "as an ai", "i cannot", "i can't",
+}
+
+// stripReasoning removes whole sentences that read as model reasoning or
+// self-correction, keeping only spoken content. Never returns empty — if every
+// sentence looked like reasoning it leaves the text unchanged rather than blank
+// the field. Deterministic.
+func stripReasoning(s string) string {
+	sents := splitSentences(s)
+	if len(sents) == 0 {
+		return s
+	}
+	kept := make([]string, 0, len(sents))
+	for _, sent := range sents {
+		low := strings.ToLower(sent)
+		drop := false
+		for _, m := range reasoningMarkers {
+			if strings.Contains(low, m) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			kept = append(kept, sent)
+		}
+	}
+	if len(kept) == 0 {
+		return collapse(s)
+	}
+	return collapse(strings.Join(kept, " "))
+}
+
 func splitSentences(s string) []string {
 	s = collapse(s)
 	if s == "" {
