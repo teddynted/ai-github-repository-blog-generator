@@ -1,8 +1,8 @@
 package seo
 
 import (
+	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -15,9 +15,9 @@ func (m SEOMetadata) Markdown() string {
 	fmt.Fprintf(&b, "_%s · release %s · SEO confidence %d/100_\n\n",
 		m.Metadata.Repository, m.Metadata.Release, m.ContentIntelligence.SEOConfidenceScore)
 
-	if len(m.Warnings) > 0 {
-		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(m.Warnings, "; "))
-	}
+	// m.Warnings are internal QA diagnostics (title too long, thin content). They
+	// stay on the struct for JSON/provenance and are logged at generation, but
+	// must not surface in the viewer-facing artifact — so they are not rendered.
 
 	writeBlog(&b, m.Blog)
 	writeYouTube(&b, m.YouTube)
@@ -169,23 +169,18 @@ func writeStructured(b *strings.Builder, sd StructuredData) {
 	b.WriteString("\n```\n\n")
 }
 
-// writeJSONLD renders the JSON-LD map deterministically (sorted keys) without a
-// json import dependency in the renderer.
+// writeJSONLD renders the JSON-LD object as valid, indented JSON. The previous
+// hand-rolled renderer used %v, which emitted unquoted strings and Go's
+// map[...] / [slice] syntax for nested values — invalid JSON that failed the
+// Google Rich Results Test. encoding/json quotes correctly and sorts map keys,
+// so the output stays valid AND deterministic.
 func writeJSONLD(b *strings.Builder, ld map[string]interface{}) {
-	keys := make([]string, 0, len(ld))
-	for k := range ld {
-		keys = append(keys, k)
+	out, err := json.MarshalIndent(ld, "", "  ")
+	if err != nil {
+		b.WriteString("{}")
+		return
 	}
-	sort.Strings(keys)
-	b.WriteString("{\n")
-	for i, k := range keys {
-		fmt.Fprintf(b, "  %q: %v", k, ld[k])
-		if i < len(keys)-1 {
-			b.WriteString(",")
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString("}")
+	b.Write(out)
 }
 
 func writeIntelligence(b *strings.Builder, ci Intelligence) {

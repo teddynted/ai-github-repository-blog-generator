@@ -119,6 +119,62 @@ func TestSEOEndToEnd(t *testing.T) {
 	}
 }
 
+func TestJSONLDIsValidJSON(t *testing.T) {
+	m, _ := newGen().SEO(context.Background(), samplePackage())
+	md := m.Markdown()
+	// Extract the JSON-LD fenced block.
+	i := strings.Index(md, "**JSON-LD:**")
+	if i < 0 {
+		t.Fatal("no JSON-LD block")
+	}
+	rest := md[i:]
+	open := strings.Index(rest, "```json\n")
+	if open < 0 {
+		t.Fatal("no json fence")
+	}
+	body := rest[open+len("```json\n"):]
+	body = body[:strings.Index(body, "\n```")]
+
+	var ld map[string]any
+	if err := json.Unmarshal([]byte(body), &ld); err != nil {
+		t.Fatalf("JSON-LD is not valid JSON: %v\n%s", err, body)
+	}
+	// author/publisher must be nested objects, not Go map[...] strings.
+	if a, ok := ld["author"].(map[string]any); !ok || a["@type"] != "Organization" {
+		t.Errorf("author not a proper JSON object: %v", ld["author"])
+	}
+	for _, k := range []string{"@context", "@type", "headline", "description", "keywords", "datePublished", "dateModified", "wordCount"} {
+		if _, ok := ld[k]; !ok {
+			t.Errorf("JSON-LD missing %q", k)
+		}
+	}
+}
+
+func TestWarningsNeverLeakIntoMarkdown(t *testing.T) {
+	m, _ := newGen().SEO(context.Background(), samplePackage())
+	m.Warnings = []string{"YouTube title is 91 chars; ≤ 70 is preferred"}
+	if md := m.Markdown(); strings.Contains(md, "**Notes:**") || strings.Contains(md, "91 chars") {
+		t.Error("internal QA warning leaked into the viewer artifact")
+	}
+}
+
+func TestHashifyCanonicalAWSCasing(t *testing.T) {
+	cases := map[string]string{
+		"aws-iam":            "AWSIAM",
+		"aws-lambda":         "AWSLambda",
+		"amazon-ec2":         "AmazonEC2",
+		"amazon-eventbridge": "AmazonEventBridge",
+		"amazon-cloudwatch":  "AmazonCloudWatch",
+		"event-driven":       "EventDriven",
+		"clean architecture": "CleanArchitecture",
+	}
+	for in, want := range cases {
+		if got := hashify(in); got != want {
+			t.Errorf("hashify(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestBlogMetaWithinLimit(t *testing.T) {
 	m, _ := newGen().SEO(context.Background(), samplePackage())
 	if l := len(m.Blog.MetaDescription); l > BlogDescMax {
