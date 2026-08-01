@@ -36,7 +36,11 @@ func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	// Thumbnail text is built from the TOPIC — release tag + up to two short topic
 	// lines — rather than reusing the (often contaminated) suggested thumbnail or
 	// a generic "THE ARCHITECTURE" tile. Max 3 lines.
-	thumb := append([]string{releaseTagUpper(pkg)}, thumbnailTopicLines(k)...)
+	// Topic-only thumbnail lines — no version tag (kept evergreen).
+	thumb := thumbnailTopicLines(k)
+	if len(thumb) == 0 {
+		thumb = []string{"AWS ARCHITECTURE"}
+	}
 	thumb = topStrings(dedupe(thumb), 3)
 
 	// Hashtags lead with the article's central AWS services and topic, not the

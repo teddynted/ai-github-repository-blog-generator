@@ -2,8 +2,6 @@
 
 _5 threads · 5 posts each · avg engagement 73/100_
 
-> **Notes:** thread 1 (Release Announcement) has no key takeaways; the release context may be thin; thread 2 (Architecture Walkthrough) has no key takeaways; the release context may be thin; thread 3 (AWS Best Practices) has no key takeaways; the release context may be thin; thread 4 (Developer Tips) has no key takeaways; the release context may be thin; thread 5 (Open Source Update) has no key takeaways; the release context may be thin
-
 ---
 
 ## Release Announcement

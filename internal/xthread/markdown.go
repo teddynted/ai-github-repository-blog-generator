@@ -15,9 +15,8 @@ func (col XThreadCollection) Markdown() string {
 	fmt.Fprintf(&b, "_%d threads · %d posts each · avg engagement %d/100_\n\n",
 		col.Metadata.ThreadCount, col.Metadata.PostsPerThread, col.ContentIntelligence.AverageEngagementScore)
 
-	if len(col.Warnings) > 0 {
-		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(col.Warnings, "; "))
-	}
+	// Warnings are internal QA signals kept on the struct for CI — they must not
+	// render into the published artifact.
 
 	for _, th := range col.Threads {
 		writeThread(&b, th)

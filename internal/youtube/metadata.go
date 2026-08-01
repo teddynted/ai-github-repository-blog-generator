@@ -102,12 +102,12 @@ func alternativeTitles(pkg ReleasePackage, primary string) []string {
 	return topStrings(filtered, 5)
 }
 
+// thumbnailText is evergreen on-screen thumbnail copy — no version tag.
 func thumbnailText(pkg ReleasePackage) string {
-	tag := releaseTag(pkg)
 	if c := pkg.Context; c != nil && len(c.Architecture.AWSServices) > 0 {
-		return strings.ToUpper(firstNonEmpty(tag, "RELEASE")) + " · " + c.Architecture.AWSServices[0]
+		return strings.ToUpper(c.Architecture.AWSServices[0]) + " · ARCHITECTURE"
 	}
-	return firstNonEmpty(strings.ToUpper(tag), "DEEP DIVE") + " · ARCHITECTURE"
+	return "AWS · ARCHITECTURE"
 }
 
 func suggestedTags(keywords, topics []string) []string {
