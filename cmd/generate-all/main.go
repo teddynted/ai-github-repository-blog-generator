@@ -12,7 +12,7 @@
 //	# Fully offline/deterministic (no model). Requires a pre-generated blog.
 //	go run ./cmd/generate-all --context ctx.json --blog post.md --offline --out ./artifacts
 //
-//	# Generate everything, blog included, via local Ollama.
+//	# Generate everything, blog included, via the Anthropic API.
 //	go run ./cmd/generate-all --context ctx.json --out ./artifacts
 package main
 
@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
@@ -40,8 +40,7 @@ func run(args []string) int {
 	blogPath := fs.String("blog", "", "path to an existing blog Markdown file (required with --offline)")
 	outDir := fs.String("out", "artifacts", "output directory for artifacts + manifest.json")
 	offline := fs.Bool("offline", false, "do not call any model (deterministic; requires --blog)")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	timeout := fs.Duration("timeout", 15*time.Minute, "overall generation timeout")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -71,7 +70,7 @@ func run(args []string) int {
 
 	orch := &contentsuite.Orchestrator{}
 	if !*offline {
-		orch.Model = ollama.New(*model, ollama.WithBaseURL(*ollamaURL))
+		orch.Model = localgen.Default(*model)
 	}
 
 	var blog *releasegen.BlogPost

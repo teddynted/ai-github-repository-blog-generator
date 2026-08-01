@@ -95,24 +95,3 @@ func N8N(baseURL, apiKey string, timeout time.Duration, logger *slog.Logger) *HT
 		},
 	}
 }
-
-// Ollama builds a probe that reports busy when a model is resident in memory
-// (recently used), via GET {baseURL}/api/ps. A genuinely idle Ollama unloads
-// its models after keep_alive, so a loaded model is a sound recent-activity signal.
-func Ollama(baseURL string, timeout time.Duration, logger *slog.Logger) *HTTPProbe {
-	return &HTTPProbe{
-		name:   "ollama",
-		url:    baseURL + "/api/ps",
-		client: newClient(timeout),
-		logger: logger,
-		busy: func(body []byte) (bool, error) {
-			var r struct {
-				Models []json.RawMessage `json:"models"`
-			}
-			if err := json.Unmarshal(body, &r); err != nil {
-				return false, err
-			}
-			return len(r.Models) > 0, nil
-		},
-	}
-}

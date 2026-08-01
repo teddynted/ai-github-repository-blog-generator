@@ -1,8 +1,6 @@
 # LinkedIn Content: acme/widget v1.0.0
 
-_5 posts · avg engagement 79/100 · avg confidence 83/100_
-
-> **Notes:** post 1 (Release Announcement) has no technical highlights; the release context may be thin; post 4 (Developer Productivity Tip) has no technical highlights; the release context may be thin; post 5 (Behind-the-Build) has no technical highlights; the release context may be thin
+_5 posts · avg engagement 79/100 · avg confidence 80/100_
 
 ---
 
@@ -10,25 +8,23 @@ _5 posts · avg engagement 79/100 · avg confidence 83/100_
 
 **Variation:** Long-form Post · **Audience:** Software engineers and engineering managers · **Engagement:** 74/100
 
-**Title:** Shipping widget v1.0.0
+**Title:** An infrastructure update worth sharing
 
 ### Post
 
-Just shipped widget v1.0.0.
-
-Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.
+Some infrastructure work worth sharing.
 
 Stack: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
 What would you want to see in the next release?
 
-Repo and release notes: https://github.com/acme/widget
+The full technical breakdown: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Engagement prompt:** What would you want to see in the next release?
 
-**CTA:** Repo and release notes: https://github.com/acme/widget
+**CTA:** The full technical breakdown: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #Release #DevOps #SoftwareEngineering #CloudComputing #AIEngineering #AWSLambda
+**Hashtags:** #Release #DevOps #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [LinkedIn Banner] widget-v1-0-0-linkedin-banner.png _(Visual Assets (M9))_
@@ -42,13 +38,11 @@ _Suggested publish: Tue 8:30am (local) · under 1 min_
 
 **Variation:** Long-form Post · **Audience:** Cloud and solutions architects · **Engagement:** 88/100
 
-**Title:** How widget v1.0.0 is architected
+**Title:** How this architecture fits together
 
 ### Post
 
 A note on the architecture behind this one.
-
-Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
 
 What stood out:
 • Uses AWS Lambda, Amazon EventBridge, Amazon SQS, and Amazon EC2
@@ -57,16 +51,16 @@ Stack: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudForm
 
 How would you approach this architecture? I'd genuinely like to hear other takes.
 
-Explore the architecture in the repo: https://github.com/acme/widget
+Full architecture write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Technical highlights:**
 - Uses AWS Lambda, Amazon EventBridge, Amazon SQS, and Amazon EC2
 
 **Engagement prompt:** How would you approach this architecture? I'd genuinely like to hear other takes.
 
-**CTA:** Explore the architecture in the repo: https://github.com/acme/widget
+**CTA:** Full architecture write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #Architecture #CloudComputing #SystemDesign #SoftwareEngineering #AIEngineering #AWSLambda
+**Hashtags:** #Architecture #CloudComputing #SystemDesign #SoftwareEngineering #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [Architecture Diagram] widget v1.0.0 — High-Level AWS Architecture _(Architecture (M11))_
@@ -95,16 +89,16 @@ Stack: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudForm
 
 What AWS service would you reach for here — and why?
 
-Explore the architecture in the repo: https://github.com/acme/widget
+Full architecture write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Technical highlights:**
 - Uses AWS Lambda, Amazon EventBridge, Amazon SQS, and Amazon EC2
 
 **Engagement prompt:** What AWS service would you reach for here — and why?
 
-**CTA:** Explore the architecture in the repo: https://github.com/acme/widget
+**CTA:** Full architecture write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #AWS #CloudComputing #DevOps #SoftwareEngineering #AIEngineering #AWSLambda
+**Hashtags:** #AWS #CloudComputing #DevOps #SoftwareEngineering #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [Architecture Diagram] widget v1.0.0 — High-Level AWS Architecture _(Architecture (M11))_
@@ -118,25 +112,23 @@ _Suggested publish: Thu 9:00am (local) · under 1 min_
 
 **Variation:** Short Update · **Audience:** Working developers · **Engagement:** 74/100
 
-**Title:** A small workflow win from widget
+**Title:** A small workflow win worth sharing
 
 ### Post
 
 Small thing, real time saved:
 
-this release
-
 Stack: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
 Would this fit into your workflow? What would you change?
 
-Try it — the repo is here: https://github.com/acme/widget
+More detail in the write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Engagement prompt:** Would this fit into your workflow? What would you change?
 
-**CTA:** Try it — the repo is here: https://github.com/acme/widget
+**CTA:** More detail in the write-up: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #DeveloperProductivity #Coding #SoftwareEngineering #CloudComputing #AIEngineering #AWSLambda
+**Hashtags:** #DeveloperProductivity #Coding #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [LinkedIn Banner] widget-v1-0-0-linkedin-banner.png _(Visual Assets (M9))_
@@ -149,25 +141,23 @@ _Suggested publish: Tue 5:00pm (local) · under 1 min_
 
 **Variation:** Long-form Post · **Audience:** Developer advocates and the open-source community · **Engagement:** 80/100
 
-**Title:** Behind the build: widget v1.0.0
+**Title:** Behind the build
 
 ### Post
 
 A bit of the story behind how this was built.
 
-Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.
-
 Stack: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
 What would you have built differently?
 
-Repo and release notes: https://github.com/acme/widget
+The full technical breakdown: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
 **Engagement prompt:** What would you have built differently?
 
-**CTA:** Repo and release notes: https://github.com/acme/widget
+**CTA:** The full technical breakdown: {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/
 
-**Hashtags:** #BuildInPublic #OpenSource #SoftwareEngineering #CloudComputing #AIEngineering #AWSLambda
+**Hashtags:** #BuildInPublic #OpenSource #SoftwareEngineering #CloudComputing #AIEngineering #AmazonEventBridge
 
 **Visual references:**
 - [LinkedIn Banner] widget-v1-0-0-linkedin-banner.png _(Visual Assets (M9))_
@@ -183,8 +173,8 @@ _Suggested publish: Wed 8:00am (local) · under 1 min_
 - **Audiences:** Software engineers and engineering managers; Cloud and solutions architects; AWS and cloud engineers; Working developers; Developer advocates and the open-source community
 - **AWS services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
 - **Technology stack:** Go, AWS Lambda, Amazon SQS, Amazon EventBridge, AWS CloudFormation
-- **SEO keywords:** this release, AWS Lambda
-- **Avg engagement:** 79/100 · **Avg confidence:** 83/100
+- **SEO keywords:** Event-Driven Pipeline, Amazon EventBridge
+- **Avg engagement:** 79/100 · **Avg confidence:** 80/100
 - **Publish cadence:** Publish 1–2 posts per week, spaced across Tue–Thu peak windows; lead with the deep dives.
 - **Production notes:**
   - Posts reference existing visual assets and architecture diagrams — do not regenerate images.

@@ -15,7 +15,7 @@
 //	# From a Release Context + a blog file, offline end-to-end:
 //	go run ./cmd/voiceover --context ctx.json --blog post.md --offline
 //
-//	# Generate the storyboard via Ollama first, then the voice-over as JSON:
+//	# Generate the storyboard via the Anthropic API first, then the voice-over as JSON:
 //	go run ./cmd/voiceover --context ctx.json --format json --out script.json
 package main
 
@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboard"
@@ -42,10 +42,9 @@ func run(args []string) int {
 	fs := flag.NewFlagSet("voiceover", flag.ContinueOnError)
 	sbPath := fs.String("storyboard", "", "path to an existing Storyboard JSON file")
 	ctxPath := fs.String("context", "", "path to a Release Context JSON file (used when --storyboard is absent)")
-	blogPath := fs.String("blog", "", "path to an existing blog Markdown file (else generate via Ollama)")
+	blogPath := fs.String("blog", "", "path to an existing blog Markdown file (else generate via the Anthropic API)")
 	format := fs.String("format", "md", "output format: md | json")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	offline := fs.Bool("offline", false, "do not call the model (deterministic narration)")
 	outPath := fs.String("out", "", "output file (default: stdout)")
 	timeout := fs.Duration("timeout", 5*time.Minute, "generation timeout")
@@ -62,7 +61,7 @@ func run(args []string) int {
 
 	var model2 releasegen.Model
 	if !*offline {
-		model2 = ollama.New(*model, ollama.WithBaseURL(*ollamaURL))
+		model2 = localgen.Default(*model)
 	}
 
 	sb, err := resolveStoryboard(ctx, *sbPath, *ctxPath, *blogPath, model2)

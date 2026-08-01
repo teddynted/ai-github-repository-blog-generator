@@ -2,8 +2,6 @@
 
 _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and cloud practitioners · intermediate_
 
-> **Notes:** runtime 0:59 is under the 10-minute long-form target; the upstream blog/storyboard may be too thin for a full long-form video
-
 ## Hook (`00:00–00:15`, showcase)
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.

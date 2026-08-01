@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/governance"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 )
 
@@ -37,8 +37,7 @@ func run(args []string) int {
 	titleFlag := fs.String("title", "", "content title (default: derived from the file)")
 	autoApprove := fs.Bool("auto-approve", false, "drive the full approve → publish lifecycle")
 	format := fs.String("format", "md", "output format: md | json")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model for AI review")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	offline := fs.Bool("offline", false, "do not call the model (deterministic review only)")
 	minScore := fs.Int("min-score", 80, "minimum overall score to pass review")
 	outPath := fs.String("out", "", "output file (default: stdout)")
@@ -76,7 +75,7 @@ func run(args []string) int {
 
 	var ai governance.AIReviewer
 	if !*offline {
-		ai = governance.NewModelReviewer(ollama.New(*model, ollama.WithBaseURL(*ollamaURL)), "ollama:"+*model)
+		ai = governance.NewModelReviewer(localgen.Default(*model), "anthropic:"+*model)
 	}
 
 	cfg := governance.DefaultConfig()

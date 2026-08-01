@@ -121,10 +121,17 @@ func TestEndToEndFromSampleRelease(t *testing.T) {
 		"linkedin":   "golden-linkedin.md",
 		"x-thread":   "golden-x-thread.md",
 	}
+	update := os.Getenv("UPDATE_GOLDENS") == "1"
 	for kind, file := range goldenMD {
 		got, ok := byKind[kind]
 		if !ok {
 			t.Errorf("suite did not produce %q", kind)
+			continue
+		}
+		if update {
+			if err := os.WriteFile(filepath.Join(td, file), []byte(got), 0o644); err != nil {
+				t.Fatalf("update golden %s: %v", file, err)
+			}
 			continue
 		}
 		want := read(t, filepath.Join(td, file))

@@ -103,7 +103,7 @@ func TestHandleMessageNotifiesHeld(t *testing.T) {
 
 func TestHandleMessageRetainsAndNotifiesOnRunError(t *testing.T) {
 	q := &fakeConsumer{}
-	r := &fakeRunner{err: errors.New("ollama down")}
+	r := &fakeRunner{err: errors.New("provider down")}
 	n := &fakeNotifier{}
 	mt := &fakeMeter{}
 	handleMessage(context.Background(), discardLogger(), q, r, nil, n, mt,

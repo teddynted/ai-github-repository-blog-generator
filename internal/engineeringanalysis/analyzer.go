@@ -1,5 +1,5 @@
 // Package engineeringanalysis is Stage 2 of the content pipeline: it drives a
-// LOCAL model (Ollama) to read the factual ReleaseContext and EXTRACT a
+// model (via the AI Provider Router) to read the factual ReleaseContext and EXTRACT a
 // structured engineering analysis (releasecontext.EngineeringContext) — the
 // "why" behind a release. It writes no prose.
 //
@@ -8,7 +8,7 @@
 // deterministic work stay local while the paid, quality-critical writing is
 // grounded in a clean, inspectable contract rather than a raw repository dump.
 //
-// The package depends only on a small Model port (satisfied by *ollama.Client
+// The package depends only on a small Model port (satisfied by the Anthropic/Bedrock clients
 // today, any platform.LLMProvider via an adapter tomorrow), so it is decoupled
 // from any specific model and fully unit-testable with a fake.
 package engineeringanalysis
@@ -24,7 +24,7 @@ import (
 )
 
 // Model is the inference port. It matches the minimal generate contract used
-// across the platform's generators, so *ollama.Client satisfies it directly.
+// across the platform's generators, so the provider clients satisfy it directly.
 type Model interface {
 	Generate(ctx context.Context, prompt string) (string, error)
 }

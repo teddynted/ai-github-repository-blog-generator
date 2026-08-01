@@ -31,19 +31,9 @@ func TestN8NIdleWhenNoExecutions(t *testing.T) {
 	}
 }
 
-func TestOllamaBusyWhenModelLoaded(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"models":[{"name":"llama3"}]}`))
-	}))
-	defer srv.Close()
-	if !Ollama(srv.URL, time.Second, nil).Busy(context.Background()) {
-		t.Error("expected busy when a model is resident")
-	}
-}
-
 func TestFailSafeBusyOnUnreachable(t *testing.T) {
 	// Nothing listening — an unreachable probe must count as BUSY, never idle.
-	p := Ollama("http://127.0.0.1:1", 200*time.Millisecond, nil)
+	p := N8N("http://127.0.0.1:1", "", 200*time.Millisecond, nil)
 	if !p.Busy(context.Background()) {
 		t.Error("unreachable probe must fail safe to busy")
 	}

@@ -8,12 +8,12 @@ import (
 
 // EngineeringContext is the structured engineering analysis of a release — the
 // single source of truth that sits BETWEEN the deterministic analysis models
-// (Ollama) and the technical-writer model (Claude).
+// and the technical-writer model (Claude).
 //
 // The pipeline is deliberately split by responsibility:
 //
 //   - Stage 1 (repository analysis) produces the factual ReleaseContext.
-//   - Stage 2 (Ollama) reads those facts and EXTRACTS this structured JSON —
+//   - Stage 2 reads those facts and EXTRACTS this structured JSON —
 //     the "why" behind the release: decisions, trade-offs, service choices,
 //     security posture, scalability, cost, and what becomes possible next. It
 //     writes no prose.

@@ -1,6 +1,6 @@
 // Package modelfallback makes the content pipeline resilient to a writer model
 // that is configured but unavailable at call time. It wraps a primary model
-// (e.g. Claude on Bedrock) and a secondary (e.g. the local Ollama model): each
+// (e.g. Claude on Bedrock) and a secondary (e.g. the model via the provider router): each
 // Generate tries the primary and, on error, falls back to the secondary.
 //
 // This closes a real gap: a model client can construct successfully yet fail on

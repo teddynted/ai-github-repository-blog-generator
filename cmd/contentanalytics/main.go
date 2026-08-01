@@ -159,7 +159,7 @@ func seedSynthetic(repo ca.Repository, start ca.Date) {
 		{"pub-hash-1", "c3", "EventBridge Patterns", ca.PlatformHashnode, ca.TypeBlog, []string{"aws", "eventbridge"}, []string{"events", "sqs"}},
 		{"pub-med-1", "c4", "Shipping AI Content Pipelines", ca.PlatformMedium, ca.TypeArticle, []string{"ai", "devops"}, []string{"pipeline", "bedrock"}},
 		{"pub-yt-1", "c5", "Build a Release Bot", ca.PlatformYouTube, ca.TypeYouTubeVideo, []string{"golang", "aws"}, []string{"automation", "ci"}},
-		{"pub-yt-2", "c6", "60s: Ollama Local LLM", ca.PlatformYouTube, ca.TypeYouTubeShorts, []string{"ai", "ollama"}, []string{"local", "llm"}},
+		{"pub-yt-2", "c6", "60s: Local LLM Inference", ca.PlatformYouTube, ca.TypeYouTubeShorts, []string{"ai", "llm"}, []string{"local", "llm"}},
 	}
 	for i, d := range demos {
 		_ = repo.SavePublication(ca.Publication{

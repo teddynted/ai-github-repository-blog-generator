@@ -1,6 +1,6 @@
 // Package idle decides whether an on-demand EC2 host has been idle long enough
 // to stop. It combines CloudWatch metrics (CPU, network) with application-level
-// activity probes (n8n, Ollama) and a sustained-idle streak, so the box is
+// activity probes (n8n) and a sustained-idle streak, so the box is
 // stopped because nothing is happening — not because a clock struck a number.
 //
 // The decision logic is pure and injected with small interfaces (Metrics,

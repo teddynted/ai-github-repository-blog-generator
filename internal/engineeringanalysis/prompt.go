@@ -17,7 +17,7 @@ const jsonSchema = `{
   "aws_services": [{"name": "service", "purpose": "what it does here", "rationale": "why this over alternatives"}],
   "security": ["IAM / networking / encryption / least-privilege facts"],
   "scalability": {"current": "how it scales today", "future": "how it will scale"},
-  "cost_optimizations": ["EC2 / Bedrock / Ollama / storage / networking cost choices"],
+  "cost_optimizations": ["EC2 / Bedrock / storage / networking cost choices"],
   "lessons_learned": ["engineering lessons this release surfaced"],
   "future_milestones": ["what this release makes possible next"],
   "implementation_notes": ["notable implementation details worth explaining"]

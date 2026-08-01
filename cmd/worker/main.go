@@ -256,7 +256,7 @@ func main() {
 	var notifier notify.Notifier = notifiers
 	meter := metrics.New(metrics.Namespace, os.Stdout)
 
-	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "model", a.Config.OllamaModel)
+	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "ai_chain", router.Chain())
 	run(ctx, a.Logger, queue, pipe, releasePipe, notifier, meter)
 	a.Logger.Info("worker stopped")
 }

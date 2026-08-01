@@ -92,10 +92,10 @@ func TestKeepsWhenCPUBusy(t *testing.T) {
 
 func TestKeepsWhenProbeBusyEvenIfMetricsIdle(t *testing.T) {
 	e := evaluator(fakeMetrics{cpu: []float64{1, 1}, net: []float64{10}},
-		fakeProbe{name: "ollama", busy: true})
+		fakeProbe{name: "worker", busy: true})
 	d, sig, _ := e.Evaluate(context.Background(), idleInstance())
-	if d.Action != ActionKeep || d.Reason != "busy:ollama" || sig.BusyProbe != "ollama" {
-		t.Fatalf("got %+v sig=%+v, want keep/busy:ollama", d, sig)
+	if d.Action != ActionKeep || d.Reason != "busy:worker" || sig.BusyProbe != "worker" {
+		t.Fatalf("got %+v sig=%+v, want keep/busy:worker", d, sig)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestKeepsWhenStreakTooShort(t *testing.T) {
 
 func TestStopsWhenIdleLongEnough(t *testing.T) {
 	e := evaluator(fakeMetrics{cpu: []float64{1, 2, 0.5}, net: []float64{100, 200}},
-		fakeProbe{name: "n8n", busy: false}, fakeProbe{name: "ollama", busy: false})
+		fakeProbe{name: "n8n", busy: false}, fakeProbe{name: "worker", busy: false})
 	d, _, err := e.Evaluate(context.Background(), idleInstance())
 	if err != nil {
 		t.Fatalf("err=%v", err)

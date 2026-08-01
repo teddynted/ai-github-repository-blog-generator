@@ -19,7 +19,7 @@
 //     provider-specific config logic leaks into business services.
 //
 // Each domain ships at least one reference implementation to demonstrate the
-// model; production providers (Bedrock, OpenAI, Ollama, Stable Diffusion, Veo,
+// model; production providers (Bedrock, OpenAI, Stable Diffusion, Veo,
 // ElevenLabs, Pinecone, LinkedIn, …) are added the same way, as new files that
 // implement the interface and call Register — with zero edits to this package.
 package platform

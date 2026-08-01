@@ -1,6 +1,6 @@
 // Command content is the local content-development tool. It generates any
 // supported artifact from a Release Context fixture using a selectable provider
-// (Anthropic, Bedrock, or Ollama), writes the result to an output directory, and
+// (Anthropic, Bedrock, or Claude Code), writes the result to an output directory, and
 // validates it — all with no GitHub, EC2, EventBridge, SQS, or S3 involvement.
 // It mirrors the production pipeline by reusing internal/contentsuite and the
 // same generators, so what you iterate on locally is what production runs.
@@ -8,7 +8,7 @@
 // Usage:
 //
 //	go run ./cmd/content --artifact blog --provider anthropic --context fixtures/v0.3.0.json --output output/
-//	go run ./cmd/content --artifact all  --provider ollama    --context fixtures/v0.3.0.json
+//	go run ./cmd/content --artifact all  --provider claude-code --context fixtures/v0.3.0.json
 //	go run ./cmd/content --artifact blog --provider anthropic --context fixtures/v0.3.0.json --dry-run
 //	go run ./cmd/content playground
 //
