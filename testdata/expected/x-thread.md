@@ -8,23 +8,19 @@ _5 threads · 5 posts each · avg engagement 73/100_
 
 ## Release Announcement
 
-**Audience:** Developers and technical communities · **Length:** 4 posts · **Engagement:** 69/100
+**Audience:** Developers and technical communities · **Length:** 3 posts · **Engagement:** 69/100
 
-**Post 1/4** _(194 chars)_
+**Post 1/3** _(194 chars)_
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 _Visual: widget-v1-0-0-x-image.png_
 
-**Post 2/4** _(140 chars)_
-
-> Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.
-
-**Post 3/4** _(90 chars)_
+**Post 2/3** _(90 chars)_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(163 chars)_
+**Post 3/3** _(163 chars)_
 
 > What would you build with this? Full breakdown on the blog 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/ #OpenSource #DevOps #AWS #AmazonEventBridge
 
@@ -38,29 +34,25 @@ _Visual: widget-v1-0-0-x-image.png_
 - [X Image] widget-v1-0-0-x-image.png _(Visual Assets (M9))_
 - [Release Card] widget-v1-0-0-release-card.png _(Visual Assets (M9))_
 
-_Suggested posting: Tue 9:00am (local) · 0m 48s_
+_Suggested posting: Tue 9:00am (local) · 0m 36s_
 
 ---
 
 ## Architecture Walkthrough
 
-**Audience:** Cloud engineers and software architects · **Length:** 4 posts · **Engagement:** 83/100
+**Audience:** Cloud engineers and software architects · **Length:** 3 posts · **Engagement:** 83/100
 
-**Post 1/4** _(194 chars)_
+**Post 1/3** _(194 chars)_
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 _Visual: widget v1.0.0 — High-Level AWS Architecture_
 
-**Post 2/4** _(167 chars)_
-
-> Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
-
-**Post 3/4** _(90 chars)_
+**Post 2/3** _(90 chars)_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(177 chars)_
+**Post 3/3** _(177 chars)_
 
 > What architecture would you choose for this? 👇 Full architecture write-up 👇 {{site_url}}/shipping-widget-v1-0-0-event-driven-pipeline/ #Architecture #CloudComputing #DevOps #AWS
 
@@ -74,7 +66,7 @@ _Visual: widget v1.0.0 — High-Level AWS Architecture_
 - [Architecture Diagram] widget v1.0.0 — High-Level AWS Architecture _(Architecture (M11))_
 - [Architecture Illustration] widget-v1-0-0-architecture-illustration.png _(Visual Assets (M9))_
 
-_Suggested posting: Wed 12:30pm (local) · 0m 48s_
+_Suggested posting: Wed 12:30pm (local) · 0m 36s_
 
 ---
 
@@ -152,23 +144,19 @@ _Suggested posting: Tue 4:00pm (local) · 0m 48s_
 
 ## Open Source Update
 
-**Audience:** The open-source community · **Length:** 4 posts · **Engagement:** 69/100
+**Audience:** The open-source community · **Length:** 3 posts · **Engagement:** 69/100
 
-**Post 1/4** _(194 chars)_
+**Post 1/3** _(194 chars)_
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
 _Visual: widget-v1-0-0-x-image.png_
 
-**Post 2/4** _(140 chars)_
-
-> Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker.
-
-**Post 3/4** _(90 chars)_
+**Post 2/3** _(90 chars)_
 
 > Built with AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, and AWS CloudFormation.
 
-**Post 4/4** _(151 chars)_
+**Post 3/3** _(151 chars)_
 
 > What would you want to see next? Issues and PRs welcome. Star / contribute 👉 https://github.com/acme/widget #OpenSource #DevOps #AWS #AmazonEventBridge
 
@@ -182,7 +170,7 @@ _Visual: widget-v1-0-0-x-image.png_
 - [X Image] widget-v1-0-0-x-image.png _(Visual Assets (M9))_
 - [Release Card] widget-v1-0-0-release-card.png _(Visual Assets (M9))_
 
-_Suggested posting: Wed 9:00am (local) · 0m 48s_
+_Suggested posting: Wed 9:00am (local) · 0m 36s_
 
 ---
 

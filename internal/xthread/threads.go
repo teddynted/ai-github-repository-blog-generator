@@ -63,8 +63,9 @@ func (g *Generator) composePosts(ctx context.Context, pkg ReleasePackage, c thre
 	hook := g.hook(ctx, c, hookDraft(c, repo, t))
 	pool = append(pool, block{content: hook, visual: firstVisual(visuals)})
 
-	// 2. Context.
-	if s := firstSentences(c.Seed, 2); s != "" && collapse(s) != collapse(hook) {
+	// 2. Context — only when it doesn't name the repository or release version
+	// (threads stay evergreen; the substance is in the takeaways/body).
+	if s := firstSentences(c.Seed, 2); s != "" && collapse(s) != collapse(hook) && !namesReleaseIdentity(s, pkg) {
 		pool = append(pool, block{content: s})
 	}
 
@@ -136,30 +137,34 @@ func ctaBlock(pkg ReleasePackage, c threadCandidate) block {
 	return block{content: content}
 }
 
-func hookDraft(c threadCandidate, repo, t string) string {
+// hookDraft is a problem-first thread opener. Like the LinkedIn openers, it does
+// NOT name the repository or release version — a thread should read as an
+// evergreen engineering note, not a release announcement. The repo/tag args are
+// retained for signature stability but intentionally unused.
+func hookDraft(c threadCandidate, _, _ string) string {
 	switch c.Type {
 	case "Release Announcement":
-		return fmt.Sprintf("🚀 %s %s is out. A quick thread on what shipped and how it's built. 🧵", repo, t)
+		return "Some infrastructure work worth a short thread. 🧵"
 	case "Feature Breakdown":
-		return fmt.Sprintf("A short thread on the headline feature in %s %s 🧵", repo, t)
+		return "A short thread on a design choice from recent work 🧵"
 	case "Architecture Walkthrough":
-		return fmt.Sprintf("How %s %s is architected — a thread 🧵", repo, t)
+		return "A note on the architecture behind this one — a thread 🧵"
 	case "AWS Best Practices":
-		return "An AWS pattern from this release worth stealing 🧵"
+		return "An AWS pattern worth stealing 🧵"
 	case "AI Engineering Insights":
-		return "Notes on the AI-engineering side of this project 🧵"
+		return "Notes on the AI-engineering side of this work 🧵"
 	case "Engineering Lessons Learned":
-		return fmt.Sprintf("A lesson from shipping %s %s 🧵", repo, t)
+		return "A lesson worth writing down from recent infrastructure work 🧵"
 	case "Implementation Deep Dive":
 		return "How this actually works under the hood — a thread 🧵"
 	case "Performance Improvements":
 		return "Reliability work that quietly pays off 🧵"
 	case "Developer Tips":
-		return fmt.Sprintf("A small workflow win from %s 🧵", repo)
+		return "A small workflow win worth sharing 🧵"
 	case "Open Source Update":
-		return fmt.Sprintf("Open-source update: %s %s 🧵", repo, t)
+		return "An open-source infrastructure update 🧵"
 	default:
-		return fmt.Sprintf("A few technical notes on %s %s 🧵", repo, t)
+		return "A few technical notes from recent work 🧵"
 	}
 }
 

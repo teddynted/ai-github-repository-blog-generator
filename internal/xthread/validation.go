@@ -63,6 +63,17 @@ func (col XThreadCollection) Validate(pkg ReleasePackage) []string {
 			problems = append(problems, where+": not grounded in the release context")
 		}
 
+		// Neutrality: thread PROSE must be evergreen — no repository name or release
+		// version (a CTA link is attribution, not body copy, so it's excluded).
+		if prose := proseOnly(threadBody(th)); namesReleaseIdentity(prose, pkg) {
+			if r := repoShort(pkg); r != "" && strings.Contains(strings.ToLower(prose), strings.ToLower(r)) {
+				problems = append(problems, where+": thread names the repository (must be evergreen)")
+			}
+			if t := tag(pkg); t != "" && strings.Contains(prose, t) {
+				problems = append(problems, where+": thread names the release version (must be evergreen)")
+			}
+		}
+
 		// Technical claims: every key takeaway must be grounded.
 		for _, k := range th.KeyTakeaways {
 			if !termGrounded(k, grounded) {
