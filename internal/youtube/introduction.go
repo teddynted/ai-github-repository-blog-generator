@@ -101,7 +101,7 @@ func learningOutcomes(pkg ReleasePackage, chapters []Chapter) []string {
 func outcomeFor(typ string) string {
 	switch typ {
 	case "problem":
-		return "Understand the problem this release solves"
+		return "Understand the problem this architecture solves"
 	case "architecture", "diagram":
 		return "Read the architecture and how the components fit together"
 	case "cloudformation":

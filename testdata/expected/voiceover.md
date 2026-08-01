@@ -25,7 +25,6 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 speaking (145 wpm)_
 - **Sync:**
   - [Camera Move] Match the delivery to the camera move — start as it begins, resolve as it settles. (Slow Zoom In)
   - [Overlay] Land the on-screen text as you say it. (Introduction)
-  - [Overlay] Land the on-screen text as you say it. (acme/widget v1.0.0)
 - **Closing cue:** Settle the last word cleanly so the transition can carry the cut.
 - **Transition:** With the stage set, let's step through the architecture.
 

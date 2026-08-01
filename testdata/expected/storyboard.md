@@ -19,7 +19,6 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 (short, 9:16)_
   2. Scale Up → title — Title card scales up into place.
 - **Overlays:**
   - [Title] Introduction
-  - [Subtitle] acme/widget v1.0.0
 - **Assets:** Repository Logo, Title Card
 - **Transition:** Diagram Morph (0.8s)
 - **Music:** upbeat, energetic intro

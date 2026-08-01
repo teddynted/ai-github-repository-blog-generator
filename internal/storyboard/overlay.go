@@ -13,11 +13,8 @@ func planOverlays(typ, title string, rctx *rc.ReleaseContext) []Overlay {
 
 	switch typ {
 	case "introduction":
-		sub := rctx.Repository.FullName
-		if rctx.Release.Tag != "" {
-			sub += " " + rctx.Release.Tag
-		}
-		out = append(out, Overlay{Kind: "Subtitle", Text: sub, Position: "center", Timing: "scene start"})
+		// No repo/version subtitle — an on-screen "org/repo v0.6.0" label is
+		// release-specific noise; the Title overlay frames the scene.
 	case "architecture", "diagram":
 		for _, svc := range topStrings(rctx.Architecture.AWSServices, 5) {
 			out = append(out, Overlay{Kind: "AWS Service Label", Text: svc, Position: "beside node", Timing: "on node highlight"})
