@@ -1,5 +1,7 @@
 package seo
 
+import "strings"
+
 // blogTagMax caps blog tags (Dev.to allows 4; Medium 5) — keep it tight.
 const blogTagMax = 6
 
@@ -11,7 +13,7 @@ func planBlogTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.Primary...)
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Technology...)
-	return topStrings(dedupe(tags), blogTagMax)
+	return topStrings(dedupeTags(dropGeneric(tags)), blogTagMax)
 }
 
 // planYouTubeTags returns YouTube tags (reusing the YouTube script's suggested
@@ -23,5 +25,23 @@ func planYouTubeTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Technical...)
 	tags = append(tags, k.Developer...)
-	return topStrings(dedupe(tags), 15)
+	return topStrings(dedupeTags(dropGeneric(tags)), 15)
+}
+
+// dedupeTags removes tags that are the same term in a different format —
+// "amazon-cloudwatch" vs "amazon cloudwatch" — which exact-match dedup keeps as
+// two tags, wasting slots. It normalizes on lower-case + hyphen/space and keeps
+// the first occurrence.
+func dedupeTags(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, t := range in {
+		key := strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(t, "-", " ")), " "))
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, t)
+	}
+	return out
 }

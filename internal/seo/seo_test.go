@@ -119,6 +119,19 @@ func TestSEOEndToEnd(t *testing.T) {
 	}
 }
 
+func TestDedupeTagsAcrossFormats(t *testing.T) {
+	in := []string{"amazon-cloudwatch", "amazon cloudwatch", "aws-iam", "AWS IAM", "go", "GitHub Actions", "github-actions"}
+	got := dedupeTags(in)
+	// One entry per normalized (lowercase, hyphen==space) term.
+	if len(got) != 4 {
+		t.Fatalf("expected 4 unique tags, got %d: %v", len(got), got)
+	}
+	// First-occurrence wins.
+	if got[0] != "amazon-cloudwatch" || got[1] != "aws-iam" {
+		t.Errorf("unexpected order/form: %v", got)
+	}
+}
+
 func TestMainEntityOfPageIsObject(t *testing.T) {
 	blog := BlogSEO{Title: "T", MetaDescription: "D", Canonical: Canonical{URL: "https://example.com/blog/x"}}
 	sd := planStructuredData(samplePackage(), blog, Keywords{Primary: []string{"aws"}}, "2026-01-01T00:00:00Z")
