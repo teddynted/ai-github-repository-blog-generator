@@ -16,7 +16,37 @@ func planBlogTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.Technology...)
 	tags = append(tags, k.AWS...)
 	tags = dedupeTags(dropPlatformConcepts(dropJunk(dropGeneric(tags), pkg), pkg))
-	return slugTags(capServiceShare(tags, pkg, blogTagMax))
+	return slugTags(conciseTags(capServiceShare(tags, pkg, blogTagMax), pkg))
+}
+
+// conciseTags shortens verbose phrase-tags to searchable taxonomy tags: a
+// multi-word topic phrase is reduced to its head noun compound (its last two
+// words) and a trailing plural is singularized — "boot-time UserData
+// provisioning" → "userdata provisioning", "Pre-Baked Custom AMIs" →
+// "custom AMI". AWS service names are kept whole ("Amazon EventBridge Scheduler"
+// stays intact).
+func conciseTags(tags []string, pkg ReleasePackage) []string {
+	awsSet := lowerSet(awsServices(pkg))
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if isAWSServiceName(t, awsSet) {
+			out = append(out, t)
+			continue
+		}
+		words := strings.Fields(t)
+		if len(words) > 2 {
+			words = words[len(words)-2:]
+		}
+		if n := len(words); n > 0 {
+			last := words[n-1]
+			lc := strings.ToLower(last)
+			if len(last) > 3 && strings.HasSuffix(lc, "s") && !strings.HasSuffix(lc, "ss") {
+				words[n-1] = last[:len(last)-1]
+			}
+		}
+		out = append(out, strings.Join(words, " "))
+	}
+	return out
 }
 
 // slugTags renders tags in the conventional tag form: lowercase, hyphen-
@@ -48,7 +78,7 @@ func planYouTubeTags(pkg ReleasePackage, k Keywords) []string {
 	tags = append(tags, k.AWS...)
 	tags = append(tags, k.Developer...)
 	tags = dedupeTags(dropPlatformConcepts(dropJunk(dropGeneric(tags), pkg), pkg))
-	return slugTags(capServiceShare(tags, pkg, 15))
+	return slugTags(conciseTags(capServiceShare(tags, pkg, 12), pkg))
 }
 
 // capServiceShare caps the list at max, keeping topic (non-service) tags freely
