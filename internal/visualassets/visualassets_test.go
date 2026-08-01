@@ -96,6 +96,39 @@ func TestPRASectionsAndGrounding(t *testing.T) {
 	}
 }
 
+func TestPlatformNotesAndDiagrammaticVariant(t *testing.T) {
+	// Unit: per-platform notes present only where expected.
+	for _, typ := range []string{"YouTube Thumbnail", "GitHub Social Card", "LinkedIn Banner", "TikTok Cover", "YouTube Shorts Cover"} {
+		if len(platformNotes(typ)) == 0 {
+			t.Errorf("expected platform notes for %q", typ)
+		}
+	}
+	if len(platformNotes("Blog Header")) != 0 {
+		t.Error("Blog Header should have no platform-specific notes")
+	}
+	// Unit: diagrammatic variant only for diagram assets.
+	if diagrammaticVariant("Architecture Illustration") == "" || diagrammaticVariant("AWS Workflow Diagram") == "" {
+		t.Error("diagram assets should get a diagrammatic variant")
+	}
+	if diagrammaticVariant("YouTube Thumbnail") != "" {
+		t.Error("non-diagram asset should not get a diagrammatic variant")
+	}
+	// End-to-end: sections render for the right assets.
+	col, err := newGen().VisualAssets(context.Background(), samplePackage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := col.Markdown()
+	for _, want := range []string{
+		"### Platform Optimization", "silhouette readability at 120px",
+		"### Diagrammatic Variant", "strict left-to-right flow",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("markdown missing %q", want)
+		}
+	}
+}
+
 func TestRenderGuidanceMapping(t *testing.T) {
 	cases := map[string]string{
 		"Architecture Illustration": "High",

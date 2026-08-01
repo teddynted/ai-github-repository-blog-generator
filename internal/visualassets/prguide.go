@@ -61,3 +61,51 @@ func depictsArchitecture(assetType string) bool {
 	}
 	return false
 }
+
+// platformNotes returns per-platform composition optimizations for an asset (#3),
+// tuned to where the image is actually consumed. Empty for platforms with no
+// distinctive constraint.
+func platformNotes(assetType string) []string {
+	switch {
+	case strings.Contains(assetType, "YouTube Thumbnail"):
+		return []string{
+			"One dominant focal object; extreme silhouette readability at 120px",
+			"Strong warm/cool contrast with clear depth separation",
+			"Avoid fine connector details that disappear on mobile",
+		}
+	case strings.Contains(assetType, "GitHub Social Card"):
+		return []string{
+			"Reads cleanly in GitHub dark-mode preview",
+			"Legible when embedded in Slack, Discord, and X link previews",
+			"Strong center-right focal cluster",
+		}
+	case strings.Contains(assetType, "LinkedIn Banner"):
+		return []string{
+			"Survives professional-feed compression on desktop and mobile",
+			"Keep important detail out of the top-left profile-photo overlap area",
+			"Respect desktop and mobile banner safe zones",
+		}
+	case strings.Contains(assetType, "TikTok") || strings.Contains(assetType, "Shorts"):
+		return []string{
+			"Keep the center clear of platform UI overlays (right-rail icons, bottom caption bar)",
+			"Large simple shapes; high-contrast focal region centered",
+			"Reduced architectural complexity for small-screen viewing",
+		}
+	default:
+		return nil
+	}
+}
+
+// diagrammaticVariant returns a documentation-first, diagrammatic alternative
+// prompt for architecture/workflow assets (#7) — offered alongside the artistic
+// version. Empty for non-diagram assets.
+func diagrammaticVariant(assetType string) string {
+	if !strings.Contains(assetType, "Architecture") && !strings.Contains(assetType, "Workflow") {
+		return ""
+	}
+	return "A documentation-first diagrammatic version of the same architecture: strict left-to-right flow, " +
+		"evenly spaced nodes with a clear directional arrow hierarchy, and minimal decorative elements. " +
+		"Leave each component block's interior empty and label-safe (render no text — interiors stay clean for " +
+		"labels added in compositing). Prioritise legibility over style: flat vector, brand palette, generous " +
+		"spacing, high contrast between nodes and background."
+}

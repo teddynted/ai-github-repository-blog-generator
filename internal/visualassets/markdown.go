@@ -85,6 +85,17 @@ func writeAsset(b *strings.Builder, a Asset) {
 	fmt.Fprintf(b, "- **Complexity:** %s · **Reliability:** %d/5 · **Best suited for:** %s\n",
 		complexity, reliability, strings.Join(models, ", "))
 
+	if notes := platformNotes(a.Type); len(notes) > 0 {
+		b.WriteString("\n### Platform Optimization\n\n")
+		for _, n := range notes {
+			fmt.Fprintf(b, "- %s\n", n)
+		}
+	}
+
+	if v := diagrammaticVariant(a.Type); v != "" {
+		fmt.Fprintf(b, "\n### Diagrammatic Variant\n\n```text\n%s\n```\n", v)
+	}
+
 	b.WriteString("\n")
 }
 
