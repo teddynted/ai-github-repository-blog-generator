@@ -99,16 +99,21 @@ func (s *Service) Register(ctx context.Context, in Input) (Outcome, error) {
 		return Outcome{}, err
 	}
 
-	cfg := github.WebhookConfig{URL: s.WebhookURL, Secret: in.WebhookSecret, Events: []string{"push", "release"}}
+	// GitHub webhook ingress has been removed from the platform. Only manage a
+	// GitHub webhook when a delivery URL is configured; otherwise onboarding is
+	// purely credential + metadata registration for the manual /process trigger.
 	hookID := existing.WebhookID
-	if alreadyRegistered {
-		// Keep GitHub signing with the (possibly rotated) secret.
-		if err := s.GitHub.UpdateWebhook(ctx, owner, name, in.PAT, hookID, cfg); err != nil {
-			return Outcome{}, err
-		}
-	} else {
-		if hookID, err = s.GitHub.CreateWebhook(ctx, owner, name, in.PAT, cfg); err != nil {
-			return Outcome{}, err
+	if s.WebhookURL != "" {
+		cfg := github.WebhookConfig{URL: s.WebhookURL, Secret: in.WebhookSecret, Events: []string{"push", "release"}}
+		if alreadyRegistered {
+			// Keep GitHub signing with the (possibly rotated) secret.
+			if err := s.GitHub.UpdateWebhook(ctx, owner, name, in.PAT, hookID, cfg); err != nil {
+				return Outcome{}, err
+			}
+		} else {
+			if hookID, err = s.GitHub.CreateWebhook(ctx, owner, name, in.PAT, cfg); err != nil {
+				return Outcome{}, err
+			}
 		}
 	}
 
