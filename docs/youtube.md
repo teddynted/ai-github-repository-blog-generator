@@ -70,7 +70,7 @@ only for prose. Each planner is a pure, independently-testable function.
 | Content intelligence (SEO, titles, tags, description, chapters, pinned comment) | Deterministic |
 | Hook, introduction, chapter narration, transitions, conclusion wording | LLM (`releasegen.Model`) with a deterministic fallback |
 
-It reuses the shared **`Model` port** (local Ollama today, Bedrock later) and
+It reuses the shared **`Model` port** (the Provider Router (Bedrock -> Anthropic)) and
 consumes the Milestone 3–5 types unchanged. When `Model` is nil, generation is
 fully deterministic — narration is built from the voice-over script and the
 Release Context, so nothing is fabricated.
@@ -159,12 +159,12 @@ go run ./cmd/youtube --context ctx.json --blog post.md --offline
 # Reuse a pre-built storyboard + voice-over, offline:
 go run ./cmd/youtube --context ctx.json --storyboard board.json --voiceover vo.json --offline
 
-# Generate the whole chain via Ollama, then the script as JSON:
+# Generate the whole chain via the Provider Router (Anthropic), then the script as JSON:
 go run ./cmd/youtube --context ctx.json --format json --out script.json
 ```
 
 Flags: `--context` (required), `--blog`, `--storyboard`, `--voiceover`,
-`--format md|json`, `--model` (`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`),
+`--format md|json`, `--model` (Anthropic model id, provider default when empty),
 `--offline`, `--out`, `--timeout`.
 
 ## 8. Status

@@ -22,32 +22,17 @@ func (f *fakePub) Publish(_ context.Context, ev intake.Event) error {
 	return nil
 }
 
-type fakeWindow struct {
-	open bool
-	err  error
+// The manual trigger no longer gates on an operating window or starts the
+// instance — the orchestration state machine owns the compute-host lifecycle.
+// So a valid request always publishes (starts an execution) and returns 202.
+func svc(pub *fakePub) *intake.Service {
+	return &intake.Service{Publisher: pub}
 }
 
-func (w fakeWindow) Open(_ context.Context) (bool, error) { return w.open, w.err }
-
-type fakeStarter struct {
-	started bool
-	err     error
-}
-
-func (s *fakeStarter) Start(_ context.Context) error { s.started = true; return s.err }
-
-func svc(pub *fakePub, w intake.Window) *intake.Service {
-	return &intake.Service{Publisher: pub, Window: w, Starter: &fakeStarter{}}
-}
-
-func svcWithStarter(pub *fakePub, w intake.Window, st *fakeStarter) *intake.Service {
-	return &intake.Service{Publisher: pub, Window: w, Starter: st}
-}
-
-func TestHandleAcceptedInWindow(t *testing.T) {
+func TestHandleAcceptedStartsExecution(t *testing.T) {
 	pub := &fakePub{}
 	body := []byte(`{"repository":"widget","owner":"acme","provider":"bedrock"}`)
-	status, resp := handle(context.Background(), svc(pub, fakeWindow{open: true}), nil, "req-1", body)
+	status, resp := handle(context.Background(), svc(pub), nil, "req-1", body)
 
 	if status != 202 {
 		t.Fatalf("status = %d, want 202; body=%s", status, resp)
@@ -62,32 +47,10 @@ func TestHandleAcceptedInWindow(t *testing.T) {
 	}
 }
 
-func TestHandleStartsInstanceWhenStopped(t *testing.T) {
-	pub := &fakePub{}
-	st := &fakeStarter{}
-	body := []byte(`{"repository":"widget","owner":"acme"}`)
-	status, resp := handle(context.Background(), svcWithStarter(pub, fakeWindow{open: false}, st), nil, "req-2", body)
-
-	if status != 202 {
-		t.Fatalf("status = %d, want 202", status)
-	}
-	if !st.started {
-		t.Error("a stopped instance must be started on demand")
-	}
-	if len(pub.published) != 1 {
-		t.Errorf("the event must still be published, got %d", len(pub.published))
-	}
-	var r acceptedResponse
-	_ = json.Unmarshal(resp, &r)
-	if r.Status != "accepted" || r.Message == "" {
-		t.Errorf("response = %+v", r)
-	}
-}
-
 func TestHandleValidationError(t *testing.T) {
 	pub := &fakePub{}
 	body := []byte(`{"owner":"acme"}`) // missing repository
-	status, resp := handle(context.Background(), svc(pub, fakeWindow{open: true}), nil, "req-3", body)
+	status, resp := handle(context.Background(), svc(pub), nil, "req-3", body)
 	if status != 400 {
 		t.Fatalf("status = %d, want 400", status)
 	}
@@ -102,16 +65,16 @@ func TestHandleValidationError(t *testing.T) {
 }
 
 func TestHandleInvalidJSON(t *testing.T) {
-	status, _ := handle(context.Background(), svc(&fakePub{}, fakeWindow{open: true}), nil, "req-4", []byte("not json"))
+	status, _ := handle(context.Background(), svc(&fakePub{}), nil, "req-4", []byte("not json"))
 	if status != 400 {
 		t.Errorf("status = %d, want 400", status)
 	}
 }
 
 func TestHandlePublishFailureIs500(t *testing.T) {
-	pub := &fakePub{err: errors.New("put failed")}
+	pub := &fakePub{err: errors.New("start failed")}
 	body := []byte(`{"repository":"widget","owner":"acme"}`)
-	status, _ := handle(context.Background(), svc(pub, fakeWindow{open: true}), nil, "req-5", body)
+	status, _ := handle(context.Background(), svc(pub), nil, "req-5", body)
 	if status != 500 {
 		t.Errorf("status = %d, want 500", status)
 	}

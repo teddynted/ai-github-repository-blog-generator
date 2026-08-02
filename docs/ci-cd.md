@@ -108,7 +108,7 @@ jobs:
 
 ## 3. Go Jobs
 
-All four Lambda functions (`registration`, `webhook-handler`, `scheduled-start`, `scheduled-stop`) are built and tested. The handler's **commit-message trigger** logic and the registration function's **validation/webhook-creation** logic should have dedicated unit tests.
+The Lambda functions (`registration`, `manual-trigger`, `release-context`, `scheduled-start`, `scheduled-stop`, `idle-stop`) and the `worker` are built and tested. The manual-trigger's **StartExecution** logic, the Provider Router fallback, and the registration function's **validation** logic have dedicated unit tests.
 
 | Step | Command |
 | --- | --- |
@@ -161,14 +161,14 @@ Findings block the PR at an appropriate severity threshold. Dependabot keeps Act
 - **Change set on PR, deploy on merge:** infrastructure changes are reviewed as a change set before they can deploy.
 - **Protected environment:** `deploy` requires the `production` environment approval (manual gate).
 - **Immutable artifacts:** Lambda binaries are versioned; use aliases for instant rollback ([Deployment §8](./deployment.md#8-rollback)).
-- **Post-deploy smoke test:** an automated check redelivers a `blog:` webhook to a test repo and verifies the event is published, the instance starts, the queue drains, and content is published — and separately that a routine commit is acknowledged and ignored.
+- **Post-deploy smoke test:** an automated check calls `POST /process` for a test repo and verifies the Step Functions execution starts the instance, the queue drains, and content is published to S3.
 
 ```mermaid
 flowchart LR
     A[Merge to main] --> B[Assume deploy role OIDC]
     B --> C[cloudformation deploy<br/>network → serverless → compute → observability]
     C --> D[Deploy Lambda artifacts]
-    D --> E[Smoke test: redeliver webhook]
+    D --> E[Smoke test: POST /process]
     E --> F{Content published?}
     F -- yes --> G[✅ Done]
     F -- no --> H[❌ Alert + rollback]

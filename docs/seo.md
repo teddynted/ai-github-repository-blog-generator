@@ -136,13 +136,13 @@ generating the rest, then emits Markdown (default) or JSON:
 # Fully offline from a context + an existing blog (deterministic):
 go run ./cmd/seo --context ctx.json --blog post.md --offline
 
-# Generate the whole chain via Ollama, then the SEO as JSON:
+# Generate the whole chain via the Provider Router (Anthropic), then the SEO as JSON:
 go run ./cmd/seo --context ctx.json --format json --out seo.json
 ```
 
 Flags: `--context` (required), `--blog`, `--storyboard`, `--voiceover`,
 `--youtube`, `--shorts`, `--tiktok`, `--format md|json`, `--model`
-(`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
+(Anthropic model id, provider default when empty), `--offline`, `--out`, `--timeout`.
 
 ## 9. Status
 

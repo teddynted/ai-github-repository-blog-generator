@@ -154,13 +154,12 @@ generating the rest, then emits Markdown (default) or JSON:
 # Fully offline from a context + an existing blog (deterministic):
 go run ./cmd/tiktok --context ctx.json --blog post.md --offline
 
-# Cap the batch and emit JSON, generating the whole chain via Ollama:
+# Cap the batch and emit JSON, generating the whole chain via the Provider Router (Anthropic):
 go run ./cmd/tiktok --context ctx.json --max 4 --format json --out tiktok.json
 ```
 
 Flags: `--context` (required), `--blog`, `--storyboard`, `--voiceover`,
-`--youtube`, `--shorts`, `--max`, `--format md|json`, `--model` (`OLLAMA_MODEL`),
-`--ollama` (`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
+`--youtube`, `--shorts`, `--max`, `--format md|json`, `--model` (Anthropic model id, provider default when empty), `--offline`, `--out`, `--timeout`.
 
 ## 8. Status
 

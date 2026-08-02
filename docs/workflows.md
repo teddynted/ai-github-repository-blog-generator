@@ -1,82 +1,67 @@
 # Workflows
 
-Control flow spans two layers. A **lightweight Webhook Handler Lambda** performs the **commit-message trigger gate**; only matched events reach the **n8n workflows** on the On-Demand EC2 instance, which run the full generation pipeline. Matched events are buffered in **Amazon SQS** (via EventBridge); the instance runs on a fixed **daily schedule (18:00–20:00, 7 days a week)** owned by EventBridge Scheduler, and n8n **drains the SQS backlog** while it is up — then drives checkout, analysis (**OpenClaw**), **Repository Memory**, generation (**Ollama/Qwen**), quality review, optional human approval, publishing, and notifications.
+Control flow spans two layers. `POST /process` starts an **AWS Step Functions** execution that starts the host, waits for it to report ready via SSM, and enqueues the job onto **Amazon SQS**. The **worker** on the On-Demand EC2 instance drains the queue and generates each artifact through the **Provider Router** (Bedrock → Anthropic), reusing anything already in S3; then **n8n** drives quality review, optional human approval, GitHub PRs, publishing, and notifications.
 
-> **Registration is not an n8n workflow.** Onboarding a repository (URL + PAT → validate → create webhook → store metadata + PAT) is handled by the **Registration Lambda** ([Architecture §2](./architecture.md#2-repository-registration-mvp)). These workflows cover only the per-event generation pipeline.
+> **Registration is not an n8n workflow.** Onboarding a repository (URL + PAT → validate → store metadata + PAT) is handled by the **Registration Lambda** ([Architecture §2](./architecture.md#2-repository-registration-mvp)). These workflows cover only the per-run generation pipeline.
 
 Related: [Architecture](./architecture.md) · [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md).
 
 ---
 
-## 1. Trigger Gate (Webhook Handler Lambda)
+## 1. Trigger (POST /process → Step Functions)
 
-Before any n8n workflow runs, the handler decides whether a run should happen at all.
+A run always starts with an authenticated `POST /process`. The manual-trigger Lambda validates it and starts a Step Functions execution; the state machine owns the compute-host lifecycle.
 
 ```mermaid
 flowchart TB
-    W[Webhook: payload + X-Hub-Signature-256] --> LK[Resolve repo record<br/>DynamoDB]
-    LK --> GS[Get webhook secret<br/>Secrets Manager]
-    GS --> SIG{Valid HMAC?}
-    SIG -- no --> R401[401 + log rejection]
-    SIG -- yes --> EX[Extract commit message]
-    EX --> T{Matches repo Trigger Pattern?<br/>default 'blog:'}
-    T -- no --> ACK[HTTP 200 — acknowledge & ignore<br/>no further processing]
-    T -- yes --> PUT[PutEvents → EventBridge]
-    PUT --> OK[HTTP 200]
+    C[POST /process<br/>x-api-key] --> LT[manual-trigger Lambda<br/>validate]
+    LT -- invalid --> R400[400]
+    LT -- ok --> SFN[StartExecution]
+    LT --> R202[HTTP 202 accepted]
+    subgraph SFN["Orchestration state machine"]
+        FIND[Find host by Project tag] --> START[StartInstances]
+        START --> WAIT[Wait: SSM Online]
+        WAIT --> ENQ[SendMessage → SQS]
+    end
+    ENQ --> WK[Worker drains SQS]
 ```
 
-- The handler is **not** an n8n workflow — it is a Lambda ([Architecture §3](./architecture.md#3-commit-message-trigger-gate)).
-- It performs **only**: resolve repo record → verify signature (webhook secret from the **shared** secret) → extract commit info → validate trigger → publish matched event → return 200. It does **no** analysis or inference, and **never reads the PAT**.
-- EventBridge routes matched events to **SQS** (buffer). The webhook never starts the host — instance power is owned by **EventBridge Scheduler** (daily window). A manual `POST /process` is the one path that starts the host on demand ([Manual Trigger](./manual-trigger.md)).
+- The manual-trigger Lambda does **only**: validate → `states:StartExecution` → 202. No analysis, inference, or PAT access.
+- The **state machine** starts the host on demand (no operating-window gate) and hands the job to SQS. Power-**off** is owned by the [scheduler](./scheduling.md).
 
-### 1a. Delivery sequence (end to end)
+### 1a. Run sequence (end to end)
 
-What happens when GitHub calls `POST /webhook`. GitHub always gets an immediate
-`HTTP 200` (`accepted` / `deferred` / `ignored`) or an error; the actual AI work
-happens later, on the instance, once it is running.
+What happens on `POST /process`. The caller gets an immediate `HTTP 202`; the AI
+work happens later, on the instance, once it reports ready.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant GH as GitHub
+    participant C as Caller
     participant API as API Gateway
-    participant LH as webhook-handler
-    participant DDB as DynamoDB
-    participant SEC as Secrets Manager<br/>(shared secret)
-    participant EB as EventBridge
+    participant LT as manual-trigger
+    participant SFN as Step Functions
+    participant SSM as SSM
     participant SQS as SQS
+    participant SEC as Secrets Manager
     participant W as Worker (on EC2)
 
-    GH->>API: POST /webhook (payload + X-Hub-Signature-256)
-    API->>LH: invoke
-    LH->>DDB: Get repo by owner/name
-    alt not registered
-        LH-->>GH: 404 not registered
-    else registered
-        LH->>SEC: read shared secret → webhook_secret[owner/name]
-        LH->>LH: verify HMAC over raw body
-        alt bad signature
-            LH-->>GH: 401 rejected
-        else valid
-            LH->>LH: trigger gate (push: commit matches 'blog:'? / release: published?)
-            alt no match / disabled / unsupported
-                LH-->>GH: 200 ignored
-            else matched
-                LH->>EB: PutEvents blog.publish.requested
-                EB->>SQS: buffer event (retained ≤ 14 days)
-                alt instance running (in window)
-                    LH-->>GH: 200 accepted
-                else instance stopped (outside window)
-                    LH-->>GH: 200 deferred (not started)
-                end
-            end
-        end
+    C->>API: POST /process (x-api-key)
+    API->>LT: invoke
+    alt invalid request
+        LT-->>C: 400
+    else valid
+        LT->>SFN: StartExecution
+        LT-->>C: 202 accepted
+        SFN->>SFN: Find host by Project tag → StartInstances
+        SFN->>SSM: wait for DescribeInstanceInformation = Online
+        SFN->>SQS: SendMessage (release job)
     end
 
-    Note over SQS,W: later — only while the host is running<br/>(scheduled-start at 18:00, or a manual /process)
+    Note over SQS,W: once the host is running
     W->>SQS: long-poll / receive
     W->>SEC: read shared secret → pat[owner/name]
-    W->>W: clone → analyze → generate → review → publish → memory → notify
+    W->>W: clone → analyze → generate (Bedrock → Anthropic) → skip-if-in-S3 → review → publish → memory → notify
     W->>SQS: delete message on success
 ```
 
@@ -86,17 +71,17 @@ sequenceDiagram
 
 | Workflow | File | Trigger | Purpose |
 | --- | --- | --- | --- |
-| Event Ingestion | `event-ingestion.json` | **SQS poll** | Pulls matched events, parses the payload |
-| Repository Analysis | `repository-analysis.json` | Called by ingestion | Checkout + structure/README/source/config analysis via OpenClaw |
+| Event Ingestion | `event-ingestion.json` | **SQS poll** | Pulls jobs, parses the payload |
+| Repository Analysis | `repository-analysis.json` | Called by ingestion | Checkout + structure/README/source/config analysis |
 | Repository Memory | `repository-memory.json` | Called by analysis | Looks up prior analyses and published topics; records new ones |
-| Content Generation | `content-generation.json` | Called by analysis | Topic ID, outline, and local inference via Ollama per content type |
+| Content Generation | `content-generation.json` | Called by analysis | Topic ID, outline, and generation via the Provider Router (Bedrock → Anthropic) per content type; skips artifacts already in S3 |
 | Quality Review | `quality-review.json` | Called by generation | Reviews drafts before publishing |
-| Approval & Publishing | `approval-publishing.json` | Called by review | Optional human approval, then publishes Markdown |
+| Approval & Publishing | `approval-publishing.json` | Called by review | Optional human approval, GitHub PR, then publishes Markdown |
 | Notifications | `notifications.json` | Called on success/failure | Notifies users |
 
 Each workflow can also be executed independently for testing ([WF-8](./requirements.md#4-workflow-requirements)).
 
-> **Trigger note:** every event in SQS has already passed the commit-message trigger gate in the handler. n8n never sees ignored events. Instance start/stop is handled by EventBridge Scheduler (scheduled-start + scheduled-stop Lambdas), **not** by n8n.
+> **Trigger note:** every job in SQS was enqueued by the Step Functions state machine after `POST /process`. Instance start is handled by the state machine; stop by EventBridge Scheduler / idle-stop — **not** by n8n.
 
 ---
 
@@ -105,10 +90,12 @@ Each workflow can also be executed independently for testing ([WF-8](./requireme
 ```mermaid
 flowchart LR
     SQS[(Amazon SQS)] --> I[Event Ingestion]
-    I --> A[Repository Analysis<br/>OpenClaw]
+    I --> A[Repository Analysis]
     A --> M[Repository Memory<br/>lookup]
-    M --> G[Content Generation<br/>topic → outline → Ollama]
-    G --> R[Quality Review]
+    M --> G[Content Generation<br/>topic → outline → Provider Router]
+    G --> S3{In S3?}
+    S3 -- yes --> P
+    S3 -- no --> R[Quality Review]
     R --> P[Approval & Publishing]
     P --> N[Notifications]
     P -.record topics.-> M
@@ -144,7 +131,7 @@ A message is **deleted only after a successful run** ([WF-6](./requirements.md#4
 
 ## 5. Repository Analysis
 
-Builds a structured understanding of the repository using **OpenClaw**.
+Builds a structured understanding of the repository (clone + static analysis in the worker).
 
 ```mermaid
 flowchart TB
@@ -182,28 +169,30 @@ Repository Memory is a **persistent per-repository store on the EBS volume**. On
 
 ## 7. Content Generation
 
-Identifies topics, builds an outline, then runs **local inference via Ollama** once per content type; retries transient failures with backoff.
+Identifies topics, builds an outline, then generates via the **Provider Router** (Bedrock → Anthropic) once per content type — skipping any artifact already in S3; retries transient failures with backoff.
 
 ```mermaid
 flowchart TB
     P[memory-aware context] --> TID[Topic identification]
     TID --> OUT[Outline generation]
     OUT --> LOOP{For each content type}
-    LOOP --> OL[Ollama generate<br/>local Qwen model]
+    LOOP --> EX{Already in S3?}
+    EX -- yes --> ACC
+    EX -- no --> OL[Provider Router generate<br/>Bedrock → Anthropic]
     OL --> C{Success?}
     C -- transient --> RB[Backoff + retry ≤ N]
     RB --> OL
     C -- failed --> E[Error → Notifications]
-    C -- ok --> ACC[Accumulate Markdown]
+    C -- ok --> ACC[Accumulate Markdown → S3]
     ACC --> LOOP
     LOOP --> O[Draft content set]
 ```
 
-**Content types (commit-triggered path):** technical blog post, README improvements, project documentation, architecture summary, API documentation, project overview, release notes, changelog, technical tutorial ([FR-3](./requirements.md#13-documentation--content-generation)).
+**Content types (repository run):** technical blog post, README improvements, project documentation, architecture summary, API documentation, project overview, release notes, changelog, technical tutorial ([FR-3](./requirements.md#13-documentation--content-generation)).
 
-**Release-triggered path:** a published GitHub Release runs the **full content suite** — blog, storyboard, voice-over, YouTube script, Shorts, TikTok, visual assets, SEO, architecture diagrams, LinkedIn, and X thread — automatically, gated by SemVer validation and the same review/approval/publish stages. See [Full Content Suite](./content-suite.md).
+**Release run:** a `/process` call with a release tag runs the **full content suite** — blog, storyboard, voice-over, YouTube script, Shorts, TikTok, visual assets, SEO, architecture diagrams, LinkedIn, and X thread — gated by SemVer validation and the same review/approval/publish stages. See [Full Content Suite](./content-suite.md).
 
-The model (`OLLAMA_MODEL`, default Qwen) and parameters come from configuration ([AI-2](./requirements.md#6-ai--local-inference-requirements)); there is **no external inference API**.
+The models (`BEDROCK_MODEL_ID` primary, `ANTHROPIC_MODEL` fallback) and parameters come from configuration ([AI-2](./requirements.md#6-ai--local-inference-requirements)); see [AI Provider Router](./hybrid-ai-routing.md).
 
 ---
 

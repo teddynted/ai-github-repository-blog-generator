@@ -153,7 +153,7 @@ go run ./cmd/architecture --context ctx.json --blog post.md --format json --out 
 ```
 
 Flags: `--context` (required), `--blog`, `--storyboard`, `--svg-dir`, `--format
-md|json`, `--model` (`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`,
+md|json`, `--model` (Anthropic model id, provider default when empty), `--offline`,
 `--out`, `--timeout`.
 
 ## 8. Status

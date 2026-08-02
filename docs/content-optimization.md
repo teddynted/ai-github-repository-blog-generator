@@ -70,7 +70,7 @@ depends only on ports ([`ports.go`](../internal/contentoptimizer/ports.go)).
 | `TrendAnalyzer` | Multi-horizon trend detection | `DefaultTrendAnalyzer` |
 | `RecommendationEngine` | Grounded, scored recommendations | `DefaultRecommendationEngine` |
 | `PromptAnalyzer` | Analyze prompt history, propose changes | `DefaultPromptAnalyzer` |
-| `ReasoningProvider` | Structured AI reasoning (grounded) | `DeterministicReasoner` / `ModelReasoner` (Bedrock/Ollama) |
+| `ReasoningProvider` | Structured AI reasoning (grounded) | `DeterministicReasoner` / `ModelReasoner` (Bedrock / Anthropic) |
 | `Repository` | Append-only persistence | `MemoryRepository` (SQLite DDL in [schema](./content-optimizer-schema.sql)) |
 | `MetricsPublisher` | CloudWatch custom metrics | `LogMetricsPublisher` / `nopMetricsPublisher` |
 | `Clock` | Time (deterministic in tests) | `time.Now` / fixed |
@@ -141,7 +141,7 @@ template **versioned and measurable**:
 [`reasoning.go`](../internal/contentoptimizer/reasoning.go) produces structured
 reasoning: **why content performed well/poorly, supporting evidence, trade-offs,
 suggested improvements, confidence, and expected impact**. The `ModelReasoner`
-(Amazon Bedrock / Ollama) is prompted with the analytics + patterns and forbidden
+(Amazon Bedrock / Anthropic) is prompted with the analytics + patterns and forbidden
 to invent numbers; on any error or unparseable output the optimizer **falls back**
 to `DeterministicReasoner`, so reasoning is always grounded and the run never
 fails.
@@ -197,7 +197,7 @@ go run ./cmd/contentoptimizer patterns --offline
 go run ./cmd/contentoptimizer trends --offline
 go run ./cmd/contentoptimizer prompts --offline
 
-# Grounded AI reasoning via Ollama (falls back to deterministic on error).
+# Grounded AI reasoning via the Provider Router (Anthropic) (falls back to deterministic on error).
 go run ./cmd/contentoptimizer report --offline --ai
 ```
 
@@ -213,8 +213,8 @@ in-place edits.
 
 ## 14. Security
 
-The optimizer stores no secrets. Reasoning credentials (Bedrock/Ollama) are
-handled by the existing `releasegen`/`ollama` layers and never logged. All AI
+The optimizer stores no secrets. Reasoning credentials (Bedrock / Anthropic) are
+handled by the existing `releasegen` / `airouter` layers and never logged. All AI
 output is grounded in supplied analytics and validated on parse; unparseable
 output is discarded in favor of deterministic reasoning.
 

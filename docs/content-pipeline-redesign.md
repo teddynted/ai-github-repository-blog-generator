@@ -1,9 +1,19 @@
 # Content Pipeline Redesign — Ollama analyses, Claude writes
 
-The content pipeline is split by **responsibility** so each model does what it is
-best at: a local model (Ollama) performs the deterministic engineering analysis,
-and Claude (via Amazon Bedrock) performs the publication-quality writing. A
-typed, inspectable **Engineering Context JSON** is the contract between them.
+> **Superseded (historical).** This document describes an earlier two-model
+> design (local Ollama for analysis, Claude for writing). The platform no longer
+> runs any local model: **all** generation goes through the **AI Provider Router**
+> — Claude on Amazon Bedrock (Opus 4.8) with an Anthropic API fallback. The
+> deterministic **Engineering Context / Release Context** contract described below
+> is still built by the worker and remains accurate; only the "Ollama produces it"
+> part is obsolete. See [AI Provider Router](./hybrid-ai-routing.md) and
+> [Architecture](./architecture.md) for the current design.
+
+The content pipeline is split by **responsibility**: a deterministic analysis
+step performs the engineering analysis (in the worker), and Claude (via the
+Provider Router — Amazon Bedrock, Anthropic fallback) performs the
+publication-quality writing. A typed, inspectable **Engineering Context JSON** is
+the contract between them.
 
 This replaces the previous design where Ollama was asked to write the whole blog
 — which produced technically accurate but generic, release-notes-flavoured prose

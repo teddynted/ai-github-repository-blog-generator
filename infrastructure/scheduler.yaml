@@ -27,7 +27,7 @@ Metadata:
       - Label: { default: Lambda code + runtime }
         Parameters: [ArtifactsBucket, StartCodeKey, StopCodeKey, LambdaMemorySize, LambdaTimeout, LogRetentionDays]
       - Label: { default: Idle auto-stop (opt-in) }
-        Parameters: [EnableIdleStop, IdleCodeKey, IdleEvalRate, IdleMinutes, CpuThreshold, StartupGraceMinutes, N8nUrl, N8nApiKey, OllamaUrl, IdleSnsTopicArn, IdleDryRun, IdleUseVpc, IdleSubnetIds, IdleSecurityGroupIds]
+        Parameters: [EnableIdleStop, IdleCodeKey, IdleEvalRate, IdleMinutes, CpuThreshold, StartupGraceMinutes, N8nUrl, N8nApiKey, IdleSnsTopicArn, IdleDryRun, IdleUseVpc, IdleSubnetIds, IdleSecurityGroupIds]
     ParameterLabels:
       InstanceId: { default: EC2 instance ID to start/stop }
       ScheduleTimezone: { default: IANA timezone for the cron expressions }
@@ -114,7 +114,7 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: >
       Set "true" to create an idle-detection Lambda that stops the instance only
-      after IdleMinutes of low CPU/network and no active n8n/Ollama work. When
+      after IdleMinutes of low CPU/network and no active n8n work. When
       enabled, set ScheduleState=DISABLED (or ManageSchedules=false) so the fixed
       StopSchedule does not also stop the instance.
   IdleCodeKey:
@@ -146,10 +146,6 @@ Parameters:
     Default: ""
     NoEcho: true
     Description: n8n public-API key for the executions check.
-  OllamaUrl:
-    Type: String
-    Default: ""
-    Description: Base URL of Ollama (e.g. http://10.0.1.20:11434); empty disables the Ollama check. Requires IdleUseVpc.
   IdleSnsTopicArn:
     Type: String
     Default: ""
@@ -163,7 +159,7 @@ Parameters:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
-    Description: Attach the Lambda to a VPC so it can reach the instance's private n8n/Ollama ports. Required for the app-level checks.
+    Description: Attach the Lambda to a VPC so it can reach the instance's private n8n port. Required for the app-level check.
   # NOTE: these default to empty. A placeholder like subnet-00000000 would satisfy
   # cfn-lint's pattern check but FAIL CloudFormation's EarlyValidation existence
   # check (the placeholder subnet does not exist), so the empty default is correct
@@ -422,7 +418,7 @@ Resources:
   # ---------------------------------------------------------------------------
   # Idle auto-stop (opt-in): a Lambda polled hourly by an EventBridge rule that
   # stops the instance only after sustained idleness across CPU, network, and
-  # (optionally) n8n/Ollama activity checks. Independent of the start path and
+  # (optionally) n8n activity checks. Independent of the start path and
   # the fixed StopSchedule.
   # ---------------------------------------------------------------------------
   IdleStopLogGroup:
@@ -510,7 +506,6 @@ Resources:
           STARTUP_GRACE_MINUTES: !Ref StartupGraceMinutes
           N8N_URL: !Ref N8nUrl
           N8N_API_KEY: !Ref N8nApiKey
-          OLLAMA_URL: !Ref OllamaUrl
           SNS_TOPIC_ARN: !Ref IdleSnsTopicArn
           DRY_RUN: !Ref IdleDryRun
           LOG_LEVEL: info

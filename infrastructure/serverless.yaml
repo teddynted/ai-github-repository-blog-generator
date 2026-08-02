@@ -1,17 +1,15 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   GitHub AI Blog Generator - Serverless stack. The always-available front door:
-  REST API Gateway (webhook, registration + manual /process routes), three
-  Lambdas (registration, webhook-handler, manual-trigger), the EventBridge bus
-  and rule, the SQS events queue +
-  dead-letter queue, the DynamoDB metadata table, and one shared Secrets Manager
-  secret holding every repository's credentials (keyed by owner/name). Instance
-  power is owned by
-  the scheduler stack (fixed daily window), so this stack never starts or
-  stops the compute host: a matched webhook is published to EventBridge and
-  buffered in SQS, then drained by the worker while the instance is up. GitHub
-  PATs and per-repo webhook secrets live in Secrets Manager under a fixed prefix
-  (created at registration time, not by this stack).
+  REST API Gateway (registration + manual /process + release-context routes),
+  three Lambdas (registration, manual-trigger, release-context), the Step
+  Functions orchestration state machine, the SQS events queue + dead-letter
+  queue, the DynamoDB metadata table, and one shared Secrets Manager secret
+  holding every repository's credentials (keyed by owner/name). POST /process
+  starts a state-machine execution that starts the compute host, waits for it to
+  report ready via SSM, and enqueues the job onto SQS for the worker to drain.
+  GitHub PATs live in Secrets Manager under a fixed prefix (created at
+  registration time, not by this stack).
 
 Parameters:
   ProjectName:
@@ -25,10 +23,6 @@ Parameters:
     Type: String
     Default: registration.zip
     Description: S3 key of the registration Lambda package.
-  WebhookHandlerCodeKey:
-    Type: String
-    Default: webhook-handler.zip
-    Description: S3 key of the webhook-handler Lambda package.
   ManualTriggerCodeKey:
     Type: String
     Default: manual-trigger.zip
@@ -140,29 +134,9 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  EventBus:
-    Type: AWS::Events::EventBus
-    Properties:
-      Name: !Sub "${ProjectName}-bus"
-
-  # Allow EventBridge to deliver matched events into the queue.
-  EventsQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref EventsQueue
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: AllowEventBridge
-            Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sqs:SendMessage
-            Resource: !GetAtt EventsQueue.Arn
-            Condition:
-              ArnEquals:
-                aws:SourceArn: !GetAtt PublishRequestedRule.Arn
+  # The state machine enqueues jobs onto EventsQueue using its own IAM role
+  # (identity-based sqs:SendMessage), so no queue resource policy is needed —
+  # unlike the former EventBridge target, which required a service principal.
 
   # ---------------------------------------------------------------------------
   # IAM roles (least privilege, one per function)
@@ -199,44 +173,8 @@ Resources:
                   - dynamodb:DeleteItem
                 Resource: !GetAtt RepositoriesTable.Arn
 
-  WebhookHandlerRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: webhook-handler
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: dynamodb:GetItem
-                Resource: !GetAtt RepositoriesTable.Arn
-              - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource: !Ref RepoCredentialsSecret
-              - Effect: Allow
-                Action: events:PutEvents
-                Resource: !GetAtt EventBus.Arn
-              # Read-only: the handler checks whether the compute host is
-              # currently running so it can report a matched delivery as
-              # processed-now ("accepted") vs deferred to the next scheduled
-              # window. It never starts or stops the instance. DescribeInstances
-              # cannot be resource-scoped, so it is granted on "*" (read-only).
-              - Effect: Allow
-                Action: ec2:DescribeInstances
-                Resource: "*"
-
-  # The manual-trigger Lambda (POST /process) needs the same downstream rights
-  # as the webhook handler minus the GitHub-specific metadata/secret reads:
-  # publish to the bus and read-only describe for the operational-window gate.
+  # The manual-trigger Lambda (POST /process) only starts a state-machine
+  # execution; the machine owns the compute-host lifecycle and SQS enqueue.
   ManualTriggerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -255,21 +193,8 @@ Resources:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action: events:PutEvents
-                Resource: !GetAtt EventBus.Arn
-              # Window gate (read-only). DescribeInstances cannot be scoped.
-              - Effect: Allow
-                Action: ec2:DescribeInstances
-                Resource: "*"
-              # A manual run overrides the schedule: start the host on demand if
-              # it is stopped. Scoped to this project's tagged instance. It never
-              # stops the instance (that stays with the scheduler stack).
-              - Effect: Allow
-                Action: ec2:StartInstances
-                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/Project: !Ref ProjectName
+                Action: states:StartExecution
+                Resource: !Ref OrchestrationStateMachine
 
   ReleaseContextRole:
     Type: AWS::IAM::Role
@@ -306,13 +231,6 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-registration"
-      RetentionInDays: !Ref LogRetentionDays
-  WebhookHandlerLogGroup:
-    Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-webhook-handler"
       RetentionInDays: !Ref LogRetentionDays
   ManualTriggerLogGroup:
     Type: AWS::Logs::LogGroup
@@ -353,36 +271,9 @@ Resources:
           REPOSITORIES_TABLE: !Ref RepositoriesTable
           REPO_SECRET_ID: !Ref RepoCredentialsSecret
           PUBLISH_TRIGGER: !Ref PublishTrigger
-          WEBHOOK_URL: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/webhook"
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  WebhookHandlerFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: WebhookHandlerLogGroup
-    Properties:
-      FunctionName: !Sub "${ProjectName}-webhook-handler"
-      Runtime: provided.al2023
-      Handler: bootstrap
-      Architectures: [arm64]
-      MemorySize: 128
-      Timeout: 10
-      Role: !GetAtt WebhookHandlerRole.Arn
-      Code:
-        S3Bucket: !Ref ArtifactsBucket
-        S3Key: !Ref WebhookHandlerCodeKey
-      Environment:
-        Variables:
-          REPOSITORIES_TABLE: !Ref RepositoriesTable
-          REPO_SECRET_ID: !Ref RepoCredentialsSecret
-          EVENT_BUS_NAME: !Ref EventBus
-          EVENT_SOURCE: !Sub "${ProjectName}.webhook"
-          PUBLISH_TRIGGER: !Ref PublishTrigger
-          # Lets the handler locate the compute host by its Project tag to
-          # report processed-now vs deferred (the window gate). Optional: unset
-          # it and every matched delivery is reported "accepted".
-          PROJECT_NAME: !Ref ProjectName
+          # WEBHOOK_URL is intentionally unset: GitHub webhook ingress was
+          # removed, so registration onboards credentials + metadata only and
+          # does not create a GitHub webhook.
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -403,13 +294,8 @@ Resources:
         S3Key: !Ref ManualTriggerCodeKey
       Environment:
         Variables:
-          EVENT_BUS_NAME: !Ref EventBus
-          # A distinct source so logs/routing can tell manual runs apart; the
-          # PublishRequestedRule matches every "${ProjectName}." source.
-          EVENT_SOURCE: !Sub "${ProjectName}.manual"
-          # Required: the manual trigger rejects requests outside the operating
-          # window (compute host stopped) rather than starting the instance.
-          PROJECT_NAME: !Ref ProjectName
+          # POST /process starts an execution of this state machine.
+          STATE_MACHINE_ARN: !Ref OrchestrationStateMachine
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -442,44 +328,146 @@ Resources:
           Value: !Ref ProjectName
 
   # ---------------------------------------------------------------------------
-  # EventBridge rule: matched events are buffered in SQS and drained by the
-  # worker while the instance is up (started/stopped by the scheduler stack).
-  # There is no start-on-event target — the scheduled window owns instance power.
+  # Step Functions orchestration state machine (the POST /process trigger).
+  # It resolves the compute host by its Project tag, starts it, waits for it to
+  # report ready via SSM, then enqueues the job onto SQS for the worker to drain
+  # (the worker skips any artifact already in S3). Instance power-OFF stays with
+  # the scheduler stack (fixed window / idle-stop).
   # ---------------------------------------------------------------------------
-  PublishRequestedRule:
-    Type: AWS::Events::Rule
+  StateMachineRole:
+    Type: AWS::IAM::Role
     Properties:
-      Name: !Sub "${ProjectName}-publish-requested"
-      EventBusName: !Ref EventBus
-      EventPattern:
-        # Match every trigger source for this project (webhook, manual, and any
-        # future CLI/Slack/cron source) by prefix, so new sources need no rule
-        # change. The bus is project-dedicated, so this stays tightly scoped.
-        source:
-          - prefix: !Sub "${ProjectName}."
-        detail-type:
-          - blog.publish.requested
-      Targets:
-        - Id: events-queue
-          Arn: !GetAtt EventsQueue.Arn
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: orchestration
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Locate the host by tag (DescribeInstances cannot be scoped) and
+              # start it on demand (scoped to this project's tagged instance).
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+              - Effect: Allow
+                Action: ec2:StartInstances
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: !Ref ProjectName
+              # Gate on the host reporting Online (cannot be resource-scoped).
+              - Effect: Allow
+                Action: ssm:DescribeInstanceInformation
+                Resource: "*"
+              # Hand the job to the worker's queue.
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt EventsQueue.Arn
+
+  OrchestrationStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub "${ProjectName}-orchestration"
+      RoleArn: !GetAtt StateMachineRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "Start the compute host, wait for SSM ready, enqueue the release job.",
+          "TimeoutSeconds": 900,
+          "StartAt": "FindInstance",
+          "States": {
+            "FindInstance": {
+              "Type": "Task",
+              "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ec2:describeInstances",
+              "Parameters": {
+                "Filters": [
+                  {"Name": "tag:Project", "Values": ["${ProjectName}"]},
+                  {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]}
+                ]
+              },
+              "ResultPath": "$.ec2",
+              "Next": "ExtractInstance"
+            },
+            "ExtractInstance": {
+              "Type": "Pass",
+              "Parameters": {
+                "instanceId.$": "$.ec2.Reservations[0].Instances[0].InstanceId",
+                "detail.$": "$.detail"
+              },
+              "ResultPath": "$",
+              "Next": "StartInstance"
+            },
+            "StartInstance": {
+              "Type": "Task",
+              "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ec2:startInstances",
+              "Parameters": {
+                "InstanceIds.$": "States.Array($.instanceId)"
+              },
+              "ResultPath": "$.start",
+              "Next": "WaitForBoot"
+            },
+            "WaitForBoot": {
+              "Type": "Wait",
+              "Seconds": 30,
+              "Next": "CheckSSM"
+            },
+            "CheckSSM": {
+              "Type": "Task",
+              "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ssm:describeInstanceInformation",
+              "Parameters": {
+                "Filters": [
+                  {"Key": "InstanceIds", "ValueSet.$": "States.Array($.instanceId)"}
+                ]
+              },
+              "ResultPath": "$.ssm",
+              "Next": "IsOnline"
+            },
+            "IsOnline": {
+              "Type": "Choice",
+              "Choices": [
+                {"Variable": "$.ssm.InstanceInformationList[0].PingStatus", "IsPresent": false, "Next": "WaitForBoot"},
+                {"Variable": "$.ssm.InstanceInformationList[0].PingStatus", "StringEquals": "Online", "Next": "BuildBody"}
+              ],
+              "Default": "WaitForBoot"
+            },
+            "BuildBody": {
+              "Type": "Pass",
+              "Parameters": {
+                "detail.$": "$.detail"
+              },
+              "ResultPath": "$.body",
+              "Next": "EnqueueJob"
+            },
+            "EnqueueJob": {
+              "Type": "Task",
+              "Resource": "arn:${AWS::Partition}:states:::sqs:sendMessage",
+              "Parameters": {
+                "QueueUrl": "${EventsQueue}",
+                "MessageBody.$": "States.JsonToString($.body)"
+              },
+              "End": true
+            }
+          }
+        }
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
 
   # ---------------------------------------------------------------------------
-  # REST API Gateway: /webhook (open, HMAC-verified) and /repositories (API key)
+  # REST API Gateway: /repositories (registration), /process (Step Functions
+  # trigger), /release-context — all API-key protected.
   # ---------------------------------------------------------------------------
   RestApi:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: !Sub "${ProjectName}-api"
-      Description: Webhook ingress and repository registration.
+      Description: Repository registration and manual processing trigger.
       EndpointConfiguration:
         Types: [REGIONAL]
-
-  WebhookResource:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref RestApi
-      ParentId: !GetAtt RestApi.RootResourceId
-      PathPart: webhook
 
   RepositoriesResource:
     Type: AWS::ApiGateway::Resource
@@ -501,18 +489,6 @@ Resources:
       RestApiId: !Ref RestApi
       ParentId: !GetAtt RestApi.RootResourceId
       PathPart: release-context
-
-  WebhookMethod:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      RestApiId: !Ref RestApi
-      ResourceId: !Ref WebhookResource
-      HttpMethod: POST
-      AuthorizationType: NONE
-      Integration:
-        Type: AWS_PROXY
-        IntegrationHttpMethod: POST
-        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebhookHandlerFunction.Arn}/invocations"
 
   RepositoriesMethod:
     Type: AWS::ApiGateway::Method
@@ -589,14 +565,6 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/release-context"
 
-  WebhookInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref WebhookHandlerFunction
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/webhook"
-
   RegistrationInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -608,25 +576,24 @@ Resources:
 
   # A Deployment is an immutable snapshot of the API. Changing methods does NOT
   # redeploy an existing Deployment (same logical id = no-op), so the stage would
-  # keep serving the old set. Bump the logical id (…V2, V3, …) whenever methods
-  # change to force a fresh snapshot — V3 adds DELETE /repositories.
-  ApiDeploymentV4:
+  # keep serving the old set. Bump the logical id (…V4, V5, …) whenever methods
+  # change to force a fresh snapshot — V5 removes /webhook.
+  ApiDeploymentV5:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - WebhookMethod
       - RepositoriesMethod
       - RepositoriesDeleteMethod
       - ProcessMethod
       - ReleaseContextMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "Deployment for ${StageName} (webhook, repositories POST+DELETE, process, release-context)"
+      Description: !Sub "Deployment for ${StageName} (repositories POST+DELETE, process, release-context)"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       RestApiId: !Ref RestApi
-      DeploymentId: !Ref ApiDeploymentV4
+      DeploymentId: !Ref ApiDeploymentV5
       StageName: !Ref StageName
 
   RegistrationApiKey:
@@ -651,11 +618,6 @@ Resources:
       UsagePlanId: !Ref ApiUsagePlan
 
 Outputs:
-  WebhookUrl:
-    Description: GitHub webhook payload URL.
-    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/webhook"
-    Export:
-      Name: !Sub "${ProjectName}-WebhookUrl"
   RegistrationUrl:
     Description: Repository registration endpoint (requires x-api-key).
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/repositories"
@@ -684,11 +646,11 @@ Outputs:
     Value: !Ref RepoCredentialsSecret
     Export:
       Name: !Sub "${ProjectName}-RepoCredentialsSecretArn"
-  EventBusName:
-    Description: EventBridge bus for matched events.
-    Value: !Ref EventBus
+  StateMachineArn:
+    Description: Orchestration state machine started by POST /process.
+    Value: !Ref OrchestrationStateMachine
     Export:
-      Name: !Sub "${ProjectName}-EventBusName"
+      Name: !Sub "${ProjectName}-StateMachineArn"
   QueueUrl:
     Description: SQS events queue URL.
     Value: !Ref EventsQueue

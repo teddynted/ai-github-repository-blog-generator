@@ -1,10 +1,12 @@
 # Requirements
 
-This document defines the requirements for the **GitHub AI Blog Generator** — an event-driven, fully self-hosted AI platform that turns GitHub repositories into technical content, triggered **either** by a GitHub webhook whose commit message matches a configurable publishing trigger (or a published release) **or** by an authenticated manual call to the **`POST /process`** endpoint. Both feed the same processing pipeline.
+This document defines the requirements for the **GitHub AI Blog Generator** — an on-demand, self-hosted AI platform that turns GitHub repositories into technical content, triggered by an authenticated call to the **`POST /process`** endpoint.
 
-For the **MVP**, users onboard a repository by providing a **GitHub Repository URL** and a **GitHub Personal Access Token (PAT)**. The platform validates access, creates a GitHub webhook, stores repository metadata, and stores the PAT securely in **AWS Secrets Manager**. GitHub App authentication is a **future enhancement** ([§15](#15-future-enhancements)).
+> **Architecture update.** The platform migrated off local inference and GitHub webhook ingress. The current design is: `POST /process` → **AWS Step Functions** → on-demand EC2 → **AI Provider Router** (Amazon Bedrock Claude Opus 4.8, Anthropic API fallback) → S3 (idempotent). Some requirement statements below still reference the earlier webhook / local-Ollama design; the mandated architecture is now the one in [Architecture](./architecture.md) and [AI Provider Router](./hybrid-ai-routing.md). REQ IDs are kept stable for traceability.
 
-When a matched webhook event or a manual `POST /process` request arrives, it is published to **Amazon EventBridge** and buffered in **Amazon SQS**. Compute runs on an **On-Demand EC2 Instance** powered on a fixed daily window (18:00–20:00, 7 days a week) by **EventBridge Scheduler** (a manual request additionally starts the host on demand), where **n8n**, **OpenClaw**, **Repository Memory**, and **Ollama** (a local **Qwen** model) generate content — with **no paid inference APIs**.
+For the **MVP**, users onboard a repository by providing a **GitHub Repository URL** and a **GitHub Personal Access Token (PAT)**. The platform validates access, stores repository metadata, and stores the PAT securely in **AWS Secrets Manager**. GitHub App authentication is a **future enhancement** ([§15](#15-future-enhancements)).
+
+When a `POST /process` request arrives, it starts an **AWS Step Functions** execution that starts the On-Demand EC2 instance, waits for it to report ready via **SSM**, and buffers the job in **Amazon SQS**. The worker generates content through the **AI Provider Router** (Bedrock → Anthropic) and reuses any artifact already in **S3**; **n8n** handles review, approval, publishing, and notifications. The scheduler stack powers the host off.
 
 Requirements use the following convention:
 
@@ -21,7 +23,7 @@ Each requirement has a stable ID:
 | `WHH-*` | Webhook handler |
 | `WF-*` | Workflow orchestration |
 | `MEM-*` | Repository Memory |
-| `AI-*` | AI / local inference |
+| `AI-*` | AI / Provider Router |
 | `WH-*` | GitHub webhook (delivery/signature/events) |
 | `REG-*` | Repository registration |
 | `META-*` | Repository metadata |
@@ -177,20 +179,24 @@ Orchestration on the instance is implemented with **n8n**.
 
 ---
 
-## 6. AI / Local Inference Requirements
+## 6. AI / Provider Router Requirements
 
-All AI inference MUST occur locally. The system MUST NOT depend on Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
+> **Updated.** The original requirement was local-only inference (Ollama). The
+> platform now uses the **AI Provider Router**: Amazon Bedrock (Claude Opus 4.8)
+> primary with an Anthropic API fallback. The rows below are restated accordingly.
+
+All AI inference MUST run through the Provider Router and MUST be Claude (Bedrock or Anthropic) — there is no local model.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| AI-1 | The system MUST perform all inference **locally using Ollama**. | MUST |
-| AI-2 | The default model MUST be a **local Qwen** model, configurable via `OLLAMA_MODEL`. | MUST |
-| AI-3 | The system MUST NOT require Amazon Bedrock, OpenAI, Anthropic, or any paid inference API. | MUST |
-| AI-4 | **OpenClaw** MUST perform repository analysis and assemble the model context. | MUST |
+| AI-1 | The system MUST perform all generation through the **AI Provider Router**, attempting **Amazon Bedrock** first. | MUST |
+| AI-2 | The primary model MUST be a **Bedrock Claude** model (`BEDROCK_MODEL_ID`, default `us.anthropic.claude-opus-4-8`). | MUST |
+| AI-3 | On a Bedrock quota/throttle error, the router MUST fall back to the **Anthropic API** (`ANTHROPIC_MODEL`), logging the fallback + reason. | MUST |
+| AI-4 | The worker MUST clone the repository and assemble the model context (Release Context) before generation. | MUST |
 | AI-5 | The system MUST use distinct, purpose-tuned prompts for each content type. | MUST |
 | AI-6 | Prompts MUST enforce a token/context budget and truncate deterministically when exceeded. | MUST |
-| AI-7 | Model weights MUST persist on the EBS volume so they are not re-downloaded on each run. | MUST |
-| AI-8 | The model, prompt templates, and parameters SHOULD be configurable without code changes. | SHOULD |
+| AI-7 | The system MUST check S3 and **reuse an existing artifact** rather than regenerating it (idempotency). | MUST |
+| AI-8 | The model ids, prompt templates, and parameters SHOULD be configurable without code changes. | SHOULD |
 
 ---
 
@@ -238,13 +244,13 @@ All infrastructure MUST be provisioned with **AWS CloudFormation**. **Terraform 
 | INF-4 | Provision an **On-Demand EC2 Instance** running Ubuntu with Docker and Docker Compose. | MUST |
 | INF-5 | Provision a **persistent gp3 EBS volume** for models, n8n state, and Repository Memory. | MUST |
 | INF-6 | Provision **Amazon API Gateway** for the webhook ingress and the **registration** endpoint. | MUST |
-| INF-7 | Provision **AWS Lambda** functions: registration, webhook handler, scheduled start, scheduled stop. | MUST |
-| INF-8 | Provision **Amazon EventBridge** (event bus + rule) for matched events, and **EventBridge Scheduler** for the daily power window. | MUST |
+| INF-7 | Provision **AWS Lambda** functions: registration, manual-trigger, release-context, scheduled start, scheduled stop, idle-stop. | MUST |
+| INF-8 | Provision an **AWS Step Functions** state machine for orchestration, and **EventBridge Scheduler** for the daily power-off window. | MUST |
 | INF-9 | Provision **Amazon SQS** (with a dead-letter queue) as the durable event buffer. | MUST |
 | INF-10 | Provision **AWS Secrets Manager** for GitHub PATs and per-repository webhook secrets. | MUST |
 | INF-11 | Provision a **metadata store** (Amazon DynamoDB) for repository metadata. | MUST |
 | INF-12 | Provision **Amazon CloudWatch** for logs, metrics, and alarms. | MUST |
-| INF-13 | The EC2 host MUST run **n8n**, **OpenClaw**, and **Ollama** via **Docker Compose**. | MUST |
+| INF-13 | The EC2 host MUST run **n8n**, **PostgreSQL**, and **Redis** via **Docker Compose**; the worker generates via Bedrock/Anthropic. | MUST |
 | INF-14 | CloudFormation templates MUST be **modular and reusable**. | MUST |
 | INF-15 | No resource MAY be created manually outside CloudFormation (no console drift). | MUST |
 
@@ -259,7 +265,7 @@ See [Security](./security.md) for full detail.
 | SEC-1 | All IAM roles and policies MUST follow **least privilege**. | MUST |
 | SEC-2 | GitHub webhook deliveries MUST be verified with **HMAC SHA-256** before evaluation ([WH-7](#72-signature-validation)). | MUST |
 | SEC-3 | The webhook and registration endpoints MUST be **HTTPS only**. | MUST |
-| SEC-4 | **Security groups** MUST restrict inbound traffic; the n8n and Ollama ports MUST NOT be publicly exposed. | MUST |
+| SEC-4 | **Security groups** MUST restrict inbound traffic; the n8n port MUST NOT be publicly exposed. | MUST |
 | SEC-5 | GitHub **PATs MUST be stored in AWS Secrets Manager** and MUST NOT be stored in plaintext, config, source, environment variables, or the metadata database ([§14](#14-secure-credential-storage-requirements)). | MUST |
 | SEC-6 | Secrets MUST be managed through Secrets Manager, retrieved only when required. | MUST |
 | SEC-7 | The EC2 instance MUST use **SSH key authentication**; password authentication MUST be disabled. | MUST |
@@ -278,13 +284,13 @@ See [Cost Optimisation](./cost-optimization.md).
 | COST-1 | **Repository access and token permissions MUST be validated at registration**, before any AI execution. | MUST |
 | COST-2 | **Trigger pre-filtering** MUST occur before any compute or AI is invoked. | MUST |
 | COST-3 | Compute MUST be **scheduled**: the EC2 instance MUST NOT run continuously — it runs only during a fixed daily window. | MUST |
-| COST-4 | The compute host MUST be an **On-Demand EC2 Instance** whose power is owned by **EventBridge Scheduler** (default 18:00–20:00, 7 days a week); the webhook path MUST NOT start it. | MUST |
+| COST-4 | The compute host MUST be an **On-Demand EC2 Instance** whose power is owned by **EventBridge Scheduler** (default 18:00–20:00) plus idle-stop; the Step Functions machine starts it on demand. | MUST |
 | COST-5 | The instance MUST be **stopped automatically** at the scheduled stop time (default 20:00, daily). | MUST |
 | COST-6 | Models, state, and Repository Memory MUST persist on **EBS** to avoid re-downloading models. | MUST |
 | COST-7 | **Amazon SQS** MUST buffer matched events that arrive outside the window so none is lost (processed at the next scheduled start). | MUST |
 | COST-8 | GitHub secrets MUST be retrieved **only when necessary**. | MUST |
-| COST-9 | Because inference is **local via Ollama**, the system MUST incur **no per-token inference charges**. | MUST |
-| COST-10 | Lightweight processing MUST use **serverless** AWS services (API Gateway, Lambda, EventBridge, SQS). | MUST |
+| COST-9 | The system MUST reuse artifacts already in S3 (idempotency) so per-token inference is spent only on new content. | MUST |
+| COST-10 | Lightweight processing MUST use **serverless** AWS services (API Gateway, Lambda, Step Functions, SQS). | MUST |
 | COST-11 | CloudWatch log retention MUST be bounded. | MUST |
 
 ---
@@ -294,7 +300,7 @@ See [Cost Optimisation](./cost-optimization.md).
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | NFR-1 | **Scalability** — the platform MUST process many matched events, buffered through SQS, across many registered repositories. | MUST |
-| NFR-2 | **Availability** — the front door (API Gateway + Lambda + EventBridge + SQS) MUST remain available even when the EC2 instance is stopped. | MUST |
+| NFR-2 | **Availability** — the front door (API Gateway + Lambda + Step Functions + SQS) MUST remain available even when the EC2 instance is stopped. | MUST |
 | NFR-3 | **Reliability** — runs MUST be idempotent and resumable across the scheduled stop/start (and instance replacement). | MUST |
 | NFR-4 | **Performance** — a typical repository SHOULD complete a run within a bounded time once the instance is warm. | SHOULD |
 | NFR-5 | **Cost efficiency** — an idle system MUST cost only persistent storage (EBS) and cheap managed services. | MUST |

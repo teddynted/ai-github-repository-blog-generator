@@ -40,7 +40,7 @@ The engine lives in [`internal/storyboard`](../internal/storyboard). It is
 | Content intelligence (chapters, complexity, thumbnail, SEO) | Deterministic |
 | Narration wording | LLM (`releasegen.Model`) with a deterministic fallback |
 
-It reuses the shared **`Model` port** (local Ollama today, Bedrock later — though
+It reuses the shared **`Model` port** (the Provider Router (Bedrock -> Anthropic)
 this project runs local-only) and the **`BlogPost`** type from Milestone 3. When
 `Model` is nil, generation is fully deterministic (narration is drawn from the
 blog prose). **Architecture is never invented:** every `DiagramRef`'s source,
@@ -92,18 +92,18 @@ without breaking.
 ## 6. Running it
 
 The `storyboard` CLI reads a Release Context JSON and a blog (existing file or
-generated via Ollama), and emits Markdown (default) or JSON:
+generated via the Provider Router (Anthropic)), and emits Markdown (default) or JSON:
 
 ```bash
 # Offline, from an existing blog file (deterministic narration):
 go run ./cmd/storyboard --context ctx.json --blog post.md --offline
 
-# Generate the blog via Ollama, then the storyboard as JSON:
+# Generate the blog via the Provider Router (Anthropic), then the storyboard as JSON:
 go run ./cmd/storyboard --context ctx.json --format json --out board.json
 ```
 
 Flags: `--context` (required), `--blog`, `--format md|json`, `--model`
-(`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
+(Anthropic model id, provider default when empty), `--offline`, `--out`, `--timeout`.
 
 ### Via the unified `content` CLI (recommended)
 
@@ -122,7 +122,7 @@ go run ./cmd/content \
   --context fixtures/designing-v0.6.0.json \
   --provider claude-code
 
-# Local-only: polish narration via Ollama (default provider).
+# Local-only: polish narration via the Provider Router (Anthropic) (default provider).
 # Slower on CPU (~2 min/scene); watch the per-scene progress logs on stderr.
 go run ./cmd/content \
   --artifact storyboard \
@@ -130,13 +130,13 @@ go run ./cmd/content \
   --no-history \
   --no-cache \
   --context fixtures/designing-v0.6.0.json \
-  --provider ollama
+  --provider anthropic
 ```
 
 Both write `output/releases/<version>/storyboard.md`, where `<version>` comes
 from the `--context` fixture. Progress is logged per scene and per model call
 (`storyboard narrating scene 3 of 13`, plus a 15s "… still generating"
-heartbeat), so a long CPU-bound Ollama run never goes silent.
+heartbeat), so a long generation never goes silent.
 
 ## 7. Status
 

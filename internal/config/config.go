@@ -55,6 +55,9 @@ type Config struct {
 	RepoSecretID string
 	// EventBusName is the EventBridge bus for matched events (EVENT_BUS_NAME).
 	EventBusName string
+	// StateMachineArn is the Step Functions orchestration state machine the
+	// manual trigger starts on POST /process (STATE_MACHINE_ARN).
+	StateMachineArn string
 	// QueueURL is the SQS events queue URL (QUEUE_URL).
 	QueueURL string
 	// InstanceID is the On-Demand EC2 instance the scheduler powers on/off
@@ -143,6 +146,7 @@ func Load(getenv Getenv) (Config, error) {
 		SecretsPrefix:         firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
 		RepoSecretID:          getenv("REPO_SECRET_ID"),
 		EventBusName:          getenv("EVENT_BUS_NAME"),
+		StateMachineArn:       getenv("STATE_MACHINE_ARN"),
 		QueueURL:              getenv("QUEUE_URL"),
 		InstanceID:            getenv("INSTANCE_ID"),
 		N8NWebhookURL:         getenv("N8N_WEBHOOK_URL"),
@@ -230,6 +234,8 @@ func (c Config) field(name string) (string, bool) {
 		return c.RepoSecretID, true
 	case "EventBusName":
 		return c.EventBusName, true
+	case "StateMachineArn":
+		return c.StateMachineArn, true
 	case "QueueURL":
 		return c.QueueURL, true
 	case "InstanceID":
