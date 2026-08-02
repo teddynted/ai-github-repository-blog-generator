@@ -82,7 +82,7 @@ func stripNarrationPreamble(s string) string {
 // CloudWatch — instead of the baseline AI platform. Mirrors the archspec filter of
 // the same name; keep the two lists in sync. Only specific product names are
 // listed, never generic words a future release might legitimately be about.
-var baselineComponentTerms = []string{"claw", "openclaw", "ollama", "bedrock", "n8n", "kafka", "efs"}
+var baselineComponentTerms = []string{"claw", "openclaw", "bedrock", "anthropic", "n8n", "kafka", "efs"}
 
 // scopeToRelease drops whole sentences that mention a baseline platform component,
 // keeping narration on the release's subject. Returns "" if nothing survives, so

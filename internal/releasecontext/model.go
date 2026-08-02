@@ -41,7 +41,7 @@ type ReleaseContext struct {
 	Implementation      ImplementationSummary  `json:"implementation"`
 	ContentIntelligence ContentIntelligence    `json:"contentIntelligence"`
 	// Engineering is the structured engineering analysis (Stage 2 of the content
-	// pipeline). It is populated by the Ollama analyzer AFTER the factual context
+	// pipeline). It is populated by the engineering analyzer AFTER the factual context
 	// is built, and consumed by the Claude technical-writer stage. Nil when the
 	// analysis stage is disabled or failed, in which case generation falls back
 	// to the factual context alone. See internal/engineeringanalysis.

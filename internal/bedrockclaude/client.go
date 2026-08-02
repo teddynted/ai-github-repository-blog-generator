@@ -1,7 +1,7 @@
 // Package bedrockclaude is the Stage 3 technical-writer model: Anthropic Claude
 // served through Amazon Bedrock. It implements the same minimal generate port
 // (Generate(ctx, prompt) -> string) that every content generator already
-// depends on, so Claude drops in exactly where the local Ollama model was —
+// depends on, so Claude drops in exactly where the model via the provider router was —
 // with no change to the generators themselves.
 //
 // Bedrock is chosen over the direct Anthropic API deliberately: authentication

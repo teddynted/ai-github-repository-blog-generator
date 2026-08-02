@@ -330,8 +330,8 @@ func TestDeterministicReasoner(t *testing.T) {
 func TestModelReasonerParsingAndFallback(t *testing.T) {
 	in := sampleInput()
 	good := &fakeModel{out: `noise {"whyPerformedWell":["high ctr"],"whyUnderperformed":["weak hook"],"supportingEvidence":["CTR 9%"],"suggestedImprovements":["stronger hook"],"confidence":0.8,"expectedImpact":"high"} trailing`}
-	r, err := NewModelReasoner(good, "ollama").Reason(context.Background(), in, nil, nil)
-	if err != nil || r.Reviewer != "ollama" || r.Confidence != 0.8 || len(r.WhyWell) == 0 {
+	r, err := NewModelReasoner(good, "anthropic").Reason(context.Background(), in, nil, nil)
+	if err != nil || r.Reviewer != "anthropic" || r.Confidence != 0.8 || len(r.WhyWell) == 0 {
 		t.Fatalf("model reasoning parse: %v %+v", err, r)
 	}
 	// Unparseable → parse error (permanent).

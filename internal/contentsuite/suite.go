@@ -175,7 +175,7 @@ var stageDeps = map[string][]string{
 	"seo-metadata":   {"visual-assets"},
 	// architecture reads only the storyboard's repo/release labels (seeded from the
 	// release context in Run), not its generated scenes — so it depends on the blog
-	// alone and never triggers the Ollama-bound storyboard stage. linkedin/x-thread,
+	// alone and never triggers the model-bound storyboard stage. linkedin/x-thread,
 	// by contrast, genuinely consume SEO + visual-assets + architecture *content*,
 	// so they keep their full chains (local output stays identical to the cloud).
 	"architecture":              {"blog"},
@@ -263,7 +263,7 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 
 	// Seed the storyboard's repo/release labels from the release context. The
 	// architecture stage reads only these labels (not the storyboard's generated
-	// scenes), so this lets architecture run without the Ollama-bound storyboard
+	// scenes), so this lets architecture run without the model-bound storyboard
 	// stage. When the storyboard stage runs, it overwrites this with the full
 	// result — architecture reads the same labels either way, so its output is
 	// identical whether or not the storyboard stage ran.
@@ -310,7 +310,9 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		go func() {
 			defer wg.Done()
 			archOut = reuseOrRun(o, "architecture", 11, "09-architecture.md", &s.Architecture,
-				func(v architecture.ArchitectureCollection) string { return architecture.ReleaseScopedMarkdown(v, rctx, s.Blog) },
+				func(v architecture.ArchitectureCollection) string {
+					return architecture.ReleaseScopedMarkdown(v, rctx, s.Blog)
+				},
 				func() (string, error) {
 					col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
 						Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,

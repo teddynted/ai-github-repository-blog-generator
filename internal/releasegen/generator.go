@@ -3,7 +3,7 @@
 // repository at one release — into publication-ready content across formats
 // (blog post, release summary, docs, LinkedIn, YouTube Shorts, TikTok, SEO).
 //
-// It depends only on a Model port (local inference today via Ollama, Amazon
+// It depends only on a Model port (inference via the AI Provider Router (Bedrock / Anthropic), Amazon
 // Bedrock later), so generation is decoupled from any specific LLM and every
 // prompt is grounded strictly in the provided context.
 package releasegen
@@ -22,7 +22,7 @@ const DefaultMaxPromptBytes = 24000
 
 const truncationMarker = "\n\n[context truncated to fit the model budget]\n"
 
-// Model is the inference port. *ollama.Client satisfies it; a Bedrock adapter
+// Model is the inference port. The Bedrock and Anthropic clients satisfy it; a Bedrock adapter
 // will too.
 type Model interface {
 	Generate(ctx context.Context, prompt string) (string, error)

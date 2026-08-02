@@ -17,7 +17,7 @@ var versions = map[string]int{
 	"linkedin":                  2,
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
-	// Ollama transforms + deterministic artifacts.
+	// model transforms + deterministic artifacts.
 	"storyboard":     1,
 	"voiceover":      1,
 	"youtube":        1,

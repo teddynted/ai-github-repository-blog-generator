@@ -21,7 +21,7 @@ func (s *stubModel) Generate(_ context.Context, prompt string) (string, error) {
 
 func TestPrimarySucceedsNoFallback(t *testing.T) {
 	primary := &stubModel{out: "claude wrote this"}
-	secondary := &stubModel{out: "ollama wrote this"}
+	secondary := &stubModel{out: "anthropic wrote this"}
 	f := &Fallback{Primary: primary, Secondary: secondary}
 
 	got, err := f.Generate(context.Background(), "write the blog")
@@ -38,14 +38,14 @@ func TestPrimarySucceedsNoFallback(t *testing.T) {
 
 func TestFallsBackOnPrimaryError(t *testing.T) {
 	primary := &stubModel{err: errors.New("Operation not allowed")}
-	secondary := &stubModel{out: "ollama wrote this"}
+	secondary := &stubModel{out: "anthropic wrote this"}
 	f := &Fallback{Primary: primary, Secondary: secondary}
 
 	got, err := f.Generate(context.Background(), "write the blog")
 	if err != nil {
 		t.Fatalf("Generate should fall back, got err: %v", err)
 	}
-	if got != "ollama wrote this" {
+	if got != "anthropic wrote this" {
 		t.Errorf("text = %q (should be the secondary's)", got)
 	}
 	if secondary.prompt != "write the blog" {

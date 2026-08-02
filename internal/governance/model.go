@@ -7,7 +7,7 @@
 // It follows Clean Architecture: the domain (this file + status.go) is pure; the
 // engines (validation, grounding, scoring, review, approval, revision,
 // readiness) depend only on the domain; and the AI reviewer and storage are
-// behind ports (ports.go) so Amazon Bedrock, Ollama, in-memory, or SQL back ends
+// behind ports (ports.go) so Amazon Bedrock, Anthropic, in-memory, or SQL back ends
 // are swappable via dependency inversion. Validation and scoring are
 // deterministic and authoritative; the LLM only adds qualitative review notes,
 // grounded in the Release Context — it never fabricates missing information, and

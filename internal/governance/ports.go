@@ -6,7 +6,7 @@ import (
 )
 
 // AIReviewer is the port for AI-assisted qualitative review. It is abstracted so
-// Amazon Bedrock (Claude), Ollama, or any future provider can be plugged in
+// Amazon Bedrock or Anthropic (Claude), or any future provider can be plugged in
 // without changing the workflow. Implementations must ground their review in the
 // provided grounding and must never fabricate facts.
 type AIReviewer interface {

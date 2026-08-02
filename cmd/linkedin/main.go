@@ -3,7 +3,7 @@
 // targeting software, cloud, and AI engineering audiences.
 //
 // It reads a Release Context JSON and an optional blog, builds the content chain
-// (blog → … → SEO → architecture) offline or via Ollama, then emits the LinkedIn
+// (blog → … → SEO → architecture) offline or via the Anthropic API, then emits the LinkedIn
 // package as Markdown (default) or JSON. It generates content, not published
 // posts.
 //
@@ -25,7 +25,7 @@ import (
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/linkedin"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/seo"
@@ -45,8 +45,7 @@ func run(args []string) int {
 	blogPath := fs.String("blog", "", "path to an existing blog Markdown file (else generate)")
 	maxPosts := fs.Int("max", 6, "maximum number of posts to generate")
 	format := fs.String("format", "md", "output format: md | json")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	offline := fs.Bool("offline", false, "do not call the model (deterministic content)")
 	outPath := fs.String("out", "", "output file (default: stdout)")
 	timeout := fs.Duration("timeout", 10*time.Minute, "generation timeout")
@@ -63,7 +62,7 @@ func run(args []string) int {
 
 	var mdl releasegen.Model
 	if !*offline {
-		mdl = ollama.New(*model, ollama.WithBaseURL(*ollamaURL))
+		mdl = localgen.Default(*model)
 	}
 
 	rctx, err := loadContext(*ctxPath)

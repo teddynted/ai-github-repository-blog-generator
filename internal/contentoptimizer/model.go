@@ -10,7 +10,7 @@
 // engines depend only on ports (PatternDetector, TrendAnalyzer,
 // RecommendationEngine, PromptAnalyzer, ReasoningProvider, Repository,
 // MetricsPublisher, Clock); and the AI reasoning is an interchangeable provider
-// (Amazon Bedrock / Ollama) behind an interface, so future models require no
+// (Amazon Bedrock / Anthropic) behind an interface, so future models require no
 // business-logic changes.
 //
 // The optimizer is deterministic, explainable, auditable, reproducible, and

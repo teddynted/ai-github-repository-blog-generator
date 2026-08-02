@@ -3,143 +3,73 @@ package airouter
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
-type stub struct {
-	name  string
-	err   error
-	calls int
+type fakeModel struct {
+	out string
+	err error
 }
 
-func (s *stub) Generate(_ context.Context, _ string) (string, error) {
-	s.calls++
-	if s.err != nil {
-		return "", s.err
-	}
-	return s.name, nil
-}
+func (f fakeModel) Generate(_ context.Context, _ string) (string, error) { return f.out, f.err }
 
-func providers() (claude, ollama *stub, m map[string]Model) {
-	claude = &stub{name: "claude-out"}
-	ollama = &stub{name: "ollama-out"}
-	return claude, ollama, map[string]Model{ProviderClaude: claude, ProviderOllama: ollama}
-}
+func prov(name, model string, m Model) Provider { return Provider{Name: name, Model: model, Client: m} }
 
-func TestDefaultPolicyRoutesHighValueToClaudeRestToOllama(t *testing.T) {
-	claude, ollama, m := providers()
-	r := New(m, DefaultRules(), ProviderOllama, ProviderOllama, nil)
-
-	// High-value → Claude.
-	for _, k := range []string{"blog", "architecture", "linkedin", "x-thread", "architecture-diagram-spec", "storyboard"} {
-		if got, _ := r.ModelFor(k).Generate(context.Background(), "p"); got != "claude-out" {
-			t.Errorf("%s routed to %q, want claude", k, got)
-		}
-	}
-	// Commodity → Ollama (default).
-	for _, k := range []string{"seo-metadata", "visual-assets", "youtube-shorts", "tiktok", "voiceover", "youtube"} {
-		if got, _ := r.ModelFor(k).Generate(context.Background(), "p"); got != "ollama-out" {
-			t.Errorf("%s routed to %q, want ollama", k, got)
-		}
-	}
-	_ = claude
-	_ = ollama
-}
-
-func TestFallsBackWhenPrimaryErrors(t *testing.T) {
-	claude := &stub{name: "claude-out", err: errors.New("Operation not allowed")}
-	ollama := &stub{name: "ollama-out"}
-	m := map[string]Model{ProviderClaude: claude, ProviderOllama: ollama}
-	r := New(m, DefaultRules(), ProviderOllama, ProviderOllama, nil)
-
-	// blog → claude, but claude errors → falls back to ollama.
+func TestPrimaryServesWhenBedrockSucceeds(t *testing.T) {
+	r := New([]Provider{
+		prov(ProviderBedrock, "us.anthropic.claude-opus-4-8", fakeModel{out: "bedrock-out"}),
+		prov(ProviderAnthropic, "claude-opus-4-8", fakeModel{out: "anthropic-out"}),
+	}, nil)
 	got, err := r.ModelFor("blog").Generate(context.Background(), "p")
-	if err != nil {
-		t.Fatalf("expected fallback, got err: %v", err)
+	if err != nil || got != "bedrock-out" {
+		t.Fatalf("expected primary (bedrock), got %q err=%v", got, err)
 	}
-	if got != "ollama-out" {
-		t.Errorf("fallback produced %q, want ollama-out", got)
-	}
-}
-
-func TestMissingProviderFallsThroughToDefault(t *testing.T) {
-	// Only Ollama registered (Claude not configured): claude-kinds route to Ollama.
-	ollama := &stub{name: "ollama-out"}
-	m := map[string]Model{ProviderOllama: ollama}
-	r := New(m, DefaultRules(), ProviderOllama, ProviderOllama, nil)
-
-	if got, _ := r.ModelFor("blog").Generate(context.Background(), "p"); got != "ollama-out" {
-		t.Errorf("blog with no claude routed to %q, want ollama-out", got)
-	}
-	if names := r.Providers(); len(names) != 1 || names[0] != ProviderOllama {
-		t.Errorf("providers = %v", names)
+	if n, m := r.Primary(); n != ProviderBedrock || m != "us.anthropic.claude-opus-4-8" {
+		t.Errorf("primary = %s/%s", n, m)
 	}
 }
 
-func TestParseRulesProviderListForm(t *testing.T) {
-	rules, err := ParseRules(`{"claude":["architecture","linkedin","x-thread"],"ollama":["seo","visual-assets"]}`)
-	if err != nil {
-		t.Fatalf("ParseRules: %v", err)
-	}
-	if rules["architecture"] != "claude" || rules["x-thread"] != "claude" {
-		t.Errorf("claude rules = %+v", rules)
-	}
-	// alias: "seo" -> "seo-metadata".
-	if rules["seo-metadata"] != "ollama" {
-		t.Errorf("seo alias not normalised: %+v", rules)
+func TestFallsBackToAnthropicOnBedrockQuota(t *testing.T) {
+	r := New([]Provider{
+		prov(ProviderBedrock, "us.anthropic.claude-opus-4-8", fakeModel{err: errors.New("ThrottlingException: rate exceeded")}),
+		prov(ProviderAnthropic, "claude-opus-4-8", fakeModel{out: "anthropic-out"}),
+	}, nil)
+	got, err := r.ModelFor("blog").Generate(context.Background(), "p")
+	if err != nil || got != "anthropic-out" {
+		t.Fatalf("expected fallback to anthropic, got %q err=%v", got, err)
 	}
 }
 
-func TestParseRulesKindProviderForm(t *testing.T) {
-	rules, err := ParseRules(`{"blog":"claude","tiktok":"ollama"}`)
-	if err != nil {
-		t.Fatalf("ParseRules: %v", err)
+func TestQuotaClassification(t *testing.T) {
+	for _, q := range []string{"ServiceQuotaExceededException", "ThrottlingException", "Too Many Requests (429)", "insufficient capacity"} {
+		if fallbackReason(errors.New(q)) != "quota" {
+			t.Errorf("%q should classify as quota", q)
+		}
 	}
-	if rules["blog"] != "claude" || rules["tiktok"] != "ollama" {
-		t.Errorf("rules = %+v", rules)
-	}
-}
-
-func TestParseRulesEmptyGivesDefault(t *testing.T) {
-	rules, err := ParseRules("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rules["blog"] != "claude" {
-		t.Errorf("empty config should yield default policy, got %+v", rules)
+	if fallbackReason(errors.New("invalid request: bad prompt")) != "error" {
+		t.Error("non-quota error should classify as 'error'")
 	}
 }
 
-func TestParseRulesInvalid(t *testing.T) {
-	if _, err := ParseRules(`{"blog": 123}`); err == nil {
-		t.Fatal("expected error for a non-list, non-string entry")
+func TestAllProvidersFailReturnsCombinedError(t *testing.T) {
+	r := New([]Provider{
+		prov(ProviderBedrock, "b", fakeModel{err: errors.New("throttled")}),
+		prov(ProviderAnthropic, "a", fakeModel{err: errors.New("boom")}),
+	}, nil)
+	_, err := r.ModelFor("blog").Generate(context.Background(), "p")
+	if err == nil || !strings.Contains(err.Error(), "all providers failed") {
+		t.Fatalf("expected combined failure, got %v", err)
 	}
 }
 
-func TestDecisionsReflectPolicy(t *testing.T) {
-	_, _, m := providers()
-	r := New(m, DefaultRules(), ProviderOllama, ProviderOllama, nil)
-	d := r.Decisions(AllKinds)
-	if d["blog"] != "claude" || d["seo-metadata"] != "ollama" {
-		t.Errorf("decisions = %+v", d)
+func TestAnthropicOnlyChain(t *testing.T) {
+	r := New([]Provider{prov(ProviderAnthropic, "claude-opus-4-8", fakeModel{out: "a"})}, nil)
+	got, err := r.ModelFor("blog").Generate(context.Background(), "p")
+	if err != nil || got != "a" {
+		t.Fatalf("anthropic-only: got %q err=%v", got, err)
 	}
-}
-
-func TestParseRulesCompactForm(t *testing.T) {
-	rules, err := ParseRules("claude=blog,architecture,linkedin,x-thread;ollama=seo,tiktok")
-	if err != nil {
-		t.Fatalf("ParseRules compact: %v", err)
-	}
-	if rules["blog"] != "claude" || rules["x-thread"] != "claude" {
-		t.Errorf("claude compact rules = %+v", rules)
-	}
-	if rules["seo-metadata"] != "ollama" || rules["tiktok"] != "ollama" {
-		t.Errorf("ollama compact rules = %+v", rules)
-	}
-}
-
-func TestParseRulesCompactInvalid(t *testing.T) {
-	if _, err := ParseRules("claude"); err == nil {
-		t.Fatal("expected error for compact group with no '='")
+	if c := r.Chain(); len(c) != 1 || c[0] != "anthropic:claude-opus-4-8" {
+		t.Errorf("chain = %v", c)
 	}
 }

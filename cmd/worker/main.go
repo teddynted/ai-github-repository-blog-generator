@@ -39,7 +39,6 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metadata"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/metrics"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/notify"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/pipeline"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/promptversion"
@@ -125,10 +124,52 @@ func main() {
 		publisher = publish.NewS3(s3.NewFromConfig(awsCfg), a.Config.OutputS3Bucket, a.Config.OutputS3Prefix, a.Logger)
 	}
 
+	// AI Provider Router: every AI request is served by AWS Bedrock (Claude Opus
+	// 4.8) primary, with automatic fallback to the Anthropic API when Bedrock
+	// cannot fulfil the request because of quota/throttling. Local/dev has no
+	// Bedrock configured → Anthropic-only. There is no local LLM inference.
+	anthropicKey := a.Config.AnthropicAPIKey
+	if a.Config.AnthropicAPIKeySecret != "" {
+		if k, kerr := sec.Value(ctx, a.Config.AnthropicAPIKeySecret); kerr != nil {
+			a.Logger.Warn("could not resolve Anthropic API key secret", "error", kerr.Error())
+		} else {
+			anthropicKey = k
+		}
+	}
+	var chain []airouter.Provider
+	if a.Config.BedrockModelID != "" {
+		if bc, berr := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{ModelID: a.Config.BedrockModelID, System: bedrockclaude.WriterPersona}); berr != nil {
+			a.Logger.Warn("bedrock claude init failed; primary provider unavailable", "error", berr.Error())
+		} else {
+			chain = append(chain, airouter.Provider{Name: airouter.ProviderBedrock, Model: a.Config.BedrockModelID, Client: bc})
+			a.Logger.Info("ai provider registered", "provider", airouter.ProviderBedrock, "model", a.Config.BedrockModelID)
+		}
+	}
+	if anthropicKey != "" {
+		am := a.Config.AnthropicModel
+		if am == "" {
+			am = anthropic.DefaultModel
+		}
+		if an, anerr := anthropic.New(anthropic.Config{APIKey: anthropicKey, Model: a.Config.AnthropicModel, System: bedrockclaude.WriterPersona}); anerr != nil {
+			a.Logger.Warn("anthropic client init failed", "error", anerr.Error())
+		} else {
+			chain = append(chain, airouter.Provider{Name: airouter.ProviderAnthropic, Model: am, Client: an})
+			a.Logger.Info("ai provider registered", "provider", airouter.ProviderAnthropic, "model", am)
+		}
+	}
+	if len(chain) == 0 {
+		log.Fatalf("ai: no provider configured — set BEDROCK_MODEL_ID (cloud) or an Anthropic API key (local)")
+	}
+	router := airouter.New(chain, a.Logger)
+	a.Logger.Info("ai provider router configured", "chain", router.Chain())
+	routed := func(kind string) releasegen.Model { return router.ModelFor(kind) }
+	analysisModel := router.ModelFor("analysis")
+	provName, provModel := router.Primary()
+
 	pipe := &pipeline.Pipeline{
 		Processor: processor,
 		Generator: &generation.Generator{
-			Model:  ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout)),
+			Model:  routed("blog"),
 			Logger: a.Logger,
 		},
 		Publisher:  publisher,
@@ -148,81 +189,22 @@ func main() {
 	// Read private repos with each repo's registered PAT (same credential as
 	// cloning); GITHUB_TOKEN is the fallback for public repos / unregistered.
 	releaseSrc.TokenFor = tokenSource.Token
-	// Two-stage model split. Stage 2 (engineering analysis) always uses the local
-	// Ollama model. Stage 3 (writing) is routed per artifact by the Hybrid AI
-	// Router: high-value public-facing content (blog, architecture, LinkedIn, X
-	// thread) goes to Claude when configured; commodity artifacts (SEO, visual
-	// assets, short-form scripts) stay on Ollama — quality where it matters, cheap
-	// where it doesn't. Claude provider preference: Anthropic API (key) > Bedrock
-	// (IAM). Every routed selection wraps a per-call fallback to Ollama, so an
-	// unavailable provider degrades gracefully rather than losing a stage.
-	analysisModel := ollama.New(a.Config.OllamaModel, ollama.WithBaseURL(a.Config.OllamaBaseURL), ollama.WithTimeout(a.Config.OllamaTimeout))
-
-	// Resolve the Anthropic API key: a Secrets Manager reference wins over a
-	// plaintext env value, so the credential need never sit in the instance's env.
-	anthropicKey := a.Config.AnthropicAPIKey
-	if a.Config.AnthropicAPIKeySecret != "" {
-		if k, kerr := sec.Value(ctx, a.Config.AnthropicAPIKeySecret); kerr != nil {
-			a.Logger.Warn("could not resolve Anthropic API key secret; skipping Anthropic writer", "error", kerr.Error())
-		} else {
-			anthropicKey = k
-		}
-	}
-
-	// Register providers: Ollama always; Claude via Anthropic API (preferred) or
-	// Bedrock when configured. A Claude init failure just leaves it unregistered,
-	// so its routes fall through to Ollama.
-	providers := map[string]airouter.Model{airouter.ProviderOllama: analysisModel}
-	claudeModel := "" // the effective Claude model id, for release-metadata provenance
-	switch {
-	case anthropicKey != "":
-		am := a.Config.AnthropicModel
-		if am == "" {
-			am = anthropic.DefaultModel
-		}
-		if cl, cerr := anthropic.New(anthropic.Config{APIKey: anthropicKey, Model: a.Config.AnthropicModel, System: bedrockclaude.WriterPersona}); cerr != nil {
-			a.Logger.Warn("anthropic client init failed; Claude routes degrade to local", "error", cerr.Error())
-		} else {
-			providers[airouter.ProviderClaude] = cl
-			claudeModel = am
-			a.Logger.Info("premium writer registered: claude via anthropic api", "model", am)
-		}
-	case a.Config.BedrockModelID != "":
-		if claude, berr := bedrockclaude.NewFromAWS(ctx, a.Config.AWSRegion, bedrockclaude.Config{ModelID: a.Config.BedrockModelID, System: bedrockclaude.WriterPersona}); berr != nil {
-			a.Logger.Warn("bedrock claude init failed; Claude routes degrade to local", "error", berr.Error())
-		} else {
-			providers[airouter.ProviderClaude] = claude
-			claudeModel = a.Config.BedrockModelID
-			a.Logger.Info("premium writer registered: claude on bedrock", "model", a.Config.BedrockModelID)
-		}
-	}
-
-	// Hybrid routing policy: the recommended default, overridable via the
-	// AI_ROUTING_RULES env var (JSON). Ollama is both the default and the fallback.
-	rules, rerr := airouter.ParseRules(a.Config.AIRoutingRules)
-	if rerr != nil {
-		a.Logger.Warn("invalid AI_ROUTING_RULES; using default policy", "error", rerr.Error())
-		rules = airouter.DefaultRules()
-	}
-	router := airouter.New(providers, rules, airouter.ProviderOllama, airouter.ProviderOllama, a.Logger)
-	a.Logger.Info("hybrid ai routing configured",
-		"providers", router.Providers(), "decisions", router.Decisions(airouter.AllKinds))
-	routed := func(kind string) releasegen.Model { return router.ModelFor(kind) }
+	// Stage 2 (engineering analysis) and Stage 3 (writing) both run through the AI
+	// Provider Router configured above (Bedrock primary → Anthropic fallback).
 
 	// Provenance for the release metadata: which provider/model/prompt produced
-	// each artifact. Routed kinds report their effective provider + model; kinds
-	// with no routed model (the deterministic SVG diagram) report "deterministic".
-	decisions := router.Decisions(airouter.AllKinds)
-	providerModels := map[string]string{
-		airouter.ProviderOllama: a.Config.OllamaModel,
-		airouter.ProviderClaude: claudeModel,
+	// each artifact. Routed artifacts report the router's primary provider (with
+	// automatic Bedrock→Anthropic fallback at request time); the deterministic SVG
+	// diagram reports "deterministic".
+	routedKinds := make(map[string]bool, len(airouter.AllKinds))
+	for _, k := range airouter.AllKinds {
+		routedKinds[k] = true
 	}
 	provenance := func(kind string) (provider, model, promptVersion string) {
-		prov, ok := decisions[kind]
-		if !ok {
+		if !routedKinds[kind] {
 			return "deterministic", "", promptversion.For(kind)
 		}
-		return prov, providerModels[prov], promptversion.For(kind)
+		return provName, provModel, promptversion.For(kind)
 	}
 
 	releasePipe := &releasepipeline.Pipeline{
@@ -230,8 +212,9 @@ func main() {
 			Sources: releaseSrc,
 			Logger:  a.Logger,
 		},
-		// Stage 2: extract the structured engineering analysis with the local model.
-		Analyzer: &engineeringanalysis.Analyzer{Model: analysisModel, Fallback: providers[airouter.ProviderClaude], Logger: a.Logger},
+		// Stage 2: extract the structured engineering analysis via the provider
+		// router (Bedrock primary → Anthropic fallback).
+		Analyzer: &engineeringanalysis.Analyzer{Model: analysisModel, Logger: a.Logger},
 		// Stage 3: the writer model produces the FULL artifact set (blog → storyboard
 		// → voice-over → YouTube → Shorts → TikTok → visual assets → SEO →
 		// architecture → LinkedIn → X thread), all grounded in the analysis and gated
@@ -273,7 +256,7 @@ func main() {
 	var notifier notify.Notifier = notifiers
 	meter := metrics.New(metrics.Namespace, os.Stdout)
 
-	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "model", a.Config.OllamaModel)
+	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "ai_chain", router.Chain())
 	run(ctx, a.Logger, queue, pipe, releasePipe, notifier, meter)
 	a.Logger.Info("worker stopped")
 }

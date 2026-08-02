@@ -5,7 +5,7 @@
 //
 // It performs no optimization automatically: prompt changes are proposals that
 // require human approval. The reasoning provider is deterministic by default and
-// can be upgraded to Bedrock/Ollama with --ai.
+// can be upgraded to the Anthropic API with --ai.
 //
 // Usage:
 //
@@ -15,7 +15,7 @@
 //	# Emit the full report as JSON.
 //	go run ./cmd/contentoptimizer report --offline --format json
 //
-//	# Grounded AI reasoning via Ollama (falls back to deterministic on error).
+//	# Grounded AI reasoning via the Anthropic API (falls back to deterministic on error).
 //	go run ./cmd/contentoptimizer report --offline --ai
 package main
 
@@ -29,7 +29,7 @@ import (
 
 	ca "github.com/teddynted/ai-github-repository-blog-generator/internal/contentanalytics"
 	co "github.com/teddynted/ai-github-repository-blog-generator/internal/contentoptimizer"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 )
 
 func main() { os.Exit(run(os.Args[1:])) }
@@ -48,9 +48,8 @@ func run(args []string) int {
 	out := fs.String("out", "", "output file (default: stdout)")
 	offline := fs.Bool("offline", false, "run on synthetic analytics (no network/secrets)")
 	analyticsPath := fs.String("analytics", "", "path to an AnalyticsInput JSON file (real mode)")
-	useAI := fs.Bool("ai", false, "use Ollama for grounded reasoning (falls back to deterministic)")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
+	useAI := fs.Bool("ai", false, "use the Anthropic API for grounded reasoning (falls back to deterministic)")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	timeout := fs.Duration("timeout", 2*time.Minute, "operation timeout")
 	if err := fs.Parse(rest); err != nil {
 		return 2
@@ -81,7 +80,7 @@ func run(args []string) int {
 	opt := co.NewOptimizer(cfg, repo, now)
 	opt.Metrics = co.LogMetricsPublisher{}
 	if *useAI {
-		opt.WithReasoner(co.NewModelReasoner(ollama.New(*model, ollama.WithBaseURL(*ollamaURL)), "ollama"))
+		opt.WithReasoner(co.NewModelReasoner(localgen.Default(*model), "anthropic"))
 	}
 
 	report, err := opt.Optimize(ctx, input, "")
@@ -146,7 +145,7 @@ func syntheticInput(ctx context.Context, target string, days int) co.AnalyticsIn
 		{"pub-dev-2", "Clean Architecture in Go", ca.PlatformDevTo, ca.TypeBlog, []string{"golang", "architecture"}, []string{"solid"}, false},
 		{"pub-hash-1", "EventBridge Patterns", ca.PlatformHashnode, ca.TypeBlog, []string{"aws", "eventbridge"}, []string{"events"}, false},
 		{"pub-yt-1", "Build a Release Bot", ca.PlatformYouTube, ca.TypeYouTubeVideo, []string{"golang", "aws"}, []string{"automation"}, true},
-		{"pub-yt-2", "60s: Ollama Local LLM", ca.PlatformYouTube, ca.TypeYouTubeShorts, []string{"ai", "ollama"}, []string{"llm"}, true},
+		{"pub-yt-2", "60s: Local LLM Inference", ca.PlatformYouTube, ca.TypeYouTubeShorts, []string{"ai", "llm"}, []string{"llm"}, true},
 	}
 	var provs []ca.AnalyticsProvider
 	seen := map[ca.Platform]bool{}
@@ -262,7 +261,7 @@ Common flags:
   --days N           Offline: synthetic analytics history depth (default 30)
   --date D           As-of date YYYY-MM-DD (default: today)
   --analytics FILE   AnalyticsInput JSON (real mode)
-  --ai               Use Ollama for grounded reasoning (falls back to deterministic)
+  --ai               Use the Anthropic API for grounded reasoning (falls back to deterministic)
   --format md|json   Output format
   --out FILE         Write to a file instead of stdout
 `)

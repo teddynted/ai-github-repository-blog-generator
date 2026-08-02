@@ -47,7 +47,7 @@ func NewOptimizer(cfg Config, repo Repository, now Clock) *Optimizer {
 	}
 }
 
-// WithReasoner sets the primary reasoning provider (e.g. Bedrock/Ollama). The
+// WithReasoner sets the primary reasoning provider (e.g. Bedrock/Anthropic). The
 // deterministic reasoner remains the fallback.
 func (o *Optimizer) WithReasoner(r ReasoningProvider) *Optimizer {
 	o.Reasoner = r

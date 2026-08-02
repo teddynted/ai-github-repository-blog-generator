@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 )
 
@@ -184,5 +184,5 @@ func TestPromptNotTruncatedWhenSmall(t *testing.T) {
 	}
 }
 
-// Guard: the concrete ollama.Client satisfies the Model port.
-var _ Model = (*ollama.Client)(nil)
+// Guard: the concrete anthropic.Client satisfies the Model port.
+var _ Model = (*anthropic.Client)(nil)

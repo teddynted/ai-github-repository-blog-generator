@@ -194,7 +194,7 @@ func TestOrchestratorOnlyRunsSelectedStagePlusDependencies(t *testing.T) {
 		want []string // exact set of stages that should run
 	}{
 		// architecture reads only the storyboard's labels (seeded from the release
-		// context), so it depends on the blog alone — no Ollama storyboard stage.
+		// context), so it depends on the blog alone — no model-bound storyboard stage.
 		{"architecture", "architecture", []string{"blog", "architecture"}},
 		// the diagram spec grounds on the blog alone.
 		{"diagram-spec", "architecture-diagram-spec", []string{"blog", "architecture", "architecture-diagram-spec"}},
@@ -238,7 +238,7 @@ func TestOrchestratorOnlyRunsSelectedStagePlusDependencies(t *testing.T) {
 }
 
 func TestArchitectureKeepsRepoLabelsWithoutStoryboardStage(t *testing.T) {
-	// Selecting only architecture skips the (Ollama) storyboard stage, but the
+	// Selecting only architecture skips the storyboard stage, but the
 	// storyboard's repo/release labels are seeded from the release context — so
 	// the architecture output must still carry the real repo, not the "project"
 	// fallback it would use with an empty storyboard.

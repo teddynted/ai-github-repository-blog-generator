@@ -24,7 +24,7 @@ import (
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/linkedin"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/seo"
@@ -46,8 +46,7 @@ func run(args []string) int {
 	maxThreads := fs.Int("max", 5, "maximum number of threads to generate")
 	posts := fs.Int("posts", 5, "posts per thread (3–10)")
 	format := fs.String("format", "md", "output format: md | json")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	offline := fs.Bool("offline", false, "do not call the model (deterministic content)")
 	outPath := fs.String("out", "", "output file (default: stdout)")
 	timeout := fs.Duration("timeout", 10*time.Minute, "generation timeout")
@@ -64,7 +63,7 @@ func run(args []string) int {
 
 	var mdl releasegen.Model
 	if !*offline {
-		mdl = ollama.New(*model, ollama.WithBaseURL(*ollamaURL))
+		mdl = localgen.Default(*model)
 	}
 
 	rctx, err := loadContext(*ctxPath)

@@ -2,7 +2,7 @@
 // /release-context endpoint, Milestone 2) into content via the local model.
 //
 // It reads a ReleaseContext JSON from a file or stdin, calls the releasegen
-// engine against a local Ollama server, and writes the result to stdout or a
+// engine against the Anthropic API, and writes the result to stdout or a
 // file. The default format is a long-form technical blog post (Milestone 3);
 // --format selects any other supported format.
 //
@@ -11,7 +11,7 @@
 //	go run ./cmd/blog --context ctx.json                 # blog post to stdout
 //	go run ./cmd/blog --context ctx.json --out post.md   # to a file
 //	cat ctx.json | go run ./cmd/blog --format linkedin   # a LinkedIn post
-//	go run ./cmd/blog --context ctx.json --model qwen2.5:7b --ollama http://127.0.0.1:11434
+//	go run ./cmd/blog --context ctx.json
 package main
 
 import (
@@ -23,7 +23,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
@@ -36,8 +36,7 @@ func run(args []string) int {
 	fs := flag.NewFlagSet("blog", flag.ContinueOnError)
 	ctxPath := fs.String("context", "-", "path to a Release Context JSON file ('-' for stdin)")
 	format := fs.String("format", "blog", "content format: blog | release-summary | documentation | linkedin | youtube-shorts | tiktok | seo-metadata")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model to use")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	outPath := fs.String("out", "", "output file (default: stdout)")
 	timeout := fs.Duration("timeout", 5*time.Minute, "generation timeout")
 	if err := fs.Parse(args); err != nil {
@@ -55,7 +54,7 @@ func run(args []string) int {
 		return 1
 	}
 
-	gen := &releasegen.Generator{Model: ollama.New(*model, ollama.WithBaseURL(*ollamaURL))}
+	gen := &releasegen.Generator{Model: localgen.Default(*model)}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 

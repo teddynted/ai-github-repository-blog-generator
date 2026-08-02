@@ -20,7 +20,7 @@
 //
 // Environment (real mode, never logged): YOUTUBE_ACCESS_TOKEN,
 // INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_USER_ID, X_BEARER_TOKEN, X_USER_ID,
-// TIKTOK_ACCESS_TOKEN. Optional AI enrichment via Ollama (OLLAMA_URL/OLLAMA_MODEL).
+// TIKTOK_ACCESS_TOKEN. Optional AI enrichment via the Anthropic API (ANTHROPIC_API_KEY).
 package main
 
 import (
@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 	si "github.com/teddynted/ai-github-repository-blog-generator/internal/socialintel"
 )
@@ -55,9 +55,8 @@ func run(args []string) int {
 	format := fs.String("format", "md", "output format: md | json")
 	out := fs.String("out", "", "output file (default: stdout)")
 	offline := fs.Bool("offline", false, "use the deterministic synthetic provider (no network/secrets)")
-	useAI := fs.Bool("ai", false, "enrich insights via Ollama (grounded; falls back to deterministic)")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
+	useAI := fs.Bool("ai", false, "enrich insights via the Anthropic API (grounded; falls back to deterministic)")
+	model := fs.String("model", "", "model id (Anthropic; default when empty)")
 	timeout := fs.Duration("timeout", 2*time.Minute, "operation timeout")
 	if err := fs.Parse(rest); err != nil {
 		return 2
@@ -107,7 +106,7 @@ func run(args []string) int {
 		}
 		var ai si.AIInsighter
 		if *useAI {
-			ai = si.NewModelInsighter(newModel(*model, *ollamaURL), "ollama")
+			ai = si.NewModelInsighter(newModel(*model), "anthropic")
 		}
 		eng := si.NewBriefingEngine(cfg, repo, ai, now)
 		if mode == "advisory" {
@@ -146,8 +145,8 @@ func buildProviders(offline bool, date si.Date, days int) []si.Provider {
 	}
 }
 
-func newModel(model, url string) releasegen.Model {
-	return ollama.New(model, ollama.WithBaseURL(url))
+func newModel(model string) releasegen.Model {
+	return localgen.Default(model)
 }
 
 func collectText(res si.CollectResult) string {
@@ -212,7 +211,7 @@ Common flags:
   --days N         Offline: synthetic history depth (default 30)
   --date D         Target date YYYY-MM-DD (default: today)
   --from D --to D  Backfill range
-  --ai             Enrich insights via Ollama (grounded)
+  --ai             Enrich insights via the Anthropic API (grounded)
   --format md|json Output format
   --out FILE       Write to a file instead of stdout
 `)

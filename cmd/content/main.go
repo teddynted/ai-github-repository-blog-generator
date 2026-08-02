@@ -1,6 +1,6 @@
 // Command content is the local content-development tool. It generates any
 // supported artifact from a Release Context fixture using a selectable provider
-// (Anthropic, Bedrock, or Ollama), writes the result to an output directory, and
+// (Anthropic, Bedrock, or Claude Code), writes the result to an output directory, and
 // validates it — all with no GitHub, EC2, EventBridge, SQS, or S3 involvement.
 // It mirrors the production pipeline by reusing internal/contentsuite and the
 // same generators, so what you iterate on locally is what production runs.
@@ -8,7 +8,7 @@
 // Usage:
 //
 //	go run ./cmd/content --artifact blog --provider anthropic --context fixtures/v0.3.0.json --output output/
-//	go run ./cmd/content --artifact all  --provider ollama    --context fixtures/v0.3.0.json
+//	go run ./cmd/content --artifact all  --provider claude-code --context fixtures/v0.3.0.json
 //	go run ./cmd/content --artifact blog --provider anthropic --context fixtures/v0.3.0.json --dry-run
 //	go run ./cmd/content playground
 //
@@ -34,10 +34,8 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/config"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentcheck"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/promptversion"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
@@ -112,22 +110,22 @@ func validateCmd(args []string) int {
 
 // options holds the parsed CLI configuration for a generate run.
 type options struct {
-	artifact, provider, ctxPath, outDir, system, model, ollamaURL, region string
-	fromBlog                                                              string
-	temperature                                                           float64
-	maxTokens                                                             int
-	dryRun, verbose, noCache, noHistory, hybrid, noReuse                  bool
-	repoLevel                                                             bool
-	repo                                                                  string
-	cacheDir                                                              string
-	timeout                                                               time.Duration
+	artifact, provider, ctxPath, outDir, system, model, region string
+	fromBlog                                                   string
+	temperature                                                float64
+	maxTokens                                                  int
+	dryRun, verbose, noCache, noHistory, hybrid, noReuse       bool
+	repoLevel                                                  bool
+	repo                                                       string
+	cacheDir                                                   string
+	timeout                                                    time.Duration
 }
 
 func generate(args []string) int {
 	fs := flag.NewFlagSet("content", flag.ContinueOnError)
 	o := options{}
 	fs.StringVar(&o.artifact, "artifact", "all", "artifact to generate (blog, architecture, …, or 'all')")
-	fs.StringVar(&o.provider, "provider", "ollama", "provider: anthropic | bedrock | ollama | claude-code (local: uses your Claude Code subscription via `claude -p`)")
+	fs.StringVar(&o.provider, "provider", "claude-code", "provider: anthropic | bedrock | claude-code (local-dev: uses your Claude Code subscription via `claude -p`)")
 	fs.StringVar(&o.ctxPath, "context", "", "path to a Release Context fixture JSON (required)")
 	fs.StringVar(&o.outDir, "output", "output", "output directory")
 	fs.Float64Var(&o.temperature, "temperature", 0, "sampling temperature (Anthropic/Bedrock)")
@@ -137,12 +135,11 @@ func generate(args []string) int {
 	fs.BoolVar(&o.verbose, "verbose", false, "verbose logging")
 	fs.BoolVar(&o.noCache, "no-cache", false, "bypass the local response cache")
 	fs.BoolVar(&o.noHistory, "no-history", false, "do not archive this run under <output>/releases/<version>/history/<stamp>/")
-	fs.BoolVar(&o.hybrid, "hybrid", false, fmt.Sprintf("hybrid routing: premium kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) via claude-code, the rest via Ollama (--model / OLLAMA_MODEL, default %s). Best with --artifact all", config.DefaultOllamaModel))
+	fs.BoolVar(&o.hybrid, "hybrid", false, "route every artifact through the local AI Provider Router (Claude Code). Best with --artifact all")
 	fs.StringVar(&o.fromBlog, "from-blog", "", "generate downstream artifacts from an EXISTING blog.md (skip blog regeneration). Requires --artifact != blog; pair with --artifact all or a specific downstream kind")
 	fs.StringVar(&o.cacheDir, "cache-dir", ".cache", "response cache directory")
 	fs.BoolVar(&o.noReuse, "no-reuse", false, "regenerate dependency artifacts instead of reusing persisted ones. By default, a targeted --artifact run reuses existing artifacts from a prior run (no model call) for every dependency, regenerating only the requested artifact")
 	fs.StringVar(&o.model, "model", "", "model id/name (provider default when empty)")
-	fs.StringVar(&o.ollamaURL, "ollama-url", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
 	fs.StringVar(&o.region, "region", envOr("AWS_REGION", "us-east-1"), "AWS region (Bedrock)")
 	fs.DurationVar(&o.timeout, "timeout", 15*time.Minute, "overall timeout")
 	fs.BoolVar(&o.repoLevel, "repo-level", false, "generate a version-independent, repository-level docs/architecture.md — from the LOCAL working tree (--repo, default) or an existing Release Context fixture (--context); the release version is ignored, never embedded. Deterministic and offline")
@@ -232,9 +229,7 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 
 	// Build the model. In dry-run we swap in a capturing model so the exact
 	// prompts flow through the real generators without calling any provider.
-	// In hybrid mode we build a per-kind router (premium via claude-code, the
-	// rest via Ollama) so a single `--artifact all` run mixes both providers —
-	// the same policy the production worker uses, kept in the Go generators.
+	// The local router uses Claude Code / Anthropic API only (no local inference).
 	var model Model
 	var modelFor func(string) releasegen.Model
 	var cache *aicache.Cache
@@ -243,17 +238,10 @@ func execute(ctx context.Context, o options, rctx *rc.ReleaseContext) int {
 	case o.dryRun:
 		model = dry
 		modelFor = func(string) releasegen.Model { return dry }
-		if o.hybrid {
-			om := o.model
-			if om == "" {
-				om = envOr("OLLAMA_MODEL", config.DefaultOllamaModel)
-			}
-			printHybridPolicy(om)
-		}
 	case o.hybrid:
-		m, mf, err := buildHybrid(o)
+		m, mf, err := buildLocalRouter(o)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: build hybrid: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error: build local router: %v\n", err)
 			return 1
 		}
 		model, modelFor = m, mf
@@ -506,23 +494,11 @@ func (m *captureModel) Generate(_ context.Context, prompt string) (string, error
 	return "## Introduction\n\nDRY-RUN STUB.\n\n## Conclusion\n\nDRY-RUN STUB.", nil
 }
 
-// ollamaOpts builds the shared Ollama client options. --max-tokens, when set,
-// overrides the client's default num_predict cap; otherwise the default cap
-// (which keeps small models from rambling) applies.
-func ollamaOpts(o options) []ollama.Option {
-	opts := []ollama.Option{ollama.WithBaseURL(o.ollamaURL)}
-	if o.maxTokens > 0 {
-		opts = append(opts, ollama.WithNumPredict(o.maxTokens))
-	}
-	return opts
-}
-
 func buildModel(ctx context.Context, o options) (Model, []string, error) {
 	// raw is the bare provider client; label names it for the progress log. Every
-	// provider is wrapped in loggingModel below so a direct (non-hybrid) run —
-	// e.g. `--provider ollama` driving the storyboard — shows per-call start,
-	// 15s heartbeats, and finish timing on stderr instead of going silent for
-	// minutes. The cache (added by the caller) stays OUTSIDE this wrapper, so a
+	// provider is wrapped in loggingModel below so a direct run shows per-call
+	// start, 15s heartbeats, and finish timing on stderr instead of going silent
+	// for minutes. The cache (added by the caller) stays OUTSIDE this wrapper, so a
 	// cache hit short-circuits without logging a phantom "generating" line.
 	var raw Model
 	var label string
@@ -551,12 +527,6 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 			return nil, nil, err
 		}
 		raw, label, fp = cl, "bedrock:"+o.model, fingerprint("bedrock", o.model, o.system, o.temperature, o.maxTokens)
-	case "ollama":
-		model := o.model
-		if model == "" {
-			model = envOr("OLLAMA_MODEL", "qwen2.5:7b")
-		}
-		raw, label, fp = ollama.New(model, ollamaOpts(o)...), "ollama:"+model, fingerprint("ollama", model, o.system, o.temperature, o.maxTokens)
 	case "claude-code":
 		// Local-dev only: generate via the Claude Code subscription (`claude -p`)
 		// instead of Anthropic API credits.
@@ -566,51 +536,31 @@ func buildModel(ctx context.Context, o options) (Model, []string, error) {
 		}
 		raw, label, fp = m, "claude-code", fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens)
 	default:
-		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, ollama, or claude-code)", o.provider)
+		return nil, nil, fmt.Errorf("unknown provider %q (want anthropic, bedrock, or claude-code)", o.provider)
 	}
 	return loggingModel{inner: raw, label: label, logger: suiteLogger()}, fp, nil
 }
 
-// buildHybrid builds a per-kind router for local hybrid generation: premium
-// kinds (blog, architecture, linkedin, x-thread, architecture-diagram-spec) go
-// to claude-code, everything else to Ollama. It mirrors the production worker's
-// airouter policy (internal/airouter.DefaultRules) so a local `--artifact all`
-// run exercises the same routing, with every prompt still owned by the Go
-// generators. The returned base Model (Ollama) drives the orchestrator's cheap
-// analysis stages; modelFor routes each artifact to its provider.
-func buildHybrid(o options) (Model, func(string) releasegen.Model, error) {
-	premium, err := newClaudeCodeModel()
+// buildLocalRouter builds the local AI Provider Router. Local development uses
+// Claude Code / Anthropic API only (there is no local LLM inference), so every
+// artifact routes through claude-code. It returns the base Model that drives the
+// orchestrator's analysis stages plus a per-kind selector (uniform).
+func buildLocalRouter(o options) (Model, func(string) releasegen.Model, error) {
+	m, err := newClaudeCodeModel()
 	if err != nil {
-		return nil, nil, fmt.Errorf("premium provider (claude-code): %w", err)
+		return nil, nil, fmt.Errorf("provider (claude-code): %w", err)
 	}
-	ollamaModel := o.model
-	if ollamaModel == "" {
-		ollamaModel = envOr("OLLAMA_MODEL", config.DefaultOllamaModel)
-	}
-	var claudeM, ollamaM Model = premium, ollama.New(ollamaModel, ollamaOpts(o)...)
+	var claudeM Model = m
 	if !o.noCache {
 		claudeM = aicache.New(claudeM, o.cacheDir, fingerprint("claude-code", "subscription", o.system, o.temperature, o.maxTokens)...)
-		ollamaM = aicache.New(ollamaM, o.cacheDir, fingerprint("ollama", ollamaModel, o.system, o.temperature, o.maxTokens)...)
 	}
-
-	providers := map[string]airouter.Model{
-		airouter.ProviderClaude: claudeM,
-		airouter.ProviderOllama: ollamaM,
-	}
-	// A stderr logger surfaces each routing decision live, so a long run shows
-	// per-artifact progress ("ai routing decision content_type=blog provider=claude")
-	// as it happens rather than going silent until the final summary.
 	logger := suiteLogger()
-	// Wrap each provider so every generation logs start + finish with elapsed
-	// time — otherwise a long run goes silent for minutes between routing lines.
 	claudeM = loggingModel{inner: claudeM, label: "claude-code", logger: logger}
-	ollamaM = loggingModel{inner: ollamaM, label: "ollama:" + ollamaModel, logger: logger}
-	providers[airouter.ProviderClaude] = claudeM
-	providers[airouter.ProviderOllama] = ollamaM
-
-	router := airouter.New(providers, airouter.DefaultRules(), airouter.ProviderOllama, airouter.ProviderOllama, logger)
-	printHybridPolicy(ollamaModel)
-	return ollamaM, func(kind string) releasegen.Model { return router.ModelFor(kind) }, nil
+	router := airouter.New([]airouter.Provider{
+		{Name: airouter.ProviderAnthropic, Model: "claude-code", Client: claudeM},
+	}, logger)
+	fmt.Fprintln(os.Stderr, "local routing — all artifacts via claude-code")
+	return claudeM, func(kind string) releasegen.Model { return router.ModelFor(kind) }, nil
 }
 
 // suiteLogger returns the stderr logger used for live run progress (routing
@@ -660,26 +610,6 @@ func (m loggingModel) Generate(ctx context.Context, prompt string) (string, erro
 	m.logger.Info("generated", "provider", m.label,
 		"elapsed", time.Since(start).Round(time.Second).String(), "out_chars", len(out))
 	return out, nil
-}
-
-// printHybridPolicy writes the per-kind provider routing to stderr so a hybrid
-// run (or a --hybrid --dry-run preview) is self-documenting.
-func printHybridPolicy(ollamaModel string) {
-	rules := airouter.DefaultRules()
-	kinds := append([]string{"blog", "architecture", "architecture-diagram-spec", "linkedin", "x-thread"}, airouter.AllKinds...)
-	seen := map[string]bool{}
-	fmt.Fprintf(os.Stderr, "hybrid routing — premium=claude-code, transforms=ollama:%s\n", ollamaModel)
-	for _, k := range kinds {
-		if seen[k] {
-			continue
-		}
-		seen[k] = true
-		p := rules[k]
-		if p == "" {
-			p = airouter.ProviderOllama
-		}
-		fmt.Fprintf(os.Stderr, "  %-26s → %s\n", k, p)
-	}
 }
 
 func fingerprint(provider, model, system string, temp float64, maxTokens int) []string {

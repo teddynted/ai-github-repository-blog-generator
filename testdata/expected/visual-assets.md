@@ -16,6 +16,19 @@ _acme/widget · release v1.0.0 · 14 assets_
 
 ---
 
+## Shared Render Constraints
+
+_Applied to every asset below — referenced by each prompt, not repeated verbatim._
+
+- No text, letters, numbers, logos, watermarks, or signatures
+- Flat vector illustration with subtle isometric depth
+- Soft directional key light with gentle rim highlights; no harsh shadows
+- Layered flat planes with soft drop shadows for depth hierarchy
+- Clean geometric shapes, consistent stroke weight, generous negative space
+- Brand palette only: deep navy #0B1F33 / #12263A with amber #FF9900 and blue #4F9DFF accents
+
+---
+
 ## YouTube Thumbnail
 
 - **Platform:** YouTube · **Aspect ratio:** 16:9 (1280x720)
@@ -42,6 +55,53 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left third → headline; lower-left → release tag
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Medium · **Reliability:** 5/5 · **Best suited for:** GPT Image, Midjourney, Flux
+
+### Platform Optimization
+
+- One dominant focal object; extreme silhouette readability at 120px
+- Strong warm/cool contrast with clear depth separation
+- Avoid fine connector details that disappear on mobile
+
+### Compact Prompt Variant
+
+```text
+event-driven AWS-native architecture, four conceptual modules, orchestration hub focal point, dark navy background, amber and blue accents, flat vector, subtle isometric depth, clean connectors, strong silhouette, empty headline space, high contrast, professional cloud infrastructure illustration
+```
+
+### Automation Metadata
+
+```yaml
+asset_id: youtube_thumbnail
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: high
+primary_use: video
+supports_motion: true
+```
+
+### Motion Handoff
+
+```yaml
+motion_handoff:
+  parallax_layers: 4
+  animate_connectors: true
+  animate_pulse_dots: true
+  safe_crop_center: true
+  preferred_zoom_anchor: orchestration_hub
+```
 
 ---
 
@@ -72,6 +132,36 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** left third → announcement headline; lower-left → release tag
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Low · **Reliability:** 5/5 · **Best suited for:** GPT Image, Flux, Stable Diffusion
+
+### Compact Prompt Variant
+
+```text
+event-driven AWS-native architecture, four conceptual modules, orchestration hub focal point, dark navy background, amber and blue accents, flat vector, subtle isometric depth, clean connectors, strong silhouette, empty headline space, high contrast, professional cloud infrastructure illustration
+```
+
+### Automation Metadata
+
+```yaml
+asset_id: repository_hero_image
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: high
+primary_use: repository
+supports_motion: false
+```
+
 ---
 
 ## GitHub Social Card
@@ -100,6 +190,47 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left half → headline; lower-left → repository name
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Low · **Reliability:** 5/5 · **Best suited for:** GPT Image, Flux, Stable Diffusion
+
+### Platform Optimization
+
+- Reads cleanly in GitHub dark-mode preview
+- Legible when embedded in Slack, Discord, and X link previews
+- Strong center-right focal cluster
+
+### Automation Metadata
+
+```yaml
+asset_id: github_social_card
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: repository
+supports_motion: true
+```
+
+### Motion Handoff
+
+```yaml
+motion_handoff:
+  parallax_layers: 4
+  animate_connectors: true
+  animate_pulse_dots: true
+  safe_crop_center: true
+  preferred_zoom_anchor: orchestration_hub
+```
 
 ---
 
@@ -130,6 +261,36 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** left half → headline; lower-left → repository name
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Low · **Reliability:** 5/5 · **Best suited for:** GPT Image, Flux, Stable Diffusion
+
+### Platform Optimization
+
+- Survives professional-feed compression on desktop and mobile
+- Keep important detail out of the top-left profile-photo overlap area
+- Respect desktop and mobile banner safe zones
+
+### Automation Metadata
+
+```yaml
+asset_id: linkedin_banner
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: social
+supports_motion: false
+```
+
 ---
 
 ## X Image
@@ -158,6 +319,41 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left half → headline; lower-left → repository name
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Low · **Reliability:** 5/5 · **Best suited for:** GPT Image, Flux, Stable Diffusion
+
+### Automation Metadata
+
+```yaml
+asset_id: x_image
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: low
+primary_use: social
+supports_motion: true
+```
+
+### Motion Handoff
+
+```yaml
+motion_handoff:
+  parallax_layers: 4
+  animate_connectors: true
+  animate_pulse_dots: true
+  safe_crop_center: true
+  preferred_zoom_anchor: orchestration_hub
+```
 
 ---
 
@@ -188,6 +384,30 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** center or lower-third → article title
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Low · **Reliability:** 5/5 · **Best suited for:** GPT Image, Flux, Stable Diffusion
+
+### Automation Metadata
+
+```yaml
+asset_id: blog_header
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: low
+primary_use: social
+supports_motion: false
+```
+
 ---
 
 ## Dev.to Cover
@@ -216,6 +436,30 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** center or lower-third → article title
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Medium · **Reliability:** 5/5 · **Best suited for:** GPT Image, Midjourney, Flux
+
+### Automation Metadata
+
+```yaml
+asset_id: dev_to_cover
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: social
+supports_motion: false
+```
 
 ---
 
@@ -246,6 +490,30 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** center or lower-third → article title
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Medium · **Reliability:** 5/5 · **Best suited for:** GPT Image, Midjourney, Flux
+
+### Automation Metadata
+
+```yaml
+asset_id: medium_cover
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: social
+supports_motion: false
+```
+
 ---
 
 ## Architecture Illustration
@@ -274,6 +542,42 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** component blocks → node labels (added by compositor)
 - **Grounded in:** release architecture diagram, AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** High · **Reliability:** 4/5 · **Best suited for:** GPT Image, Flux
+
+### Diagrammatic Variant
+
+```text
+A documentation-first diagrammatic version of the same architecture: strict left-to-right flow, evenly spaced nodes with a clear directional arrow hierarchy, and minimal decorative elements. Leave each component block's interior empty and label-safe (render no text — interiors stay clean for labels added in compositing). Prioritise legibility over style: flat vector, brand palette, generous spacing, high contrast between nodes and background.
+```
+
+### Compact Prompt Variant
+
+```text
+event-driven AWS-native architecture, four conceptual modules, orchestration hub focal point, dark navy background, amber and blue accents, flat vector, subtle isometric depth, clean connectors, strong silhouette, empty headline space, high contrast, professional cloud infrastructure illustration
+```
+
+### Automation Metadata
+
+```yaml
+asset_id: architecture_illustration
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: high
+primary_use: docs
+supports_motion: false
+```
 
 ---
 
@@ -304,6 +608,42 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** component blocks → node labels (added by compositor)
 - **Grounded in:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** High · **Reliability:** 4/5 · **Best suited for:** GPT Image, Flux
+
+### Diagrammatic Variant
+
+```text
+A documentation-first diagrammatic version of the same architecture: strict left-to-right flow, evenly spaced nodes with a clear directional arrow hierarchy, and minimal decorative elements. Leave each component block's interior empty and label-safe (render no text — interiors stay clean for labels added in compositing). Prioritise legibility over style: flat vector, brand palette, generous spacing, high contrast between nodes and background.
+```
+
+### Compact Prompt Variant
+
+```text
+event-driven AWS-native architecture, four conceptual modules, orchestration hub focal point, dark navy background, amber and blue accents, flat vector, subtle isometric depth, clean connectors, strong silhouette, empty headline space, high contrast, professional cloud infrastructure illustration
+```
+
+### Automation Metadata
+
+```yaml
+asset_id: aws_workflow_diagram
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: docs
+supports_motion: false
+```
+
 ---
 
 ## Release Card
@@ -332,6 +672,30 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** lower third → release headline; top-left → logo
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Low · **Reliability:** 5/5 · **Best suited for:** GPT Image, Flux, Stable Diffusion
+
+### Automation Metadata
+
+```yaml
+asset_id: release_card
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: low
+primary_use: social
+supports_motion: false
+```
 
 ---
 
@@ -362,6 +726,36 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** lower third → release headline; top-left → logo
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Medium · **Reliability:** 5/5 · **Best suited for:** GPT Image, Midjourney, Flux
+
+### Compact Prompt Variant
+
+```text
+event-driven AWS-native architecture, four conceptual modules, orchestration hub focal point, dark navy background, amber and blue accents, flat vector, subtle isometric depth, clean connectors, strong silhouette, empty headline space, high contrast, professional cloud infrastructure illustration
+```
+
+### Automation Metadata
+
+```yaml
+asset_id: promotional_graphic
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: social
+supports_motion: false
+```
+
 ---
 
 ## YouTube Shorts Cover
@@ -390,6 +784,47 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** upper third → hook headline; lower third → handle / CTA
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
+
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Medium · **Reliability:** 5/5 · **Best suited for:** GPT Image, Midjourney, Flux
+
+### Platform Optimization
+
+- Keep the center 40% vertical band clear of platform UI overlays; avoid the right-edge interaction rail
+- Large simple shapes; high-contrast focal cluster centered and readable at small preview sizes
+- Reduced architectural complexity vs. desktop assets for small-screen viewing
+
+### Automation Metadata
+
+```yaml
+asset_id: youtube_shorts_cover
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: video
+supports_motion: true
+```
+
+### Motion Handoff
+
+```yaml
+motion_handoff:
+  parallax_layers: 4
+  animate_connectors: true
+  animate_pulse_dots: true
+  safe_crop_center: true
+  preferred_zoom_anchor: orchestration_hub
+```
 
 ---
 
@@ -420,6 +855,47 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Text placeholders (render no text):** upper third → hook headline; lower third → handle / CTA
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
 
+### Quality Checklist
+
+- Single clear focal point
+- Empty text-safe zone preserved
+- No overlapping connector lines
+- No tiny unreadable details
+- Strong contrast between focal object and background
+- Composition remains legible when scaled down
+
+### Render Guidance
+
+- **Complexity:** Medium · **Reliability:** 5/5 · **Best suited for:** GPT Image, Midjourney, Flux
+
+### Platform Optimization
+
+- Keep the center 40% vertical band clear of platform UI overlays; avoid the right-edge interaction rail
+- Large simple shapes; high-contrast focal cluster centered and readable at small preview sizes
+- Reduced architectural complexity vs. desktop assets for small-screen viewing
+
+### Automation Metadata
+
+```yaml
+asset_id: tiktok_cover
+version: v1.0.0
+theme: event_driven_architecture
+render_priority: medium
+primary_use: video
+supports_motion: true
+```
+
+### Motion Handoff
+
+```yaml
+motion_handoff:
+  parallax_layers: 4
+  animate_connectors: true
+  animate_pulse_dots: true
+  safe_crop_center: true
+  preferred_zoom_anchor: orchestration_hub
+```
+
 ---
 
 ## Collection Intelligence
@@ -432,4 +908,25 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
   - Prompts are provider-neutral: usable with GPT Image, DALL·E, Stable Diffusion, Midjourney, Nova Canvas, or Flux.
   - Images render no text — add real copy in the reserved placeholder zones during compositing.
   - Apply the shared Branding across every asset for a consistent visual identity.
+
+---
+
+# Final Validation Matrix
+
+| Asset | Text-safe zones | Mobile-safe | Docs-safe | Animation-ready |
+| --- | :---: | :---: | :---: | :---: |
+| YouTube Thumbnail | ✅ | ✅ | — | ✅ |
+| Repository Hero Image | ✅ | ✅ | ✅ | — |
+| GitHub Social Card | ✅ | ✅ | ✅ | ✅ |
+| LinkedIn Banner | ✅ | ✅ | — | — |
+| X Image | ✅ | ✅ | — | ✅ |
+| Blog Header | ✅ | ✅ | ✅ | — |
+| Dev.to Cover | ✅ | ✅ | ✅ | — |
+| Medium Cover | ✅ | ✅ | ✅ | — |
+| Architecture Illustration | ✅ | — | ✅ | — |
+| AWS Workflow Diagram | ✅ | — | ✅ | — |
+| Release Card | ✅ | ✅ | — | — |
+| Promotional Graphic | ✅ | ✅ | — | — |
+| YouTube Shorts Cover | ✅ | ✅ | — | ✅ |
+| TikTok Cover | ✅ | ✅ | — | ✅ |
 

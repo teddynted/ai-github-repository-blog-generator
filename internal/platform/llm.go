@@ -35,7 +35,7 @@ type LLMResponse struct {
 }
 
 // LLMProvider is the abstraction every managed (Bedrock, OpenAI, Anthropic,
-// Gemini, Azure OpenAI, Cohere, Mistral, Together, Groq) and local (Ollama,
+// Gemini, Azure OpenAI, Cohere, Mistral, Together, Groq) and local (
 // llama.cpp, vLLM, LM Studio) model implements. Adding a provider is a new file
 // implementing this interface + a Register call — no business-logic change.
 type LLMProvider interface {
@@ -53,7 +53,7 @@ type StreamingLLM interface {
 
 // echoLLM is the reference LLM provider: deterministic, dependency-free, and
 // offline. It demonstrates the contract (and doubles as a test/dev double). A
-// production provider (Bedrock/Ollama/OpenAI) replaces only the Generate body.
+// production provider (Bedrock/OpenAI) replaces only the Generate body.
 type echoLLM struct {
 	id   string
 	name string

@@ -23,7 +23,7 @@ const DefaultMaxPromptBytes = 24000
 
 const truncationMarker = "\n\n[context truncated to fit the model budget]\n"
 
-// Model is the local-inference port. *ollama.Client satisfies it.
+// Model is the local-inference port. the provider clients satisfies it.
 type Model interface {
 	Generate(ctx context.Context, prompt string) (string, error)
 }

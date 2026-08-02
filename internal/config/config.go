@@ -18,9 +18,6 @@ import (
 const (
 	DefaultPublishTrigger      = "blog:"
 	DefaultSecretsPrefix       = "blog-gen/repos"
-	DefaultOllamaModel         = "qwen2.5:7b"
-	DefaultOllamaBaseURL       = "http://localhost:11434"
-	DefaultOllamaTimeout       = 15 * time.Minute
 	DefaultOutputDir           = "/data/generated-content"
 	DefaultWorkDir             = "/data/work"
 	DefaultMemoryDir           = "/data/memory"
@@ -69,24 +66,15 @@ type Config struct {
 	// WebhookURL is this platform's public webhook endpoint, used by the
 	// registration Lambda when creating the GitHub webhook (WEBHOOK_URL).
 	WebhookURL string
-	// OllamaModel is the local model served by Ollama (OLLAMA_MODEL).
-	OllamaModel string
-	// OllamaBaseURL is the local Ollama endpoint (OLLAMA_BASE_URL).
-	OllamaBaseURL string
-	// OllamaTimeout bounds a single Ollama inference request (OLLAMA_TIMEOUT,
-	// e.g. "20m"). Long-form generation on CPU can exceed the old 5m ceiling.
-	OllamaTimeout time.Duration
-	// BedrockModelID selects the Amazon Bedrock Claude model for the Stage-3
-	// technical-writer (BEDROCK_MODEL_ID, e.g. the Sonnet 5 inference-profile id
-	// "us.anthropic.claude-sonnet-5"). When set, Claude writes the
-	// content (grounded in the Ollama engineering analysis); when blank, Ollama
-	// remains the writer (the zero-paid-inference default). Auth is IAM via the
-	// instance role in AWSRegion — no API key.
+	// BedrockModelID selects the Amazon Bedrock Claude model — the AI Provider
+	// Router's primary provider in the cloud (BEDROCK_MODEL_ID, e.g. the
+	// inference-profile id "us.anthropic.claude-opus-4-8"). Auth is IAM via the
+	// instance role in AWSRegion — no API key. When Bedrock cannot fulfil a request
+	// because of quota/throttling, the router falls back to the Anthropic API.
 	BedrockModelID string
-	// AnthropicAPIKey is an Anthropic API key for the Stage-3 writer via
-	// api.anthropic.com (ANTHROPIC_API_KEY). Prefer AnthropicAPIKeySecret in
-	// production so the key never sits in plaintext env. When either resolves to a
-	// non-empty key, the Anthropic API writer is used in preference to Bedrock.
+	// AnthropicAPIKey is an Anthropic API key (ANTHROPIC_API_KEY) — the router's
+	// fallback provider in the cloud and the only provider locally. Prefer
+	// AnthropicAPIKeySecret in production so the key never sits in plaintext env.
 	AnthropicAPIKey string
 	// AnthropicAPIKeySecret is a Secrets Manager id/ARN whose value is the
 	// Anthropic API key (ANTHROPIC_API_KEY_SECRET). Resolved at startup; takes
@@ -94,13 +82,8 @@ type Config struct {
 	// instance's env file.
 	AnthropicAPIKeySecret string
 	// AnthropicModel is the Anthropic API model id for the writer (ANTHROPIC_MODEL,
-	// e.g. "claude-sonnet-5"). Blank uses the client default.
+	// e.g. "claude-opus-4-8"). Blank uses the client default.
 	AnthropicModel string
-	// AIRoutingRules is the Hybrid AI Routing policy as JSON (AI_ROUTING_RULES),
-	// mapping content kinds to providers — e.g.
-	// {"claude":["blog","architecture"],"ollama":["seo-metadata","tiktok"]}.
-	// Blank uses the built-in default policy. See internal/airouter.
-	AIRoutingRules string
 	// OutputDir is where generated content is written locally (OUTPUT_DIR).
 	OutputDir string
 	// OutputS3Bucket, when set, publishes generated content to S3 instead of the
@@ -164,14 +147,10 @@ func Load(getenv Getenv) (Config, error) {
 		InstanceID:            getenv("INSTANCE_ID"),
 		N8NWebhookURL:         getenv("N8N_WEBHOOK_URL"),
 		WebhookURL:            getenv("WEBHOOK_URL"),
-		OllamaModel:           firstNonEmpty(getenv("OLLAMA_MODEL"), DefaultOllamaModel),
-		OllamaBaseURL:         firstNonEmpty(getenv("OLLAMA_BASE_URL"), DefaultOllamaBaseURL),
-		OllamaTimeout:         durationOrDefault(getenv("OLLAMA_TIMEOUT"), DefaultOllamaTimeout),
 		BedrockModelID:        getenv("BEDROCK_MODEL_ID"),
 		AnthropicAPIKey:       getenv("ANTHROPIC_API_KEY"),
 		AnthropicAPIKeySecret: getenv("ANTHROPIC_API_KEY_SECRET"),
 		AnthropicModel:        getenv("ANTHROPIC_MODEL"),
-		AIRoutingRules:        getenv("AI_ROUTING_RULES"),
 		OutputDir:             firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
 		OutputS3Bucket:        getenv("OUTPUT_S3_BUCKET"),
 		OutputS3Prefix:        firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
@@ -259,8 +238,6 @@ func (c Config) field(name string) (string, bool) {
 		return c.N8NWebhookURL, true
 	case "WebhookURL":
 		return c.WebhookURL, true
-	case "OllamaModel":
-		return c.OllamaModel, true
 	case "LogLevel":
 		return c.LogLevel, true
 	default:

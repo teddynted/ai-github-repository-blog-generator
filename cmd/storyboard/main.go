@@ -3,14 +3,14 @@
 //
 // It reads a Release Context JSON (from the /release-context endpoint or S3) and
 // either an already-generated blog (--blog) or generates one on the fly via
-// local Ollama, then produces the storyboard as Markdown (default) or JSON.
+// the Anthropic API, then produces the storyboard as Markdown (default) or JSON.
 //
 // Usage:
 //
 //	# From a context + an existing blog file, fully offline (deterministic):
 //	go run ./cmd/storyboard --context ctx.json --blog post.md --offline
 //
-//	# Generate the blog first (needs Ollama), then the storyboard as JSON:
+//	# Generate the blog first (needs the Anthropic API), then the storyboard as JSON:
 //	go run ./cmd/storyboard --context ctx.json --format json --out board.json
 package main
 
@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboard"
@@ -35,10 +35,9 @@ func main() { os.Exit(run(os.Args[1:])) }
 func run(args []string) int {
 	fs := flag.NewFlagSet("storyboard", flag.ContinueOnError)
 	ctxPath := fs.String("context", "", "path to a Release Context JSON file (required)")
-	blogPath := fs.String("blog", "", "path to an existing blog Markdown file (else generate via Ollama)")
+	blogPath := fs.String("blog", "", "path to an existing blog Markdown file (else generate via the Anthropic API)")
 	format := fs.String("format", "md", "output format: md | json")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	offline := fs.Bool("offline", false, "do not call the model (deterministic narration)")
 	outPath := fs.String("out", "", "output file (default: stdout)")
 	timeout := fs.Duration("timeout", 5*time.Minute, "generation timeout")
@@ -66,7 +65,7 @@ func run(args []string) int {
 
 	var model2 releasegen.Model
 	if !*offline {
-		model2 = ollama.New(*model, ollama.WithBaseURL(*ollamaURL))
+		model2 = localgen.Default(*model)
 	}
 
 	post, err := resolveBlog(ctx, *blogPath, &rctx, model2)

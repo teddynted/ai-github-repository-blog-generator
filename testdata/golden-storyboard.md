@@ -1,6 +1,6 @@
 # Storyboard: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
+_acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS  
 **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Production:** medium · **Animation:** low
@@ -12,7 +12,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 ## Scene 1 — The problem
 
 - **Objective:** Establish the problem and why this change matters.
-- **Timing:** 16s recommended (13–21s, medium)
+- **Timing:** 17s recommended (14–22s, slow)
 - **Narration:** The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy, and coupled ingestion to processing. We needed a pipeline that absorbs bursts, decouples the front door from the worker, and keeps cost bounded.
 - **Visual:** A before/after timeline dramatising the operational cost — animate the slow path filling up; keep on-screen text light so the narration carries it. Assets: Timeline, Flow Diagram, Motion Graphics.
 - **Camera:** Focus Shift — Rack focus from context to the problem statement.
@@ -29,7 +29,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 ## Scene 2 — The architecture
 
 - **Objective:** Explain the system architecture and how components interact.
-- **Timing:** 23s recommended (20–28s, slow)
+- **Timing:** 25s recommended (22–30s, slow)
 - **Narration:** Widget is now fully event-driven: - A webhook handler (AWS Lambda) validates each inbound event and publishes it to Amazon EventBridge. - An EventBridge rule routes matching events into an Amazon SQS queue, which provides durable buffering and retries; a dead-letter queue captures poison messages. - A scheduled EC2 worker drains the queue during its window and processes each widget.
 - **Visual:** An architecture canvas that builds the components in one at a time, with a lower-third AWS-service label appearing as each is introduced. Assets: Architecture Diagram, AWS Icons.
 - **Camera:** Diagram Focus — Frame the diagram; move to each highlighted node.
@@ -51,7 +51,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 ## Scene 3 — How it works
 
 - **Objective:** Explain how the feature was implemented.
-- **Timing:** 22s recommended (19–27s, slow)
+- **Timing:** 24s recommended (21–29s, slow)
 - **Narration:** When a widget event arrives, the Lambda verifies its signature and publishes it to EventBridge. Because EventBridge fans out to SQS, ingestion never blocks on processing — bursts pile up safely in the queue. The EC2 worker, started on a schedule, pulls messages, processes them, and relies on SQS retries plus the DLQ for anything that fails.
 - **Visual:** A terminal or editor screen recording of the key mechanism — scroll or type the real identifiers, tags, and config, highlighting each as the narration reaches it. Assets: Code Editor, Terminal Recording.
 - **Camera:** Push In — Push in on the key code as it is explained.
@@ -69,7 +69,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 ## Scene 4 — Security
 
 - **Objective:** Explain: Security.
-- **Timing:** 8s recommended (5–13s, fast)
+- **Timing:** 9s recommended (6–14s, medium)
 - **Narration:** The worker enforces IMDSv2, runs under a least-privilege IAM role, keeps secrets in AWS Secrets Manager, and only accepts HMAC-verified webhooks.
 - **Visual:** A supporting visual for: Security. Assets: Code Editor.
 - **Camera:** Static — Steady frame.
@@ -103,7 +103,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 ## Scene 6 — Wrapping up
 
 - **Objective:** Summarise the takeaways and point to what's next.
-- **Timing:** 9s recommended (6–14s, medium)
+- **Timing:** 10s recommended (7–15s, medium)
 - **Narration:** Widget v1.0.0 turns a polling prototype into a durable, decoupled, cost-aware event-driven pipeline on AWS — reproducible with CloudFormation and hardened by default.
 - **Visual:** Closing title card recapping the reusable pattern with a subtle call to action. Assets: Repository Logo, Title Card.
 - **Camera:** Slow Zoom Out — Zoom out to close the video calmly.
@@ -121,9 +121,9 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:24 (short, 9:16)_
 ## Chapters
 
 - `0:00` The problem
-- `0:16` The architecture
-- `0:39` How it works
-- `1:01` Security
-- `1:09` Breaking change
-- `1:15` Wrapping up
+- `0:17` The architecture
+- `0:42` How it works
+- `1:06` Security
+- `1:15` Breaking change
+- `1:21` Wrapping up
 

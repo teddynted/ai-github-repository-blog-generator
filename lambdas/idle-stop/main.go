@@ -1,7 +1,6 @@
 // Command idle-stop is the AWS Lambda invoked on a schedule (hourly by default)
 // by an EventBridge rule. It stops the on-demand EC2 host (INSTANCE_ID) only
-// when it has been idle — CPU and network below threshold AND no active n8n or
-// Ollama work — for a sustained IDLE_MINUTES. Idleness is tracked across
+// when it has been idle — CPU and network below threshold AND no active n8n work — for a sustained IDLE_MINUTES. Idleness is tracked across
 // invocations by an IdleSince tag on the instance, so the Lambda stays
 // stateless. It is independent of the start path and honours a KEEP_RUNNING tag
 // override.
@@ -65,10 +64,6 @@ func main() {
 	if u := os.Getenv("N8N_URL"); u != "" {
 		probes = append(probes, idleprobe.N8N(u, os.Getenv("N8N_API_KEY"), probeTimeout, a.Logger))
 	}
-	if u := os.Getenv("OLLAMA_URL"); u != "" {
-		probes = append(probes, idleprobe.Ollama(u, probeTimeout, a.Logger))
-	}
-
 	ev := &idle.Evaluator{
 		Cfg: idle.Config{
 			CPUThreshold: envFloat("CPU_THRESHOLD", 5),
@@ -138,7 +133,7 @@ func main() {
 			return string(d.Action), nil
 		}
 
-		msg := "Stopping " + instanceID + ": idle for " + strconv.Itoa(int(d.IdleFor.Minutes())) + "m (CPU/network below threshold, no n8n/Ollama activity)."
+		msg := "Stopping " + instanceID + ": idle for " + strconv.Itoa(int(d.IdleFor.Minutes())) + "m (CPU/network below threshold, no n8n activity)."
 		if dryRun {
 			a.Logger.Info("DRY_RUN: would stop", "instance_id", instanceID, "message", msg)
 			return "dry_run_stop", nil

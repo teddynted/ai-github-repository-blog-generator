@@ -1,5 +1,5 @@
 // Package idleprobe provides application-level activity checks for the idle
-// detector: it asks n8n and Ollama directly whether they are currently doing
+// detector: it asks n8n directly whether they are currently doing
 // work. Every probe fails safe — an unreachable or malformed response counts as
 // BUSY, so a network blip never contributes to a wrongful stop.
 package idleprobe
@@ -24,7 +24,7 @@ type HTTPProbe struct {
 	logger *slog.Logger
 }
 
-// Name identifies the probe (e.g. "n8n", "ollama").
+// Name identifies the probe (e.g. "n8n").
 func (p *HTTPProbe) Name() string { return p.name }
 
 // Busy performs the check. On any error it returns true (fail-safe).
@@ -92,27 +92,6 @@ func N8N(baseURL, apiKey string, timeout time.Duration, logger *slog.Logger) *HT
 				return false, err
 			}
 			return len(r.Data) > 0, nil
-		},
-	}
-}
-
-// Ollama builds a probe that reports busy when a model is resident in memory
-// (recently used), via GET {baseURL}/api/ps. A genuinely idle Ollama unloads
-// its models after keep_alive, so a loaded model is a sound recent-activity signal.
-func Ollama(baseURL string, timeout time.Duration, logger *slog.Logger) *HTTPProbe {
-	return &HTTPProbe{
-		name:   "ollama",
-		url:    baseURL + "/api/ps",
-		client: newClient(timeout),
-		logger: logger,
-		busy: func(body []byte) (bool, error) {
-			var r struct {
-				Models []json.RawMessage `json:"models"`
-			}
-			if err := json.Unmarshal(body, &r); err != nil {
-				return false, err
-			}
-			return len(r.Models) > 0, nil
 		},
 	}
 }

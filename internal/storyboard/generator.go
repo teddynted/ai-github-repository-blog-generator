@@ -80,7 +80,7 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 			nextTitle = sections[i+1].Title
 		}
 		// Narration is one (potentially slow) model call per scene; log position so
-		// a long CPU-bound run — e.g. Ollama polishing every scene — shows steady
+		// a long CPU-bound run — e.g. the model polishing every scene — shows steady
 		// scene-by-scene progress rather than going silent between the whole-run
 		// start and finish lines.
 		if g.Logger != nil && g.Model != nil {

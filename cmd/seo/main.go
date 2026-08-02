@@ -12,7 +12,7 @@
 //	# Fully offline from a context + an existing blog (deterministic):
 //	go run ./cmd/seo --context ctx.json --blog post.md --offline
 //
-//	# Generate the whole chain via Ollama, then the SEO as JSON:
+//	# Generate the whole chain via the Anthropic API, then the SEO as JSON:
 //	go run ./cmd/seo --context ctx.json --format json --out seo.json
 package main
 
@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/ollama"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/localgen"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/seo"
@@ -50,8 +50,7 @@ func run(args []string) int {
 	shPath := fs.String("shorts", "", "path to an existing YouTube Shorts JSON file (else generate)")
 	ttPath := fs.String("tiktok", "", "path to an existing TikTok JSON file (else generate)")
 	format := fs.String("format", "md", "output format: md | json")
-	model := fs.String("model", envOr("OLLAMA_MODEL", "qwen2.5:7b"), "Ollama model")
-	ollamaURL := fs.String("ollama", envOr("OLLAMA_URL", "http://127.0.0.1:11434"), "Ollama base URL")
+	model := fs.String("model", "", "model id (Anthropic; provider default when empty)")
 	offline := fs.Bool("offline", false, "do not call the model (deterministic metadata)")
 	outPath := fs.String("out", "", "output file (default: stdout)")
 	timeout := fs.Duration("timeout", 10*time.Minute, "generation timeout")
@@ -68,7 +67,7 @@ func run(args []string) int {
 
 	var mdl releasegen.Model
 	if !*offline {
-		mdl = ollama.New(*model, ollama.WithBaseURL(*ollamaURL))
+		mdl = localgen.Default(*model)
 	}
 
 	rctx, err := loadContext(*ctxPath)
