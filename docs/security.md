@@ -1,6 +1,6 @@
 # Security
 
-Security model and controls for the **GitHub AI Blog Generator**. The platform is designed to be secure by default: GitHub PATs isolated in AWS Secrets Manager, least-privilege IAM, HMAC-validated webhooks, restricted security groups, HTTPS-only ingress, SSH key authentication, and encryption in transit and at rest.
+Security model and controls for the **GitHub AI Blog Generator**. The platform is designed to be secure by default: GitHub PATs and the Anthropic key isolated in AWS Secrets Manager, least-privilege IAM, API-key-gated endpoints, restricted security groups, HTTPS-only ingress, SSH key authentication, and encryption in transit and at rest.
 
 Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) · [Monitoring](./monitoring.md).
 
@@ -10,7 +10,7 @@ Related: [Infrastructure](./infrastructure.md) · [Deployment](./deployment.md) 
 
 - Every compute identity — each Lambda and the EC2 instance — has its **own least-privilege role**; no shared, over-broad roles.
 - Human/CI access uses **short-lived credentials**: SSO for humans, **GitHub OIDC** federation for CI (no long-lived access keys). See [CI/CD](./ci-cd.md#5-aws-authentication-oidc).
-- The registration Lambda may write secrets/metadata; the webhook handler may read metadata and the webhook secret and publish events; the instance consumes the queue and reads the PAT only when cloning.
+- The registration Lambda may write secrets/metadata; the manual-trigger Lambda may only start a Step Functions execution; the state machine may start the host and enqueue jobs; the instance consumes the queue, calls Bedrock, and reads the PAT only when cloning.
 
 ---
 
@@ -20,45 +20,34 @@ GitHub Personal Access Tokens are the most sensitive material in the MVP, so the
 
 | Control | Implementation |
 | --- | --- |
-| **Secrets Manager only** | All repositories' PATs and webhook secrets are stored in **one shared AWS Secrets Manager secret** (JSON keyed by owner/name) |
-| **Never in plain text** | PATs are never stored in source, config files, environment variables, container images, or the metadata database |
+| **Secrets Manager only** | All repositories' PATs live in **one shared AWS Secrets Manager secret** (JSON keyed by owner/name); the **Anthropic API key** is a separate secret (Bedrock uses IAM, no key) |
+| **Never in plain text** | PATs and the Anthropic key are never stored in source, config files, environment variables, container images, or the metadata database |
 | **Reference, not value** | DynamoDB holds only the **secret reference** (ARN/name), never the token |
-| **Retrieved only when needed** | The PAT is fetched only for clone/webhook operations — not by the webhook handler on the hot path |
-| **Least privilege** | IAM grants `GetSecretValue` scoped to specific secret ARNs; the registration Lambda alone may create/put secrets |
-| **Never logged** | PATs (and secrets) are never written to logs or surfaced in errors |
+| **Retrieved only when needed** | The PAT is fetched only when a run clones the repo — never by the request Lambdas |
+| **Least privilege** | IAM grants `GetSecretValue` scoped to specific secret ARNs; the registration Lambda alone may put the repos secret |
+| **Never logged** | PATs and the Anthropic key are never written to logs or surfaced in errors |
 | **Encryption** | Secrets are KMS-encrypted at rest; retrieved over TLS |
 
-**Rotation** of a repository's PAT or webhook secret is supported: re-`POST /repositories` with `"update": true` and the new value(s). The registration Lambda updates the GitHub webhook's configuration in the **same call**, so signed deliveries keep verifying (see [Registration §5](./registration.md#5-update-credentials-rotation)).
+**Rotation** of a repository's PAT is supported: re-`POST /repositories` with `"update": true` and the new value. The Anthropic key is rotated with `put-secret-value` on its secret; restart the worker to pick it up.
 
 ---
 
-## 3. Webhook Signature Validation & Trigger Gate
+## 3. Endpoint Authentication (API key)
 
-The **Webhook Handler Lambda** resolves the repository record, validates the signature **before** evaluating the trigger, and publishes an event **only** on a match ([WH-7…WH-10](./requirements.md#72-signature-validation)).
+There is no public webhook ingress. Every API Gateway route — registration,
+`POST /process`, and `POST /release-context` — is gated by an **API key**.
 
 | Control | Implementation |
 | --- | --- |
-| **Per-repo secret** | The repository's webhook secret is resolved from Secrets Manager (via the metadata record) |
-| **HMAC SHA-256** | The `X-Hub-Signature-256` header is recomputed over the raw body |
-| **Constant-time comparison** | Signatures are compared with a constant-time function |
-| **Reject invalid signatures** | Missing/invalid signatures are rejected with `401` and **never evaluated or published** |
-| **Trigger gate** | Only commits matching the repo's trigger pattern (default `blog:`) are published; all others return `200` and stop |
-| **HTTPS only** | The API Gateway endpoint accepts TLS traffic only |
-| **Audit logging** | Every delivery — published, ignored, and rejected — is logged (never the payload or secret) |
+| **API key required** | All routes set `ApiKeyRequired: true`; a request without a valid `x-api-key` gets `403` from API Gateway **before** any Lambda runs |
+| **Usage plan** | Keys are bound to a shared usage plan on the stage (rate/quota can be tuned) |
+| **Least-privilege trigger** | The `manual-trigger` Lambda can only `states:StartExecution` on the orchestration state machine — no EC2, no secrets |
+| **HTTPS only** | The API Gateway endpoints accept TLS traffic only |
+| **Audit logging** | Every request is logged with its outcome (never the payload or a secret) |
 
-**Validation + gate contract (illustrative):**
-
-```text
-record   = metadata.lookup(repo_full_name)
-secret   = secretsmanager.get(record.webhook_secret_ref)
-expected = "sha256=" + HMAC_SHA256(secret, raw_request_body)
-if not constant_time_equals(expected, header["X-Hub-Signature-256"]):
-    respond 401 and log rejection
-elif not matches(commit_message, record.trigger_pattern):   # default "blog:"
-    respond 200 and log "ignored"
-else:
-    events.put(bus, "blog.publish.requested", payload); respond 200
-```
+The API key id is a stack output (`RegistrationApiKeyId`); resolve its value with
+`aws apigateway get-api-key --include-value`. Rotate by creating a new key on the
+usage plan and retiring the old one.
 
 ---
 
@@ -82,29 +71,30 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 }
 ```
 
-**Webhook Handler Lambda (illustrative):**
+**manual-trigger Lambda + state machine (illustrative):**
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
-    { "Effect": "Allow", "Action": ["dynamodb:GetItem"],
-      "Resource": "arn:aws:dynamodb:us-east-1:<acct>:table/blog-gen-repositories" },
-    { "Effect": "Allow", "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:us-east-1:<acct>:secret:blog-gen/github/repositories-*" },
-    { "Effect": "Allow", "Action": ["events:PutEvents"],
-      "Resource": "arn:aws:events:us-east-1:<acct>:event-bus/blog-gen-bus" }
+    { "Sid": "ManualTrigger", "Effect": "Allow", "Action": ["states:StartExecution"],
+      "Resource": "arn:aws:states:us-east-1:<acct>:stateMachine:blog-gen-orchestration" },
+    { "Sid": "StateMachineEc2", "Effect": "Allow", "Action": ["ec2:StartInstances"],
+      "Resource": "arn:aws:ec2:us-east-1:<acct>:instance/*",
+      "Condition": { "StringEquals": { "aws:ResourceTag/Project": "blog-gen" } } },
+    { "Sid": "StateMachineEnqueue", "Effect": "Allow", "Action": ["sqs:SendMessage"],
+      "Resource": "arn:aws:sqs:us-east-1:<acct>:blog-gen-events" }
   ]
 }
 ```
 
 | Principal | May do | May NOT do |
 | --- | --- | --- |
-| `registration` (Lambda) | Create secrets, write metadata, create webhooks (via PAT) | Read the queue, start/stop the instance, run inference |
-| `webhook-handler` (Lambda) | Read metadata, read the webhook secret, publish matched events, **describe** instances (read-only window gate) | **Read the PAT**, **start/stop** the instance, read the queue |
-| `scheduled-start` (Lambda) | Start the target instance (by ID) | Stop it, publish events, read the queue |
-| `scheduled-stop` (Lambda) | Stop the target instance (by ID) | Start it, publish events |
-| EC2 instance | Consume the queue, read the PAT (to clone), write logs | Modify IAM, alter infrastructure, create secrets |
+| `registration` (Lambda) | Read/write the repos secret, write metadata | Read the queue, start/stop the instance, run inference |
+| `manual-trigger` (Lambda) | `states:StartExecution` only | Access EC2, secrets, the queue, or inference |
+| `StateMachineRole` | Describe + tag-scoped start instances, SSM describe, `sqs:SendMessage` | Stop the instance, read secrets/PAT, run inference |
+| `scheduled-start` / `scheduled-stop` (Lambda) | Start/stop the target instance (by ID) | Publish events, read the queue |
+| EC2 instance | Consume the queue, call Bedrock, read the PAT (to clone), R/W the content bucket, write logs | Modify IAM, alter infrastructure, create secrets |
 
 ---
 
@@ -112,12 +102,13 @@ Policies specify concrete actions and resource ARNs; wildcards are avoided where
 
 | Data | At rest | In transit |
 | --- | --- | --- |
-| Secrets (PATs, webhook secrets) | KMS-encrypted (Secrets Manager) | TLS |
+| Secrets (PATs, Anthropic key, SMTP password) | KMS-encrypted (Secrets Manager) | TLS |
 | DynamoDB (metadata) | Encryption at rest | TLS |
-| EBS (models, n8n state, Repository Memory) | Encrypted EBS | TLS to AWS APIs |
+| EBS (n8n + PostgreSQL state, Repository Memory) | Encrypted EBS | TLS to AWS APIs |
+| Amazon S3 (artifacts) | SSE-KMS at rest | TLS |
 | Amazon SQS | SSE at rest | TLS |
-| Webhook & registration endpoints | — | HTTPS only (TLS 1.2+) |
-| GitHub API & clone | — | HTTPS only |
+| Registration / `/process` endpoints | — | HTTPS only (TLS 1.2+) |
+| GitHub API, Bedrock, Anthropic | — | HTTPS only |
 
 Where SSE-KMS is used, keys have rotation enabled and key policies restrict use to the intended roles.
 
@@ -125,17 +116,17 @@ Where SSE-KMS is used, keys have rotation enabled and key policies restrict use 
 
 ## 6. Network Security (Security Groups & HTTPS)
 
-- **Ingress to the instance** is limited to **SSH (22) from the operator CIDR(s)** only. The **n8n (5678)** and **Ollama (11434)** ports are **never** exposed to the internet.
-- **Webhook and registration ingress** terminate at **API Gateway (HTTPS only)**, not the instance.
+- **Ingress to the instance** is limited to **SSH (22) from the operator CIDR(s)** only. The **n8n (5678)** port is **never** exposed to the internet (SSH tunnel only).
+- **Registration and `/process` ingress** terminate at **API Gateway (HTTPS only)**, not the instance.
 - Restrict `OperatorCidr` to known addresses; avoid `0.0.0.0/0`.
-- Egress allows the instance to clone repositories, pull container images, and reach AWS APIs.
+- Egress allows the instance to clone repositories, pull container images, and reach AWS APIs, Bedrock, and the Anthropic API.
 
 ---
 
 ## 7. Environment Variables & Secrets Management
 
-- Sensitive values (webhook secrets, PATs) live in **Secrets Manager** — **never committed** to source, images, or CloudFormation templates ([SEC-5](./requirements.md#9-security-requirements)).
-- Non-secret configuration (`PublishTrigger` default, `OLLAMA_MODEL`, timeouts) may be passed as environment/CloudFormation parameters.
+- Sensitive values (PATs, the Anthropic API key, the SMTP password) live in **Secrets Manager** — **never committed** to source, images, or CloudFormation templates ([SEC-5](./requirements.md#9-security-requirements)). Bedrock uses IAM, so there is no key to store for the primary leg.
+- Non-secret configuration (`PublishTrigger` default, `BEDROCK_MODEL_ID`, `ANTHROPIC_MODEL`, timeouts) may be passed as environment/CloudFormation parameters.
 - `.env` and any local parameter files are git-ignored.
 - No long-lived AWS keys in code, CI, or images — CI uses **OIDC**; compute uses **instance/Lambda roles**.
 - **Repository Memory** stores analysis and topic metadata only — never secrets ([MEM-5](./requirements.md#5-repository-memory-requirements)).
@@ -164,7 +155,7 @@ See [Monitoring](./monitoring.md) for alerting on suspicious or failed activity.
 ## 10. Data Handling & Privacy
 
 - Only **repository content the operator has rights to** should be processed; access is via the scoped PAT.
-- **All inference is local** (Ollama) — repository content is **never sent to a third-party model provider**.
+- **Inference is managed Claude** — repository-derived context is sent to **Amazon Bedrock** (in your AWS account, IAM-authenticated) and, on fallback, the **Anthropic API**, under those services' data-use terms. No other third-party model provider is used.
 - Cloned repositories are transient — they live on the instance's disk during a run and are not persisted.
 
 ---
@@ -188,11 +179,12 @@ instructions and …") to steer a generated artifact.
   Review & Approval Workflow ([governance](./governance.md)); the publishing layer
   **refuses content that is not approved**. A successful injection therefore
   cannot auto-publish — a human sees the output first.
-- **Local inference only.** All generation runs on local Ollama; injected text
-  cannot exfiltrate data to a third-party model provider.
-- **Trigger gate limits initiation.** Runs fire only on a matching `blog:` commit
-  (or an authenticated `POST /process`), so an outside party cannot freely trigger
-  generation on arbitrary input.
+- **Managed inference, in-account first.** Generation runs on Amazon Bedrock
+  (your account, IAM) with an Anthropic API fallback — not an arbitrary
+  third-party endpoint — so injected text has a bounded, audited egress path.
+- **Authenticated trigger limits initiation.** Runs fire only on an authenticated
+  `POST /process` (API key), so an outside party cannot freely trigger generation
+  on arbitrary input.
 
 **Residual risk & recommended hardening (fast-follow, not yet implemented):**
 
@@ -204,8 +196,8 @@ instructions and …") to steer a generated artifact.
 - Consider a lightweight content check (denylist for injected directives, links to
   unexpected domains) before the review stage for defense in depth.
 
-> The current posture (grounding + mandatory review/approval + local inference)
-> keeps injection from producing an auto-published or data-exfiltrating outcome.
+> The current posture (grounding + mandatory review/approval + managed in-account
+> inference) keeps injection from producing an auto-published outcome.
 > The hardening above reduces the chance of injected text degrading an artifact's
 > *quality* before a human catches it.
 
