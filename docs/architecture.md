@@ -1,29 +1,29 @@
 # Architecture
 
-This document describes the architecture of the **GitHub AI Blog Generator**: the design principles, **repository registration (MVP)**, the **commit-message trigger gate**, the event-driven trigger path, the AWS deployment topology, the analysis and local-inference pipeline, content generation, data flow, and storage.
+This document describes the architecture of the **GitHub AI Blog Generator**: the design principles, **repository registration (MVP)**, the **`POST /process` → Step Functions** trigger path, the AWS deployment topology, the analysis and generation pipeline, content generation, data flow, and storage.
 
-Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.md) · [Workflows](./workflows.md) · [Cost Optimisation](./cost-optimization.md) · [Security](./security.md).
+Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.md) · [Workflows](./workflows.md) · [Cost Optimisation](./cost-optimization.md) · [Security](./security.md) · [AI Provider Router](./hybrid-ai-routing.md).
 
 ---
 
 ## 1. Design Principles
 
 - **Simple MVP onboarding** — users connect a repository with its URL and a **GitHub Personal Access Token (PAT)**; the PAT is stored in **AWS Secrets Manager** and only a reference is kept in the metadata store. GitHub App authentication is a future enhancement.
-- **Opt-in generation** — a webhook is received on every push, but a run happens **only** when the commit message matches the repository's publishing trigger (default `blog:`) or a release is published. All other events are acknowledged and ignored.
-- **Two trigger sources, one pipeline** — a run can be initiated **automatically by a GitHub webhook**, or **manually by the authenticated `POST /process` endpoint** ([Manual Trigger](./manual-trigger.md)). Both publish the same `blog.publish.requested` event, so the downstream pipeline is identical regardless of how it was triggered; future sources (CLI, Slack, cron) plug in the same way.
-- **Event-driven** — triggered events are published to **Amazon EventBridge** and buffered in **Amazon SQS**; the worker drains them while the instance is up. Nothing runs speculatively.
-- **Self-hosted inference** — all AI runs locally via **Ollama** with a local **Qwen** model. No Amazon Bedrock, OpenAI, Anthropic, or any paid inference API.
-- **Pay only during the window** — an **On-Demand EC2 instance** runs on a fixed daily schedule (18:00–20:00, 7 days a week) set by EventBridge Scheduler; compute cost is bounded and predictable.
-- **Durable buffering** — every matched event is buffered in **Amazon SQS** so nothing is lost while the instance is stopped or booting.
-- **Persistent state, ephemeral compute** — models, n8n state, and **Repository Memory** live on a persistent **gp3 EBS volume**.
-- **Secure by default** — least-privilege IAM, secrets in Secrets Manager (never logged), HMAC-verified webhooks, encryption everywhere.
+- **On-demand, opt-in generation** — a run happens **only** when the authenticated **`POST /process`** endpoint is called (naming a repository, optionally a release). Nothing runs on repository changes.
+- **One trigger, one pipeline** — `POST /process` starts an **AWS Step Functions** execution; future sources (CLI, Slack, cron, release webhooks) can start the same execution, so the downstream pipeline is identical regardless of how it was triggered.
+- **Managed Claude inference** — every artifact is generated through the **AI Provider Router**: **Amazon Bedrock (Claude Opus 4.8)** first, with automatic fallback to the **Anthropic API** on a quota/throttle error. No local model, no GPU. See [AI Provider Router](./hybrid-ai-routing.md).
+- **Never regenerate** — before generating an artifact the worker checks **Amazon S3**; existing Markdown is reused, never rebuilt, so a re-run spends no tokens on content that already exists.
+- **On-demand compute** — a small **On-Demand t4g.small EC2 instance** is started by the state machine and stopped by a fixed daily window + opt-in idle-stop; compute cost is bounded and predictable.
+- **Durable buffering** — the state machine hands the job to **Amazon SQS** so nothing is lost while the instance boots.
+- **Persistent state, ephemeral compute** — n8n + PostgreSQL state and **Repository Memory** live on a persistent **gp3 EBS volume**.
+- **Secure by default** — least-privilege IAM, secrets in Secrets Manager (never logged), API-key-gated endpoints, encryption everywhere.
 - **Everything as code** — infrastructure is AWS CloudFormation; workflows are versioned n8n JSON; services run via Docker Compose.
 
 ---
 
 ## 2. Repository Registration (MVP)
 
-Onboarding connects a repository using a **GitHub PAT**. It validates access, creates the webhook, stores metadata, and stores the PAT securely — all before any content is ever generated.
+Onboarding connects a repository using a **GitHub PAT**. It validates access, stores metadata, and stores the PAT securely — all before any content is ever generated.
 
 ```mermaid
 flowchart TB
@@ -32,50 +32,49 @@ flowchart TB
     REGAPI --> VA[Validate repository access<br/>GitHub API]
     VA -- fail --> ERR[Reject + log]
     VA -- ok --> VP[Validate token permissions]
-    VP --> WH[Create GitHub webhook<br/>+ generate webhook secret]
-    WH --> META[Store metadata → DynamoDB<br/>secret reference, trigger pattern, ...]
-    META --> SEC[Store PAT + webhook secret → Secrets Manager]
+    VP --> META[Store metadata → DynamoDB<br/>secret reference, trigger pattern, ...]
+    META --> SEC[Store PAT → Secrets Manager]
     SEC --> DONE[Repository successfully registered]
 ```
 
-**What the PAT is used for:** accessing repository contents, registering the GitHub webhook, reading repository metadata, and (future) repository synchronisation.
+**What the PAT is used for:** accessing repository contents, reading repository metadata, and opening pull requests. (GitHub webhook ingress has been removed; registration no longer creates a GitHub webhook.)
 
 **Where things are stored:**
 
 | Data | Store | Notes |
 | --- | --- | --- |
 | GitHub PAT | **AWS Secrets Manager** | Never in plain text, source, config, env vars, or the database |
-| Webhook signing secret | **AWS Secrets Manager** | Per repository |
-| Repository metadata | **Amazon DynamoDB** | Repository ID, owner, name, URL, default branch, webhook ID, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, registration timestamp |
+| Repository metadata | **Amazon DynamoDB** | Repository ID, owner, name, URL, default branch, **trigger pattern**, enabled status, **secret reference (ARN)**, last processed commit SHA, registration timestamp |
 
-The metadata store holds only a **reference** to the secret — never the PAT itself. The PAT is retrieved **only when required** (clone, webhook management), under least-privilege IAM ([Security → Credentials](./security.md#2-github-pat--secret-storage), [Requirements §12–§14](./requirements.md#12-repository-registration-requirements-mvp)).
+The metadata store holds only a **reference** to the secret — never the PAT itself. The PAT is retrieved **only when required** (clone, pull request), under least-privilege IAM ([Security → Credentials](./security.md#2-github-pat--secret-storage), [Requirements §12–§14](./requirements.md#12-repository-registration-requirements-mvp)).
 
 > **GitHub App authentication is a future enhancement, not part of the MVP** ([Roadmap](./roadmap.md)).
 
 ---
 
-## 3. Commit-Message Trigger Gate
+## 3. The `POST /process` Trigger → Step Functions
 
-The trigger gate lives in the **Webhook Handler Lambda** and runs before any compute or AI is invoked.
+A run always starts with an authenticated request to `POST /process`. The manual-trigger Lambda validates it and starts a **Step Functions** execution, which owns the compute-host lifecycle and the job hand-off.
 
 ```mermaid
 flowchart TB
-    W[Webhook delivery] --> LK[Resolve repository record<br/>DynamoDB]
-    LK --> GS[Get webhook secret<br/>Secrets Manager]
-    GS --> SIG{Valid HMAC signature?}
-    SIG -- no --> R401[Return 401 + log rejection]
-    SIG -- yes --> EX[Extract commit message]
-    EX --> T{Matches repository's<br/>Trigger Pattern? default 'blog:'}
-    T -- no --> ACK[Return HTTP 200<br/>acknowledge & ignore — no further processing]
-    T -- yes --> PUT[PutEvents → Amazon EventBridge]
-    PUT --> OK[Return HTTP 200]
+    C[POST /process<br/>x-api-key] --> LT[Lambda: manual-trigger<br/>validate request]
+    LT -- invalid --> R400[Return 400]
+    LT -- ok --> SFN[StartExecution → Step Functions]
+    LT --> R202[Return HTTP 202 accepted]
+    subgraph SFN["Orchestration state machine"]
+        FIND[Find host by Project tag] --> START[StartInstances]
+        START --> WAIT[Wait: SSM DescribeInstanceInformation = Online]
+        WAIT --> ENQ[SendMessage → SQS]
+    end
+    ENQ --> WK[Worker drains SQS]
 ```
 
-- The trigger pattern is **per repository** (stored in metadata, default `blog:`). Custom patterns (`[blog]`, regex) are [planned](./roadmap.md).
-- A non-matching event is a **terminal success**: the handler returns `200` and does nothing else.
-- Only a **matching** event is published to EventBridge.
+- The request names the repository and, optionally, a `releaseTag` (release-suite path) or nothing (repository path).
+- The state machine is **idempotent to instance state**: `StartInstances` is a no-op if the host is already running, and the SSM wait loop tolerates a not-yet-registered instance.
+- Instance power-**off** stays with the scheduler stack (fixed window / idle-stop), not the state machine.
 
-See [Cost Optimisation → Trigger Pre-Filtering](./cost-optimization.md#2-trigger-pre-filtering) and [Requirements → Publishing Trigger](./requirements.md#2-publishing-trigger-requirements).
+See [Manual Trigger](./manual-trigger.md) and [Cost Optimisation](./cost-optimization.md).
 
 ---
 
@@ -85,49 +84,51 @@ See [Cost Optimisation → Trigger Pre-Filtering](./cost-optimization.md#2-trigg
 flowchart TB
     subgraph GitHub
         REG[Registration: URL + PAT]
-        EVT[GitHub Webhook<br/>push]
         REPO[(Target Repository)]
     end
 
     subgraph AWS
-        APIGW[Amazon API Gateway<br/>webhook + registration]
+        APIGW[Amazon API Gateway<br/>registration + /process]
         RL[Lambda: Registration]
-        LH[Lambda: Webhook Handler<br/>verify + validate trigger]
-        SM[AWS Secrets Manager<br/>PAT + webhook secret]
+        LT[Lambda: manual-trigger<br/>validate + StartExecution]
+        SM[AWS Secrets Manager<br/>PAT + Anthropic key]
         DDB[(DynamoDB<br/>repository metadata)]
-        EB[Amazon EventBridge]
+        SFN[AWS Step Functions<br/>start host · SSM wait · enqueue]
         SQS[(Amazon SQS + DLQ)]
-        SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily]
-        PWR[Lambda: scheduled-start / scheduled-stop<br/>+ opt-in idle-stop]
-        subgraph EC2["EC2 On-Demand Instance (Ubuntu + Docker Compose)"]
+        SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily + idle-stop]
+        subgraph EC2["EC2 t4g.small (Ubuntu arm64 + Docker Compose)"]
+            WK[Worker: content generator]
             N8N[n8n Orchestrator]
-            OC[OpenClaw]
+            PG[(PostgreSQL)]
+            RD[(Redis)]
             MEM[(Repository Memory)]
-            OLL[Ollama + Qwen]
         end
+        BR[Amazon Bedrock<br/>Claude Opus 4.8]
+        AN[Anthropic API<br/>fallback]
+        S3[(Amazon S3<br/>artifacts, idempotent)]
         EBS[(Persistent gp3 EBS Volume)]
         CW[Amazon CloudWatch]
     end
 
-    REG -->|HTTPS| APIGW --> RL
-    RL -->|validate + create hook| REPO
+    REG -->|HTTPS x-api-key| APIGW --> RL
+    RL -->|validate| REPO
     RL -->|metadata| DDB
-    RL -->|PAT + webhook secret| SM
-    EVT -->|HTTPS + HMAC| APIGW --> LH
-    LH -->|lookup| DDB
-    LH -->|webhook secret| SM
-    LH -->|trigger match → PutEvents| EB
-    LH -->|no match → 200| EVT
-    EB --> SQS
-    SCH --> PWR -->|Start/StopInstances| EC2
-    SQS -.->|drained while up| N8N
-    N8N --> OC --> MEM
-    OC -->|PAT| SM
-    OC --> OLL
-    OLL -->|content| N8N
-    N8N -->|publish + notify| OUT[Published content / users]
+    RL -->|PAT| SM
+    APIGW -->|POST /process| LT --> SFN
+    SFN -->|Start + SSM wait| EC2
+    SFN -->|SendMessage| SQS
+    SQS -.->|drained while up| WK
+    WK -->|Bedrock first| BR
+    BR -.->|quota| AN
+    WK -->|exists? else generate| S3
+    WK -->|PAT| SM
+    S3 --> N8N
+    N8N --- PG
+    N8N --- RD
+    N8N -->|approval · PR · publish · notify| OUT[Published content / users]
+    SCH -->|StopInstances| EC2
     EBS --- EC2
-    LH -. logs .-> CW
+    WK -. logs .-> CW
     N8N -. logs .-> CW
 ```
 
@@ -135,30 +136,31 @@ flowchart TB
 
 | Component | Responsibility |
 | --- | --- |
-| Registration API (API Gateway + Lambda) | Validate repo access + token permissions, create webhook, store metadata (DynamoDB) and PAT/webhook secret (Secrets Manager) |
-| AWS Secrets Manager | One shared secret holding all repos' PATs + webhook secrets (JSON keyed by owner/name); retrieved only when needed |
-| Amazon DynamoDB | Repository metadata (secret reference, trigger pattern, webhook ID, …) — **never the PAT** |
-| API Gateway | Public HTTPS ingress for webhook + registration |
-| Webhook Handler (Lambda) | Resolve repo metadata, verify signature, **validate trigger**, publish matched events. **No analysis or inference; never fetches the PAT** |
-| Amazon EventBridge | Route matched events to the SQS buffer |
-| Amazon SQS | Durable buffer so no matched event is lost while the instance is outside its window; DLQ |
-| EventBridge Scheduler | Authority for instance power — starts/stops the host on the daily window (18:00–20:00, 7 days a week) |
+| Registration API (API Gateway + Lambda) | Validate repo access + token permissions, store metadata (DynamoDB) and the PAT (Secrets Manager) |
+| AWS Secrets Manager | Shared secret holding all repos' PATs (JSON keyed by owner/name) + the Anthropic API key; retrieved only when needed |
+| Amazon DynamoDB | Repository metadata (secret reference, trigger pattern, …) — **never the PAT** |
+| API Gateway | HTTPS ingress for registration + `/process` + `/release-context` (all API-key gated) |
+| manual-trigger (Lambda) | Validate the `POST /process` request and start a Step Functions execution. **No analysis or inference** |
+| AWS Step Functions | Resolve the host by tag, start it, wait for SSM `Online`, then enqueue the job onto SQS |
+| Amazon SQS | Durable buffer between the state machine and the worker; DLQ |
+| EventBridge Scheduler | Authority for instance power-off — the daily window + opt-in idle-stop |
 | scheduled-start / scheduled-stop (Lambda) | Start/stop the On-Demand instance on the schedule (idempotent) |
-| idle-stop (Lambda, opt-in) | Stop the instance after sustained idleness (CPU/network + n8n/Ollama checks) instead of a fixed time — see [scheduling](./scheduling.md) |
-| EC2 On-Demand Instance | Host running n8n, OpenClaw, Ollama via Docker Compose |
-| OpenClaw | Clone (using the PAT) and analyse the repository |
+| idle-stop (Lambda, opt-in) | Stop the instance after sustained idleness (CPU/network + n8n checks) — see [scheduling](./scheduling.md) |
+| EC2 On-Demand Instance (t4g.small) | Host running the worker + n8n + PostgreSQL + Redis via Docker Compose |
+| Worker (`cmd/worker`) | Drain SQS, clone + analyse the repo, generate via the Provider Router, store to S3 (skipping existing artifacts) |
+| AI Provider Router (`internal/airouter`) | Bedrock (Claude Opus 4.8) primary → Anthropic API fallback on quota |
+| Amazon S3 | Generated artifacts; the idempotency check reuses existing Markdown |
 | Repository Memory | Per-repo continuity and topic de-duplication |
-| Ollama + Qwen | Local LLM inference |
-| Release Context API (Lambda: `release-context`) | Build and persist the structured Release Context for a repo + release; the Content Intelligence entrypoint (`POST /release-context`) |
-| Release Context Builder (`internal/releasecontext`) | Analyse repository, release, commits, changed files, docs, CloudFormation, and Mermaid into a versioned, AI-ready Release Context |
-| Content Generation (`internal/releasegen`) | Generate a long-form blog post plus release summary, social, and SEO variants from a Release Context via the local model |
-| Release Content Pipeline (worker) | On a published release: build the context, generate content, review, publish, and notify |
+| n8n | Human approval, GitHub PRs, publishing, and notifications |
+| Release Context API (Lambda: `release-context`) | Build and persist the structured Release Context (`POST /release-context`) |
+| Release Context Builder (`internal/releasecontext`) | Analyse repo, release, commits, changed files, docs, CloudFormation, and Mermaid into a versioned, AI-ready Release Context |
+| Content Generation (`internal/releasegen`) | Generate a long-form blog plus release summary, social, and SEO variants from a Release Context via the Provider Router |
 
 ---
 
 ### Content Intelligence & Generation (Milestones 2–3)
 
-Beyond the trigger gate, the platform turns a repository + release into
+Beyond the trigger, the platform turns a repository + release into
 publication-ready content. This is **Content Intelligence** (analysis) feeding
 **Content Generation** (writing):
 
@@ -166,8 +168,11 @@ publication-ready content. This is **Content Intelligence** (analysis) feeding
 flowchart LR
     SRC[GitHub API + git] --> RCB[Release Context Builder]
     RCB --> RCX[(Release Context<br/>versioned JSON)]
-    RCX --> GEN[Content Generation<br/>local Ollama]
-    GEN --> REV[Review] --> PUB[Publish] --> OUT[(Output bucket / EBS)]
+    RCX --> GEN[Content Generation<br/>Provider Router: Bedrock → Anthropic]
+    GEN --> S3CHK{Exists in S3?}
+    S3CHK -- yes --> REUSE[Reuse]
+    S3CHK -- no --> REV[Review] --> PUB[Publish] --> OUT[(S3 output)]
+    REUSE --> OUT
 ```
 
 - The **Release Context** is the single, versioned source of truth
@@ -175,86 +180,89 @@ flowchart LR
   matters, and how it fits the architecture. It is built by pure, decoupled
   analyzers behind a `Sources` port, so it is reusable from a Lambda, the worker,
   or a CLI.
-- **Generation** is decoupled by a `Model` port (local Ollama today), grounded
+- **Generation** is decoupled by a `Model` port (the Provider Router), grounded
   strictly in the context, and produces a long-form blog post (with SEO front
   matter and accurate embedded Mermaid) plus other formats.
-- On a **published release**, the worker runs this end to end automatically;
-  reads use the repository's registered PAT. See
+- On a **release run**, the worker runs this end to end automatically; reads use
+  the repository's registered PAT. See
   [Release Context](./release-context.md) and [Blog Generation](./blog-generation.md).
 
 ---
 
-## 5. Webhook Handler Responsibilities
+## 5. manual-trigger Responsibilities
 
-The handler is intentionally **lightweight** so it returns to GitHub in milliseconds. It is limited to:
+The manual-trigger Lambda is intentionally **lightweight** so it returns to the caller in milliseconds. It is limited to:
 
-1. **Resolve the repository record** (metadata) for the delivery.
-2. Retrieve the repository's **webhook secret** and verify the signature (HMAC SHA-256, constant-time).
-3. Parse the payload and extract commit information (message, ref, author).
-4. **Validate the commit message against the repository's Trigger Pattern.**
-5. **Publish an event to EventBridge only when the trigger matches.**
-6. Return a successful HTTP response to GitHub as quickly as possible.
+1. **Validate** the JSON request (owner, repository, optional `releaseTag`).
+2. **Start a Step Functions execution** whose input is the job the worker consumes.
+3. Return **HTTP 202** with the request id.
 
-The handler **must not** clone repositories, perform analysis, access Repository Memory, invoke AI models, or **retrieve/log the PAT** ([Requirements → Webhook Handler](./requirements.md#3-webhook-handler-requirements)).
+The Lambda **must not** clone repositories, perform analysis, invoke AI models, start the instance itself, or **retrieve/log the PAT** — the state machine owns the compute-host lifecycle and the worker owns generation.
 
 ---
 
 ## 6. AWS Deployment Topology
 
-The front door (API Gateway + Lambda + EventBridge + SQS + Secrets Manager + DynamoDB) is fully serverless and **always available even when the EC2 instance is stopped**. The compute host runs in a **public subnet**; inbound access is tightly restricted.
+The front door (API Gateway + Lambda + Step Functions + SQS + Secrets Manager + DynamoDB) is fully serverless and **always available even when the EC2 instance is stopped**. The compute host runs in a **public subnet**; inbound access is tightly restricted.
 
 ```mermaid
 flowchart TB
-    GH[GitHub] -->|443 HTTPS| APIGW[API Gateway]
-    APIGW --> LH[Webhook Handler Lambda]
+    CAL[Caller] -->|443 HTTPS x-api-key| APIGW[API Gateway]
+    APIGW --> LT[manual-trigger Lambda]
     APIGW --> RL[Registration Lambda]
-    LH --> EB[EventBridge]
-    EB --> SQS[(SQS)]
+    LT --> SFN[Step Functions]
+    SFN --> SQS[(SQS)]
     SCH[EventBridge Scheduler] --> PWR[scheduled-start / scheduled-stop Lambda<br/>+ opt-in idle-stop]
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         IGW[Internet Gateway]
         subgraph Public["Public subnet 10.0.0.0/24"]
-            EC2[(EC2 On-Demand Instance<br/>n8n + OpenClaw + Ollama)]
+            EC2[(EC2 t4g.small<br/>worker + n8n + PostgreSQL + Redis)]
             EBS[(gp3 EBS volume)]
         end
     end
+    SFN -->|Start + SSM wait| EC2
     PWR -->|Start/StopInstances| EC2
     EC2 --- EBS
     EC2 --- IGW
     ADMIN[Operator] -->|SSH key auth<br/>restricted CIDR| EC2
 ```
 
-- **Ingress:** GitHub reaches the platform through **API Gateway** (managed TLS). The instance's inbound is limited to **SSH (22) from operator IPs**; the **n8n and Ollama ports are never publicly exposed**.
-- **Egress:** the **Internet Gateway** provides outbound access for cloning, image pulls, and model downloads.
+- **Ingress:** callers reach the platform through **API Gateway** (managed TLS, API-key gated). The instance's inbound is limited to **SSH (22) from operator IPs**; the **n8n port is never publicly exposed** (SSH tunnel only). SSM (via the instance role) provides the readiness signal, not an inbound port.
+- **Egress:** the **Internet Gateway** provides outbound access for cloning, image pulls, and Bedrock/Anthropic API calls.
 
 ---
 
 ## 7. Analysis & Generation Pipeline
 
-Once the instance is up and n8n is invoked, it runs the pipeline. **OpenClaw** clones the repository (retrieving the PAT from Secrets Manager only now), **Repository Memory** provides continuity, and **Ollama** runs the local model.
+Once the instance is up, the **worker** drains SQS, clones the repository (retrieving the PAT from Secrets Manager only now), consults **Repository Memory**, and generates each artifact through the **Provider Router** — reusing anything already in S3. **n8n** then reviews, approves, publishes, and notifies.
 
 ```mermaid
 sequenceDiagram
-    participant N as n8n
+    participant WK as Worker
     participant SM as Secrets Manager
-    participant OC as OpenClaw
     participant M as Repository Memory
-    participant OL as Ollama (Qwen)
+    participant RTR as Provider Router
+    participant S3 as Amazon S3
+    participant N as n8n
 
-    N->>SM: Get PAT (only now, when needed)
-    N->>OC: Matched event + PAT
-    OC->>OC: Checkout / sync repository
-    OC->>OC: Structure, README, source, config analysis
-    OC->>M: Look up prior analyses + published topics
-    M-->>OC: Memory context (avoid duplicates)
-    OC->>OC: Topic identification + outline
-    loop each content type
-        OC->>OL: Prompt with repo context + memory
-        OL-->>OC: Generated content
+    WK->>SM: Get PAT (only now, when needed)
+    WK->>WK: Checkout / sync repository
+    WK->>WK: Structure, README, source, config analysis
+    WK->>M: Look up prior analyses + published topics
+    M-->>WK: Memory context (avoid duplicates)
+    loop each artifact
+        WK->>S3: Exists?
+        alt already present
+            S3-->>WK: reuse (skip generation)
+        else missing
+            WK->>RTR: Prompt (Bedrock → Anthropic on quota)
+            RTR-->>WK: Generated content
+            WK->>S3: Store artifact
+        end
     end
-    OC->>N: Draft content set
+    S3->>N: Draft content set
     N->>N: Quality review → optional human approval
-    N->>N: Publish + notify
+    N->>N: Publish + GitHub PR + notify
     N->>M: Record published topics
 ```
 
@@ -294,25 +302,23 @@ flowchart LR
     REG[Register: URL + PAT] --> RL[Registration Lambda]
     RL --> SM[(Secrets Manager)]
     RL --> DDB[(DynamoDB metadata)]
-    RL --> HOOK[GitHub webhook created]
 
-    EVT[GitHub push] -->|verify + validate trigger| LH[Webhook Handler]
-    LH --> DDB
-    LH --> SM
-    LH -->|match → PutEvents| EB[(EventBridge)]
-    LH -->|no match → 200| STOP[Ignored]
-    EB --> SQS[(SQS)]
+    CAL[POST /process] --> LT[manual-trigger]
+    LT --> SFN[(Step Functions)]
+    SFN -->|SendMessage| SQS[(SQS)]
     SCH[EventBridge Scheduler<br/>18:00 / 20:00 daily] --> PWR[scheduled-start / scheduled-stop<br/>+ opt-in idle-stop]
-    PWR -.->|power| N8N
-    SQS --> N8N[n8n]
-    GH[(GitHub repo)] -->|clone w/ PAT| OC[OpenClaw]
-    N8N --> OC
-    OC <--> MEM[(Repository Memory)]
-    OC -->|context| OL[Ollama / Qwen]
-    OL -->|content| N8N
-    N8N -->|review + approve| PUB[Publish]
+    SFN -.->|Start + SSM wait| WK
+    PWR -.->|power off| WK
+    SQS --> WK[Worker]
+    GH[(GitHub repo)] -->|clone w/ PAT| WK
+    WK <--> MEM[(Repository Memory)]
+    WK -->|Bedrock → Anthropic| RTR[Provider Router]
+    RTR -->|content| WK
+    WK -->|exists? else store| S3[(Amazon S3)]
+    S3 --> N8N[n8n]
+    N8N -->|review + approve + PR| PUB[Publish]
     N8N -->|update last commit SHA| DDB
-    N8N -->|notification| NOTIF[(Email / Slack / webhook)]
+    N8N -->|notification| NOTIF[(Gmail / Slack / webhook)]
 ```
 
 ---
@@ -321,10 +327,11 @@ flowchart LR
 
 | Store | Contents | Notes |
 | --- | --- | --- |
-| **AWS Secrets Manager** | One shared secret (all repos' PATs + webhook secrets, keyed by owner/name) | Encrypted; retrieved only when needed; **never** in the database or logs |
+| **AWS Secrets Manager** | Shared secret (all repos' PATs, keyed by owner/name) + the Anthropic API key | Encrypted; retrieved only when needed; **never** in the database or logs |
 | **Amazon DynamoDB** | Repository metadata (incl. secret reference) | Encrypted at rest; **never** stores the PAT |
-| **gp3 EBS volume** | Ollama models, n8n state, **Repository Memory**, workflows | Persistent across start/stop; encrypted |
+| **Amazon S3** | Generated artifacts (blog, social, video, SEO, …) | Idempotent — the worker reuses existing Markdown instead of regenerating |
+| **gp3 EBS volume** | n8n + PostgreSQL state, **Repository Memory**, work dirs | Persistent across start/stop; encrypted |
 | Repository clones | Working copy during a run | Transient — discarded after the run |
-| **Amazon SQS** | Buffered matched events + DLQ | Durable; retention up to 14 days |
+| **Amazon SQS** | Buffered jobs + DLQ | Durable; retention up to 14 days |
 
-Persisting models and Repository Memory on EBS makes the start/stop cost model viable; keeping PATs in Secrets Manager (with only references in DynamoDB) keeps credentials isolated and least-privilege. Published Markdown is written to whatever destination the deployment configures.
+Persisting n8n/PostgreSQL state and Repository Memory on EBS makes the start/stop cost model viable; keeping PATs and the Anthropic key in Secrets Manager (with only references in DynamoDB) keeps credentials isolated and least-privilege. Generated Markdown is written to S3, where the idempotency check reuses it on re-runs.
