@@ -55,14 +55,14 @@ adapters:
    │ revision · readiness    │  │ state machine     │  │ GitHubGateway  │
    └─────────────────────────┘  └───────────────────┘  │ Clock          │
                                                         └────────────────┘
-        adapters: ModelReviewer (Bedrock/Ollama) · MemoryRepository · noopGitHub
+        adapters: ModelReviewer (Provider Router: Bedrock / Anthropic) · MemoryRepository · noopGitHub
 ```
 
 | Concern | Component |
 | --- | --- |
 | Validation Engine | `ValidationEngine` — deterministic completeness/markdown/mermaid/YAML/links/refs |
 | Review Engine | `ReviewEngine` — merges deterministic scores with AI notes |
-| AI Reviewer | `AIReviewer` port + `ModelReviewer` (Bedrock/Ollama), grounded, JSON-parsed |
+| AI Reviewer | `AIReviewer` port + `ModelReviewer` (Provider Router: Bedrock / Anthropic), grounded, JSON-parsed |
 | Grounding | `GroundingEngine` — verifies claims against the Release Context; fails closed |
 | Quality Scoring | `ScoringEngine` — 8 dimensions → Approve / Needs Revision / Reject |
 | Approval Engine | `ApprovalEngine` — role permissions + pre-approval quality gates |
@@ -187,12 +187,12 @@ state, err := engine.Publish(ctx, state.Content.ID, "publisher")
 # Review a blog grounded in a release context (deterministic only):
 go run ./cmd/govern --content post.md --type "Technical Blog" --context ctx.json --offline
 
-# Full lifecycle, JSON output, AI review via Ollama:
+# Full lifecycle, JSON output, AI review via the Provider Router (Anthropic):
 go run ./cmd/govern --content post.md --context ctx.json --auto-approve --format json
 ```
 
 Flags: `--content` (required), `--context`, `--type`, `--title`, `--auto-approve`,
-`--min-score`, `--format md|json`, `--model`, `--ollama`, `--offline`, `--out`.
+`--min-score`, `--format md|json`, `--model`, `--offline`, `--out`.
 
 ---
 
@@ -209,7 +209,7 @@ never blocks the workflow — the engine falls back to the deterministic review.
 ## 12. Status & future enhancements
 
 **Implemented:** domain models + state machine, validation/grounding/scoring/
-review/approval/revision/readiness engines, the AI reviewer port + Bedrock/Ollama
+review/approval/revision/readiness engines, the AI reviewer port + Bedrock/Anthropic
 adapter, in-memory repository, workflow orchestration with audit trail, the
 Markdown report renderer, and the `govern` CLI. Unit + workflow + integration
 tests at 80%+.
