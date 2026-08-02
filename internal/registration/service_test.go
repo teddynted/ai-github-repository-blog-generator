@@ -159,10 +159,9 @@ func TestRegisterUpdate(t *testing.T) {
 func TestRegisterValidatesRequiredFields(t *testing.T) {
 	svc := newService(&fakeGitHub{}, &fakeSecrets{}, &fakeMeta{})
 	for _, in := range []Input{
-		{Repository: "w", PAT: "t", WebhookSecret: "s"},   // no owner
-		{Owner: "o", PAT: "t", WebhookSecret: "s"},        // no repository
-		{Owner: "o", Repository: "w", WebhookSecret: "s"}, // no pat
-		{Owner: "o", Repository: "w", PAT: "t"},           // no webhook_secret
+		{Repository: "w", PAT: "t"},   // no owner
+		{Owner: "o", PAT: "t"},        // no repository
+		{Owner: "o", Repository: "w"}, // no pat
 	} {
 		if _, err := svc.Register(context.Background(), in); apperror.CodeOf(err) != apperror.CodeInvalidInput {
 			t.Errorf("input %+v: code = %s, want invalid_input", in, apperror.CodeOf(err))

@@ -186,9 +186,8 @@ func validate(in Input) error {
 	if in.PAT == "" {
 		missing = append(missing, "pat")
 	}
-	if in.WebhookSecret == "" {
-		missing = append(missing, "webhook_secret")
-	}
+	// webhook_secret is optional: GitHub webhook ingress has been removed, so a
+	// secret is only used when a WebhookURL is configured (see Register).
 	if len(missing) > 0 {
 		return apperror.New(apperror.CodeInvalidInput, "missing required field(s): "+joinComma(missing))
 	}

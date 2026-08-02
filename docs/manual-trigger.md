@@ -1,10 +1,10 @@
-# Manual Processing Trigger (POST /process)
+# Processing Trigger (POST /process)
 
-An authenticated REST endpoint that manually triggers an AI processing run. It
-is **one more trigger source** alongside the GitHub webhook — it does **not**
-create a separate pipeline. A manual request is validated, then handed to the
-shared `intake.Service`, which publishes onto the **same EventBridge → SQS →
-worker** path the webhook uses.
+The authenticated REST endpoint that triggers an AI processing run — the
+platform's single entry point. A request is validated, then handed to the shared
+`intake.Service`, which **starts an AWS Step Functions execution**. The state
+machine starts the compute host, waits for it to report ready via SSM, and
+enqueues the job onto SQS for the worker.
 
 Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) ·
 [Scheduling](./scheduling.md) · [Infrastructure](./infrastructure.md).
@@ -16,34 +16,26 @@ Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) ·
 Every trigger source builds the same `intake.Event` and calls
 `intake.Service.Submit(...)`; the worker treats all events identically, so the
 processing engine is independent of how a run was triggered. Adding a future
-source (CLI, Slack, cron) is just another thin entry point that maps its input
-to `intake.Request` / `intake.Event` and calls `Submit` — no orchestration is
-duplicated.
+source (CLI, Slack, cron, release webhook) is just another thin entry point that
+maps its input to `intake.Request` / `intake.Event` and calls `Submit` — no
+orchestration is duplicated.
 
 ```mermaid
 flowchart LR
-  GH[GitHub webhook] --> H[webhook-handler]
   API["POST /process (API key)"] --> M[manual-trigger]
-  H --> S[intake.Service.Submit]
-  M --> S
-  S -->|publish| EB[EventBridge]
-  EB --> SQS[(SQS)]
+  M --> S[intake.Service.Submit]
+  S -->|StartExecution| SFN[Step Functions]
+  SFN -->|start host · SSM ready · SendMessage| SQS[(SQS)]
   SQS --> W[worker pipeline]
 ```
 
-The only difference between sources is the **window policy**:
-
-| Trigger | Policy | Outside the operating window |
-| --- | --- | --- |
-| webhook (push/release) | `BufferOutsideWindow` | published, retained in SQS, processed at the next scheduled start (`deferred`) |
-| manual (`POST /process`) | `StartOutsideWindow` | **starts the instance on demand** (overriding the schedule), publishes, and returns 202 |
-
-The webhook never starts the instance — the [scheduler](./scheduling.md) owns
-its normal power window (default 18:00–20:00, 7 days a week). The **manual** trigger
-is an explicit override: it starts the On-Demand host if it is stopped so a run
-can be forced any time (its role has tag-scoped `ec2:StartInstances`; it never
-stops the instance). If the start call fails, the event is still buffered in SQS
-and runs at the next scheduled start.
+The `intake.Service`'s `Publisher` is the Step Functions publisher
+(`eventbus.NewStepFunctions`), which starts an execution whose input is exactly
+the `{"detail": <event>}` body the worker consumes. The **state machine owns the
+compute-host lifecycle** (find host by tag → start → SSM ready gate → enqueue),
+so this Lambda never touches EC2 and there is no operating-window gate — a run is
+always started on demand. Instance power-**off** stays with the
+[scheduler](./scheduling.md).
 
 ---
 
@@ -72,9 +64,7 @@ API_KEY=$(aws apigateway get-api-key --api-key "$KEY_ID" --include-value --query
 The endpoint requires an **API key** (`x-api-key`) — the same simple scheme the
 registration route uses, covered by the shared API Gateway **usage plan** on the
 stage. Requests without a valid key get **403 Forbidden** from API Gateway before
-the Lambda runs; the endpoint is never publicly accessible. (IAM auth or a Lambda
-authorizer would also satisfy the requirement; the API key is the simplest secure
-fit for the existing architecture.)
+the Lambda runs; the endpoint is never publicly accessible.
 
 ## 4. Request payload
 
@@ -94,18 +84,17 @@ fit for the existing architecture.)
 | --- | --- | --- | --- |
 | `repository` | **yes** | — | repository name (without owner) |
 | `owner` | **yes** | — | repository owner/org |
-| `branch` | no | `main` | mapped to `refs/heads/<branch>` (snapshot run) |
+| `branch` | no | `main` | mapped to `refs/heads/<branch>` (repository run) |
 | `commit` | no | (resolved by pipeline) | specific commit SHA to process |
-| `releaseTag` | no | — | when set, generates **release content** (technical blog + summaries) for that GitHub Release via the [Release Context](./release-context.md) → [generation](./blog-generation.md) pipeline, instead of a snapshot run |
+| `releaseTag` | no | — | when set, generates **release content** (full suite) for that GitHub Release via the [Release Context](./release-context.md) → [generation](./blog-generation.md) pipeline, instead of a repository run |
 | `force` | no | `false` | request reprocessing even if already published (carried through for the worker) |
-| `provider` | no | local Ollama | AI-provider hint (e.g. `bedrock`); carried through for future use |
+| `provider` | no | (router default) | AI-provider hint; carried through for future use. Generation runs through the [Provider Router](./hybrid-ai-routing.md) (Bedrock → Anthropic) regardless |
 
-> **Two run modes.** Without `releaseTag`, `/process` triggers a **snapshot run**
+> **Two run modes.** Without `releaseTag`, `/process` triggers a **repository run**
 > (clone the branch and generate content from the working copy). With
-> `releaseTag`, it triggers a **release run** — the same path a published-release
-> webhook takes — building the Release Context for that tag and generating a
-> long-form blog post plus summaries. `POST /release-context` builds only the
-> context (no generation); `/process` with a tag builds *and* generates.
+> `releaseTag`, it triggers a **release run** — building the Release Context for
+> that tag and generating the full content suite. `POST /release-context` builds
+> only the context (no generation); `/process` with a tag builds *and* generates.
 
 The payload is **extensible**: unknown fields are ignored, and `force`/`provider`
 flow through on the event for future enhancements. Required fields are validated
@@ -115,23 +104,19 @@ and produce a meaningful error.
 
 | Status | When | Body |
 | --- | --- | --- |
-| **202 Accepted** | published; instance running, or started on demand | success (below) |
+| **202 Accepted** | the Step Functions execution started | success (below) |
 | **400 Bad Request** | missing required field / invalid JSON | `{"status":"error","reason":"…"}` |
 | **403 Forbidden** | missing/invalid API key | API Gateway default |
-| **500 Internal Server Error** | publish failed | `{"status":"error","reason":"internal error"}` |
+| **500 Internal Server Error** | StartExecution failed | `{"status":"error","reason":"internal error"}` |
 
-**Success (202)** — `message` reflects what happened:
-
-- in the window (host already running): `"AI processing has been initiated."`
-- host stopped, started on demand: `"AI platform is starting; processing will begin shortly."`
-- host stopped and the start call failed (event still buffered): `"AI platform could not be started now; processing will begin at the next scheduled runtime."`
+**Success (202):**
 
 ```json
 {
   "status": "accepted",
   "trigger": "manual",
   "requestId": "8280b22c-36a5-4f12-80b6-fd98ad7b4a91",
-  "message": "AI platform is starting; processing will begin shortly."
+  "message": "AI processing has been initiated."
 }
 ```
 
@@ -147,15 +132,16 @@ and produce a meaningful error.
 ## 6. Examples
 
 ```bash
-# In window (host running) → processed now
+# Repository run
 curl -sS -X POST "$API" \
   -H "Content-Type: application/json" \
   -H "x-api-key: $API_KEY" \
   -d '{"repository":"widget","owner":"acme","branch":"main"}'
 # → 202 {"status":"accepted",...,"message":"AI processing has been initiated."}
 
-# Outside window (host stopped) → started on demand, event buffered
-# → 202 {"status":"accepted",...,"message":"AI platform is starting; processing will begin shortly."}
+# Release run (full content suite)
+curl -sS -X POST "$API" -H "Content-Type: application/json" -H "x-api-key: $API_KEY" \
+  -d '{"repository":"widget","owner":"acme","releaseTag":"v1.2.0"}'
 
 # Missing the API key
 curl -sS -X POST "$API" -H "Content-Type: application/json" -d '{"repository":"widget","owner":"acme"}'
@@ -174,8 +160,8 @@ context — no secrets or request bodies are logged:
 | `request_id` | API Gateway request id |
 | `repository` | `acme/widget` |
 | `branch` | `refs/heads/main` |
-| `provider` | `bedrock` (empty ⇒ local Ollama) |
-| `decision` | `accepted` / `started` / `deferred` |
+| `provider` | `bedrock` (empty ⇒ router default) |
+| `decision` | `accepted` |
 | `duration` | processing time |
 | `outcome` | `success` / `failure` |
 
@@ -183,14 +169,15 @@ context — no secrets or request bodies are logged:
 
 | Resource | Purpose |
 | --- | --- |
-| `ManualTriggerRole` | least-privilege role: `events:PutEvents` on the bus, read-only `ec2:DescribeInstances` (window gate), and **tag-scoped `ec2:StartInstances`** (start on demand). No stop. |
+| `ManualTriggerRole` | least-privilege role: `states:StartExecution` on the orchestration state machine. **No EC2 access.** |
 | `ManualTriggerLogGroup` | `/aws/lambda/${ProjectName}-manual-trigger`, retention-bounded |
-| `ManualTriggerFunction` | Go Lambda (`provided.al2023`, arm64); env `EVENT_BUS_NAME`, `EVENT_SOURCE=${ProjectName}.manual`, `PROJECT_NAME` |
+| `ManualTriggerFunction` | Go Lambda (`provided.al2023`, arm64); env `STATE_MACHINE_ARN` |
+| `OrchestrationStateMachine` | Step Functions state machine: find host by tag → start → SSM ready gate → SendMessage to SQS |
+| `StateMachineRole` | `ec2:DescribeInstances`, tag-scoped `ec2:StartInstances`, `ssm:DescribeInstanceInformation`, `sqs:SendMessage` |
 | `ProcessResource` / `ProcessMethod` | `POST /process`, `ApiKeyRequired: true`, `AWS_PROXY` integration |
 | `ProcessInvokePermission` | lets API Gateway invoke the Lambda |
-| `ApiDeploymentV3` | bumped deployment so the stage serves the new methods |
-| `PublishRequestedRule` | source pattern broadened to a `${ProjectName}.` **prefix** so manual (and future) sources route to SQS with no rule change |
-| Output `ProcessUrl` | the endpoint URL |
+| `ApiDeploymentV5` | bumped deployment so the stage serves the current methods (V5 removes `/webhook`) |
+| Outputs `ProcessUrl` / `StateMachineArn` | the endpoint URL and the state machine ARN |
 
 `observability.yaml` adds a `ManualTriggerErrorsAlarm` and a dashboard row.
 
@@ -215,21 +202,17 @@ Then fetch `ProcessUrl` + the API key (section 2) and call the endpoint.
 
 ---
 
-## 10. Migration notes
+## 10. Design notes
 
-- **New shared core `internal/intake`.** The canonical `Event` contract and the
-  publish/window decision moved out of `internal/webhook` into `internal/intake`
-  (`Event`, `Publisher`, `Window`, `Service.Submit`, `Request`). The webhook
-  handler now delegates to `intake.Service` (buffer policy) instead of its own
-  inline logic — no behaviour change; the webhook still returns `accepted` /
-  `deferred` / `ignored`.
-- **`eventbus` and the worker** now use `intake.Event` (same JSON tags, so the
-  SQS message contract is unchanged and in-flight messages stay compatible).
-- **Window gate reused.** `awsec2.InstanceWindow` (host-running check) satisfies
-  `intake.Window` and is shared by both the webhook handler and the manual
-  trigger.
-- **EventBridge rule** now matches a source **prefix** (`${ProjectName}.`)
-  instead of the single `${ProjectName}.webhook` source, so additional trigger
-  sources route to SQS without a rule edit.
-- **No pipeline duplication:** the manual trigger reuses EventBridge, SQS, and
-  the worker; only a thin new Lambda + API Gateway route were added.
+- **Shared core `internal/intake`.** The canonical `Event` contract and
+  `Service.Submit` live in `internal/intake` (`Event`, `Publisher`, `Request`).
+  The manual trigger maps its request to an `intake.Event` and submits it.
+- **Step Functions publisher.** `eventbus.NewStepFunctions` implements
+  `intake.Publisher`; its `Publish` starts an execution whose input is the exact
+  `{"detail": <event>}` SQS body the worker consumes — so the message contract is
+  unchanged from the worker's perspective.
+- **No window gate.** The state machine starts the host on every run, so the
+  manual trigger has no operating-window logic and needs no EC2 permissions.
+- **One entry point today, many tomorrow.** Additional sources (CLI, Slack, cron,
+  release webhook) can start the same state machine, so the downstream pipeline
+  is unchanged.
