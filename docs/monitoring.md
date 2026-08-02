@@ -1,6 +1,6 @@
 # Monitoring & Observability
 
-How the platform is observed in production: CloudWatch logs, metrics, dashboards, and alarms across the webhook front door, the EventBridge/SQS path, the scheduled On-Demand host, and the n8n pipeline. A key signal is the **ratio of triggered to ignored events** — most webhooks should be acknowledged and ignored.
+How the platform is observed in production: CloudWatch logs, metrics, dashboards, and alarms across the `/process` front door, the Step Functions / SQS path, the on-demand host, and the worker + n8n pipeline. Key signals are **run success rate**, **queue age**, and the **Provider Router fallback rate**.
 
 Related: [Infrastructure](./infrastructure.md) · [Security](./security.md) · [Monitoring Requirements](./requirements.md#11-non-functional-requirements).
 
@@ -10,7 +10,7 @@ Related: [Infrastructure](./infrastructure.md) · [Security](./security.md) · [
 
 CloudWatch is the single pane of glass:
 
-- **Logs** — log groups for `registration`, `webhook-handler`, `manual-trigger`, `scheduled-start`, `scheduled-stop`, and the EC2 host (n8n), with bounded retention (`LogRetentionDays`, default 14).
+- **Logs** — log groups for `registration`, `manual-trigger`, `release-context`, `scheduled-start`, `scheduled-stop`, and the EC2 host (worker + n8n), with bounded retention (`LogRetentionDays`, default 14).
 - **Metrics** — a custom `BlogGenerator` namespace, plus native AWS metrics.
 - **Dashboard** — one operational dashboard combining trigger activity, run health, latency, queue depth, and instance state.
 - **Alarms** — threshold and anomaly alarms.
@@ -25,33 +25,32 @@ CloudWatch is the single pane of glass:
 | --- | --- | --- |
 | `RegistrationsCompleted` | Count | Repositories registered successfully |
 | `RegistrationsFailed` | Count | Registration attempts that failed (access/permission validation) |
-| `WebhookReceived` | Count | Webhook deliveries received |
-| `WebhookRejected` | Count | Deliveries rejected (invalid signature) |
-| `TriggerMatched` | Count | Deliveries whose commit message matched the publish trigger |
-| `WebhookIgnored` | Count | Valid deliveries acknowledged and ignored (no trigger match) |
-| `RunsStarted` | Count | Runs started (matched events dequeued) |
+| `ProcessRequested` | Count | `POST /process` requests accepted (executions started) |
+| `RunsStarted` | Count | Runs started (jobs dequeued) |
 | `RunsSucceeded` | Count | Runs that published content |
 | `RunsFailed` | Count | Runs ending in failure |
+| `ArtifactsReused` | Count | Artifacts skipped because they already exist in S3 (idempotency) |
+| `ProviderFallbacks` | Count | Generations that fell back from Bedrock to the Anthropic API |
 | `RunDurationMs` | Milliseconds | End-to-end run latency (excludes cold start) |
 | `ColdStartMs` | Milliseconds | Time from instance start to first message processed |
 | `ApprovalsPending` | Count | Runs waiting on human approval |
 | `AssetsGenerated` | Count | Content assets produced per run |
-| `InferenceLatencyMs` | Milliseconds | Local Ollama generation latency per content type |
+| `InferenceLatencyMs` | Milliseconds | Provider Router generation latency per content type |
 
-> A healthy system typically shows **`WebhookIgnored` ≫ `TriggerMatched`** — most commits are routine and correctly filtered out.
+> A rising **`ProviderFallbacks`** rate means Bedrock is throttling — check Bedrock quotas; the Anthropic fallback keeps runs succeeding meanwhile.
 
 ### AWS-native metrics
 
 | Source | Key metrics |
 | --- | --- |
 | API Gateway | `Count`, `4XXError`, `5XXError`, `Latency` |
-| Lambda (`registration`, `webhook-handler`, `manual-trigger`, `scheduled-start`, `scheduled-stop`) | `Invocations`, `Errors`, `Throttles`, `Duration` |
+| Lambda (`registration`, `manual-trigger`, `release-context`, `scheduled-start`, `scheduled-stop`) | `Invocations`, `Errors`, `Throttles`, `Duration` |
+| Step Functions | `ExecutionsStarted`, `ExecutionsFailed`, `ExecutionsTimedOut`, `ExecutionTime` |
 | DynamoDB (`repositories`) | `ThrottledRequests`, `System/UserErrors` |
 | Secrets Manager | `GetSecretValue` call volume (audit spikes) |
-| EventBridge | `Invocations`, `FailedInvocations`, `ThrottledRules` |
 | SQS (`events`) | `ApproximateNumberOfMessagesVisible`, `ApproximateAgeOfOldestMessage` |
 | SQS (`events-dlq`) | `ApproximateNumberOfMessagesVisible` (any message = attention) |
-| EC2 | `CPUUtilization`, `StatusCheckFailed`, `GPUUtilization` (if published) |
+| EC2 | `CPUUtilization`, `StatusCheckFailed` |
 | EBS | `VolumeReadOps`, `VolumeWriteOps`, `BurstBalance` |
 
 ---
@@ -59,15 +58,15 @@ CloudWatch is the single pane of glass:
 ## 3. Logging
 
 - All components emit **structured JSON logs** (run ID, stage, status, duration).
-- A **run ID** flows through every stage so a single generation can be traced from the matched event to publish across all n8n workflows.
-- The handler logs each delivery's **outcome** (`published`, `ignored`, `rejected`) with the delivery ID — never the raw payload or secret.
+- A **run ID** flows through every stage so a single generation can be traced from the `/process` request through generation to publish.
+- The worker logs each run's **outcome** (`published`, `reused`, `failed`) with the run ID — never the raw payload or secret.
 - Logs **exclude secrets and raw source contents** ([Security §8](./security.md#9-logging--audit-trails)).
 
-Example query (CloudWatch Logs Insights) — ignored vs published in the last day:
+Example query (CloudWatch Logs Insights) — run outcomes in the last day:
 
 ```text
-fields @timestamp, deliveryId, outcome
-| filter outcome in ["published", "ignored", "rejected"]
+fields @timestamp, runId, outcome
+| filter outcome in ["published", "reused", "failed"]
 | stats count() by outcome
 ```
 
@@ -80,10 +79,9 @@ log group, one stream per source, keyed by instance id:
 
 | Stream | Source | Use |
 | --- | --- | --- |
-| `{id}/boot` | `/var/log/cloud-init-output.log` | Boot + provisioning (model seed, service start) |
+| `{id}/boot` | `/var/log/cloud-init-output.log` | Boot + provisioning (Docker install, compose up, service start) |
 | `{id}/syslog` | `/var/log/syslog` | Full systemd/journald |
-| `{id}/worker` | `blog-gen-worker` | The pipeline: clone/context → generate → review → publish |
-| `{id}/ollama` | `blog-gen-ollama` | Model load + inference |
+| `{id}/worker` | `blog-gen-worker` | The pipeline: clone/context → generate (Bedrock → Anthropic) → S3 → review → publish |
 | `{id}/health` | 60s `health.sh` probe | `READY` / `UNHEALTHY: <reason>` |
 
 **Watch the box live** (the fastest way to see a run happen or a failure land):
@@ -127,15 +125,14 @@ Alarms publish to an SNS topic subscribed by the operator (and optionally Slack)
 
 | Alarm | Condition | Severity |
 | --- | --- | --- |
-| Webhook rejections | `WebhookRejected` spike (misconfig or attack) | Medium |
+| Provider fallback spike | `ProviderFallbacks` rising (Bedrock throttling) | Medium |
 | Dead-letter queue not empty | `events-dlq` messages ≥ 1 | High |
 | Queue backlog growing | `ApproximateAgeOfOldestMessage` > threshold | High |
 | Run failure rate | `RunsFailed` ≥ 1 in 5 min (or failure ratio > 20%) | High |
-| Handler Lambda errors | `webhook-handler` `Errors` > 0 | High |
-| Manual trigger errors | `manual-trigger` `Errors` > 0 (POST /process failing) | Medium |
+| Manual trigger errors | `manual-trigger` `Errors` > 0 (POST /process failing) | High |
+| State machine failures | Step Functions `ExecutionsFailed`/`ExecutionsTimedOut` > 0 | High |
 | Scheduled-start errors | `scheduled-start` `Errors` > 0 (host may not come up for its window) | High |
-| Scheduled-stop errors | `scheduled-stop` `Errors` > 0 (instance may not stop at 20:00 → cost) | High |
-| EventBridge failures | `FailedInvocations` > 0 | High |
+| Scheduled-stop errors | `scheduled-stop` `Errors` > 0 (instance may not stop → cost) | High |
 | API Gateway 5XX | `5XXError` > 0 | High |
 | EC2 status check | `StatusCheckFailed` ≥ 1 | High |
 | Approval backlog | `ApprovalsPending` sustained | Low |
@@ -165,10 +162,10 @@ Because the instance stops and starts on the schedule, in-flight work at 20:00 t
 
 ## 7. Cost & Idle Monitoring
 
-- Track **triggered vs ignored** ratio — a sudden rise in `TriggerMatched` may indicate misuse of the `blog:` trigger and rising cost.
-- Track instance **running hours** to confirm the schedule works — the instance should be `running` only 18:00–20:00 every day and `stopped` otherwise.
-- A `scheduled-stop` error is a **cost risk**: if the instance fails to stop at 20:00, it keeps billing until the next successful stop.
-- Because inference is local, there are **no token/usage metrics to bill** — cost tracking focuses on EC2 running time and EBS size ([Cost Optimisation](./cost-optimization.md)).
+- Track **`ArtifactsReused`** — a high reuse ratio confirms idempotency is saving inference cost; a sudden drop means new work is being generated.
+- Track instance **running hours** to confirm the host stops after runs — it should be `stopped` outside the window / after idle-stop.
+- A `scheduled-stop` error is a **cost risk**: if the instance fails to stop, it keeps billing until the next successful stop.
+- Inference is **per-token on Bedrock/Anthropic** — watch `ProviderFallbacks` and Bedrock usage in Cost Explorer alongside EC2 running time and EBS size ([Cost Optimisation](./cost-optimization.md)).
 
 ---
 
@@ -176,8 +173,8 @@ Because the instance stops and starts on the schedule, in-flight work at 20:00 t
 
 | Situation | First checks |
 | --- | --- |
-| A `blog:` commit produced nothing | Confirm delivery (GitHub Recent Deliveries); check handler logged `published` (and `accepted`/`deferred`); check EventBridge/SQS; confirm the instance is up (in-window) or will process at the next 18:00 start |
-| A normal commit produced content | Check the configured `PublishTrigger`; review handler trigger logic |
-| Messages stuck in queue | Is it outside the window (expected — drains at next start)? In-window: check n8n polling; inspect DLQ |
-| Instance won't stop | Check `scheduled-stop` logs and the EventBridge stop schedule (`ScheduleState`, timezone) |
-| High cost | Confirm the instance is stopped outside the window; check triggered/ignored ratio; review EBS size and log retention |
+| A `/process` call produced nothing | Check the Step Functions execution (did it reach EnqueueJob?); confirm the instance started and reported SSM `Online`; check the worker log for the run id |
+| A run failed at generation | Check the worker log for `ai provider failed`; verify Bedrock model access or the Anthropic key secret; the router logs which leg it used |
+| Messages stuck in queue | Is the worker up (instance running)? Check the worker is draining; inspect DLQ |
+| Instance won't stop | Check `scheduled-stop` logs and the EventBridge stop schedule (`ScheduleState`, timezone), and idle-stop settings |
+| High cost | Confirm the instance is stopped after runs; check `ArtifactsReused` (idempotency working?) and Bedrock token usage; review EBS size and log retention |
