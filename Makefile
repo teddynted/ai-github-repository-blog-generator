@@ -87,7 +87,8 @@ deploy-scheduler:
 # ── Local content development & prompt testing ────────────────────────────────
 # Override on the command line, e.g.:
 #   make blog-local CONTENT_PROVIDER=anthropic CONTENT_FIXTURE=fixtures/v0.3.0.json
-CONTENT_PROVIDER ?= ollama
+# Providers: claude-code (subscription, no API key) | anthropic | bedrock.
+CONTENT_PROVIDER ?= claude-code
 CONTENT_FIXTURE  ?= fixtures/v0.3.0.json
 CONTENT_OUT      ?= output
 

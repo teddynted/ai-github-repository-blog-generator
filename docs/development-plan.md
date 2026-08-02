@@ -1,5 +1,13 @@
 # Development Plan
 
+> **Historical.** This plan records the incremental build, including the earlier
+> local-Ollama / GitHub-webhook design. The platform has since migrated to
+> `POST /process` → **AWS Step Functions** → **AI Provider Router** (Amazon
+> Bedrock → Anthropic) with S3 idempotency, on a t4g.small running n8n +
+> PostgreSQL + Redis. For the current architecture see [Architecture](./architecture.md),
+> [AI Provider Router](./hybrid-ai-routing.md), and [Infrastructure](./infrastructure.md).
+> The milestone history below is kept for traceability.
+
 This document tracks the incremental implementation of the MVP against the
 [Requirements](./requirements.md) and [Roadmap](./roadmap.md). The documentation
 is the single source of truth; this plan records **how** the MVP is being built

@@ -6,9 +6,9 @@ same night, every day, so the environment is available during a chosen window
 rest of the day. The window is fully configurable, including a weekday-only
 option for extra cost savings (see below).
 
-For the blog-gen platform this stack **owns instance power**: it is the
-authority for when the On-Demand compute host is available, and the webhook path
-never starts the instance itself. The stack is otherwise self-contained
+For the blog-gen platform this stack **owns instance power-off**: it is the
+authority for stopping the On-Demand compute host (the Step Functions state
+machine starts it on demand). The stack is otherwise self-contained
 (`infrastructure/scheduler.yaml` + two Go Lambdas), targets an instance by ID,
 and can schedule any instance independently of the application stacks.
 
@@ -89,7 +89,7 @@ Go source:
 - `lambdas/scheduled-start/main.go`, `lambdas/scheduled-stop/main.go` — thin entry points.
 - `internal/power/power.go` — the idempotent `Switch` use case (unit-tested).
 - `lambdas/idle-stop/main.go` + `internal/idle` (decision logic), `internal/awscloudwatch`
-  (metrics), `internal/idleprobe` (n8n/Ollama checks) — the idle auto-stop path.
+  (metrics), `internal/idleprobe` (n8n check) — the idle auto-stop path.
 - `internal/awsec2/ec2.go` — the EC2 adapter (`InstanceState`, `StartInstance`, `StopInstance`).
 
 ---
@@ -369,7 +369,7 @@ sustained `IdleMinutes` (default 30):
 
 - CPU below `CpuThreshold` (default 5%) across the trailing window,
 - network (NetworkIn + NetworkOut) below threshold,
-- no active n8n execution and no resident Ollama model (app checks — VPC only),
+- no active n8n execution (app check — VPC only),
 
 tracked across runs by an `IdleSince` tag on the instance (the Lambda stays
 stateless). Safeguards: a `KEEP_RUNNING=true` tag override, a startup grace so it
@@ -379,14 +379,14 @@ stopping; flip to `false` once the logs look right). Every check **fails safe**:
 an unreachable probe or a metrics error counts as busy, so a blip never triggers
 a wrongful stop.
 
-### App-level checks (n8n / Ollama) need a VPC
+### App-level check (n8n) needs a VPC
 
 CPU + network detection works with no networking. To also check n8n
-(`/api/v1/executions?status=running`) and Ollama (`/api/ps`), the Lambda must
-reach the instance's private ports, so it runs in your VPC — supply
-`IdleSubnetIds` + `IdleSecurityGroupIds` (a subnet the instance is in, and an SG
-allowed to reach it on 5678/11434). Without **both**, idle-stop deploys *without*
-the app checks (CPU + network only) rather than failing the stack.
+(`/api/v1/executions?status=running`), the Lambda must reach the instance's
+private port, so it runs in your VPC — supply `IdleSubnetIds` +
+`IdleSecurityGroupIds` (a subnet the instance is in, and an SG allowed to reach
+it on 5678). Without **both**, idle-stop deploys *without* the app check
+(CPU + network only) rather than failing the stack.
 
 ### Enabling it (repo vars → `deploy.yml`)
 
@@ -418,27 +418,27 @@ month, a **~92% compute saving**. (A weekday-only window drops this to ~40 h/mon
 
 ### Estimated monthly savings
 
-For a `g4dn.xlarge` at the On-Demand rate of **$0.526/h** (us-east-1):
+For a `t4g.small` at the On-Demand rate of **~$0.0168/h** (us-east-1):
 
 | Mode | Hours/month | Compute cost/month |
 | --- | --- | --- |
-| Always-on (24×7) | ~730 | **~$384** |
-| Scheduled (2 h × 7 days) | ~60 | **~$32** |
-| Scheduled (2 h × weekdays, optional) | ~40 | **~$21** |
-| **Saving (7-day)** | | **~$352/mo (~92%)** |
+| Always-on (24×7) | ~730 | **~$12** |
+| Scheduled (2 h × 7 days) | ~60 | **~$1** |
+| Scheduled (2 h × weekdays, optional) | ~40 | **~$0.70** |
+| **Saving (7-day)** | | **~$11/mo (~92%)** |
 
 Because the window is fixed, the monthly compute cost is
-**known in advance** — it does not scale with webhook volume. (EBS storage is
-billed separately and is **not** affected by stopping — see below.)
+**known in advance**. The host is tiny (it only runs n8n + the API-calling
+worker), so the absolute figures are small either way; idle-stop trims it
+further. (EBS storage is billed separately and is **not** affected by stopping.)
 
 ### Why On-Demand rather than Spot
 
-The compute host is **On-Demand**. Spot would be ~70–90% cheaper per hour, but a
-Spot `StartInstances` only succeeds if there is capacity at your max price at
-18:00 — for scarce GPU types that regularly fails (`InsufficientInstanceCapacity`),
-and Spot instances can be reclaimed mid-window with a 2-minute warning. Since the
-fixed daily window already caps compute cost, On-Demand's guarantee that the
-**scheduled start always succeeds and the host stays up for the whole window** is
+The compute host is **On-Demand**. Spot would be cheaper per hour, but a Spot
+`StartInstances` only succeeds if there is capacity at your max price, and Spot
+instances can be reclaimed mid-window with a 2-minute warning. On a t4g.small the
+absolute cost is already low, so On-Demand's guarantee that the **start always
+succeeds and the host stays up for the whole run** is
 worth more than the marginal Spot discount. A one-off maintenance run outside the
 window is a manual `start-instances` (or a manual invoke of the scheduled-start
 Lambda).

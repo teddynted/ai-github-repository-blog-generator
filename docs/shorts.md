@@ -65,7 +65,7 @@ the LLM only for punch. Each planner is a pure, independently-testable function.
 | Hashtags · CTA · SEO · collection intelligence | Deterministic |
 | Hook, script, caption wording | LLM (`releasegen.Model`) with a deterministic fallback |
 
-It reuses the shared **`Model` port** (local Ollama today, Bedrock later) and
+It reuses the shared **`Model` port** (the Provider Router (Bedrock -> Anthropic)) and
 consumes the Milestone 2–6 types unchanged. When `Model` is nil, generation is
 fully deterministic — hooks and scripts are assembled from grounded seeds.
 
@@ -147,13 +147,12 @@ generating the rest, then emits Markdown (default) or JSON:
 # Fully offline from a context + an existing blog (deterministic):
 go run ./cmd/shorts --context ctx.json --blog post.md --offline
 
-# Cap the batch and emit JSON, generating the whole chain via Ollama:
+# Cap the batch and emit JSON, generating the whole chain via the Provider Router (Anthropic):
 go run ./cmd/shorts --context ctx.json --max 4 --format json --out shorts.json
 ```
 
 Flags: `--context` (required), `--blog`, `--storyboard`, `--voiceover`,
-`--youtube`, `--max`, `--format md|json`, `--model` (`OLLAMA_MODEL`), `--ollama`
-(`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
+`--youtube`, `--max`, `--format md|json`, `--model` (Anthropic model id, provider default when empty), `--offline`, `--out`, `--timeout`.
 
 ## 8. Status
 

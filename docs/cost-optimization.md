@@ -1,6 +1,6 @@
 # Cost Optimisation
 
-Cost controls for the **GitHub AI Blog Generator**. The design keeps the idle footprint tiny and spends nothing on repositories or commits that should not be processed. Validation happens as early and as cheaply as possible; compute is an **On-Demand instance on a fixed daily schedule** (18:00–20:00, 7 days a week); inference is local.
+Cost controls for the **GitHub AI Blog Generator**. The design keeps the idle footprint tiny and never regenerates content it already has. Compute is a small **On-Demand t4g.small** started on demand and stopped by a daily window + idle-stop; inference is **managed Claude** (Bedrock → Anthropic), billed per token only for **new** artifacts.
 
 Related: [Infrastructure](./infrastructure.md) · [Monitoring](./monitoring.md) · [Cost Requirements](./requirements.md#10-cost-optimisation-requirements).
 
@@ -12,36 +12,35 @@ Repository access and PAT permissions are validated **once, at registration** �
 
 ---
 
-## 2. Trigger Pre-Filtering
+## 2. S3 Idempotency — Never Regenerate
 
-**Validating the commit-message trigger before invoking any AI or compute is a primary cost-saving mechanism.**
+**Reusing artifacts already in S3 is the primary control on paid-inference cost**, since generation is the only paid step.
 
-The **Webhook Handler Lambda** checks every push against the repository's trigger pattern (default `blog:`) in milliseconds. For unmatched commits — the overwhelming majority — the platform:
+Before generating an artifact the worker checks S3 for an existing Markdown file, and reuses it if present. Re-running a release therefore:
 
 | Cost avoided | Because |
 | --- | --- |
-| **AI inference cost** | The local model is never invoked |
-| **Compute cost** | No event is buffered, so nothing is processed when the instance next runs |
-| **Storage cost** | No unwanted content is generated |
-| **Unnecessary executions** | No pipeline, no queue churn, no orchestration |
+| **AI inference cost** | Existing artifacts are reused — no tokens spent regenerating them |
+| **Compute cost** | A reused artifact skips the whole generation stage |
+| **Duplicate work** | No re-write of content that already exists |
 
-The handler simply returns `HTTP 200` and stops. You pay for processing only on the commits you explicitly opt in ([COST-2](./requirements.md#10-cost-optimisation-requirements)).
+You pay per token only for **new** content ([COST-2](./requirements.md#10-cost-optimisation-requirements)).
 
 ---
 
-## 3. Scheduled Compute (Fixed Daily Window)
+## 3. On-Demand Compute (started on `/process`)
 
-A matched event is published to **EventBridge** and durably **buffered in SQS** — the webhook never starts compute. Instance power is owned by **EventBridge Scheduler**, which starts the On-Demand host at **18:00** and stops it at **20:00**, **every day (Mon–Sun)**. The worker drains the buffered backlog while the host is up.
+`POST /process` starts a **Step Functions** execution that starts the host, waits for it to report ready via SSM, and enqueues the job onto **SQS**. Nothing runs until a request comes in; a fixed daily window (18:00–20:00) plus opt-in idle-stop powers the host off.
 
 ```mermaid
 flowchart LR
-    WH[Matched event] --> EB[EventBridge]
-    EB -->|buffer| SQS[(SQS, retained until the window)]
-    SCH[EventBridge Scheduler<br/>18:00 daily] -->|start| EC2[(EC2 On-Demand running)]
+    P[POST /process] --> SFN[Step Functions]
+    SFN -->|start| EC2[(EC2 t4g.small running)]
+    SFN -->|SendMessage| SQS[(SQS)]
     EC2 -->|drain| SQS
 ```
 
-There is **no always-on server**; compute charges accrue only during the ~2 h daily window ([COST-3, COST-4](./requirements.md#10-cost-optimisation-requirements)).
+There is **no always-on server**; the host is a tiny t4g.small, and compute charges accrue only while a job needs it ([COST-3, COST-4](./requirements.md#10-cost-optimisation-requirements)).
 
 ---
 
@@ -65,37 +64,37 @@ The compute host is **On-Demand**, powered on/off by the schedule, rather than a
 
 | Aspect | Detail |
 | --- | --- |
-| **Why not Spot** | Spot is ~70–90% cheaper but interruptible and capacity-gated — a scheduled/GPU start can fail with `InsufficientInstanceCapacity` |
-| **Why On-Demand** | A scheduled start must always succeed and stay up for the whole window; availability outweighs the marginal Spot saving |
-| **Cost is bounded anyway** | The fixed ~60 h/month window already caps compute cost, so Spot's discount buys little here |
-| **Durability** | Matched events are buffered in SQS; models, state, and memory persist on EBS across the daily stop/start |
+| **Why not Spot** | Spot is cheaper but interruptible and capacity-gated — a start can fail with `InsufficientInstanceCapacity` |
+| **Why On-Demand** | A start must always succeed; on a t4g.small the absolute cost is already low, so availability outweighs the marginal Spot saving |
+| **Cost is low anyway** | A t4g.small plus idle-stop keeps compute cheap, so Spot's discount buys little here |
+| **Durability** | Jobs are buffered in SQS; n8n/PostgreSQL state and memory persist on EBS across stop/start |
 
 Rationale in full: [README → Why On-Demand](../README.md#why-on-demand-scheduled-runtime).
 
 ---
 
-## 6. Local Inference — No Per-Token Cost
+## 6. Managed Claude — Pay Per Use, No GPU
 
-Because **Ollama** runs a **local Qwen** model, there are **no per-token inference charges** — no matter how much content a triggered run generates ([COST-9](./requirements.md#10-cost-optimisation-requirements)). The only inference cost is the already-paid-for EC2 compute time.
+Inference runs on **Amazon Bedrock (Claude Opus 4.8)** with an **Anthropic API** fallback, billed **per token**. Two things keep this small: there is **no GPU instance to run or keep warm** (the host is a t4g.small making API calls), and **S3 idempotency** means tokens are spent only on **new** artifacts ([COST-9](./requirements.md#10-cost-optimisation-requirements)).
 
 ---
 
 ## 7. Persistent EBS, Ephemeral Compute
 
-Model weights, n8n state, and **Repository Memory** live on a persistent **gp3 EBS volume** that survives start/stop cycles — a restarted instance re-attaches it and is ready to infer **without re-downloading models** ([COST-6](./requirements.md#10-cost-optimisation-requirements)). Only cheap storage cost persists while stopped.
+n8n + PostgreSQL state and **Repository Memory** live on a persistent **gp3 EBS volume** that survives start/stop cycles — a restarted instance re-attaches it with state intact ([COST-6](./requirements.md#10-cost-optimisation-requirements)). Only cheap storage cost persists while stopped (20 GB, no model weights).
 
 ---
 
-## 8. SQS Defers Events to the Next Window
+## 8. SQS Buffers the Job
 
-The instance runs only 18:00–20:00 every day, so a matched event can arrive while it is stopped. **Amazon SQS** buffers matched events (retention up to 14 days) so none is lost; the worker processes the backlog once the scheduled start brings the instance up, with a visibility timeout and dead-letter queue for retries ([COST-7](./requirements.md#10-cost-optimisation-requirements)). A webhook inside the window is processed within seconds; one outside it is reported `deferred` and picked up at the next start.
+The host is off until a `/process` call starts it, so the Step Functions machine buffers the job in **Amazon SQS** (retention up to 14 days) so it is not lost while the instance boots. The worker drains it once the host is up, with a visibility timeout and dead-letter queue for retries ([COST-7](./requirements.md#10-cost-optimisation-requirements)).
 
 ---
 
 ## 9. Retrieve Secrets Only When Needed & Serverless Lightweight Processing
 
-- **Secrets on demand.** The GitHub PAT is fetched from Secrets Manager **only when a run needs to clone** — never on the webhook hot path — minimising secret API calls ([COST-8](./requirements.md#10-cost-optimisation-requirements)).
-- **Serverless front door.** Registration, signature verification, trigger evaluation, event routing, and buffering all run on **serverless** services (API Gateway, Lambda, EventBridge, SQS) that cost effectively nothing at idle ([COST-10](./requirements.md#10-cost-optimisation-requirements)).
+- **Secrets on demand.** The GitHub PAT is fetched from Secrets Manager **only when a run needs to clone** — minimising secret API calls ([COST-8](./requirements.md#10-cost-optimisation-requirements)).
+- **Serverless front door.** Registration, the `/process` trigger, the Step Functions orchestration, and buffering all run on **serverless** services (API Gateway, Lambda, Step Functions, SQS) that cost effectively nothing at idle ([COST-10](./requirements.md#10-cost-optimisation-requirements)).
 
 ---
 
@@ -111,24 +110,25 @@ The instance runs only 18:00–20:00 every day, so a matched event can arrive wh
 
 ## 11. Estimated Monthly AWS Cost
 
-> Illustrative estimate for the **scheduled daily window** (18:00–20:00, 7 days a week ≈ 60 h/month) in `us-east-1`. The dominant variable is **EC2 On-Demand compute time**, now bounded by the schedule.
+> Illustrative estimate for the **daily window** (18:00–20:00 ≈ 60 h/month) in `us-east-1`. The dominant variable is now **per-token Claude inference**, kept low by S3 idempotency (only new artifacts are billed).
 
 | Service | Assumption | Est. monthly (USD) |
 | --- | --- | --- |
-| EC2 On-Demand (`g4dn.xlarge`, ~60 h/month) | Scheduled start/stop, ~$0.526/h | ~$32 |
-| EBS gp3 (100 GB, persistent) | Retained while stopped | ~$8 |
-| Lambda (registration + handler + scheduled-start + scheduled-stop) | Low volume | ~$0 |
+| EC2 On-Demand (`t4g.small`, ~60 h/month) | Started on demand, ~$0.0168/h | ~$1 |
+| EBS gp3 (20 GB, persistent) | Retained while stopped | ~$1.60 |
+| Lambda (registration + manual-trigger + release-context + scheduled) | Low volume | ~$0 |
+| Step Functions | A handful of state transitions per run | ~$0 |
 | API Gateway | Low request volume | ~$0–1 |
-| EventBridge + SQS | Low event volume | ~$0 |
-| Secrets Manager | 1 shared secret for ALL repos | ~$0.40 flat |
+| SQS | Low message volume | ~$0 |
+| Secrets Manager | shared repos secret + Anthropic key | ~$0.80 |
 | DynamoDB (on-demand) | Low read/write | ~$0–1 |
 | CloudWatch (logs + metrics) | 14-day retention | ~$1–3 |
-| **Inference (Ollama, local)** | No per-token fee | **$0** |
-| **Baseline (single repo)** | | **~$42–45** |
+| **Inference (Bedrock / Anthropic, per token)** | Only for **new** artifacts (idempotent) | **variable** |
+| **Fixed baseline (single repo, excl. inference)** | | **~$5–8** |
 
 **Notes & levers:**
-- **The schedule caps EC2 cost.** ~60 h/month at On-Demand rates is the largest line item and is fixed regardless of webhook volume; narrow the window to cut it further.
-- **Trigger pre-filtering** still means routine commits add **$0** — they never buffer work for a run to process.
-- **EBS** is the largest *fixed storage* item; **Secrets Manager** is a single shared secret (~$0.40 flat, not per repo).
-- There is **no NAT gateway** and **no inference API bill**.
-- For comparison, an always-on (24×7) On-Demand `g4dn.xlarge` is ~$380/month — the daily window is a **~92% compute saving**.
+- **Inference is the main variable.** S3 idempotency means a re-run of an existing release costs **$0** in tokens; you pay only when generating new content.
+- **No GPU.** The t4g.small host makes API calls, so there is no GPU rate and no large instance to keep warm — the fixed compute baseline is a few dollars.
+- **Secrets Manager** holds the shared repos secret plus the Anthropic key (~$0.40 each).
+- There is **no NAT gateway** and **no local model server**.
+- Widen/narrow the schedule window (`StartExpression`/`StopExpression`) or lean on idle-stop to trim the already-small compute line.

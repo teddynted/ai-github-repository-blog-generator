@@ -26,7 +26,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID", "WebhookURL"); err != nil {
+	// WebhookURL is optional: GitHub webhook ingress has been removed, so an
+	// empty value simply skips creating a GitHub webhook at registration time.
+	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 

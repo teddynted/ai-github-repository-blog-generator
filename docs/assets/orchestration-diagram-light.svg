@@ -81,46 +81,46 @@
 <text x="50" y="388" fill="#6B6F7C" font-size="10" font-weight="600">telemetry</text>
 <text x="497" y="586" fill="#6B6F7C" font-size="10" font-weight="600" text-anchor="start">async job</text>
 <text x="624.75" y="866" fill="#6B6F7C" font-size="10" font-weight="600" text-anchor="middle">ai model</text>
-<text x="479" y="1585" fill="#6B6F7C" font-size="10" font-weight="600" text-anchor="middle">monitors Lambda · SQS · Orchestrator · Bedrock · n8n</text>
+<text x="479" y="1585" fill="#6B6F7C" font-size="10" font-weight="600" text-anchor="middle">monitors Lambda · Step Functions · SQS · Bedrock · n8n</text>
 <g>
 <rect x="148" y="130" width="190" height="58" rx="12" fill="#141428" opacity="0.06"/>
 <rect x="148" y="127" width="190" height="58" rx="12" fill="#FFFFFF" stroke="#EA4B71" stroke-width="1.6"/>
 <rect x="158" y="137" width="38" height="38" rx="9" fill="#EA4B71"/>
 <text x="177" y="160" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">⚡</text>
-<text x="208" y="153" fill="#23232B" font-size="13" font-weight="600">GitHub Webhook</text>
-<text x="208" y="169" fill="#6B6F7C" font-size="10" font-weight="500">push event</text>
+<text x="208" y="153" fill="#23232B" font-size="13" font-weight="600">CI · CD pipeline</text>
+<text x="208" y="169" fill="#6B6F7C" font-size="10" font-weight="500">POST /process</text>
 </g>
 <g>
 <rect x="384" y="130" width="190" height="58" rx="12" fill="#141428" opacity="0.06"/>
 <rect x="384" y="127" width="190" height="58" rx="12" fill="#FFFFFF" stroke="#EA4B71" stroke-width="1.6"/>
 <rect x="394" y="137" width="38" height="38" rx="9" fill="#EA4B71"/>
 <text x="413" y="160" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">⚡</text>
-<text x="444" y="153" fill="#23232B" font-size="13" font-weight="600">GitHub Release</text>
-<text x="444" y="169" fill="#6B6F7C" font-size="10" font-weight="500">release event</text>
+<text x="444" y="153" fill="#23232B" font-size="13" font-weight="600">CLI · manual run</text>
+<text x="444" y="169" fill="#6B6F7C" font-size="10" font-weight="500">POST /process</text>
 </g>
 <g>
 <rect x="620" y="130" width="190" height="58" rx="12" fill="#141428" opacity="0.06"/>
 <rect x="620" y="127" width="190" height="58" rx="12" fill="#FFFFFF" stroke="#EA4B71" stroke-width="1.6"/>
 <rect x="630" y="137" width="38" height="38" rx="9" fill="#EA4B71"/>
 <text x="649" y="160" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">⚡</text>
-<text x="680" y="153" fill="#23232B" font-size="13" font-weight="600">GitHub Actions</text>
-<text x="680" y="169" fill="#6B6F7C" font-size="10" font-weight="500">workflow event</text>
+<text x="680" y="153" fill="#23232B" font-size="13" font-weight="600">n8n · cron</text>
+<text x="680" y="169" fill="#6B6F7C" font-size="10" font-weight="500">POST /process</text>
 </g>
 <g>
 <rect x="368.5" y="252" width="221" height="58" rx="12" fill="#141428" opacity="0.06"/>
 <rect x="368.5" y="249" width="221" height="58" rx="12" fill="#FFFFFF" stroke="#E2E2EA" stroke-width="1.4"/>
 <rect x="378.5" y="259" width="38" height="38" rx="9" fill="#2563EB"/>
-<text x="397.5" y="282" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">EB</text>
-<text x="428.5" y="275" fill="#23232B" font-size="13" font-weight="600">Amazon EventBridge</text>
-<text x="428.5" y="291" fill="#6B6F7C" font-size="10" font-weight="500">event ingestion</text>
+<text x="397.5" y="282" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">λ</text>
+<text x="428.5" y="275" fill="#23232B" font-size="13" font-weight="600">AWS Lambda</text>
+<text x="428.5" y="291" fill="#6B6F7C" font-size="10" font-weight="500">manual-trigger</text>
 </g>
 <g>
 <rect x="393" y="374" width="172" height="58" rx="12" fill="#141428" opacity="0.06"/>
 <rect x="393" y="371" width="172" height="58" rx="12" fill="#FFFFFF" stroke="#E2E2EA" stroke-width="1.4"/>
 <rect x="403" y="381" width="38" height="38" rx="9" fill="#2563EB"/>
-<text x="422" y="404" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">λ</text>
-<text x="453" y="397" fill="#23232B" font-size="13" font-weight="600">AWS Lambda</text>
-<text x="453" y="413" fill="#6B6F7C" font-size="10" font-weight="500">webhook handler</text>
+<text x="422" y="404" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">SF</text>
+<text x="453" y="397" fill="#23232B" font-size="13" font-weight="600">AWS Step Functions</text>
+<text x="453" y="413" fill="#6B6F7C" font-size="10" font-weight="500">start host · SSM · enqueue</text>
 </g>
 <g>
 <rect x="378" y="496" width="202" height="58" rx="12" fill="#141428" opacity="0.06"/>
@@ -128,7 +128,7 @@
 <rect x="388" y="503" width="38" height="38" rx="9" fill="#2563EB"/>
 <text x="407" y="526" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">SQS</text>
 <text x="438" y="519" fill="#23232B" font-size="13" font-weight="600">Amazon SQS</text>
-<text x="438" y="535" fill="#6B6F7C" font-size="10" font-weight="500">queue · backpressure</text>
+<text x="438" y="535" fill="#6B6F7C" font-size="10" font-weight="500">durable job buffer</text>
 </g>
 <g>
 <rect x="364.5" y="618" width="229" height="58" rx="12" fill="#141428" opacity="0.06"/>
@@ -168,15 +168,15 @@
 <rect x="666" y="851" width="38" height="38" rx="9" fill="#7C3AED"/>
 <text x="685" y="874" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">BR</text>
 <text x="716" y="867" fill="#23232B" font-size="13" font-weight="600">Amazon Bedrock</text>
-<text x="716" y="883" fill="#6B6F7C" font-size="10" font-weight="500">Claude · Nova · Titan</text>
+<text x="716" y="883" fill="#6B6F7C" font-size="10" font-weight="500">Claude Opus 4.8 · primary</text>
 </g>
 <g>
 <rect x="653.5" y="914" width="213" height="58" rx="12" fill="#141428" opacity="0.06"/>
 <rect x="653.5" y="911" width="213" height="58" rx="12" fill="#FFFFFF" stroke="#E2E2EA" stroke-width="1.4" stroke-dasharray="6 4"/>
 <rect x="663.5" y="921" width="38" height="38" rx="9" fill="#7C3AED"/>
-<text x="682.5" y="944" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">OL</text>
-<text x="713.5" y="937" fill="#23232B" font-size="13" font-weight="600">Ollama — optional</text>
-<text x="713.5" y="953" fill="#6B6F7C" font-size="10" font-weight="500">Llama 3 · DeepSeek</text>
+<text x="682.5" y="944" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">AN</text>
+<text x="713.5" y="937" fill="#23232B" font-size="13" font-weight="600">Anthropic API</text>
+<text x="713.5" y="953" fill="#6B6F7C" font-size="10" font-weight="500">fallback on quota</text>
 </g>
 <g>
 <rect x="108" y="1106" width="148" height="58" rx="12" fill="#141428" opacity="0.06"/>
@@ -216,7 +216,7 @@
 <rect x="409" y="1235" width="38" height="38" rx="9" fill="#64748B"/>
 <text x="428" y="1258" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">S3</text>
 <text x="459" y="1251" fill="#23232B" font-size="13" font-weight="600">Amazon S3</text>
-<text x="459" y="1267" fill="#6B6F7C" font-size="10" font-weight="500">draft storage</text>
+<text x="459" y="1267" fill="#6B6F7C" font-size="10" font-weight="500">artifacts · idempotent</text>
 </g>
 <g>
 <rect x="381" y="1350" width="196" height="58" rx="12" fill="#141428" opacity="0.06"/>

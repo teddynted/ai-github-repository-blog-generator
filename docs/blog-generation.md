@@ -12,8 +12,8 @@ Related: [Release Context](./release-context.md) · [Architecture](./architectur
 
 The engine lives in [`internal/releasegen`](../internal/releasegen) and depends
 only on a **`Model` port** (`Generate(ctx, prompt) (string, error)`), satisfied
-by the platform's local **Ollama** client today and by an **Amazon Bedrock**
-adapter later — so generation is decoupled from any specific LLM.
+by the **AI Provider Router** (**Amazon Bedrock** primary, **Anthropic API**
+fallback) — so generation is decoupled from any specific LLM.
 
 Blog generation is a **hybrid** of deterministic assembly and LLM prose, so the
 result is both accurate and reliable:
@@ -77,7 +77,7 @@ Other formats (`release-summary`, `documentation`, `linkedin`, `youtube-shorts`,
 ## 4. Running it
 
 The `blog` CLI reads a Release Context JSON (from the `/release-context`
-endpoint or S3) and generates content against a local Ollama server — the same
+endpoint or S3) and generates content through the Provider Router (Anthropic locally) — the same
 model that runs on the instance:
 
 ```bash
@@ -85,14 +85,13 @@ model that runs on the instance:
 go run ./cmd/blog --context ctx.json
 
 # To a file, choosing the model
-go run ./cmd/blog --context ctx.json --out post.md --model qwen2.5:7b
+go run ./cmd/blog --context ctx.json --out post.md --model claude-opus-4-8
 
 # A LinkedIn post from a piped context
 cat ctx.json | go run ./cmd/blog --format linkedin
 ```
 
-Flags: `--context` (`-` = stdin), `--format`, `--model` (`OLLAMA_MODEL`),
-`--ollama` (`OLLAMA_URL`, default `http://127.0.0.1:11434`), `--out`, `--timeout`.
+Flags: `--context` (`-` = stdin), `--format`, `--model` (Anthropic model id, provider default when empty), `--out`, `--timeout`.
 
 ## 5. Status
 
@@ -100,7 +99,7 @@ Flags: `--context` (`-` = stdin), `--format`, `--model` (`OLLAMA_MODEL`),
 prompts, `GenerateAll` error aggregation) and the dedicated long-form `Blog`
 generator (SEO front matter, fixed section structure, accurate Mermaid
 embedding). Unit-tested at 90%+ coverage with a fake model; the `blog` CLI runs
-it against local Ollama.
+it through the Provider Router (Anthropic locally).
 
 **Closing the loop:** [`internal/releasepipeline`](../internal/releasepipeline)
 composes the Release Context Builder (M2), this generator (M3), and the

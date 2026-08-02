@@ -1,9 +1,10 @@
 // Command manual-trigger is the AWS Lambda behind the authenticated
-// POST /process REST endpoint. It is one more trigger source for the platform:
-// it validates a JSON request, then hands it to the shared intake.Service,
-// which publishes onto the same EventBridge → SQS → worker pipeline the webhook
-// uses. It performs no cloning, analysis, or AI work, and never starts the EC2
-// instance — outside the operating window the request is rejected.
+// POST /process REST endpoint — the platform's Step Functions trigger. It
+// validates a JSON request, then hands it to the shared intake.Service, which
+// starts an execution of the orchestration state machine. The state machine
+// starts the compute host, waits for it to report ready via SSM, and enqueues
+// the job onto SQS for the worker. This Lambda performs no cloning, analysis,
+// or AI work, and does not start the instance itself.
 package main
 
 import (
@@ -17,11 +18,9 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
+	"github.com/aws/aws-sdk-go-v2/service/sfn"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/awsec2"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/eventbus"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/intake"
 )
@@ -34,10 +33,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	// ProjectName is required here (unlike the webhook): the manual trigger must
-	// know whether the platform is inside its operating window so it can reject
-	// out-of-window requests rather than start the instance.
-	if err := a.Config.Require("AWSRegion", "EventBusName", "EventSource", "ProjectName"); err != nil {
+	// The state machine (not this Lambda) owns the compute-host lifecycle, so
+	// only the region and the target state-machine ARN are required.
+	if err := a.Config.Require("AWSRegion", "StateMachineArn"); err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
@@ -47,13 +45,9 @@ func main() {
 		log.Fatalf("aws config: %v", err)
 	}
 
-	ec2Client := awsec2.New(ec2.NewFromConfig(awsCfg))
 	svc := &intake.Service{
-		Publisher: eventbus.NewEventBridge(eventbridge.NewFromConfig(awsCfg), a.Config.EventBusName, a.Config.EventSource),
-		Window:    awsec2.NewInstanceWindow(ec2Client, a.Config.ProjectName),
-		// Manual runs override the schedule: start the host on demand if stopped.
-		Starter: awsec2.NewInstanceStarter(ec2Client, a.Config.ProjectName),
-		Logger:  a.Logger,
+		Publisher: eventbus.NewStepFunctions(sfn.NewFromConfig(awsCfg), a.Config.StateMachineArn),
+		Logger:    a.Logger,
 	}
 
 	lambda.Start(func(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -101,9 +95,9 @@ func handle(ctx context.Context, svc *intake.Service, logger *slog.Logger, reque
 	}
 
 	ev := r.ToEvent(triggerSource)
-	// Manual runs override the schedule: start the instance if it is stopped,
-	// then publish. The worker processes the event once the host is healthy.
-	decision, err := svc.Submit(ctx, ev, intake.StartOutsideWindow)
+	// Start the orchestration state machine; it starts the host, waits for it
+	// to report ready via SSM, and enqueues the job for the worker.
+	decision, err := svc.Submit(ctx, ev, intake.BufferOutsideWindow)
 	logResult(logger, requestID, ev, decision, err, time.Since(start))
 
 	if err != nil {

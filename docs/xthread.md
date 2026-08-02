@@ -133,12 +133,12 @@ chain, then emits Markdown (default) or JSON:
 # Fully offline from a context + an existing blog (deterministic):
 go run ./cmd/xthread --context ctx.json --blog post.md --offline
 
-# 7-post threads, JSON, generating the chain via Ollama:
+# 7-post threads, JSON, generating the chain via the Provider Router (Anthropic):
 go run ./cmd/xthread --context ctx.json --posts 7 --format json --out xthreads.json
 ```
 
 Flags: `--context` (required), `--blog`, `--max`, `--posts` (3–10), `--format
-md|json`, `--model` (`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`,
+md|json`, `--model` (Anthropic model id, provider default when empty), `--offline`,
 `--out`, `--timeout`.
 
 ## 8. Status
