@@ -79,7 +79,7 @@
 
   <div class="stage">
     <svg id="diagram" viewBox="0 0 1120 1800" role="img"
-         aria-label="A top-to-bottom n8n-style workflow: GitHub webhook, release and actions triggers converge into EventBridge, then Lambda and SQS, then down through the AI Blog Orchestrator (Repository Analyzer, Content Intelligence, Prompt Orchestrator, Quality Gate) which calls Amazon Bedrock with an optional Ollama model, fans out to blog, visual, video and social artifacts, collects into Amazon S3, is published by n8n to GitHub pull requests and the blog platform, with CloudWatch monitoring the AWS steps.">
+         aria-label="A top-to-bottom workflow: CI, CLI and n8n callers POST /process into a manual-trigger Lambda, which starts an AWS Step Functions execution that starts the host and enqueues to SQS; the worker (Repository Analyzer, Content Intelligence, Prompt Orchestrator, Quality Gate) generates through Amazon Bedrock with an Anthropic API fallback, fans out to blog, visual, video and social artifacts, stores them idempotently in Amazon S3, and n8n publishes to GitHub pull requests and the blog platform, with CloudWatch monitoring the AWS steps.">
       <defs>
         <pattern id="grid" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1.3" cy="1.3" r="1.3" fill="var(--grid)"></circle>
@@ -103,23 +103,23 @@
   const COLOR = { n8n:"var(--n8n)", github:"var(--github)", aws:"var(--aws)", ai:"var(--ai)", pub:"var(--pub)", store:"var(--store)", artifact:"var(--artifact)" };
 
   const N = {
-    WH:  { fam:"n8n", mono:"⚡", t:"GitHub Webhook", s:"push event",     trig:true },
-    REL: { fam:"n8n", mono:"⚡", t:"GitHub Release", s:"release event",  trig:true },
-    GHA: { fam:"n8n", mono:"⚡", t:"GitHub Actions", s:"workflow event", trig:true },
-    EB:  { fam:"aws", mono:"EB",  t:"Amazon EventBridge", s:"event ingestion" },
-    LWH: { fam:"aws", mono:"λ",   t:"AWS Lambda",         s:"webhook handler" },
+    WH:  { fam:"n8n", mono:"⚡", t:"CI · CD pipeline", s:"POST /process",     trig:true },
+    REL: { fam:"n8n", mono:"⚡", t:"CLI · manual run", s:"POST /process",  trig:true },
+    GHA: { fam:"n8n", mono:"⚡", t:"n8n · cron", s:"POST /process", trig:true },
+    EB:  { fam:"aws", mono:"λ",   t:"AWS Lambda", s:"manual-trigger" },
+    LWH: { fam:"aws", mono:"SF",  t:"AWS Step Functions", s:"start host · SSM · enqueue" },
     SQS: { fam:"aws", mono:"SQS", t:"Amazon SQS",         s:"queue · backpressure" },
     RA:  { fam:"ai", mono:"01", t:"Repository Analyzer",  s:"README · arch · diff" },
     CI:  { fam:"ai", mono:"02", t:"Content Intelligence", s:"SEO · summary · audience" },
     PO:  { fam:"ai", mono:"03", t:"Prompt Orchestrator",  s:"blog · diagram · social" },
     QG:  { fam:"ai", mono:"04", t:"Quality Gate",         s:"markdown · frontmatter" },
-    BR:  { fam:"ai", mono:"BR", t:"Amazon Bedrock",       s:"Claude · Nova · Titan" },
-    OL:  { fam:"ai", mono:"OL", t:"Ollama — optional",    s:"Llama 3 · DeepSeek", opt:true },
+    BR:  { fam:"ai", mono:"BR", t:"Amazon Bedrock",       s:"Claude Opus 4.8 · primary" },
+    OL:  { fam:"ai", mono:"AN", t:"Anthropic API",     s:"fallback on quota", opt:true },
     BLOG:{ fam:"artifact", mono:"MD",  t:"Blog", s:"SEO · notes" },
     VIS: { fam:"artifact", mono:"SVG", t:"Visuals",  s:"AWS · Mermaid" },
     VID: { fam:"artifact", mono:"MP4", t:"Video",   s:"storyboard" },
     SOC: { fam:"artifact", mono:"SOC", t:"Social",  s:"LinkedIn · X" },
-    S3:  { fam:"store", mono:"S3",  t:"Amazon S3", s:"draft storage" },
+    S3:  { fam:"store", mono:"S3",  t:"Amazon S3", s:"artifacts · idempotent" },
     N8N: { fam:"n8n",   mono:"n8n", t:"n8n",       s:"workflow automation" },
     PR:  { fam:"pub", mono:"PR",  t:"GitHub Pull Request", s:"human review" },
     SITE:{ fam:"pub", mono:"WEB", t:"Blog Platform",       s:"scheduled publish" },
@@ -154,7 +154,7 @@
     let x = cx - rowTotal(r) / 2;
     r.forEach(id => { const n = N[id]; n.x = x + n.w/2; n.y = y; x += n.w + ROWGAP; });
   });
-  // Bedrock / Ollama attached beside the Prompt Orchestrator (n8n AI-agent pattern)
+  // Bedrock / Anthropic attached beside the Prompt Orchestrator (n8n AI-agent pattern)
   const brW = Math.max(N.BR.w, N.OL.w);
   const rightX = cx + N.PO.w/2 + 60 + brW/2;
   N.BR.x = rightX; N.BR.y = N.PO.y - 18;
@@ -224,7 +224,7 @@
   const wlbl = (x, y, txt, anchor) => { const t = el("text", { x, y, class:"wire-lbl", "text-anchor":anchor||"middle" }); t.textContent = txt; layers.appendChild(t); };
   wlbl(cx + 18, (B(N.SQS) + T(N.RA)) / 2 + 3, "async job", "start");
   wlbl((R(N.PO) + L(N.BR)) / 2, N.PO.y - 22, "ai model");
-  wlbl(cx, T(N.CW) - 12, "monitors Lambda · SQS · Orchestrator · Bedrock · n8n");
+  wlbl(cx, T(N.CW) - 12, "monitors Lambda · Step Functions · SQS · Bedrock · n8n");
 
   // ---- node cards ----
   const drawNode = (n) => {
