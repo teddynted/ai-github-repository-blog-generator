@@ -67,7 +67,7 @@ for wording. Each planner is a pure, independently-testable function.
 | Content intelligence (words, speaking/recording time, density, TTS voice) | Deterministic |
 | Narration wording | LLM (`releasegen.Model`) with a deterministic fallback |
 
-It reuses the shared **`Model` port** (local Ollama today, Bedrock later) and the
+It reuses the shared **`Model` port** (the Provider Router (Bedrock -> Anthropic)) and the
 Milestone 4 **`Storyboard`** type. When `Model` is nil, narration is taken from
 the storyboard **verbatim** — generation is fully deterministic and grounded.
 
@@ -89,7 +89,7 @@ The script never names a provider voice ID. Instead it emits neutral direction
 any engine or narrator can honour:
 
 - **Pronunciation** entries carry an SSML `say-as` hint (`spell-out` for acronyms
-  like AWS/JSON/IAM, `as-written` for words like CloudFormation/Ollama/Bedrock).
+  like AWS/JSON/IAM, `as-written` for words like CloudFormation/Anthropic/Bedrock).
 - **Pauses** carry a `durationMs` that maps directly to SSML `<break time="…">`.
 - **Voice** carries a provider-neutral recommendation (style, persona, language,
   words-per-minute).
@@ -166,12 +166,12 @@ go run ./cmd/voiceover --storyboard board.json --offline
 # From a Release Context + a blog file, offline end-to-end:
 go run ./cmd/voiceover --context ctx.json --blog post.md --offline
 
-# Generate the storyboard via Ollama first, then the voice-over as JSON:
+# Generate the storyboard via the Provider Router (Anthropic) first, then the voice-over as JSON:
 go run ./cmd/voiceover --context ctx.json --format json --out script.json
 ```
 
 Flags: `--storyboard`, `--context`, `--blog`, `--format md|json`, `--model`
-(`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
+(Anthropic model id, provider default when empty), `--offline`, `--out`, `--timeout`.
 
 ## 9. Status
 

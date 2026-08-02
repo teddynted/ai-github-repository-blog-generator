@@ -50,7 +50,7 @@ concrete providers, HTTP, or a database.
 |------|----------------|-----------------|
 | `Provider` | Collect account + content metrics for a platform | YouTube / Instagram / X / TikTok + `SyntheticProvider` |
 | `Repository` | Persist & query immutable snapshots | `MemoryRepository` (SQLite DDL in [`social-intel-schema.sql`](./social-intel-schema.sql)) |
-| `AIInsighter` | Turn grounded metrics into qualitative notes | `ModelInsighter` (Bedrock/Ollama) |
+| `AIInsighter` | Turn grounded metrics into qualitative notes | `ModelInsighter` (Bedrock / Anthropic) |
 | `Monitor` | Emit counters/durations/errors | `LogMonitor` (→ CloudWatch) / `nopMonitor` |
 | `Clock` | Time (deterministic in tests) | `time.Now` / fixed |
 | `HTTPDoer` | HTTP for provider adapters | `*http.Client` / mock |
@@ -112,7 +112,7 @@ Identifies the **best**, **fastest-growing**, **highest-engagement**,
 
 [`insights.go`](../internal/socialintel/insights.go) always produces
 **deterministic** insights and recommendations straight from the metrics. The
-optional `ModelInsighter` (Bedrock/Ollama) is given the metrics as JSON with an
+optional `ModelInsighter` (Bedrock / Anthropic) is given the metrics as JSON with an
 explicit instruction to invent no numbers; its notes are *appended* to — never
 substituted for — the deterministic findings. Any model error or unparseable
 output falls back silently to the deterministic set.
@@ -143,7 +143,7 @@ go run ./cmd/socialintel advisory --offline --from 2026-06-01 --to 2026-06-30
 # Real collection for today (requires env credentials, see §8).
 go run ./cmd/socialintel collect
 
-# Grounded AI enrichment via Ollama (falls back to deterministic on error).
+# Grounded AI enrichment via the Provider Router (Anthropic) (falls back to deterministic on error).
 go run ./cmd/socialintel briefing --offline --ai
 ```
 

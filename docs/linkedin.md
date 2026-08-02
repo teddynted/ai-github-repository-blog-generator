@@ -139,12 +139,12 @@ chain, then emits Markdown (default) or JSON:
 # Fully offline from a context + an existing blog (deterministic):
 go run ./cmd/linkedin --context ctx.json --blog post.md --offline
 
-# Cap the batch and emit JSON, generating the chain via Ollama:
+# Cap the batch and emit JSON, generating the chain via the Provider Router (Anthropic):
 go run ./cmd/linkedin --context ctx.json --max 4 --format json --out linkedin.json
 ```
 
 Flags: `--context` (required), `--blog`, `--max`, `--format md|json`, `--model`
-(`OLLAMA_MODEL`), `--ollama` (`OLLAMA_URL`), `--offline`, `--out`, `--timeout`.
+(Anthropic model id, provider default when empty), `--offline`, `--out`, `--timeout`.
 
 ## 8. Status
 

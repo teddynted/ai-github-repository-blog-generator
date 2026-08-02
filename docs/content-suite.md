@@ -55,7 +55,7 @@ architecture CLI exits `0` with a skip notice when there is no infrastructure.)
 # supply a pre-generated blog; everything downstream runs deterministically.
 go run ./cmd/generate-all --context ctx.json --blog post.md --offline --out ./artifacts
 
-# Generate everything, blog included, via local Ollama.
+# Generate everything, blog included, via the Provider Router (Anthropic locally).
 go run ./cmd/generate-all --context ctx.json --out ./artifacts
 ```
 

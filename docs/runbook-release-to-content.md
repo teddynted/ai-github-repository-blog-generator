@@ -1,14 +1,14 @@
 # Runbook: Release → Content (end-to-end validation)
 
-This runbook validates the complete pipeline on a live AWS account: publishing a
-GitHub Release produces the **full, reviewed, published content suite** — blog,
-storyboard, voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture,
-LinkedIn, and X thread. It exercises Semantic Version validation, Milestone 2
-(Release Context), the Milestone 3–13 content suite, and the review/publish/notify
-stages together. No manual `generate-all` invocation is required — the worker's
-release path runs the whole suite automatically.
+This runbook validates the complete pipeline on a live AWS account: calling
+`POST /process` with a release tag produces the **full, reviewed, published
+content suite** — blog, storyboard, voice-over, YouTube, Shorts, TikTok, visual
+assets, SEO, architecture, LinkedIn, and X thread. It exercises Semantic Version
+validation, Milestone 2 (Release Context), the Milestone 3–13 content suite, and
+the review/publish/notify stages together. No manual `generate-all` invocation is
+required — the worker's release path runs the whole suite automatically.
 
-Related: [Deployment](./deployment.md) · [Release Context](./release-context.md) · [Full Content Suite](./content-suite.md) · [Blog Generation](./blog-generation.md).
+Related: [Deployment](./deployment.md) · [Manual Trigger](./manual-trigger.md) · [Release Context](./release-context.md) · [Full Content Suite](./content-suite.md).
 
 ---
 
@@ -16,21 +16,20 @@ Related: [Deployment](./deployment.md) · [Release Context](./release-context.md
 
 ```mermaid
 flowchart LR
-    REL[Publish GitHub Release] --> WH[webhook-handler]
-    WH -->|release event| EB[EventBridge]
-    EB --> SQS[(SQS)]
+    P[POST /process + releaseTag] --> LT[manual-trigger]
+    LT --> SFN[Step Functions]
+    SFN -->|start host · SSM ready · SendMessage| SQS[(SQS)]
     SQS --> W[worker on EC2]
     W --> SV{SemVer valid?}
     SV -- no --> STOP[reject early]
     SV -- yes --> CTX[Release Context]
-    CTX --> GEN[full content suite via Ollama\nblog → … → X thread]
-    GEN --> REV[review] --> APP[approval] --> PUB[publish] --> OUT[(output bucket / EBS)]
+    CTX --> GEN[full content suite via Provider Router\nblog → … → X thread, skip-if-in-S3]
+    GEN --> REV[review] --> APP[approval] --> PUB[publish] --> OUT[(S3 output)]
     W -.-> NOTE[notify]
 ```
 
-The webhook front door is always up; the **worker only runs during the instance
-window** (18:00–20:00 daily by default). A release published outside the window
-is buffered in SQS and processed at the next start — or force a start (§5).
+The `/process` front door is always up; the state machine **starts the host on
+demand** and enqueues the job. The scheduler/idle-stop powers the host off.
 
 ---
 
@@ -39,9 +38,9 @@ is buffered in SQS and processed at the next start — or force a start (§5).
 - The stacks are deployed (`blog-gen-serverless`, `blog-gen-compute`,
   `blog-gen-scheduler`, `blog-gen-observability`). See [Deployment](./deployment.md)
   and [Installation → bootstrap](../README.md#installation).
-- The EC2 instance runs **Ollama** with the configured model pulled, and the
-  `blog-gen-worker` service is active.
-- The target repository is **registered** (webhook created, PAT stored) — see §4.
+- The `blog-gen-worker` service is active on the instance and Bedrock model
+  access (or the Anthropic key secret) is configured.
+- The target repository is **registered** (PAT stored) — see §4.
 - AWS CLI v2 configured for the account/region.
 
 Set these once for the commands below:
@@ -56,7 +55,7 @@ export STACK=blog-gen
 ## 3. Confirm the deployment is healthy
 
 ```bash
-# Serverless endpoints (note ReleaseContextUrl, RegistrationUrl, WebhookUrl)
+# Serverless endpoints (note ReleaseContextUrl, RegistrationUrl, ProcessUrl)
 aws cloudformation describe-stacks --stack-name ${STACK}-serverless \
   --query "Stacks[0].Outputs" --output table
 
@@ -66,7 +65,7 @@ aws lambda get-function --function-name ${STACK}-release-context \
 
 # The worker is running on the instance (SSH in first — see Deployment §5)
 systemctl status blog-gen-worker --no-pager
-curl -s http://127.0.0.1:11434/api/tags   # Ollama lists the pulled model
+docker compose -f /opt/blog-gen/docker-compose.yml ps   # n8n + postgres + redis up
 ```
 
 ---
@@ -101,14 +100,17 @@ and **Settings → Webhooks** lists the `release` event.
 > release from your localhost. Substitute `<owner>/<repo>` below for any other
 > registered repository.
 
-### Option A — full loop (recommended): publish a release
+### Option A — full loop (recommended): POST /process with the release tag
 
-1. On the registered repo, publish a GitHub Release (e.g. tag `v0.3.0`).
-2. If **outside the instance window**, force a start so the worker drains the
-   queue now:
+1. On the registered repo, ensure the GitHub Release exists (e.g. tag `v0.3.0`).
+2. Call `POST /process` with the tag — the state machine starts the host and
+   enqueues the job:
 
 ```bash
-aws lambda invoke --function-name ${STACK}-scheduled-start /dev/stdout
+PURL=$(aws cloudformation describe-stacks --stack-name ${STACK}-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='ProcessUrl'].OutputValue" --output text)
+curl -sS -X POST "$PURL" -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"owner":"teddynted","repository":"designing-an-ai-agent-platform-on-aws","releaseTag":"v0.3.0"}'
 ```
 
 ### Option B — context only (no instance needed): call the endpoint
@@ -134,9 +136,9 @@ curl -sS -X POST "$URL" -H "x-api-key: $API_KEY" -H "Content-Type: application/j
 
 | Stage | Check |
 | --- | --- |
-| **Webhook received** | GitHub → Recent Deliveries: `200`, body `accepted`/`deferred`. |
-| **Event published** | `blog-gen-webhook-handler` logs show `release` → PutEvents. |
-| **Buffered** | SQS `ApproximateNumberOfMessages` increments (drains when the worker is up). |
+| **Accepted** | `POST /process` returns `202`; a Step Functions execution starts. |
+| **Enqueued** | State machine reaches EnqueueJob; SQS `ApproximateNumberOfMessages` increments. |
+| **Host up** | The instance transitions `stopped` → `running` (started by the state machine). |
 | **Context built** | `release-contexts/<date>/<id>.json` exists in the artifacts bucket (Option B), or worker logs `release context built`. |
 | **Content generated** | Worker logs `blog post generated` / `content generated`; metric `ReleaseRunsSucceeded`. |
 | **Published** | New Markdown in the output destination (§7). |
@@ -145,8 +147,8 @@ curl -sS -X POST "$URL" -H "x-api-key: $API_KEY" -H "Content-Type: application/j
 Commands:
 
 ```bash
-# Webhook-handler logs (last 5 min)
-aws logs tail /aws/lambda/${STACK}-webhook-handler --since 5m --format short
+# Manual-trigger logs (last 5 min)
+aws logs tail /aws/lambda/${STACK}-manual-trigger --since 5m --format short
 
 # Release-context Lambda logs
 aws logs tail /aws/lambda/${STACK}-release-context --since 10m --format short
@@ -206,9 +208,9 @@ char** `description`, `tags`), an H1, the full section structure
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| Webhook `deferred`, nothing generated | Instance outside its window — force a start (§5) or wait for 18:00. |
+| `POST /process` 202 but nothing runs | Check the Step Functions execution — did it reach EnqueueJob? Is the instance reporting SSM `Online`? |
 | Worker logs `release run failed … unauthorized` | Repo PAT lacks Contents:Read, or repo not registered — re-register (§4). |
-| `no content generated` | Ollama not reachable/model not pulled — `curl 127.0.0.1:11434/api/tags`, `ollama pull <model>`. |
+| `no content generated` | Check the worker log for `ai provider failed`; enable Bedrock model access or set the Anthropic key secret. |
 | Context `warnings` include "no CHANGELOG"/"no commits" | Expected for sparse releases; content still generates from what's present. |
 | Message keeps redelivering | A stage errors each attempt; check worker logs. After max receives it moves to the DLQ. |
 | 403 from `/release-context` | Missing/!wrong `x-api-key` (§5, Option B). |
@@ -219,7 +221,7 @@ char** `description`, `tags`), an H1, the full section structure
 
 - Delete generated test objects from the output bucket and
   `release-contexts/` prefix.
-- Deregister the test repo (removes webhook + stored PAT):
+- Deregister the test repo (removes the stored PAT + metadata):
 
   ```bash
   scripts/register-repository.sh --owner <owner> --repository <repo> --delete
