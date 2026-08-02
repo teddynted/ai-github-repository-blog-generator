@@ -1,6 +1,6 @@
 # Deployment
 
-This guide covers deploying the **GitHub AI Blog Generator** to AWS using **CloudFormation**, then wiring up the GitHub webhook.
+This guide covers deploying the **GitHub AI Blog Generator** to AWS using **CloudFormation**, then registering a repository and triggering a run with `POST /process`.
 
 Related: [Local Development](./local-development.md) · [Infrastructure](./infrastructure.md) · [Security](./security.md) · [CI/CD](./ci-cd.md).
 
@@ -10,7 +10,7 @@ Related: [Local Development](./local-development.md) · [Infrastructure](./infra
 
 | Requirement | Notes |
 | --- | --- |
-| AWS account | With permissions to create VPC, EC2, Lambda, API Gateway, SQS, EventBridge, IAM, and CloudWatch |
+| AWS account | With permissions to create VPC, EC2, Lambda, API Gateway, Step Functions, SQS, IAM, and CloudWatch |
 | Region | Any Region where these services are available (e.g. `us-east-1`) |
 | AWS CLI v2 | Configured with credentials (`aws configure` or SSO) |
 | EC2 key pair | For SSH access to the instance |
@@ -18,9 +18,9 @@ Related: [Local Development](./local-development.md) · [Infrastructure](./infra
 | Go ≥ 1.25 | To build the Lambda binaries (build toolchain pinned in `go.mod`) |
 | Docker | For local build/testing (optional) |
 
-> **No Amazon Bedrock, OpenAI, or Anthropic access is required.** All inference runs locally via Ollama on the instance.
+> **Amazon Bedrock access** to a Claude model (`us.anthropic.claude-opus-4-8`) **and/or** an **Anthropic API key** is required — the Provider Router uses Bedrock first and falls back to the Anthropic API.
 >
-> The instance runs Ollama, so choose a **GPU instance type** (e.g. `g4dn.xlarge`) and a Region/AZ that offers it. The host is **On-Demand**, so a scheduled start does not depend on Spot capacity.
+> The instance only runs n8n + the API-calling worker, so the default is a small **t4g.small (arm64/Graviton)** — no GPU. The host is **On-Demand**, so a start does not depend on Spot capacity.
 
 Verify access:
 
@@ -74,20 +74,20 @@ cp .env.example .env
 | --- | --- | --- |
 | `AWS_REGION` | Deployment region | `us-east-1` |
 | `ProjectName` | Resource name prefix | `blog-gen` |
-| `WEBHOOK_SECRET` | Shared secret for GitHub HMAC validation | random 32+ chars |
-| `PUBLISH_TRIGGER` | Commit-message trigger that gates generation | `blog:` |
-| `INSTANCE_TYPE` | EC2 instance type for the On-Demand instance | `g4dn.xlarge` |
+| `BEDROCK_MODEL_ID` | Provider Router primary — Bedrock Claude model id | `us.anthropic.claude-opus-4-8` |
+| `ANTHROPIC_MODEL` | Provider Router fallback — Anthropic API model id | `claude-opus-4-8` |
+| `PUBLISH_TRIGGER` | Optional trigger pattern stored in metadata | `blog:` |
+| `INSTANCE_TYPE` | EC2 instance type (arm64/Graviton) | `t4g.small` |
 | `StartExpression` | Scheduler cron for the daily START (scheduler stack) | `cron(0 18 ? * * *)` |
 | `StopExpression` | Scheduler cron for the daily STOP (scheduler stack) | `cron(0 20 ? * * *)` |
 | `ScheduleTimezone` | IANA timezone the crons evaluate in (scheduler stack) | `Etc/UTC` |
-| `OLLAMA_MODEL` | Local model to run | `qwen2.5:7b` |
-| `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `100` |
+| `EBS_VOLUME_SIZE_GB` | Size of the persistent gp3 volume | `20` |
 | `KeyPairName` | (optional) existing key pair; blank = stack-managed | (managed) |
 | `REQUIRE_HUMAN_APPROVAL` | Require manual approval before publishing | `false` |
 | `LogRetentionDays` | CloudWatch retention | `14` |
 | `OperatorCidr` | CIDR allowed to SSH to the instance | `203.0.113.10/32` |
 
-> **Never commit secrets.** `WEBHOOK_SECRET` and any tokens are provided via environment/parameter input at deploy time, not stored in the repository ([Security](./security.md)).
+> **Never commit secrets.** The Anthropic API key and any GitHub tokens live in Secrets Manager, provided out-of-band at deploy time, not stored in the repository ([Security](./security.md)).
 
 ---
 
@@ -98,21 +98,21 @@ cp .env.example .env
 make build
 
 # Package each for Lambda (provided.al2023, arm64)
-for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
+for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
   [ -f "dist/$fn/bootstrap" ] && ( cd dist/$fn && zip $fn.zip bootstrap )
 done
 ```
 
-- `registration` — validate repo + PAT, create the webhook, store metadata + secrets.
-- `webhook-handler` — resolve metadata, verify signature, validate the commit-message trigger, publish matched events, and report processed-now vs deferred (the window gate).
-- `manual-trigger` — the authenticated `POST /process` endpoint; validates the request and submits it through the shared intake service, **starting the On-Demand host on demand** if it is stopped (202 accepted). See [Manual Trigger](./manual-trigger.md).
+- `registration` — validate repo + PAT, store metadata + secret.
+- `manual-trigger` — the authenticated `POST /process` endpoint; validates the request and **starts a Step Functions execution** (202 accepted). See [Manual Trigger](./manual-trigger.md).
+- `release-context` — the authenticated `POST /release-context` endpoint; builds the structured Release Context.
 - `scheduled-start` — start the On-Demand instance at 18:00 daily (scheduler stack).
 - `scheduled-stop` — stop the instance at 20:00 daily (scheduler stack).
 
 Upload the ZIPs to the artifacts bucket (from the [bootstrap](#first-time-bootstrap-automated-deploy)); the serverless/scheduler templates' default code keys are `<fn>.zip` at the bucket root:
 
 ```bash
-for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
+for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
   aws s3 cp "dist/$fn/$fn.zip" "s3://$ARTIFACTS_BUCKET/$fn.zip"
 done
 ```
@@ -131,7 +131,7 @@ aws cloudformation deploy \
   --parameter-overrides OperatorCidr=$OperatorCidr \
   --capabilities CAPABILITY_NAMED_IAM
 
-# 2. Serverless layer (API Gateway, Lambdas, EventBridge, SQS + DLQ)
+# 2. Serverless layer (API Gateway, Lambdas, Step Functions, SQS + DLQ)
 aws cloudformation deploy \
   --template-file infrastructure/serverless.yaml \
   --stack-name blog-gen-serverless \
@@ -139,15 +139,16 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 3. Compute layer (On-Demand EC2 + persistent EBS + worker service)
-#    Build & upload the worker binary first (linux/amd64):
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
+#    Build & upload the worker binary first (linux/arm64 — the t4g host is Graviton):
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
 aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/worker"
 aws cloudformation deploy \
   --template-file infrastructure/compute.yaml \
   --stack-name blog-gen-compute \
   --parameter-overrides \
       InstanceType=$INSTANCE_TYPE \
-      OllamaModel=$OLLAMA_MODEL \
+      BedrockModelId=$BEDROCK_MODEL_ID \
+      AnthropicModel=$ANTHROPIC_MODEL \
       EbsVolumeSizeGb=$EBS_VOLUME_SIZE_GB \
       ArtifactsBucket=$ARTIFACTS_BUCKET \
       WorkerCodeKey=worker \
@@ -155,6 +156,11 @@ aws cloudformation deploy \
       NotifyEmailTo=$NOTIFY_EMAIL_TO \
       SmtpUsername=$SMTP_USERNAME \
   --capabilities CAPABILITY_NAMED_IAM
+
+# Set the Anthropic API key (Provider Router fallback leg) out-of-band:
+ANTHROPIC_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+  --query "Stacks[0].Outputs[?OutputKey=='AnthropicApiKeySecretArn'].OutputValue" --output text 2>/dev/null || echo "blog-gen/anthropic/api-key")
+aws secretsmanager put-secret-value --secret-id "$ANTHROPIC_SECRET_ARN" --secret-string 'sk-ant-...'
 
 # 4. Scheduler layer — owns instance power (start 18:00 / stop 20:00, daily).
 #    Wire it to the compute stack's InstanceId:
@@ -194,11 +200,11 @@ The worker reads it at startup via `SMTP_PASSWORD_SECRET`; restart the service
 (or the instance) to pick up a changed value: `sudo systemctl restart blog-gen-worker`.
 Email is optional — leave `NotifyEmail*`/`SmtpUsername` unset to disable it.
 
-Retrieve the webhook URL:
+Retrieve the `/process` endpoint URL:
 
 ```bash
 aws cloudformation describe-stacks --stack-name blog-gen-serverless \
-  --query "Stacks[0].Outputs[?OutputKey=='WebhookUrl'].OutputValue" --output text
+  --query "Stacks[0].Outputs[?OutputKey=='ProcessUrl'].OutputValue" --output text
 ```
 
 ---
@@ -228,13 +234,13 @@ In the n8n editor: **Workflows → Import from File**, select each JSON under `w
 
 ## 6. Register a Repository
 
-Registration validates access, creates the GitHub webhook, and stores the repo's credentials in the **shared** Secrets Manager secret (`blog-gen/github/repositories`). Full endpoint spec (payload, responses, errors, delete, migration): [Registration](./registration.md).
+Registration validates access and stores the repo's PAT in the **shared** Secrets Manager secret (`blog-gen/github/repositories`). GitHub webhook ingress has been removed, so registration no longer creates a GitHub webhook. Full endpoint spec (payload, responses, errors, delete): [Registration](./registration.md).
 
-**1. Create the GitHub PAT** (in GitHub, not via the endpoint): **Settings → Developer settings → Personal access tokens → Fine-grained tokens**, scoped to the target repo with **Contents: Read**, **Webhooks: Read and write**, **Metadata: Read**. Copy the `github_pat_…` value.
+**1. Create the GitHub PAT** (in GitHub, not via the endpoint): **Settings → Developer settings → Personal access tokens → Fine-grained tokens**, scoped to the target repo with **Contents: Read**, **Pull requests: Read and write**, **Metadata: Read**. Copy the `github_pat_…` value.
 
-**2. POST it to the registration endpoint** with `owner`, `repository`, `pat`, and a `webhook_secret` you choose.
+**2. POST it to the registration endpoint** with `owner`, `repository`, and `pat`.
 
-> ⚠️ **The registration route requires an API key** (`ApiKeyRequired: true`). Send the `x-api-key` header or you get **403 Forbidden**. (The webhook route is public — HMAC-signed — and takes no API key.)
+> ⚠️ **The registration and `/process` routes require an API key** (`ApiKeyRequired: true`). Send the `x-api-key` header or you get **403 Forbidden**.
 
 ```bash
 REGISTRATION_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
@@ -247,30 +253,28 @@ API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value --q
 curl -sS -X POST "$REGISTRATION_URL" \
   -H "Content-Type: application/json" \
   -H "x-api-key: $API_KEY" \
-  -d '{"owner":"acme","repository":"widget","pat":"github_pat_xxx","webhook_secret":"myWebhookSecret"}'
+  -d '{"owner":"acme","repository":"widget","pat":"github_pat_xxx"}'
 
-# Rotate credentials for an existing repo (add "update": true):
-#   -d '{"owner":"acme","repository":"widget","pat":"github_pat_new","webhook_secret":"rotated","update":true}'
+# Rotate the PAT for an existing repo (add "update": true):
+#   -d '{"owner":"acme","repository":"widget","pat":"github_pat_new","update":true}'
 # Deregister a repo:
 #   curl -sS -X DELETE "$REGISTRATION_URL" -H "x-api-key: $API_KEY" \
 #     -H "Content-Type: application/json" -d '{"owner":"acme","repository":"widget"}'
 ```
 
-> **Convenience wrapper:** [`scripts/register-repository.sh`](../scripts/register-repository.sh) runs exactly this request for you — it resolves `RegistrationUrl` + the API key from the stack, reads the PAT/webhook secret from the environment (or prompts, so they stay out of your shell history), and builds the JSON safely:
->
-> ```bash
-> GITHUB_PAT=github_pat_xxx WEBHOOK_SECRET=myWebhookSecret \
->   scripts/register-repository.sh --owner acme --repository widget
-> # rotate: add --update   ·   deregister: --delete (no credentials needed)
-> ```
+On success the platform validates access + token permissions, adds the PAT to the shared secret keyed by `acme/widget`, and writes metadata to DynamoDB.
 
-On success the platform validates access + token permissions, creates the webhook (pointing at `WebhookUrl`) with your `webhook_secret`, adds the credentials to the shared secret keyed by `acme/widget`, and writes metadata to DynamoDB. Confirm a green **✓** under the repo's **Settings → Webhooks → Recent Deliveries**.
+### Trigger a run
 
-> The webhook front door (API Gateway + Lambda + EventBridge + SQS) is **always available**, even when the EC2 instance is stopped. The handler acknowledges every push and only publishes an event when the commit message matches the repository's trigger pattern (default `blog:`). It never starts the instance — that is owned by the scheduler's daily window; a matched event that arrives outside the window is buffered in SQS and processed at the next 18:00 start.
+`POST /process` starts the pipeline. It returns **202** and starts a Step Functions execution that boots the host and enqueues the job:
 
-### Manual webhook setup (fallback)
+```bash
+PROCESS_URL=$(aws cloudformation describe-stacks --stack-name blog-gen-serverless \
+  --query "Stacks[0].Outputs[?OutputKey=='ProcessUrl'].OutputValue" --output text)
 
-If you prefer to create the webhook yourself: **Settings → Webhooks → Add webhook** → Payload URL = `WebhookUrl`, Content type = `application/json`, Secret = the repository's webhook secret, Events = **push** and **release** (registration subscribes to both automatically).
+curl -sS -X POST "$PROCESS_URL" -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"owner":"acme","repository":"widget","releaseTag":"v1.2.0"}'   # omit releaseTag for a repo run
+```
 
 ---
 
@@ -285,45 +289,41 @@ aws cloudformation describe-stacks --stack-name blog-gen-serverless \
 aws sqs get-queue-attributes --queue-url "$QUEUE_URL" \
   --attribute-names ApproximateNumberOfMessages
 
-# Handler + registration Lambdas are deployed
-aws lambda get-function --function-name blog-gen-webhook-handler --query 'Configuration.State'
+# Manual-trigger + registration Lambdas are deployed
+aws lambda get-function --function-name blog-gen-manual-trigger --query 'Configuration.State'
 aws lambda get-function --function-name blog-gen-registration --query 'Configuration.State'
 
 # Metadata table is active
 aws dynamodb describe-table --table-name blog-gen-repositories --query 'Table.TableStatus'
 
-# EC2 instance is registered (likely 'stopped' until a webhook arrives)
+# EC2 instance is registered (likely 'stopped' until a /process call arrives)
 aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
   --query 'Reservations[0].Instances[0].State.Name'
 ```
 
-On the instance (via SSH), confirm Ollama and the worker are up:
+On the instance (via SSH), confirm the orchestration plane and worker are up:
 
 ```bash
-docker ps --filter name=ollama            # ollama/ollama container running
-curl -s http://127.0.0.1:11434/api/tags   # lists the pulled model(s)
-nvidia-smi                                # GPU visible (when EnableGpu=true)
-systemctl status blog-gen-worker          # active (running)
-journalctl -u blog-gen-worker -n 50       # recent worker logs
+docker compose -f /opt/blog-gen/docker-compose.yml ps   # n8n + postgres + redis running
+curl -s http://127.0.0.1:5678/healthz                   # n8n ready
+systemctl status blog-gen-worker                        # active (running)
+journalctl -u blog-gen-worker -n 50                     # recent worker logs
 ```
 
-**Smoke test:** verify both paths of the trigger gate.
+**Smoke test:** call `POST /process` (see [Trigger a run](#trigger-a-run)) and follow the execution.
 
-1. **Ignored path** — push a normal commit (e.g. `docs: tweak README`). Expect a green ✓ in GitHub, `WebhookIgnored` in CloudWatch, and **nothing buffered** to SQS.
-2. **Triggered path** — push a commit whose message starts with `blog:` (e.g. `blog: smoke test`), or **Redeliver** such a delivery. Inside the window the response is `accepted`; outside it, `deferred`.
-
-Expected sequence for the triggered path:
+Expected sequence:
 
 | Check | Expected |
 | --- | --- |
-| Registration | `RegistrationUrl` returns success; DynamoDB item present; webhook created in GitHub |
-| GitHub Recent Deliveries | Green ✓ (HTTP 200); body `accepted` (in window) or `deferred` (outside) |
-| CloudWatch (handler) | Logs show verify → trigger match → PutEvents → window gate (accepted/deferred) |
-| EventBridge / SQS | Event published; SQS count increments (drains once the instance is up) |
-| EC2 (scheduled-start, 18:00 daily) | Transitions `stopped` → `running`; verify with `aws lambda invoke --function-name blog-gen-scheduled-start /dev/stdout` to force a start now |
-| CloudWatch (n8n / worker) | Run logs: analyze → memory → generate → review → publish |
-| Published output | New Markdown content at the configured destination |
-| EC2 (scheduled-stop, 20:00 daily) | Transitions back to `stopped` |
+| Registration | `RegistrationUrl` returns success; DynamoDB item present |
+| `POST /process` | HTTP 202; a Step Functions execution starts |
+| Step Functions console | Execution: FindInstance → StartInstance → WaitForBoot → CheckSSM → EnqueueJob |
+| EC2 | Transitions `stopped` → `running` (started by the state machine) |
+| SQS | Job enqueued; count increments then drains once the worker is up |
+| CloudWatch (worker) | Run logs: analyze → memory → generate (Bedrock → Anthropic) → S3 → review |
+| Published output | New Markdown in the content S3 bucket (reused on re-runs) |
+| EC2 (scheduled-stop / idle-stop) | Transitions back to `stopped` |
 
 ---
 
@@ -346,6 +346,6 @@ CloudFormation computes and applies only the diff. Inspect changes with `aws clo
 
 **Lambda rollback** — deploy a previous artifact (use published versions/aliases for instant revert).
 
-**Persistent data** — the gp3 EBS volume is retained across instance replacement, so models and n8n state survive a compute rollback.
+**Persistent data** — the gp3 EBS volume is retained across instance replacement, so n8n + PostgreSQL state and Repository Memory survive a compute rollback.
 
 > **Guardrail:** never run `aws cloudformation delete-stack` against a shared environment as a rollback mechanism. Prefer a targeted re-deploy from a known-good commit.
