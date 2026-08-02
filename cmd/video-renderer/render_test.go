@@ -104,19 +104,64 @@ func TestDimsFor(t *testing.T) {
 	}
 }
 
-func TestSegmentAndConcatArgs(t *testing.T) {
-	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf")
+func TestSegmentArgsColorAndDiagramBackground(t *testing.T) {
+	// No background image → solid colour source.
+	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "")
+	joined := strings.Join(seg, " ")
+	if !strings.Contains(joined, "color=c=0x0B0B12:s=1080x1920") || !strings.Contains(joined, "textfile=/w/cap.txt") || !strings.Contains(joined, "-shortest") {
+		t.Errorf("colour segment args = %v", seg)
+	}
 	if !slices.Contains(seg, "/w/n.mp3") || !slices.Contains(seg, "/w/s.mp4") {
 		t.Errorf("segment args missing io: %v", seg)
 	}
-	joined := strings.Join(seg, " ")
-	if !strings.Contains(joined, "color=c=0x0B0B12:s=1080x1920") || !strings.Contains(joined, "textfile=/w/cap.txt") || !strings.Contains(joined, "-shortest") {
-		t.Errorf("segment args = %v", seg)
+
+	// With a diagram background → loop the image, cover-crop it, then caption.
+	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/diagram.png")
+	dj := strings.Join(dseg, " ")
+	if !slices.Contains(dseg, "/w/diagram.png") || strings.Contains(dj, "color=c=") {
+		t.Errorf("diagram bg not used: %v", dseg)
 	}
+	if !strings.Contains(dj, "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080") {
+		t.Errorf("diagram cover-crop filter missing: %v", dseg)
+	}
+}
+
+func TestConcatArgs(t *testing.T) {
 	con := concatArgs("/w/list.txt", "/w/final.mp4")
 	cj := strings.Join(con, " ")
 	if !strings.Contains(cj, "-f concat") || !slices.Contains(con, "/w/final.mp4") {
 		t.Errorf("concat args = %v", con)
+	}
+}
+
+func TestDiagramURIFromStoryboard(t *testing.T) {
+	in := "s3://b/generated-content/acme/widget/releases/v1.0.0/.artifacts/storyboard.json"
+	want := "s3://b/generated-content/acme/widget/releases/v1.0.0/architecture-diagram.svg"
+	if got := diagramURIFromStoryboard(in); got != want {
+		t.Errorf("diagram uri = %q, want %q", got, want)
+	}
+	if got := diagramURIFromStoryboard("s3://b/some/other/key.json"); got != "" {
+		t.Errorf("unexpected uri for non-storyboard key: %q", got)
+	}
+}
+
+func TestWantsDiagram(t *testing.T) {
+	for _, ty := range []string{"architecture", "diagram"} {
+		if !(scene{Type: ty}).wantsDiagram() {
+			t.Errorf("%q should want the diagram", ty)
+		}
+	}
+	for _, ty := range []string{"introduction", "conclusion", ""} {
+		if (scene{Type: ty}).wantsDiagram() {
+			t.Errorf("%q should not want the diagram", ty)
+		}
+	}
+}
+
+func TestRsvgArgs(t *testing.T) {
+	got := rsvgArgs("/w/d.svg", "/w/d.png", 1920, 1080)
+	if strings.Join(got, " ") != "-w 1920 -h 1080 -o /w/d.png /w/d.svg" {
+		t.Errorf("rsvg args = %v", got)
 	}
 }
 

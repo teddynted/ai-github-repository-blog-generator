@@ -59,11 +59,17 @@ long-form plan its script references by scene index); `youtube-shorts` and
 `videos[0].scenes`), using each scene's on-screen `overlay` as the caption and
 falling back to a capped storyboard if the format script is missing.
 
-> **Still v1.** Visuals are Polly narration + text-card captions. Richer visuals
-> (AI images from `visual-assets`, architecture-diagram overlays, music /
-> intro-outro) remain follow-ups — the platform produces image *prompts* and
-> Mermaid/SVG diagrams, not finished raster assets, so those need an
-> image-generation service or an SVG/Mermaid rasterizer added to the renderer.
+**Diagram backgrounds:** for storyboard scenes typed `architecture`/`diagram`,
+the renderer fetches the release's `architecture-diagram.svg` (written by the
+publisher next to the artifacts), rasterizes it once with `rsvg-convert` to the
+frame size, and uses it as the scene background (cover-cropped) instead of a
+plain colour card. Best-effort — a missing diagram falls back to the colour card.
+
+> **Still v1.** Remaining follow-ups: **AI imagery** from `visual-assets` (the
+> platform produces image *prompts*, not finished images — needs an
+> image-generation service) and **music / branded intro-outro** (needs bundled
+> static assets). Everything else — per-format scripts, captions, and diagram
+> backgrounds — is implemented.
 
 ---
 

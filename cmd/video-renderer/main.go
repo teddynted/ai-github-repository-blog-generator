@@ -35,6 +35,7 @@ const (
 	defaultVoice   = "Matthew"
 	defaultFont    = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 	ffmpegBin      = "ffmpeg"
+	rsvgBin        = "rsvg-convert"
 	renderWorkRoot = "/tmp/render"
 )
 
@@ -99,6 +100,10 @@ func run(ctx context.Context) error {
 	w, h := dimsFor(aspect)
 	log.Printf("rendering %s: %d scenes at %dx%d", format, len(scenes), w, h)
 
+	// Best-effort: rasterize the release's architecture diagram once, to use as
+	// the background for architecture/diagram scenes ("" if unavailable).
+	diagramPNG := maybeDiagram(ctx, s3c, storyboardURI, work, w, h)
+
 	// Per-scene: narration (Polly) + caption + segment.
 	var listBuf bytes.Buffer
 	for _, sc := range scenes {
@@ -110,8 +115,12 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(sc.Title), 0o644); err != nil {
 			return err
 		}
+		bg := ""
+		if sc.wantsDiagram() {
+			bg = diagramPNG // "" falls back to a colour card
+		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
-		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile)); err != nil {
+		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg)); err != nil {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
 		}
 		fmt.Fprintf(&listBuf, "file '%s'\n", seg)
@@ -163,6 +172,39 @@ func runFFmpeg(ctx context.Context, args []string) error {
 	cmd := exec.CommandContext(ctx, ffmpegBin, args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// maybeDiagram fetches the release's architecture-diagram.svg (derived from the
+// storyboard URI) and rasterizes it to a PNG sized to the frame. Best-effort:
+// any miss (no diagram, download or rasterize failure) returns "" and the
+// renderer falls back to colour cards.
+func maybeDiagram(ctx context.Context, s3c *s3.Client, storyboardURI, work string, w, h int) string {
+	uri := diagramURIFromStoryboard(storyboardURI)
+	if uri == "" {
+		return ""
+	}
+	b, k, err := parseS3URI(uri)
+	if err != nil {
+		return ""
+	}
+	svgBytes, err := getObject(ctx, s3c, b, k)
+	if err != nil {
+		log.Printf("no architecture diagram (%s): %v", uri, err)
+		return ""
+	}
+	svg := filepath.Join(work, "diagram.svg")
+	if err := os.WriteFile(svg, svgBytes, 0o644); err != nil {
+		return ""
+	}
+	png := filepath.Join(work, "diagram.png")
+	cmd := exec.CommandContext(ctx, rsvgBin, rsvgArgs(svg, png, w, h)...)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Printf("rasterize diagram failed: %v", err)
+		return ""
+	}
+	log.Printf("using architecture diagram background: %s", uri)
+	return png
 }
 
 func getObject(ctx context.Context, c *s3.Client, bucket, key string) ([]byte, error) {

@@ -7,12 +7,19 @@ import (
 
 // scene is the minimal per-shot data the renderer needs: a caption (shown as a
 // text card) and the narration (synthesized to speech). Duration is derived from
-// the narration audio length at render time, so it is not needed here.
+// the narration audio length at render time, so it is not needed here. Type is
+// the storyboard scene type (architecture/diagram/…); it drives whether the
+// rendered architecture diagram is used as the scene background.
 type scene struct {
 	Number    int
 	Title     string
 	Narration string
+	Type      string
 }
+
+// wantsDiagram reports whether a scene should use the architecture diagram as its
+// background rather than a plain caption card.
+func (s scene) wantsDiagram() bool { return s.Type == "architecture" || s.Type == "diagram" }
 
 // scenesForFormat selects the best scene source per format:
 //   - youtube uses the storyboard (the long-form video plan the youtube script
@@ -86,6 +93,7 @@ type rawScene struct {
 	Title       string `json:"title"`
 	Overlay     string `json:"overlay"`
 	Narration   string `json:"narration"`
+	Type        string `json:"type"`
 }
 
 func collect(raw []rawScene) []scene {
@@ -97,7 +105,7 @@ func collect(raw []rawScene) []scene {
 		}
 		n := firstNonZero(s.SceneNumber, s.Number, i+1)
 		caption := firstNonEmpty(strings.TrimSpace(s.Title), strings.TrimSpace(s.Overlay), "Scene")
-		out = append(out, scene{Number: n, Title: caption, Narration: narr})
+		out = append(out, scene{Number: n, Title: caption, Narration: narr, Type: s.Type})
 	}
 	return out
 }
