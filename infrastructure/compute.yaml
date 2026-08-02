@@ -1,13 +1,15 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  GitHub AI Blog Generator - Compute stack. An On-Demand EC2 instance (Ubuntu)
-  that runs n8n + OpenClaw + Ollama via Docker Compose, plus a persistent gp3
-  EBS volume that survives start/stop cycles (models, n8n state, Repository
-  Memory). The instance is powered on/off on a fixed daily schedule by the
-  scheduler stack (default 18:00-20:00, 7 days a week); On-Demand is used so a start
-  always succeeds within that window (no Spot-capacity dependency). Imports the
-  subnet and security group from the network stack and the SQS queue from the
-  serverless stack.
+  GitHub AI Blog Generator - Compute stack. A small On-Demand EC2 instance
+  (Ubuntu, arm64/Graviton) that runs the orchestration plane — n8n + PostgreSQL
+  + Redis via Docker Compose — plus the content generator, which calls Claude on
+  Amazon Bedrock (falling back to the Anthropic API); there is NO local model
+  inference or GPU. A persistent gp3 EBS volume survives start/stop cycles (n8n
+  state + Repository Memory). The Step Functions state machine in the serverless
+  stack starts this instance on demand, waits for it to report ready via SSM,
+  hands the release job to the SQS queue the worker drains, and stops it again.
+  Imports the subnet and security group from the network stack and the SQS queue
+  from the serverless stack.
 
 Parameters:
   ProjectName:
@@ -16,8 +18,12 @@ Parameters:
     Description: Resource name prefix and tag value (must match the other stacks).
   InstanceType:
     Type: String
-    Default: g4dn.xlarge
-    Description: EC2 instance type for the On-Demand instance (GPU recommended for Ollama).
+    Default: t4g.small
+    Description: >
+      EC2 instance type for the On-Demand instance. Defaults to t4g.small
+      (arm64/Graviton) — the box only runs n8n + PostgreSQL + Redis and the
+      generator's API calls, so no GPU or large compute is needed. Must be an
+      arm64 type to match the Graviton base AMI (LatestUbuntuAmi).
   KeyPairName:
     Type: String
     Default: ""
@@ -27,62 +33,29 @@ Parameters:
       SSM Parameter Store at /ec2/keypair/<key-pair-id>.
   EbsVolumeSizeGb:
     Type: Number
-    Default: 100
+    Default: 20
     MinValue: 20
-    Description: Size of the persistent gp3 volume (models + n8n state + memory).
-  OllamaModel:
-    Type: String
-    Default: qwen2.5:7b
-    Description: Local model served by Ollama.
+    Description: Size of the persistent gp3 volume (n8n + PostgreSQL state + Repository Memory).
   BedrockModelId:
     Type: String
     Default: ""
     Description: >
-      Amazon Bedrock Claude model id for the technical-writer stage (e.g.
-      anthropic.claude-3-5-sonnet-20240620-v1:0). When set, Claude writes the
-      content (grounded in the local Ollama engineering analysis); blank keeps
-      the local model as the writer (zero paid inference). Auth is IAM via the
-      instance role — no API key.
+      Amazon Bedrock Claude model id — the Provider Router's primary target
+      (e.g. us.anthropic.claude-opus-4-8). Auth is IAM via the instance role, no
+      API key. On a quota/throttle error the router falls back to the Anthropic
+      API. Blank disables the Bedrock leg (Anthropic-only). See internal/airouter.
   AnthropicModel:
     Type: String
     Default: ""
     Description: >
-      Anthropic API model id for the technical-writer stage (e.g.
-      claude-sonnet-4-5), used when the Anthropic API key secret holds a key.
-      Blank uses the client default. The Anthropic API is preferred over Bedrock
-      when a key is present.
-  AIRoutingRules:
-    Type: String
-    Default: ""
-    Description: >
-      Hybrid AI Routing policy override. Use the shell-safe compact form
-      "provider=kind,kind;provider=kind" (e.g.
-      claude=blog,architecture,linkedin,x-thread;ollama=seo-metadata,tiktok).
-      Blank uses the built-in default policy. See internal/airouter.
-  EnableGpu:
-    Type: String
-    Default: "true"
-    AllowedValues: ["true", "false"]
-    Description: >
-      Install NVIDIA drivers + container toolkit and give Ollama the GPU. Set to
-      "false" to run Ollama CPU-only (e.g. testing on a non-GPU instance type).
+      Anthropic API model id used on the fallback leg of the Provider Router
+      (e.g. claude-opus-4-8), active when the Anthropic API key secret holds a
+      key. Blank uses the client default. Bedrock is attempted first; this is the
+      quota fallback. See internal/airouter.
   LatestUbuntuAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-    Description: Fallback base AMI (latest Ubuntu 22.04 amd64) when CustomAmi is unset.
-  CustomAmi:
-    Type: String
-    Default: ""
-    Description: >
-      Pre-baked worker AMI id from scripts/build-ami.sh (Docker, NVIDIA, Ollama +
-      model, systemd services). When set, boot skips all installs — the fast
-      path. Leave blank to fall back to the stock Ubuntu AMI (slow first boot).
-  AmiScriptsKey:
-    Type: String
-    Default: ""
-    Description: >
-      S3 key of scripts/ami/provision.sh (uploaded by deploy.yml). Used only on
-      the fallback path to provision a stock AMI at boot.
+    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id
+    Description: Base AMI (latest Ubuntu 22.04 arm64/Graviton) — matches the t4g instance family.
   OutputS3Bucket:
     Type: String
     Default: ""
@@ -102,7 +75,7 @@ Parameters:
     Type: String
     Default: ""
     Description: >
-      S3 key of the linux/amd64 worker binary (e.g. "<sha>/worker"). When set
+      S3 key of the linux/arm64 worker binary (e.g. "<sha>/worker"). When set
       with ArtifactsBucket, the instance downloads it and runs it as a systemd
       service.
   NotifyEmailFrom:
@@ -134,7 +107,6 @@ Conditions:
   HasKeyPair: !Not [!Equals [!Ref KeyPairName, ""]]
   # No external key supplied → the stack creates and manages one.
   ManageKeyPair: !Equals [!Ref KeyPairName, ""]
-  HasCustomAmi: !Not [!Equals [!Ref CustomAmi, ""]]
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
   HasWorkerCode: !And
     - !Not [!Equals [!Ref ArtifactsBucket, ""]]
@@ -189,6 +161,12 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
+      # Register as an SSM managed instance so the Step Functions state machine
+      # can gate on DescribeInstanceInformation (instance Online) before handing
+      # off the release job. Grants only the SSM agent's core channel — no
+      # RunCommand document is invoked by the pipeline.
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
       Policies:
         - PolicyName: instance
           PolicyDocument:
@@ -226,9 +204,9 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
-              # Invoke Claude on Bedrock for the technical-writer stage (used only
-              # when BEDROCK_MODEL_ID is set; the run falls back to the local model
-              # otherwise). Scoped to Anthropic foundation models + inference
+              # Invoke Claude on Bedrock — the Provider Router's primary leg (used
+              # when BEDROCK_MODEL_ID is set; on a quota/throttle error the router
+              # falls back to the Anthropic API). Scoped to Anthropic foundation models + inference
               # profiles — auth is this instance role, so there is no API key. The
               # foundation-model ARN uses a region wildcard because a cross-region
               # inference profile (e.g. us.anthropic.*) routes InvokeModel to the
@@ -268,8 +246,13 @@ Resources:
               # by the bootstrap stack (or the OutputS3Bucket override when one is
               # supplied). The bucket name is deterministic, so no cross-stack
               # import is needed.
+              # PutObject stores generated artifacts; GetObject backs the S3
+              # idempotency check (skip artifacts already published — see
+              # internal/artifactstore) so a re-run never regenerates them.
               - Effect: Allow
-                Action: s3:PutObject
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
                 Resource: !If
                   - HasOutputBucket
                   - !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
@@ -317,7 +300,7 @@ Resources:
       LaunchTemplateName: !Sub "${ProjectName}-lt"
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
-        ImageId: !If [HasCustomAmi, !Ref CustomAmi, !Ref LatestUbuntuAmi]
+        ImageId: !Ref LatestUbuntuAmi
         KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref ManagedKeyPair]
         IamInstanceProfile:
           Arn: !GetAtt InstanceProfile.Arn
@@ -326,10 +309,10 @@ Resources:
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs:
-              # Must be >= the baked worker AMI's root snapshot (40 GB, sized in
-              # packer/worker/blog-gen.pkr.hcl for Docker + the ollama image +
-              # the baked model seed). A smaller root fails to launch from it.
-              VolumeSize: 40
+              # Root holds the OS + Docker + the n8n/PostgreSQL/Redis images and
+              # the generator binary. No model image/seed anymore, so 20 GB is
+              # ample (persistent state lives on the separate /data volume).
+              VolumeSize: 20
               VolumeType: gp3
               Encrypted: true
               DeleteOnTermination: true
@@ -339,9 +322,9 @@ Resources:
               - |
                 #!/bin/bash
                 set -euxo pipefail
-                # --- Runtime init only. Heavy installs (Docker, NVIDIA, Ollama image,
-                # --- the model, systemd units) are pre-baked into the CustomAmi by
-                # --- scripts/ami/provision.sh; a stock AMI runs that same script here.
+                # --- Boots the orchestration plane (n8n + PostgreSQL + Redis via
+                # --- Docker Compose) and installs the generator worker. No local
+                # --- model, GPU, or AMI baking — Claude runs on Bedrock/Anthropic.
                 export DEBIAN_FRONTEND=noninteractive
                 mkdir -p /opt/blog-gen /etc/blog-gen
 
@@ -359,12 +342,12 @@ Resources:
                 INSTANCE_ID=$(imds instance-id)
                 AZ=$(imds placement/availability-zone)
 
-                # --- Observability: ship boot/worker/ollama logs + CPU/mem/disk
-                # --- metrics to CloudWatch so the box is diagnosable without
-                # --- SSH/SSM. Installs the agent if the AMI lacks it (idempotent).
-                # --- Worker/Ollama get dedicated log streams (systemd drop-ins);
-                # --- a 60s health probe records readiness. Role grants
-                # --- CreateLogStream + PutLogEvents + PutMetricData.
+                # --- Observability: ship boot/worker logs + CPU/mem/disk metrics
+                # --- to CloudWatch so the box is diagnosable without SSH.
+                # --- Installs the agent if the AMI lacks it (idempotent). The
+                # --- worker gets a dedicated log stream (systemd drop-in); a 60s
+                # --- health probe records readiness. Role grants CreateLogStream
+                # --- + PutLogEvents + PutMetricData.
                 CW=/opt/aws/amazon-cloudwatch-agent
                 if [ ! -x "$CW/bin/amazon-cloudwatch-agent-ctl" ]; then
                   ARCH=$(dpkg --print-architecture)
@@ -374,18 +357,13 @@ Resources:
                 fi
                 mkdir -p "$CW/etc" /var/log/blog-gen
 
-                # Dedicated worker + ollama log streams via systemd drop-ins (they
-                # start after /data mounts, below, so these are in place first).
-                mkdir -p /etc/systemd/system/blog-gen-worker.service.d /etc/systemd/system/blog-gen-ollama.service.d
+                # Dedicated worker log stream via a systemd drop-in (it starts
+                # after /data mounts, below, so this is in place first).
+                mkdir -p /etc/systemd/system/blog-gen-worker.service.d
                 cat > /etc/systemd/system/blog-gen-worker.service.d/logging.conf <<'DROPIN'
                 [Service]
                 StandardOutput=append:/var/log/blog-gen/worker.log
                 StandardError=append:/var/log/blog-gen/worker.log
-                DROPIN
-                cat > /etc/systemd/system/blog-gen-ollama.service.d/logging.conf <<'DROPIN'
-                [Service]
-                StandardOutput=append:/var/log/blog-gen/ollama.log
-                StandardError=append:/var/log/blog-gen/ollama.log
                 DROPIN
 
                 # 60s health probe -> its own stream (READY / UNHEALTHY: <reason>).
@@ -414,14 +392,12 @@ Resources:
                 systemctl daemon-reload
                 systemctl enable --now blog-gen-health.timer || true
 
-                # The SSM agent is baked into the base image but this account has
-                # no SSM instance-management role, so it logs an AccessDenied
-                # every ~25m and adds nothing (the pipeline uses SQS/S3/Secrets,
-                # not SSM). Stop and disable it to keep syslog clean. If Session
-                # Manager access is wanted later, configure the account SSM role
-                # and re-enable snap.amazon-ssm-agent.amazon-ssm-agent.
-                snap stop --disable amazon-ssm-agent 2>/dev/null || true
-                systemctl disable --now snap.amazon-ssm-agent.amazon-ssm-agent.service 2>/dev/null || true
+                # Keep the SSM agent running: the Step Functions state machine
+                # gates on DescribeInstanceInformation (this instance reporting
+                # Online) before handing off the release job, and the instance
+                # role now carries AmazonSSMManagedInstanceCore. Ensure it is up.
+                snap start amazon-ssm-agent 2>/dev/null || true
+                systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service 2>/dev/null || true
 
                 # Metrics (CPU/mem/disk on / and /data) + the five log streams.
                 # Quoted heredoc so the agent's ${!aws:InstanceId} placeholder
@@ -445,7 +421,6 @@ Resources:
                           { "file_path": "/var/log/cloud-init-output.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/boot" },
                           { "file_path": "/var/log/syslog", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/syslog" },
                           { "file_path": "/var/log/blog-gen/worker.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/worker" },
-                          { "file_path": "/var/log/blog-gen/ollama.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/ollama" },
                           { "file_path": "/var/log/blog-gen/health.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/health" }
                         ]
                       }
@@ -480,24 +455,84 @@ Resources:
                   grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
                   mount -a
                 fi
-                mkdir -p /data/ollama /data/generated-content /data/work /data/memory /data/pending
+                mkdir -p /data/generated-content /data/work /data/memory /data/pending \
+                         /data/n8n /data/postgres /data/redis
 
-                # Fallback: a stock AMI (no baked marker) runs the canonical
-                # provisioner now. A baked CustomAmi skips this entirely (fast path).
-                if [ ! -f /opt/blog-gen/.ami-baked ]; then
-                  echo "no baked AMI marker; provisioning at boot (slow path)"
-                  apt-get update -y && apt-get install -y awscli
-                  aws s3 cp "s3://${ArtifactsBucket}/${AmiScriptsKey}" /opt/blog-gen/provision.sh
-                  chmod +x /opt/blog-gen/provision.sh
-                  OLLAMA_MODEL="${OllamaModel}" ENABLE_GPU="${EnableGpu}" BAKE_MODEL=false \
-                    /opt/blog-gen/provision.sh
+                # --- Docker + Compose. On a stock AMI these are not present; install
+                # --- them once (arm64). No NVIDIA/GPU runtime — nothing runs a
+                # --- local model on this box.
+                if ! command -v docker >/dev/null 2>&1; then
+                  install -m 0755 -d /etc/apt/keyrings
+                  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                  chmod a+r /etc/apt/keyrings/docker.gpg
+                  echo "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+                    > /etc/apt/sources.list.d/docker.list
+                  apt-get update -y
+                  apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
                 fi
+                systemctl enable --now docker
 
-                # Seed the model from the baked copy if the volume is empty — avoids a
-                # multi-GB download at boot.
-                if [ ! -d /data/ollama/models ] && [ -d /opt/blog-gen/ollama-seed/models ]; then
-                  cp -a /opt/blog-gen/ollama-seed/. /data/ollama/
+                # Internal PostgreSQL password for the localhost-only metadata DB.
+                # Generated once and kept on the persistent volume next to the DB
+                # data, so an instance replacement reuses the same credential (a
+                # regenerated password would fail auth against the existing data).
+                # Compose reads .env from its working directory for variable interpolation.
+                if [ ! -s /data/orchestration.env ]; then
+                  (umask 077; echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" > /data/orchestration.env)
                 fi
+                cp /data/orchestration.env /opt/blog-gen/.env
+                chmod 600 /opt/blog-gen/.env
+
+                # --- Orchestration plane: n8n (workflows), PostgreSQL (n8n state),
+                # --- Redis (queue/cache). State persists on /data so it survives
+                # --- stop/start. n8n binds 127.0.0.1:5678; the Step Functions
+                # --- machine reaches it after the SSM ready gate.
+                cat > /opt/blog-gen/docker-compose.yml <<'COMPOSE'
+                services:
+                  postgres:
+                    image: postgres:16-alpine
+                    restart: unless-stopped
+                    environment:
+                      POSTGRES_USER: n8n
+                      POSTGRES_PASSWORD: ${!POSTGRES_PASSWORD}
+                      POSTGRES_DB: n8n
+                    volumes:
+                      - /data/postgres:/var/lib/postgresql/data
+                  redis:
+                    image: redis:7-alpine
+                    restart: unless-stopped
+                    volumes:
+                      - /data/redis:/data
+                  n8n:
+                    image: n8nio/n8n:latest
+                    restart: unless-stopped
+                    depends_on: [postgres, redis]
+                    environment:
+                      DB_TYPE: postgresdb
+                      DB_POSTGRESDB_HOST: postgres
+                      DB_POSTGRESDB_DATABASE: n8n
+                      DB_POSTGRESDB_USER: n8n
+                      DB_POSTGRESDB_PASSWORD: ${!POSTGRES_PASSWORD}
+                      QUEUE_BULL_REDIS_HOST: redis
+                      N8N_DIAGNOSTICS_ENABLED: "false"
+                    ports:
+                      - "127.0.0.1:5678:5678"
+                    volumes:
+                      - /data/n8n:/home/node/.n8n
+                COMPOSE
+
+                cat > /etc/systemd/system/blog-gen-orchestration.service <<'UNIT'
+                [Unit]
+                Description=blog-gen orchestration plane (n8n + PostgreSQL + Redis)
+                After=docker.service network-online.target
+                Requires=docker.service
+                [Service]
+                Type=oneshot
+                RemainAfterExit=yes
+                WorkingDirectory=/opt/blog-gen
+                ExecStart=/usr/bin/docker compose -f /opt/blog-gen/docker-compose.yml up -d
+                ExecStop=/usr/bin/docker compose -f /opt/blog-gen/docker-compose.yml down
+                UNIT
 
                 # --- Worker binary + env (stack-specific values). SMTP password is NOT
                 # --- here — the worker reads it from Secrets Manager via the secret ref.
@@ -511,12 +546,9 @@ Resources:
                 QUEUE_URL=${QueueUrl}
                 REPOSITORIES_TABLE=${RepositoriesTable}
                 REPO_SECRET_ID=${RepoSecretId}
-                OLLAMA_MODEL=${OllamaModel}
-                OLLAMA_BASE_URL=http://127.0.0.1:11434
                 BEDROCK_MODEL_ID=${BedrockModelId}
                 ANTHROPIC_API_KEY_SECRET=${AnthropicApiKeySecret}
                 ANTHROPIC_MODEL=${AnthropicModel}
-                AI_ROUTING_RULES=${AIRoutingRules}
                 OUTPUT_DIR=/data/generated-content
                 OUTPUT_S3_BUCKET=${OutputBucketName}
                 WORK_DIR=/data/work
@@ -531,21 +563,44 @@ Resources:
                 SMTP_PASSWORD_SECRET=${NotificationsSecret}
                 ENVEOF
                   chmod 600 /etc/blog-gen/worker.env
+                  # The worker drains the SQS queue the Step Functions machine
+                  # feeds and generates artifacts (Bedrock -> Anthropic via the
+                  # Provider Router), skipping any already in S3. No local-model
+                  # dependency, so it starts as soon as the network is up.
+                  cat > /etc/systemd/system/blog-gen-worker.service <<'UNIT'
+                [Unit]
+                Description=blog-gen content generator worker (SQS -> Claude -> S3)
+                After=network-online.target
+                Wants=network-online.target
+                [Service]
+                EnvironmentFile=/etc/blog-gen/worker.env
+                ExecStart=/usr/local/bin/blog-gen-worker
+                Restart=always
+                RestartSec=5
+                [Install]
+                WantedBy=multi-user.target
+                UNIT
                 fi
 
-                # --- Auto-start. The systemd units (blog-gen-ollama, blog-gen-worker)
-                # --- are baked into the AMI / written by the provisioner above;
-                # --- enabling them makes the stack restart automatically on every boot.
+                # --- Health probe. Reports the orchestration plane + worker state
+                # --- for the 60s health timer configured above.
+                cat > /opt/blog-gen/health.sh <<'HEALTH'
+                #!/usr/bin/env bash
+                systemctl is-active --quiet docker || { echo "UNHEALTHY: docker down"; exit 1; }
+                curl -sf http://127.0.0.1:5678/healthz >/dev/null 2>&1 || { echo "UNHEALTHY: n8n not ready"; exit 1; }
+                if [ -x /usr/local/bin/blog-gen-worker ]; then
+                  systemctl is-active --quiet blog-gen-worker || { echo "UNHEALTHY: worker not active"; exit 1; }
+                fi
+                echo "READY"
+                HEALTH
+                chmod +x /opt/blog-gen/health.sh
+
+                # --- Auto-start every boot: the orchestration plane and (if the
+                # --- binary is present) the generator worker.
                 systemctl daemon-reload
-                systemctl enable --now blog-gen-ollama
+                systemctl enable --now blog-gen-orchestration
                 if [ -x /usr/local/bin/blog-gen-worker ]; then
                   systemctl enable --now blog-gen-worker
-                fi
-
-                # If the model was not baked, pull it once now (persists on /data).
-                if [ ! -d /data/ollama/models ]; then
-                  for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/version >/dev/null && break || sleep 3; done
-                  docker exec ollama ollama pull "${OllamaModel}" || echo "model pull deferred; worker retries"
                 fi
 
                 /opt/blog-gen/health.sh || echo "not healthy yet; services will converge"
@@ -607,7 +662,7 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-InstanceId"
   InstancePublicIp:
-    Description: Public IP (SSH; n8n/Ollama reached via SSH tunnel only).
+    Description: Public IP (SSH; n8n reached via SSH tunnel to 127.0.0.1:5678).
     Value: !GetAtt Instance.PublicIp
   ContentBucketName:
     Description: >

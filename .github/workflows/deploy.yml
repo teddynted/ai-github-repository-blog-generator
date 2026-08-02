@@ -11,11 +11,8 @@ name: deploy
 #    matching bootstrap.yaml — no variable needed.)
 #   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
-#   var    INSTANCE_TYPE        - (optional) override the EC2 type; e.g. t3.xlarge for a CPU smoke test
-#   var    ENABLE_GPU           - (optional) "false" to run Ollama CPU-only (pairs with INSTANCE_TYPE)
-#
-# The worker AMI id is read automatically from SSM (/blog-gen/worker-ami, written
-# by build-ami.yml); absent => stock-AMI fallback. No variable to set.
+#   var    INSTANCE_TYPE        - (optional) override the EC2 type; must be arm64/Graviton
+#                                 (default t4g.small) to match the base AMI
 #
 # Optional email-notification vars (non-secret; the SMTP password is stored in
 # Secrets Manager, NOT here):
@@ -65,13 +62,13 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed daily window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
 
-      - name: build worker (linux/amd64, runs on the EC2 instance)
-        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
+      - name: build worker (linux/arm64, runs on the t4g EC2 instance)
+        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
 
       - uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -91,12 +88,10 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration webhook-handler manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
-          # provision.sh is fetched at boot only on the stock-AMI fallback path.
-          aws s3 cp scripts/ami/provision.sh "s3://$ARTIFACTS_BUCKET/$SHA/provision.sh"
 
       - name: deploy network stack
         run: |
@@ -119,7 +114,6 @@ jobs:
         run: |
           P="ArtifactsBucket=$ARTIFACTS_BUCKET"
           P="$P RegistrationCodeKey=$SHA/registration.zip"
-          P="$P WebhookHandlerCodeKey=$SHA/webhook-handler.zip"
           P="$P ManualTriggerCodeKey=$SHA/manual-trigger.zip"
           P="$P ReleaseContextCodeKey=$SHA/release-context.zip"
           [ -n "$GITHUB_READ_TOKEN" ] && P="$P GitHubReadToken=$GITHUB_READ_TOKEN"
@@ -142,36 +136,27 @@ jobs:
           # password lives in Secrets Manager (NotificationsSecret) — set it once
           # with: aws secretsmanager put-secret-value \
           #   --secret-id blog-gen/notifications/smtp-password --secret-string '<pw>'
-          # Fast baked-AMI boot: the AMI id is read from SSM (/blog-gen/worker-ami,
-          # written by build-ami.yml). Absent → stock-AMI fallback (provision.sh at
-          # boot). Fully automatic — no manual variable.
-          # The key pair is managed by the compute stack (AWS::EC2::KeyPair) — no
-          # KeyPairName is passed, so CloudFormation always creates/owns it.
-          PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker AmiScriptsKey=$SHA/provision.sh"
+          # The instance boots the stock Ubuntu 22.04 arm64 AMI and installs
+          # Docker + the n8n/PostgreSQL/Redis compose stack at first boot (no
+          # pre-baked AMI, no local model). The key pair is managed by the
+          # compute stack (AWS::EC2::KeyPair) — no KeyPairName is passed, so
+          # CloudFormation always creates/owns it.
+          PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker"
           # Generated content is published to S3 (durable + inspectable) instead
           # of the instance's ephemeral EBS. The compute stack creates and owns a
           # dedicated content bucket (blog-gen-content-<account>-<region>); set the
           # OUTPUT_S3_BUCKET repo variable only to override with a pre-existing bucket.
           [ -n "${{ vars.OUTPUT_S3_BUCKET }}" ] && PARAMS="$PARAMS OutputS3Bucket=${{ vars.OUTPUT_S3_BUCKET }}"
-          # CPU smoke test: set INSTANCE_TYPE (e.g. t3.xlarge) + ENABLE_GPU=false
-          # to validate the whole path on cheap, widely-available CPU capacity.
+          # Optional: override the arm64 instance type (default t4g.small). Must
+          # stay in an arm64/Graviton family to match the base AMI.
           [ -n "${{ vars.INSTANCE_TYPE }}" ] && PARAMS="$PARAMS InstanceType=${{ vars.INSTANCE_TYPE }}"
-          [ -n "${{ vars.ENABLE_GPU }}" ]    && PARAMS="$PARAMS EnableGpu=${{ vars.ENABLE_GPU }}"
-          # Optional: Claude-on-Bedrock technical-writer stage. Set the
-          # BEDROCK_MODEL_ID repo variable to a Bedrock Claude model id to enable
-          # it; leave unset for the zero-paid local writer.
+          # Provider Router primary leg: set BEDROCK_MODEL_ID to the Bedrock Claude
+          # model id (e.g. us.anthropic.claude-opus-4-8). Auth is the instance role.
           [ -n "${{ vars.BEDROCK_MODEL_ID }}" ] && PARAMS="$PARAMS BedrockModelId=${{ vars.BEDROCK_MODEL_ID }}"
-          # Optional: Anthropic API technical-writer (preferred over Bedrock when the
-          # api-key secret holds a key). Set ANTHROPIC_MODEL to pin the model id; the
-          # key itself lives only in Secrets Manager, never a repo variable.
+          # Provider Router fallback leg: Bedrock is attempted first; on a quota
+          # error the router falls back to the Anthropic API. Set ANTHROPIC_MODEL to
+          # pin the model id; the key itself lives only in Secrets Manager.
           [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && PARAMS="$PARAMS AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
-          # Optional: override the Hybrid AI Routing policy. Use the shell-safe
-          # compact form (no quotes/spaces), e.g.
-          # claude=blog,architecture,linkedin,x-thread;ollama=seo-metadata,tiktok
-          [ -n "${{ vars.AI_ROUTING_RULES }}" ] && PARAMS="$PARAMS AIRoutingRules=${{ vars.AI_ROUTING_RULES }}"
-          AMI_ID=$(aws ssm get-parameter --name /blog-gen/worker-ami \
-            --query Parameter.Value --output text 2>/dev/null || echo "")
-          [ -n "$AMI_ID" ]           && PARAMS="$PARAMS CustomAmi=$AMI_ID"
           [ -n "$NOTIFY_EMAIL_FROM" ] && PARAMS="$PARAMS NotifyEmailFrom=$NOTIFY_EMAIL_FROM"
           [ -n "$NOTIFY_EMAIL_TO" ]   && PARAMS="$PARAMS NotifyEmailTo=$NOTIFY_EMAIL_TO"
           [ -n "$SMTP_USERNAME" ]     && PARAMS="$PARAMS SmtpUsername=$SMTP_USERNAME"
@@ -196,7 +181,6 @@ jobs:
           IDLE_MINUTES: ${{ vars.IDLE_MINUTES }}
           IDLE_DRY_RUN: ${{ vars.IDLE_DRY_RUN }}
           IDLE_N8N_URL: ${{ vars.IDLE_N8N_URL }}
-          IDLE_OLLAMA_URL: ${{ vars.IDLE_OLLAMA_URL }}
           # VPC mode is derived from whether both subnet + SG IDs are supplied
           # (see the deploy step), so there is no separate IDLE_USE_VPC toggle.
           IDLE_SUBNET_IDS: ${{ vars.IDLE_SUBNET_IDS }}
@@ -217,8 +201,7 @@ jobs:
           [ -n "$IDLE_MINUTES" ]     && P="$P IdleMinutes=$IDLE_MINUTES"
           [ -n "$IDLE_DRY_RUN" ]     && P="$P IdleDryRun=$IDLE_DRY_RUN"
           [ -n "$IDLE_N8N_URL" ]     && P="$P N8nUrl=$IDLE_N8N_URL"
-          [ -n "$IDLE_OLLAMA_URL" ]  && P="$P OllamaUrl=$IDLE_OLLAMA_URL"
-          # VPC mode drives the n8n/Ollama app checks, and a VPC Lambda MUST have
+          # VPC mode drives the n8n app check, and a VPC Lambda MUST have
           # real subnets AND security groups — an empty VpcConfig is rejected by
           # the Lambda API. So enable VPC only when both are supplied; otherwise
           # idle-stop runs without the app probes (CPU + network only) rather than
