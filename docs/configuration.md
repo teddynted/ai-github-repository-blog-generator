@@ -4,7 +4,7 @@ Every environment variable the platform reads, in one place. Values are injected
 into each AWS Lambda + the worker by CloudFormation; for local development copy
 [`.env.example`](../.env.example) to `.env`.
 
-**Never** put GitHub PATs or webhook secrets here — those live only in **AWS
+**Never** put GitHub PATs or the Anthropic API key here — those live only in **AWS
 Secrets Manager** (see [Security](./security.md)). Config is loaded through the
 injectable `config.Load(getenv)` port (`internal/config`), so nothing reads the
 environment directly in business logic.
@@ -18,13 +18,12 @@ Legend: **Req?** = Required · **Def** = Default when unset.
 | `AWS_REGION` | AWS region for all SDK clients. | Yes (AWS) | — | `us-east-1` | AWS region id |
 | `LOG_LEVEL` | Structured-log verbosity (`slog`). | No | `info` | `debug` | `debug` \| `info` \| `warn` \| `error` |
 | `PROJECT_NAME` | Resource name prefix / cost tag. | No | — | `blog-gen` | lowercase-kebab |
-| `EVENT_SOURCE` | EventBridge `source` the webhook handler publishes under. | No | `blog-gen.webhook` | `blog-gen.webhook` | `a.b` string |
 
 ## Publishing trigger
 
 | Variable | Purpose | Req? | Def | Example | Format / values |
 |----------|---------|------|-----|---------|-----------------|
-| `PUBLISH_TRIGGER` | Commit-message prefix that opts a push into generation (per-repo override lives in metadata). | No | `blog:` | `blog:` | non-empty string |
+| `PUBLISH_TRIGGER` | Optional commit-message prefix stored in metadata (retained for future push-based sources; the MVP is driven by `POST /process`). | No | `blog:` | `blog:` | non-empty string |
 
 ## Data stores
 
@@ -38,9 +37,9 @@ Legend: **Req?** = Required · **Def** = Default when unset.
 
 | Variable | Purpose | Req? | Def | Example | Format / values |
 |----------|---------|------|-----|---------|-----------------|
-| `EVENT_BUS_NAME` | EventBridge bus matched events are published to. | Yes | — | `blog-gen-bus` | bus name |
+| `STATE_MACHINE_ARN` | Step Functions state machine the manual trigger starts on `POST /process`. | Yes (manual-trigger) | — | `arn:aws:states:…:stateMachine:blog-gen-orchestration` | state machine ARN |
 | `QUEUE_URL` | SQS queue the worker drains. | Yes (worker) | — | `https://sqs…/blog-gen` | SQS URL |
-| `WEBHOOK_URL` | Public webhook URL registration installs on the repo. | Yes (registration) | — | `https://…/webhook` | HTTPS URL |
+| `WEBHOOK_URL` | Optional GitHub webhook URL for registration. Blank (the default) skips creating a GitHub webhook — ingress has been removed. | No | — | — | HTTPS URL |
 | `N8N_WEBHOOK_URL` | Optional n8n orchestration entry point. | No | — | `https://…/n8n` | HTTPS URL |
 
 ## Compute lifecycle
@@ -49,12 +48,13 @@ Legend: **Req?** = Required · **Def** = Default when unset.
 |----------|---------|------|-----|---------|-----------------|
 | `INSTANCE_ID` | On-Demand EC2 host the scheduler powers on/off (fixed daily window). | Yes (scheduler) | — | `i-0abc123` | EC2 instance id |
 
-## AI — local inference
+## AI — Provider Router (Bedrock primary → Anthropic fallback)
 
 | Variable | Purpose | Req? | Def | Example | Format / values |
 |----------|---------|------|-----|---------|-----------------|
-| `OLLAMA_MODEL` | Local model used for generation + grounded review. | No | `qwen2.5:7b` | `qwen2.5:7b` | Ollama model tag |
-| `OLLAMA_BASE_URL` | Ollama server base URL (also `OLLAMA_URL` for the standalone CLIs). | No | `http://localhost:11434` | `http://127.0.0.1:11434` | HTTP URL |
+| `BEDROCK_MODEL_ID` | Provider Router primary leg — Bedrock Claude model id (IAM auth, no key). Blank disables the Bedrock leg. | No | — | `us.anthropic.claude-opus-4-8` | Bedrock model id |
+| `ANTHROPIC_API_KEY_SECRET` | Secrets Manager id/ARN holding the Anthropic API key for the fallback leg. | No | — | `blog-gen/anthropic/api-key` | name or ARN |
+| `ANTHROPIC_MODEL` | Provider Router fallback leg — Anthropic API model id (blank uses the client default). | No | — | `claude-opus-4-8` | Anthropic model id |
 
 ## Worker filesystem (on the instance, `/data` is the EBS volume)
 
@@ -93,7 +93,7 @@ Legend: **Req?** = Required · **Def** = Default when unset.
 
 ## Validation rules
 
-- The webhook handler and worker **fail fast** at startup if a variable they
+- The request Lambdas and worker **fail fast** at startup if a variable they
   require (per the tables above) is missing or malformed.
 - `SMTP_PORT` must parse as an integer; `LOG_LEVEL` must be one of the listed
   values; URLs must be well-formed.
@@ -105,7 +105,8 @@ Legend: **Req?** = Required · **Def** = Default when unset.
 
 ## Standalone-CLI configuration
 
-The generator CLIs (`storyboard`, `youtube`, `generate-all`, …) read
-`OLLAMA_MODEL` and `OLLAMA_URL` for the model, and take everything else via flags
-(`--context`, `--blog`, `--offline`, `--out`, …). With `--offline` they use no
-model and no network. See each command's `--help` and [Full Content Suite](./content-suite.md).
+The generator CLIs (`storyboard`, `youtube`, `generate-all`, …) generate through
+the AI Provider Router (Claude Code by default, or `--provider anthropic|bedrock`
+with `ANTHROPIC_API_KEY`), and take everything else via flags (`--context`,
+`--blog`, `--offline`, `--out`, …). With `--offline` they use no model and no
+network. See each command's `--help` and [Full Content Suite](./content-suite.md).
