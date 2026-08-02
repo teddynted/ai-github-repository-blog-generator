@@ -148,6 +148,13 @@ type Orchestrator struct {
 	// the cloud pipeline is unaffected unless it opts in.
 	Store ArtifactStore
 	Reuse bool
+	// Idempotent, when set with a Store, makes EVERY stage idempotent: before
+	// generating an artifact the orchestrator reuses it from the Store if it
+	// already exists, so a full run never regenerates (or re-spends model tokens
+	// on) an artifact that was produced by a previous run. This is the cloud
+	// idempotency policy — "existing artifacts are never regenerated". It is
+	// independent of Only/Reuse (which is the local targeted-run dependency reuse).
+	Idempotent bool
 }
 
 // ArtifactStore persists and reloads a stage's STRUCTURED output (not its
@@ -579,7 +586,17 @@ type stageOutcome struct {
 // explicitly requested (in Only) is always regenerated, since that is the one
 // being iterated on. Requires opt-in (Reuse) and a Store.
 func (o *Orchestrator) reuseDep(name string) bool {
-	return o.Reuse && o.Store != nil && len(o.Only) > 0 && !o.Only[name]
+	if o.Store == nil {
+		return false
+	}
+	// Cloud idempotency: reuse ANY artifact that already exists, so a full run
+	// never regenerates one.
+	if o.Idempotent {
+		return true
+	}
+	// Local targeted-run reuse: reuse dependencies; the requested stage always
+	// regenerates.
+	return o.Reuse && len(o.Only) > 0 && !o.Only[name]
 }
 
 // reuseOrRun returns a persisted artifact's outcome when name is a reusable

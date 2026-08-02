@@ -28,6 +28,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/approval"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/archdiagram"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/artifactstore"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/awssqs"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/bedrockclaude"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/contentsuite"
@@ -226,6 +227,18 @@ func main() {
 		Reviewer:         review.Reviewer{},
 		Publisher:        publisher,
 		Logger:           a.Logger,
+	}
+
+	// S3 artifact idempotency: when publishing to S3, reuse any artifact that
+	// already exists instead of regenerating it — existing artifacts are never
+	// regenerated and no Anthropic/Bedrock tokens are re-spent.
+	if a.Config.OutputS3Bucket != "" {
+		s3Client := s3.NewFromConfig(awsCfg)
+		bucket, prefix := a.Config.OutputS3Bucket, a.Config.OutputS3Prefix
+		releasePipe.ArtifactStore = func(ctx context.Context, rctx *rc.ReleaseContext) contentsuite.ArtifactStore {
+			return artifactstore.NewS3(ctx, s3Client, bucket, prefix,
+				rctx.Repository.Owner, rctx.Repository.Name, rctx.Release.Tag, a.Logger)
+		}
 	}
 
 	notifiers := notify.Multi{&notify.LogNotifier{Logger: a.Logger}}

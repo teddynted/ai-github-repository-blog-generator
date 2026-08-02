@@ -349,6 +349,39 @@ func TestReuseOrRun(t *testing.T) {
 	}
 }
 
+func TestIdempotentModeReusesAnyExistingStage(t *testing.T) {
+	fs := &fakeStore{data: map[string][]byte{}}
+	b, _ := jsonMarshal(reuseDoc{Title: "cached"})
+	fs.data["blog"] = b
+	// Idempotent full run (no Only): an existing artifact is reused; an absent one
+	// is generated and persisted.
+	o := &Orchestrator{Store: fs, Idempotent: true}
+	render := func(d reuseDoc) string { return d.Title }
+
+	var dst reuseDoc
+	genCalls := 0
+	out := reuseOrRun(o, "blog", 3, "blog.md", &dst, render, func() (string, error) {
+		genCalls++
+		return "generated", nil
+	})
+	if genCalls != 0 || dst.Title != "cached" || out.md != "cached" {
+		t.Errorf("existing artifact must be reused (no model call): calls=%d dst=%+v", genCalls, dst)
+	}
+
+	genCalls = 0
+	out = reuseOrRun(o, "storyboard", 4, "sb.md", &dst, render, func() (string, error) {
+		genCalls++
+		dst = reuseDoc{Title: "fresh"}
+		return "fresh", nil
+	})
+	if genCalls != 1 || out.md != "fresh" {
+		t.Errorf("absent artifact must generate: calls=%d md=%q", genCalls, out.md)
+	}
+	if _, ok := fs.data["storyboard"]; !ok {
+		t.Error("a freshly generated artifact must be persisted for the next run")
+	}
+}
+
 func TestReuseDep(t *testing.T) {
 	o := &Orchestrator{Only: map[string]bool{"seo-metadata": true}, Reuse: true, Store: &fakeStore{}}
 	if !o.reuseDep("visual-assets") {

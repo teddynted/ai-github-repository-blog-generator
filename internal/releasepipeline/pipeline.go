@@ -97,6 +97,12 @@ type Pipeline struct {
 	// through the same review/publish/notify stages. When nil the pipeline falls
 	// back to Formats (below), preserving the original behaviour.
 	Suite *contentsuite.Orchestrator
+	// ArtifactStore, when set, is called once per release to build an idempotency
+	// store (e.g. S3-backed). When it returns a non-nil store, the Suite runs in
+	// idempotent mode: any artifact that already exists in the store is reused
+	// instead of regenerated, so a release is never re-generated and no
+	// Anthropic/Bedrock tokens are re-spent on existing artifacts.
+	ArtifactStore func(ctx context.Context, rctx *rc.ReleaseContext) contentsuite.ArtifactStore
 	// Formats to generate when Suite is nil; defaults to blog + release summary.
 	Formats   []releasegen.Format
 	Reviewer  Reviewer
@@ -310,6 +316,15 @@ func (p *Pipeline) generate(ctx context.Context, rctx *rc.ReleaseContext) ([]gen
 // failed stages are surfaced as non-fatal issues (recorded in the Result), so a
 // thin release still publishes the artifacts it could produce.
 func (p *Pipeline) generateSuite(ctx context.Context, rctx *rc.ReleaseContext) ([]generation.Content, []string) {
+	// Idempotency: attach a per-release store so an artifact that already exists is
+	// reused, never regenerated. The worker processes releases serially, so
+	// mutating the shared Suite here is safe.
+	if p.ArtifactStore != nil {
+		if store := p.ArtifactStore(ctx, rctx); store != nil {
+			p.Suite.Store = store
+			p.Suite.Idempotent = true
+		}
+	}
 	suite := p.Suite.Run(ctx, rctx, nil)
 	out := make([]generation.Content, 0, len(suite.Artifacts()))
 	for _, a := range suite.Artifacts() {
