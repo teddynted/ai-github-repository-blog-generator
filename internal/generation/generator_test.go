@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/anthropic"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/apperror"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/processing"
 )
 

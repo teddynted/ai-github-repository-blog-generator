@@ -310,7 +310,9 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		go func() {
 			defer wg.Done()
 			archOut = reuseOrRun(o, "architecture", 11, "09-architecture.md", &s.Architecture,
-				func(v architecture.ArchitectureCollection) string { return architecture.ReleaseScopedMarkdown(v, rctx, s.Blog) },
+				func(v architecture.ArchitectureCollection) string {
+					return architecture.ReleaseScopedMarkdown(v, rctx, s.Blog)
+				},
 				func() (string, error) {
 					col, err := (&architecture.Generator{Model: o.model("architecture")}).Architecture(ctx, architecture.ReleasePackage{
 						Context: rctx, Blog: s.Blog, Storyboard: s.Storyboard,

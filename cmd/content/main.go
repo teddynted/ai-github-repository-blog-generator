@@ -111,14 +111,14 @@ func validateCmd(args []string) int {
 // options holds the parsed CLI configuration for a generate run.
 type options struct {
 	artifact, provider, ctxPath, outDir, system, model, region string
-	fromBlog                                                              string
-	temperature                                                           float64
-	maxTokens                                                             int
-	dryRun, verbose, noCache, noHistory, hybrid, noReuse                  bool
-	repoLevel                                                             bool
-	repo                                                                  string
-	cacheDir                                                              string
-	timeout                                                               time.Duration
+	fromBlog                                                   string
+	temperature                                                float64
+	maxTokens                                                  int
+	dryRun, verbose, noCache, noHistory, hybrid, noReuse       bool
+	repoLevel                                                  bool
+	repo                                                       string
+	cacheDir                                                   string
+	timeout                                                    time.Duration
 }
 
 func generate(args []string) int {

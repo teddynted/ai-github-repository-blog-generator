@@ -649,12 +649,12 @@ func spotPackage() ReleasePackage {
 		"GitHub Actions", "Go Modules", "Infrastructure as Code", "Event-Driven Architecture", "AWS IAM",
 	}
 	ctx := &rc.ReleaseContext{
-		SchemaVersion: "1.0.0",
-		Repository:    rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
-		Release:       rc.Release{Tag: "v0.6.0"},
-		Architecture:  rc.Architecture{Overview: "Pre-baked custom AMIs move EC2 UserData provisioning into image creation to cut Spot startup latency.", AWSServices: []string{"Amazon EC2", "AWS IAM", "AWS Lambda", "Amazon CloudWatch", "Amazon EventBridge"}},
-		Changelog:     rc.ChangelogAnalysis{Found: true, Features: []string{"Pre-baked custom AMIs cut EC2 Spot startup latency"}},
-		Technologies:  []rc.Technology{{Name: "Go"}, {Name: "AWS CloudFormation"}},
+		SchemaVersion:       "1.0.0",
+		Repository:          rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
+		Release:             rc.Release{Tag: "v0.6.0"},
+		Architecture:        rc.Architecture{Overview: "Pre-baked custom AMIs move EC2 UserData provisioning into image creation to cut Spot startup latency.", AWSServices: []string{"Amazon EC2", "AWS IAM", "AWS Lambda", "Amazon CloudWatch", "Amazon EventBridge"}},
+		Changelog:           rc.ChangelogAnalysis{Found: true, Features: []string{"Pre-baked custom AMIs cut EC2 Spot startup latency"}},
+		Technologies:        []rc.Technology{{Name: "Go"}, {Name: "AWS CloudFormation"}},
 		ContentIntelligence: rc.ContentIntelligence{Summary: "Pre-baked custom AMIs cut EC2 Spot startup latency.", SEOKeywords: seokw},
 	}
 	post := releasegen.BlogPost{
@@ -724,10 +724,10 @@ func TestPlatformConceptsRejectedFromPrimaryAndAbout(t *testing.T) {
 func serviceOnlySEOPackage() ReleasePackage {
 	junkSEO := []string{"agent", "ai", "amazon cloudwatch", "amazon ec2", "amazon eventbridge", "amazon s3", "an", "aws", "aws iam", "aws lambda", "aws lambda (go runtime)", "aws sdk for go v2", "changelog", "designing", "event-driven architecture", "github actions", "go", "go modules", "infrastructure as code"}
 	ctx := &rc.ReleaseContext{
-		SchemaVersion: "1.0.0",
-		Repository:    rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
-		Release:       rc.Release{Tag: "v0.6.0"},
-		Architecture:  rc.Architecture{Overview: "An event-driven, AWS-native system on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge.", AWSServices: []string{"AWS IAM", "AWS Lambda", "Amazon CloudWatch", "Amazon EC2", "Amazon EventBridge", "Amazon S3"}},
+		SchemaVersion:       "1.0.0",
+		Repository:          rc.Repository{Name: "designing-an-ai-agent-platform-on-aws", FullName: "teddynted/designing-an-ai-agent-platform-on-aws", Language: "Go"},
+		Release:             rc.Release{Tag: "v0.6.0"},
+		Architecture:        rc.Architecture{Overview: "An event-driven, AWS-native system on AWS IAM, AWS Lambda, Amazon CloudWatch, Amazon EC2, Amazon EventBridge.", AWSServices: []string{"AWS IAM", "AWS Lambda", "Amazon CloudWatch", "Amazon EC2", "Amazon EventBridge", "Amazon S3"}},
 		ContentIntelligence: rc.ContentIntelligence{Summary: "release v0.6.0 delivers 7 analyzed changes across 24 files.", SEOKeywords: junkSEO},
 	}
 	post := releasegen.BlogPost{
