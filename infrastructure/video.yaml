@@ -1,0 +1,589 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub AI Blog Generator - Social Video stack. Renders the generated video
+  scripts (youtube, youtube-shorts, tiktok) into MP4s. The worker starts the
+  VideoStateMachine after a successful release run; the machine loads the
+  structured script artifacts (a thin Lambda), renders each format concurrently
+  on ECS Fargate (FFmpeg + Amazon Polly, from an ECR image), and publishes a
+  manifest of the resulting S3 URIs for downstream publishing (n8n). Imports the
+  VPC + public subnet from the network stack.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix and tag value (must match the other stacks).
+  ArtifactsBucket:
+    Type: String
+    Description: S3 bucket holding the Lambda deployment packages (bootstrap zips).
+  LoadVideoScriptsCodeKey:
+    Type: String
+    Default: load-video-scripts.zip
+    Description: S3 key of the load-video-scripts Lambda package.
+  PublishVideoManifestCodeKey:
+    Type: String
+    Default: publish-video-manifest.zip
+    Description: S3 key of the publish-video-manifest Lambda package.
+  RendererImageTag:
+    Type: String
+    Default: latest
+    Description: >
+      Tag of the video-renderer image in the ECR repo this stack creates
+      (pushed by deploy.yml before a task runs). The task definition references
+      <repo-uri>:<tag>; the image only needs to exist when a task actually runs.
+  ContentBucket:
+    Type: String
+    Default: ""
+    Description: >
+      Bucket the worker publishes generated content to (scripts are read from
+      here at render time). Blank uses the bootstrap-created content bucket
+      (<project>-content-<account>-<region>); the runtime bucket also arrives in
+      the state-machine input. Used here only to scope the read IAM policy.
+  TaskCpu:
+    Type: String
+    Default: "2048"
+    AllowedValues: ["1024", "2048", "4096"]
+    Description: Fargate task vCPU units for the renderer (2048 = 2 vCPU).
+  TaskMemory:
+    Type: String
+    Default: "8192"
+    Description: Fargate task memory (MiB) — must be valid for the chosen TaskCpu.
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    Description: Retention for the renderer + Lambda log groups.
+
+Conditions:
+  HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Storage: rendered videos land here, keyed by owner/name/tag/format.
+  # ---------------------------------------------------------------------------
+  VideoBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-video-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ---------------------------------------------------------------------------
+  # Renderer image registry + Fargate cluster/task.
+  # ---------------------------------------------------------------------------
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-video-renderer"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules":[{"rulePriority":1,"description":"expire untagged","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":14},"action":{"type":"expire"}}]}
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${ProjectName}-video"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  RendererLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/${ProjectName}/video-renderer"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # Fargate tasks run in the public subnet with a public IP so they can reach
+  # ECR, S3, and Polly without a NAT gateway. Egress-only SG.
+  FargateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${ProjectName} video renderer (egress only)"
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}-VpcId"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Outbound to ECR, S3, Polly, CloudWatch.
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Pulls the image + ships logs (the AWS-managed execution policy covers both).
+  VideoTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+
+  # The renderer's own permissions: read scripts from the content bucket,
+  # synthesize narration with Polly, write the MP4 to the video bucket.
+  VideoTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: renderer
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !If
+                  - HasContentBucket
+                  - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${VideoBucket}/*"
+              # Polly cannot be resource-scoped for SynthesizeSpeech.
+              - Effect: Allow
+                Action: polly:SynthesizeSpeech
+                Resource: "*"
+
+  VideoTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${ProjectName}-video-renderer"
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt VideoTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt VideoTaskRole.Arn
+      ContainerDefinitions:
+        - Name: renderer
+          Image: !Sub "${EcrRepository.RepositoryUri}:${RendererImageTag}"
+          Essential: true
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref RendererLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: renderer
+
+  # ---------------------------------------------------------------------------
+  # Notifications + orchestration Lambdas.
+  # ---------------------------------------------------------------------------
+  VideoNotificationsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-video-notifications"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  LoadVideoScriptsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-load-video-scripts"
+      RetentionInDays: !Ref LogRetentionDays
+  PublishVideoManifestLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-publish-video-manifest"
+      RetentionInDays: !Ref LogRetentionDays
+
+  LoadVideoScriptsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: load-video-scripts
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Read the script/storyboard/voiceover JSON artifacts.
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !If
+                  - HasContentBucket
+                  - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
+
+  PublishVideoManifestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: publish-video-manifest
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${VideoBucket}/*"
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref VideoNotificationsTopic
+
+  LoadVideoScriptsFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: LoadVideoScriptsLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-load-video-scripts"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt LoadVideoScriptsRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref LoadVideoScriptsCodeKey
+      Environment:
+        Variables:
+          VIDEO_BUCKET: !Ref VideoBucket
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PublishVideoManifestFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: PublishVideoManifestLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-publish-video-manifest"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt PublishVideoManifestRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref PublishVideoManifestCodeKey
+      Environment:
+        Variables:
+          VIDEO_BUCKET: !Ref VideoBucket
+          SNS_TOPIC_ARN: !Ref VideoNotificationsTopic
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ---------------------------------------------------------------------------
+  # Orchestration: load scripts -> render 3 formats in parallel -> manifest.
+  # ---------------------------------------------------------------------------
+  VideoStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: video-orchestration
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt LoadVideoScriptsFunction.Arn
+                  - !GetAtt PublishVideoManifestFunction.Arn
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref VideoTaskDefinition
+              - Effect: Allow
+                Action:
+                  - ecs:StopTask
+                  - ecs:DescribeTasks
+                Resource: "*"
+              # runTask.sync passes the task roles to ECS.
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !GetAtt VideoTaskExecutionRole.Arn
+                  - !GetAtt VideoTaskRole.Arn
+              # runTask.sync uses the managed EventBridge rule to wait for completion.
+              - Effect: Allow
+                Action:
+                  - events:PutTargets
+                  - events:PutRule
+                  - events:DescribeRule
+                Resource: !Sub "arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForECSTaskRule"
+
+  OrchestrationStateMachineName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectName}/video/state-machine-name"
+      Type: String
+      Value: !Sub "${ProjectName}-video"
+      Description: Fixed name of the video state machine (so the worker builds its ARN by construction).
+
+  VideoStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub "${ProjectName}-video"
+      RoleArn: !GetAtt VideoStateMachineRole.Arn
+      DefinitionString: !Sub
+        - |
+          {
+            "Comment": "Render social videos (youtube/shorts/tiktok) from generated scripts.",
+            "TimeoutSeconds": 5400,
+            "StartAt": "LoadVideoScripts",
+            "States": {
+              "LoadVideoScripts": {
+                "Type": "Task",
+                "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+                "Parameters": {
+                  "FunctionName": "${LoadFn}",
+                  "Payload.$": "$"
+                },
+                "ResultSelector": { "jobs.$": "$.Payload" },
+                "ResultPath": "$.loaded",
+                "Next": "GenerateSocialVideos"
+              },
+              "GenerateSocialVideos": {
+                "Type": "Parallel",
+                "ResultPath": "$.renderResults",
+                "Next": "PublishVideoManifest",
+                "Branches": [
+                  {
+                    "StartAt": "BuildYouTubeVideo",
+                    "States": {
+                      "BuildYouTubeVideo": {
+                        "Type": "Task",
+                        "Resource": "arn:${AWS::Partition}:states:::ecs:runTask.sync",
+                        "Parameters": {
+                          "LaunchType": "FARGATE",
+                          "Cluster": "${ClusterArn}",
+                          "TaskDefinition": "${TaskDef}",
+                          "NetworkConfiguration": {
+                            "AwsvpcConfiguration": {
+                              "Subnets": ["${SubnetId}"],
+                              "SecurityGroups": ["${SgId}"],
+                              "AssignPublicIp": "ENABLED"
+                            }
+                          },
+                          "Overrides": {
+                            "ContainerOverrides": [{
+                              "Name": "renderer",
+                              "Environment": [
+                                {"Name": "FORMAT", "Value": "youtube"},
+                                {"Name": "SCRIPT_S3_URI", "Value.$": "$.loaded.jobs.youtube.scriptUri"},
+                                {"Name": "STORYBOARD_S3_URI", "Value.$": "$.loaded.jobs.youtube.storyboardUri"},
+                                {"Name": "VOICEOVER_S3_URI", "Value.$": "$.loaded.jobs.youtube.voiceoverUri"},
+                                {"Name": "OUTPUT_S3_URI", "Value.$": "$.loaded.jobs.youtube.outputUri"},
+                                {"Name": "ASPECT", "Value.$": "$.loaded.jobs.youtube.aspect"}
+                              ]
+                            }]
+                          }
+                        },
+                        "ResultPath": "$.ecs",
+                        "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "YouTubeFailed"}],
+                        "Next": "YouTubeDone"
+                      },
+                      "YouTubeDone": {
+                        "Type": "Pass",
+                        "Parameters": {"format": "youtube", "status": "rendered", "outputUri.$": "$.loaded.jobs.youtube.outputUri"},
+                        "End": true
+                      },
+                      "YouTubeFailed": {
+                        "Type": "Pass",
+                        "Parameters": {"format": "youtube", "status": "failed", "outputUri.$": "$.loaded.jobs.youtube.outputUri", "error.$": "$.error.Error"},
+                        "End": true
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "BuildShortsVideo",
+                    "States": {
+                      "BuildShortsVideo": {
+                        "Type": "Task",
+                        "Resource": "arn:${AWS::Partition}:states:::ecs:runTask.sync",
+                        "Parameters": {
+                          "LaunchType": "FARGATE",
+                          "Cluster": "${ClusterArn}",
+                          "TaskDefinition": "${TaskDef}",
+                          "NetworkConfiguration": {
+                            "AwsvpcConfiguration": {
+                              "Subnets": ["${SubnetId}"],
+                              "SecurityGroups": ["${SgId}"],
+                              "AssignPublicIp": "ENABLED"
+                            }
+                          },
+                          "Overrides": {
+                            "ContainerOverrides": [{
+                              "Name": "renderer",
+                              "Environment": [
+                                {"Name": "FORMAT", "Value": "youtube-shorts"},
+                                {"Name": "SCRIPT_S3_URI", "Value.$": "$.loaded.jobs.shorts.scriptUri"},
+                                {"Name": "STORYBOARD_S3_URI", "Value.$": "$.loaded.jobs.shorts.storyboardUri"},
+                                {"Name": "VOICEOVER_S3_URI", "Value.$": "$.loaded.jobs.shorts.voiceoverUri"},
+                                {"Name": "OUTPUT_S3_URI", "Value.$": "$.loaded.jobs.shorts.outputUri"},
+                                {"Name": "ASPECT", "Value.$": "$.loaded.jobs.shorts.aspect"}
+                              ]
+                            }]
+                          }
+                        },
+                        "ResultPath": "$.ecs",
+                        "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "ShortsFailed"}],
+                        "Next": "ShortsDone"
+                      },
+                      "ShortsDone": {
+                        "Type": "Pass",
+                        "Parameters": {"format": "youtube-shorts", "status": "rendered", "outputUri.$": "$.loaded.jobs.shorts.outputUri"},
+                        "End": true
+                      },
+                      "ShortsFailed": {
+                        "Type": "Pass",
+                        "Parameters": {"format": "youtube-shorts", "status": "failed", "outputUri.$": "$.loaded.jobs.shorts.outputUri", "error.$": "$.error.Error"},
+                        "End": true
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "BuildTikTokVideo",
+                    "States": {
+                      "BuildTikTokVideo": {
+                        "Type": "Task",
+                        "Resource": "arn:${AWS::Partition}:states:::ecs:runTask.sync",
+                        "Parameters": {
+                          "LaunchType": "FARGATE",
+                          "Cluster": "${ClusterArn}",
+                          "TaskDefinition": "${TaskDef}",
+                          "NetworkConfiguration": {
+                            "AwsvpcConfiguration": {
+                              "Subnets": ["${SubnetId}"],
+                              "SecurityGroups": ["${SgId}"],
+                              "AssignPublicIp": "ENABLED"
+                            }
+                          },
+                          "Overrides": {
+                            "ContainerOverrides": [{
+                              "Name": "renderer",
+                              "Environment": [
+                                {"Name": "FORMAT", "Value": "tiktok"},
+                                {"Name": "SCRIPT_S3_URI", "Value.$": "$.loaded.jobs.tiktok.scriptUri"},
+                                {"Name": "STORYBOARD_S3_URI", "Value.$": "$.loaded.jobs.tiktok.storyboardUri"},
+                                {"Name": "VOICEOVER_S3_URI", "Value.$": "$.loaded.jobs.tiktok.voiceoverUri"},
+                                {"Name": "OUTPUT_S3_URI", "Value.$": "$.loaded.jobs.tiktok.outputUri"},
+                                {"Name": "ASPECT", "Value.$": "$.loaded.jobs.tiktok.aspect"}
+                              ]
+                            }]
+                          }
+                        },
+                        "ResultPath": "$.ecs",
+                        "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "TikTokFailed"}],
+                        "Next": "TikTokDone"
+                      },
+                      "TikTokDone": {
+                        "Type": "Pass",
+                        "Parameters": {"format": "tiktok", "status": "rendered", "outputUri.$": "$.loaded.jobs.tiktok.outputUri"},
+                        "End": true
+                      },
+                      "TikTokFailed": {
+                        "Type": "Pass",
+                        "Parameters": {"format": "tiktok", "status": "failed", "outputUri.$": "$.loaded.jobs.tiktok.outputUri", "error.$": "$.error.Error"},
+                        "End": true
+                      }
+                    }
+                  }
+                ]
+              },
+              "PublishVideoManifest": {
+                "Type": "Task",
+                "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+                "Parameters": {
+                  "FunctionName": "${PublishFn}",
+                  "Payload": {
+                    "owner.$": "$.owner",
+                    "name.$": "$.name",
+                    "tag.$": "$.tag",
+                    "results.$": "$.renderResults"
+                  }
+                },
+                "End": true
+              }
+            }
+          }
+        - LoadFn: !GetAtt LoadVideoScriptsFunction.Arn
+          PublishFn: !GetAtt PublishVideoManifestFunction.Arn
+          ClusterArn: !GetAtt EcsCluster.Arn
+          TaskDef: !Ref VideoTaskDefinition
+          SubnetId:
+            Fn::ImportValue: !Sub "${ProjectName}-PublicSubnetId"
+          SgId: !GetAtt FargateSecurityGroup.GroupId
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  VideoStateMachineArn:
+    Description: Video state machine the worker starts after a release run.
+    Value: !Ref VideoStateMachine
+    Export:
+      Name: !Sub "${ProjectName}-VideoStateMachineArn"
+  VideoBucketName:
+    Description: S3 bucket holding rendered videos + the manifest.
+    Value: !Ref VideoBucket
+    Export:
+      Name: !Sub "${ProjectName}-VideoBucketName"
+  EcrRepositoryUri:
+    Description: ECR repo deploy.yml pushes the renderer image to.
+    Value: !GetAtt EcrRepository.RepositoryUri
+  VideoNotificationsTopicArn:
+    Description: SNS topic for video-render completion notifications.
+    Value: !Ref VideoNotificationsTopic
