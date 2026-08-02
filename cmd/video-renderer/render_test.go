@@ -28,6 +28,57 @@ func TestParseScenesSkipsEmptyAndDefaults(t *testing.T) {
 	}
 }
 
+func TestScenesForFormatUsesNativeScriptForShortFormats(t *testing.T) {
+	storyboard := []byte(`{"scenes":[{"sceneNumber":1,"title":"Long","narration":"Long-form scene."}]}`)
+	shorts := []byte(`{"shorts":[{"id":1,"title":"Short A","scenes":[
+		{"number":1,"overlay":"HOOK","narration":"Quick hook."},
+		{"number":2,"overlay":"POINT","narration":"The point."}
+	]},{"id":2,"scenes":[{"number":1,"narration":"other short"}]}]}`)
+
+	got, err := scenesForFormat("youtube-shorts", shorts, storyboard)
+	if err != nil {
+		t.Fatalf("shorts: %v", err)
+	}
+	// Uses the FIRST short's scenes with the overlay as the caption — not the storyboard.
+	if len(got) != 2 || got[0].Title != "HOOK" || got[0].Narration != "Quick hook." {
+		t.Fatalf("shorts scenes = %+v", got)
+	}
+
+	tiktok := []byte(`{"videos":[{"id":1,"scenes":[{"number":1,"overlay":"TT","narration":"Tik narration."}]}]}`)
+	tt, err := scenesForFormat("tiktok", tiktok, storyboard)
+	if err != nil || len(tt) != 1 || tt[0].Title != "TT" {
+		t.Fatalf("tiktok scenes = %+v err=%v", tt, err)
+	}
+}
+
+func TestScenesForFormatFallsBackToStoryboard(t *testing.T) {
+	storyboard := []byte(`{"scenes":[
+		{"sceneNumber":1,"title":"S1","narration":"one"},
+		{"sceneNumber":2,"title":"S2","narration":"two"},
+		{"sceneNumber":3,"title":"S3","narration":"three"},
+		{"sceneNumber":4,"title":"S4","narration":"four"},
+		{"sceneNumber":5,"title":"S5","narration":"five"},
+		{"sceneNumber":6,"title":"S6","narration":"six"}
+	]}`)
+	// No/blank format script → storyboard, capped for the short format.
+	got, err := scenesForFormat("tiktok", nil, storyboard)
+	if err != nil {
+		t.Fatalf("fallback: %v", err)
+	}
+	if len(got) != shortSceneCap {
+		t.Fatalf("expected storyboard capped to %d, got %d", shortSceneCap, len(got))
+	}
+}
+
+func TestScenesForFormatYouTubeUsesStoryboard(t *testing.T) {
+	storyboard := []byte(`{"scenes":[{"sceneNumber":1,"title":"Intro","narration":"n"}]}`)
+	// A youtube script must be ignored in favour of the storyboard it references.
+	got, err := scenesForFormat("youtube", []byte(`{"chapters":[]}`), storyboard)
+	if err != nil || len(got) != 1 || got[0].Title != "Intro" {
+		t.Fatalf("youtube scenes = %+v err=%v", got, err)
+	}
+}
+
 func TestCapScenes(t *testing.T) {
 	in := []scene{{Number: 1}, {Number: 2}, {Number: 3}}
 	if len(capScenes(in, 2)) != 2 {

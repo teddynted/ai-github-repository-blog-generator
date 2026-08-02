@@ -14,44 +14,116 @@ type scene struct {
 	Narration string
 }
 
+// scenesForFormat selects the best scene source per format:
+//   - youtube uses the storyboard (the long-form video plan the youtube script
+//     references by scene index);
+//   - youtube-shorts / tiktok use their own native vertical scripts (short,
+//     fast-paced, with on-screen overlays), falling back to a capped storyboard
+//     if the format script is missing/empty.
+//
+// scriptJSON may be nil (youtube, or when the format script was not loaded).
+func scenesForFormat(format string, scriptJSON, storyboardJSON []byte) ([]scene, error) {
+	switch format {
+	case "youtube-shorts":
+		if s := parseFormatScenes(scriptJSON, "shorts"); len(s) > 0 {
+			return s, nil
+		}
+	case "tiktok":
+		if s := parseFormatScenes(scriptJSON, "videos"); len(s) > 0 {
+			return s, nil
+		}
+	}
+	// youtube, or a fallback: the storyboard (capped for short formats).
+	sb, err := parseScenes(storyboardJSON)
+	if err != nil {
+		return nil, err
+	}
+	if format == "youtube-shorts" || format == "tiktok" {
+		sb = capScenes(sb, shortSceneCap)
+	}
+	return sb, nil
+}
+
 // parseScenes extracts the ordered scene list from a storyboard.json artifact
-// (see internal/storyboard). It is tolerant: scenes with empty narration are
-// skipped, and a blank title falls back to "Scene N".
+// (see internal/storyboard). Scenes with empty narration are skipped; a blank
+// title falls back to "Scene".
 func parseScenes(storyboardJSON []byte) ([]scene, error) {
 	var sb struct {
-		Scenes []struct {
-			SceneNumber int    `json:"sceneNumber"`
-			Title       string `json:"title"`
-			Narration   string `json:"narration"`
-		} `json:"scenes"`
+		Scenes []rawScene `json:"scenes"`
 	}
 	if err := json.Unmarshal(storyboardJSON, &sb); err != nil {
 		return nil, err
 	}
-	out := make([]scene, 0, len(sb.Scenes))
-	for i, s := range sb.Scenes {
+	return collect(sb.Scenes), nil
+}
+
+// parseFormatScenes extracts scenes from a shorts.json / tiktok.json artifact.
+// Those are collections; v1 renders the first item's scenes. collectionKey is
+// "shorts" or "videos". Returns nil on any parse issue (caller falls back).
+func parseFormatScenes(scriptJSON []byte, collectionKey string) []scene {
+	if len(scriptJSON) == 0 {
+		return nil
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(scriptJSON, &doc); err != nil {
+		return nil
+	}
+	var items []struct {
+		Scenes []rawScene `json:"scenes"`
+	}
+	if err := json.Unmarshal(doc[collectionKey], &items); err != nil || len(items) == 0 {
+		return nil
+	}
+	return collect(items[0].Scenes)
+}
+
+// rawScene is the tolerant shape shared by storyboard/shorts/tiktok scenes: they
+// all carry a narration and either a title (storyboard) or an overlay (short
+// formats) that serves as the on-screen caption.
+type rawScene struct {
+	SceneNumber int    `json:"sceneNumber"`
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	Overlay     string `json:"overlay"`
+	Narration   string `json:"narration"`
+}
+
+func collect(raw []rawScene) []scene {
+	out := make([]scene, 0, len(raw))
+	for i, s := range raw {
 		narr := strings.TrimSpace(s.Narration)
 		if narr == "" {
 			continue
 		}
-		n := s.SceneNumber
-		if n == 0 {
-			n = i + 1
-		}
-		title := strings.TrimSpace(s.Title)
-		if title == "" {
-			title = "Scene"
-		}
-		out = append(out, scene{Number: n, Title: title, Narration: narr})
+		n := firstNonZero(s.SceneNumber, s.Number, i+1)
+		caption := firstNonEmpty(strings.TrimSpace(s.Title), strings.TrimSpace(s.Overlay), "Scene")
+		out = append(out, scene{Number: n, Title: caption, Narration: narr})
 	}
-	return out, nil
+	return out
 }
 
-// cap limits the scene list for short-form formats (youtube-shorts, tiktok) so a
-// vertical clip does not run the full long-form length. n<=0 keeps them all.
+// capScenes limits the scene list for short-form fallbacks. n<=0 keeps them all.
 func capScenes(scenes []scene, n int) []scene {
 	if n > 0 && len(scenes) > n {
 		return scenes[:n]
 	}
 	return scenes
+}
+
+func firstNonZero(vals ...int) int {
+	for _, v := range vals {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

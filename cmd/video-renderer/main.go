@@ -71,15 +71,25 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("download storyboard: %w", err)
 	}
-	scenes, err := parseScenes(sbJSON)
-	if err != nil {
-		return fmt.Errorf("parse storyboard: %w", err)
+	// Short formats (shorts/tiktok) render from their own native vertical script;
+	// youtube uses the storyboard it references. Loading the format script is
+	// best-effort — a miss falls back to a capped storyboard.
+	var scriptJSON []byte
+	if scriptURI := os.Getenv("SCRIPT_S3_URI"); scriptURI != "" && (format == "youtube-shorts" || format == "tiktok") {
+		if b, k, perr := parseS3URI(scriptURI); perr == nil {
+			if body, gerr := getObject(ctx, s3c, b, k); gerr == nil {
+				scriptJSON = body
+			} else {
+				log.Printf("format script unavailable (%s); using storyboard: %v", scriptURI, gerr)
+			}
+		}
 	}
-	if format == "youtube-shorts" || format == "tiktok" {
-		scenes = capScenes(scenes, shortSceneCap)
+	scenes, err := scenesForFormat(format, scriptJSON, sbJSON)
+	if err != nil {
+		return fmt.Errorf("select scenes: %w", err)
 	}
 	if len(scenes) == 0 {
-		return fmt.Errorf("no narratable scenes in storyboard")
+		return fmt.Errorf("no narratable scenes for %s", format)
 	}
 
 	work := filepath.Join(renderWorkRoot, format)

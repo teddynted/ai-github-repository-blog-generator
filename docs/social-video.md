@@ -48,17 +48,22 @@ image built by `deploy.yml`). Container env is set by the state machine:
 `FORMAT, SCRIPT_S3_URI, STORYBOARD_S3_URI, VOICEOVER_S3_URI, OUTPUT_S3_URI, ASPECT`.
 
 `cmd/video-renderer` (in `containers/video-renderer/Dockerfile` = FFmpeg + the Go
-binary) does: download the storyboard → per scene, synthesize narration with
-**Amazon Polly** (neural) → render a caption + narration MP4 segment with FFmpeg
-at the format aspect ratio (`1920×1080` / `1080×1920`) → concatenate → upload the
-final MP4 to `OUTPUT_S3_URI`.
+binary) does: pick the scene source for the format → per scene, synthesize
+narration with **Amazon Polly** (neural) → render a caption + narration MP4
+segment with FFmpeg at the format aspect ratio (`1920×1080` / `1080×1920`) →
+concatenate → upload the final MP4 to `OUTPUT_S3_URI`.
 
-> **v1 scope.** All formats are driven from the **storyboard** scenes (a single,
-> stable schema); short formats are capped to a few scenes. Visuals are Polly
-> narration + text-card captions. Per-format script scene selection and richer
-> visuals (AI images from `visual-assets`, diagram overlays, music/intro-outro)
-> are follow-ups — the platform produces image *prompts* and Mermaid diagrams,
-> not finished imagery.
+**Per-format scene source:** `youtube` renders from the **storyboard** (the
+long-form plan its script references by scene index); `youtube-shorts` and
+`tiktok` render from their **own native vertical scripts** (`shorts[0].scenes` /
+`videos[0].scenes`), using each scene's on-screen `overlay` as the caption and
+falling back to a capped storyboard if the format script is missing.
+
+> **Still v1.** Visuals are Polly narration + text-card captions. Richer visuals
+> (AI images from `visual-assets`, architecture-diagram overlays, music /
+> intro-outro) remain follow-ups — the platform produces image *prompts* and
+> Mermaid/SVG diagrams, not finished raster assets, so those need an
+> image-generation service or an SVG/Mermaid rasterizer added to the renderer.
 
 ---
 
