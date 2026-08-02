@@ -52,6 +52,14 @@ Parameters:
       (e.g. claude-opus-4-8), active when the Anthropic API key secret holds a
       key. Blank uses the client default. Bedrock is attempted first; this is the
       quota fallback. See internal/airouter.
+  VideoStateMachineArn:
+    Type: String
+    Default: ""
+    Description: >
+      ARN of the video Step Functions state machine (from the video stack). When
+      set, the worker starts it after a successful release run to render social
+      videos. Blank disables video rendering. Deterministic name:
+      arn:<partition>:states:<region>:<account>:stateMachine:<project>-video.
   LatestUbuntuAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id
@@ -217,6 +225,11 @@ Resources:
                   - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.*"
                   - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
                   - !Sub "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*"
+              # After a successful release run, start the video state machine to
+              # render social videos. Scoped to this project's fixed-name machine.
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-video"
               # Publish CPU/mem/disk metrics via the CloudWatch agent (scoped to
               # this project's metric namespace; PutMetricData cannot be resource-scoped).
               - Effect: Allow
@@ -551,6 +564,7 @@ Resources:
                 ANTHROPIC_MODEL=${AnthropicModel}
                 OUTPUT_DIR=/data/generated-content
                 OUTPUT_S3_BUCKET=${OutputBucketName}
+                VIDEO_STATE_MACHINE_ARN=${VideoStateMachineArn}
                 WORK_DIR=/data/work
                 MEMORY_DIR=/data/memory
                 PENDING_DIR=/data/pending
