@@ -12,15 +12,18 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sfn"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/airouter"
@@ -269,8 +272,23 @@ func main() {
 	var notifier notify.Notifier = notifiers
 	meter := metrics.New(metrics.Namespace, os.Stdout)
 
+	// After a successful release run, optionally start the video state machine to
+	// render social videos (needs S3 output so the renderer can read the scripts).
+	var relRunner releaseRunner = releasePipe
+	if a.Config.VideoStateMachineArn != "" && a.Config.OutputS3Bucket != "" {
+		relRunner = &videoTriggeringRunner{
+			inner:  releasePipe,
+			sfn:    sfn.NewFromConfig(awsCfg),
+			arn:    a.Config.VideoStateMachineArn,
+			bucket: a.Config.OutputS3Bucket,
+			prefix: a.Config.OutputS3Prefix,
+			logger: a.Logger,
+		}
+		a.Logger.Info("video rendering enabled", "state_machine", a.Config.VideoStateMachineArn)
+	}
+
 	a.Logger.Info("worker started", "queue", a.Config.QueueURL, "ai_chain", router.Chain())
-	run(ctx, a.Logger, queue, pipe, releasePipe, notifier, meter)
+	run(ctx, a.Logger, queue, pipe, relRunner, notifier, meter)
 	a.Logger.Info("worker stopped")
 }
 
@@ -290,6 +308,51 @@ type runner interface {
 // release events fall through to the snapshot pipeline.
 type releaseRunner interface {
 	Run(ctx context.Context, req rc.Request) (releasepipeline.Result, error)
+}
+
+// sfnStarter is the subset of the Step Functions client the video trigger uses.
+type sfnStarter interface {
+	StartExecution(ctx context.Context, in *sfn.StartExecutionInput, optFns ...func(*sfn.Options)) (*sfn.StartExecutionOutput, error)
+}
+
+// videoTriggeringRunner decorates a releaseRunner: after a successful release
+// run (scripts are now in S3), it starts the video state machine to render the
+// social videos. The trigger is best-effort — a failure to start the video
+// pipeline never fails the release run that already published.
+type videoTriggeringRunner struct {
+	inner  releaseRunner
+	sfn    sfnStarter
+	arn    string
+	bucket string
+	prefix string
+	logger *slog.Logger
+}
+
+func (v *videoTriggeringRunner) Run(ctx context.Context, req rc.Request) (releasepipeline.Result, error) {
+	res, err := v.inner.Run(ctx, req)
+	if err != nil {
+		return res, err
+	}
+	input, merr := json.Marshal(map[string]string{
+		"owner":  req.Owner,
+		"name":   req.Repository,
+		"tag":    req.ReleaseTag,
+		"bucket": v.bucket,
+		"prefix": v.prefix,
+	})
+	if merr != nil {
+		v.logger.Error("video input marshal failed (non-fatal)", "repo", req.FullName(), "error", merr.Error())
+		return res, err
+	}
+	if _, serr := v.sfn.StartExecution(ctx, &sfn.StartExecutionInput{
+		StateMachineArn: aws.String(v.arn),
+		Input:           aws.String(string(input)),
+	}); serr != nil {
+		v.logger.Error("video render start failed (non-fatal)", "repo", req.FullName(), "release", req.ReleaseTag, "error", serr.Error())
+	} else {
+		v.logger.Info("video render started", "repo", req.FullName(), "release", req.ReleaseTag)
+	}
+	return res, err
 }
 
 // meter emits metrics (satisfied by *metrics.Emitter).

@@ -58,6 +58,10 @@ type Config struct {
 	// StateMachineArn is the Step Functions orchestration state machine the
 	// manual trigger starts on POST /process (STATE_MACHINE_ARN).
 	StateMachineArn string
+	// VideoStateMachineArn is the Step Functions video state machine the worker
+	// starts after a successful release run to render social videos
+	// (VIDEO_STATE_MACHINE_ARN). Blank disables video rendering.
+	VideoStateMachineArn string
 	// QueueURL is the SQS events queue URL (QUEUE_URL).
 	QueueURL string
 	// InstanceID is the On-Demand EC2 instance the scheduler powers on/off
@@ -147,6 +151,7 @@ func Load(getenv Getenv) (Config, error) {
 		RepoSecretID:          getenv("REPO_SECRET_ID"),
 		EventBusName:          getenv("EVENT_BUS_NAME"),
 		StateMachineArn:       getenv("STATE_MACHINE_ARN"),
+		VideoStateMachineArn:  getenv("VIDEO_STATE_MACHINE_ARN"),
 		QueueURL:              getenv("QUEUE_URL"),
 		InstanceID:            getenv("INSTANCE_ID"),
 		N8NWebhookURL:         getenv("N8N_WEBHOOK_URL"),
@@ -236,6 +241,8 @@ func (c Config) field(name string) (string, bool) {
 		return c.EventBusName, true
 	case "StateMachineArn":
 		return c.StateMachineArn, true
+	case "VideoStateMachineArn":
+		return c.VideoStateMachineArn, true
 	case "QueueURL":
 		return c.QueueURL, true
 	case "InstanceID":

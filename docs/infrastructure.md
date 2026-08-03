@@ -13,7 +13,8 @@ Related: [Architecture](./architecture.md) · [Deployment](./deployment.md) · [
 | Amazon VPC | Network isolation (public subnet, IGW, route tables, SGs) | `network.yaml` |
 | Amazon API Gateway | HTTPS ingress: registration, manual `POST /process`, and `POST /release-context` | `serverless.yaml` |
 | AWS Lambda | Registration, manual-trigger, release-context (`serverless.yaml`); scheduled-start, scheduled-stop, idle-stop (`scheduler.yaml`) | `serverless.yaml` / `scheduler.yaml` |
-| AWS Step Functions | Orchestration state machine — start host, wait for SSM ready, enqueue the job | `serverless.yaml` |
+| AWS Step Functions | Orchestration state machine — start host, wait for SSM ready, enqueue the job; plus the opt-in **video** state machine (render → manifest) | `serverless.yaml` / `video.yaml` |
+| Amazon ECS Fargate + ECR + Polly | Opt-in social-video rendering (`GenerateSocialVideos`): FFmpeg + Amazon Polly renderer image on Fargate | `video.yaml` |
 | AWS Secrets Manager | Shared secret holding all repos' PATs (JSON keyed by owner/name) + the Anthropic API key | `serverless.yaml` |
 | Amazon DynamoDB | Repository metadata store | `serverless.yaml` |
 | Amazon EventBridge Scheduler | Daily start/stop schedules (owns instance power-off) | `scheduler.yaml` |
@@ -200,7 +201,7 @@ infrastructure/
 | `scheduler.yaml` | Daily power schedules + start/stop Lambdas (owns instance power-off) | `StartFunctionArn`, `StopFunctionArn`, `ScheduleWindow` |
 | `observability.yaml` | Logs, metrics, alarms | `DashboardName`, `LogGroupNames` |
 
-Deploy order is **network → serverless → compute → scheduler → observability**; the compute stack imports the queue and instance security group from earlier stacks, and the scheduler stack takes the compute stack's `InstanceId`.
+Deploy order is **network → serverless → compute → scheduler → observability**; the compute stack imports the queue and instance security group from earlier stacks, and the scheduler stack takes the compute stack's `InstanceId`. The opt-in **`video.yaml`** stack (social-video rendering) deploys last, imports the network VPC/subnet, and is gated on `ENABLE_VIDEO=true` — see [Social Video](./social-video.md).
 
 ---
 

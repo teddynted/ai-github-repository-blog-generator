@@ -12,6 +12,8 @@ name: deploy
 #   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
 #   var    INSTANCE_TYPE        - (optional) override the EC2 type; must be arm64/Graviton
+#   var    ENABLE_VIDEO         - (optional) "true" to deploy the social-video pipeline
+#                                 (video stack + ECR image) and wire the worker to it
 #                                 (default t4g.small) to match the base AMI
 #
 # Optional email-notification vars (non-secret; the SMTP password is stored in
@@ -62,7 +64,7 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed daily window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -85,10 +87,11 @@ jobs:
           # wrong ARTIFACTS_BUCKET variable pointing at a non-existent bucket.
           ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
           echo "ARTIFACTS_BUCKET=blog-gen-artifacts-${ACCOUNT}-${{ vars.AWS_REGION }}" >> "$GITHUB_ENV"
+          echo "ACCOUNT=${ACCOUNT}" >> "$GITHUB_ENV"
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
           aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
@@ -157,6 +160,10 @@ jobs:
           # error the router falls back to the Anthropic API. Set ANTHROPIC_MODEL to
           # pin the model id; the key itself lives only in Secrets Manager.
           [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && PARAMS="$PARAMS AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
+          # Social video rendering (opt-in). Set ENABLE_VIDEO=true to wire the worker
+          # to the video state machine (deployed below). The ARN is deterministic, so
+          # compute needs no dependency on the video stack existing yet.
+          [ "${{ vars.ENABLE_VIDEO }}" = "true" ] && PARAMS="$PARAMS VideoStateMachineArn=arn:aws:states:${{ vars.AWS_REGION }}:${ACCOUNT}:stateMachine:blog-gen-video"
           [ -n "$NOTIFY_EMAIL_FROM" ] && PARAMS="$PARAMS NotifyEmailFrom=$NOTIFY_EMAIL_FROM"
           [ -n "$NOTIFY_EMAIL_TO" ]   && PARAMS="$PARAMS NotifyEmailTo=$NOTIFY_EMAIL_TO"
           [ -n "$SMTP_USERNAME" ]     && PARAMS="$PARAMS SmtpUsername=$SMTP_USERNAME"
@@ -238,3 +245,28 @@ jobs:
             --template-file infrastructure/observability.yaml \
             --stack-name blog-gen-observability \
             --capabilities CAPABILITY_NAMED_IAM
+
+      # Social video pipeline (opt-in via ENABLE_VIDEO=true). Deploys the video
+      # stack (creates the ECR repo + Fargate task def + VideoStateMachine), then
+      # builds and pushes the renderer image tagged with the commit SHA. The task
+      # definition references <repo>:<sha>; the image only needs to exist when a
+      # task actually runs, so pushing after the stack deploy is fine.
+      - name: deploy video stack + push renderer image
+        if: ${{ vars.ENABLE_VIDEO == 'true' }}
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/video.yaml \
+            --stack-name blog-gen-video \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              ArtifactsBucket="$ARTIFACTS_BUCKET" \
+              LoadVideoScriptsCodeKey="$SHA/load-video-scripts.zip" \
+              PublishVideoManifestCodeKey="$SHA/publish-video-manifest.zip" \
+              RendererImageTag="$SHA"
+
+          ECR="${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/blog-gen-video-renderer"
+          aws ecr get-login-password --region "${{ vars.AWS_REGION }}" \
+            | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
+          docker buildx build --platform linux/arm64 \
+            -f containers/video-renderer/Dockerfile \
+            -t "${ECR}:${SHA}" --push .
