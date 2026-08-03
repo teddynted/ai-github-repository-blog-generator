@@ -91,8 +91,10 @@ Resources:
 
   RendererLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    # Delete (not Retain) so a rolled-back/cleaned stack does not orphan the log
+    # group and collide with "already exists" on the next create.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/${ProjectName}/video-renderer"
       RetentionInDays: !Ref LogRetentionDays
@@ -200,15 +202,19 @@ Resources:
 
   LoadVideoScriptsLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    # Delete (not Retain) so a rolled-back/cleaned stack does not orphan the log
+    # group and collide with "already exists" on the next create.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-load-video-scripts"
       RetentionInDays: !Ref LogRetentionDays
   PublishVideoManifestLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    # Delete (not Retain) so a rolled-back/cleaned stack does not orphan the log
+    # group and collide with "already exists" on the next create.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ProjectName}-publish-video-manifest"
       RetentionInDays: !Ref LogRetentionDays
