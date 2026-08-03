@@ -29,3 +29,4 @@ coverage.*
 !/logs/.gitkeep
 /content
 /worker
+/video-renderer
