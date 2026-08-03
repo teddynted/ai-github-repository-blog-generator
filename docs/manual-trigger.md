@@ -2,9 +2,23 @@
 
 The authenticated REST endpoint that triggers an AI processing run — the
 platform's single entry point. A request is validated, then handed to the shared
-`intake.Service`, which **starts an AWS Step Functions execution**. The state
-machine starts the compute host, waits for it to report ready via SSM, and
-enqueues the job onto SQS for the worker.
+`intake.Service`, which **starts an AWS Step Functions execution**.
+
+**Which state machine depends on the cutover flag** (`CONTENT_STATE_MACHINE_ARN`
+on the Lambda, set by `CUTOVER_CONTENT=true`):
+
+- **Serverless (current, cutover live)** → the **`GenerateContent`** state
+  machine (`blog-gen-content`) runs the generator as a one-shot **ECS Fargate**
+  task (`content-runner`) that builds the Release Context, generates the full
+  content suite, and publishes it to S3 — then best-effort triggers video
+  rendering. **No EC2 host, no SQS.**
+- **Legacy (pre-cutover / rollback)** → the **`OrchestrationStateMachine`** starts
+  the EC2 worker box, waits for it to report ready via SSM, and enqueues the job
+  onto SQS for the worker.
+
+The endpoint, request/response, and API key are identical either way — only the
+engine behind `/process` changes. See
+[Serverless content migration](./content-generation-serverless-migration.md).
 
 Related: [Architecture](./architecture.md) · [Workflows](./workflows.md) ·
 [Scheduling](./scheduling.md) · [Infrastructure](./infrastructure.md).
@@ -24,18 +38,21 @@ orchestration is duplicated.
 flowchart LR
   API["POST /process (API key)"] --> M[manual-trigger]
   M --> S[intake.Service.Submit]
-  S -->|StartExecution| SFN[Step Functions]
-  SFN -->|start host · SSM ready · SendMessage| SQS[(SQS)]
-  SQS --> W[worker pipeline]
+  S -->|StartExecution| SFN["Step Functions (GenerateContent)"]
+  SFN -->|"ecs:runTask.sync"| F["Fargate content-runner"]
+  F -->|generate + publish| S3[(S3 content bucket)]
+  SFN -.->|best-effort| V["blog-gen-video"]
 ```
 
 The `intake.Service`'s `Publisher` is the Step Functions publisher
 (`eventbus.NewStepFunctions`), which starts an execution whose input is exactly
-the `{"detail": <event>}` body the worker consumes. The **state machine owns the
-compute-host lifecycle** (find host by tag → start → SSM ready gate → enqueue),
-so this Lambda never touches EC2 and there is no operating-window gate — a run is
-always started on demand. Instance power-**off** stays with the
-[scheduler](./scheduling.md).
+the `{"detail": <event>}` body the generator consumes. The Lambda targets
+`CONTENT_STATE_MACHINE_ARN` when set (serverless, current) and otherwise
+`STATE_MACHINE_ARN` (the legacy orchestration machine) — same input envelope
+either way, so the switch is a config flip. This Lambda never touches EC2 and
+there is no operating-window gate — a run is always started on demand. On the
+serverless path there is no instance at all; on the legacy path, instance
+power-**off** stays with the [scheduler](./scheduling.md).
 
 ---
 
@@ -90,11 +107,17 @@ the Lambda runs; the endpoint is never publicly accessible.
 | `force` | no | `false` | request reprocessing even if already published (carried through for the worker) |
 | `provider` | no | (router default) | AI-provider hint; carried through for future use. Generation runs through the [Provider Router](./hybrid-ai-routing.md) (Bedrock → Anthropic) regardless |
 
-> **Two run modes.** Without `releaseTag`, `/process` triggers a **repository run**
-> (clone the branch and generate content from the working copy). With
-> `releaseTag`, it triggers a **release run** — building the Release Context for
-> that tag and generating the full content suite. `POST /release-context` builds
-> only the context (no generation); `/process` with a tag builds *and* generates.
+> **Two run modes.** With `releaseTag`, `/process` triggers a **release run** —
+> building the Release Context for that tag and generating the full content suite.
+> Without `releaseTag`, it triggers a **repository run** (clone the branch and
+> generate from the working copy). `POST /release-context` builds only the context
+> (no generation); `/process` with a tag builds *and* generates.
+>
+> ⚠️ **On the serverless path, only release runs are supported.** The
+> `GenerateContent` machine requires a `releaseTag` (the Fargate `content-runner`
+> takes `RELEASE_TAG`); a `/process` call **without** `releaseTag` fails the
+> execution (`States.Runtime`, missing `$.detail.release_tag`) even though the API
+> returns `202`. Repository/snapshot runs only work on the legacy worker path.
 
 The payload is **extensible**: unknown fields are ignored, and `force`/`provider`
 flow through on the event for future enhancements. Required fields are validated
@@ -169,10 +192,11 @@ context — no secrets or request bodies are logged:
 
 | Resource | Purpose |
 | --- | --- |
-| `ManualTriggerRole` | least-privilege role: `states:StartExecution` on the orchestration state machine. **No EC2 access.** |
+| `ManualTriggerRole` | least-privilege role: `states:StartExecution` on the orchestration **and** the (deterministically named) `blog-gen-content` state machine. **No EC2 access.** |
 | `ManualTriggerLogGroup` | `/aws/lambda/${ProjectName}-manual-trigger`, retention-bounded |
-| `ManualTriggerFunction` | Go Lambda (`provided.al2023`, arm64); env `STATE_MACHINE_ARN` |
-| `OrchestrationStateMachine` | Step Functions state machine: find host by tag → start → SSM ready gate → SendMessage to SQS |
+| `ManualTriggerFunction` | Go Lambda (`provided.al2023`, arm64); env `STATE_MACHINE_ARN` + `CONTENT_STATE_MACHINE_ARN` (the latter set by `CUTOVER_CONTENT=true`, routing `/process` to the serverless `GenerateContent` machine) |
+| `OrchestrationStateMachine` | *(legacy path)* Step Functions state machine: find host by tag → start → SSM ready gate → SendMessage to SQS. Dormant once cutover; removed in Phase B teardown. |
+| `GenerateContent` (in `content.yaml`) | *(serverless path)* runs the `content-runner` Fargate task → publishes the suite to S3 → best-effort triggers `blog-gen-video` |
 | `StateMachineRole` | `ec2:DescribeInstances`, tag-scoped `ec2:StartInstances`, `ssm:DescribeInstanceInformation`, `sqs:SendMessage` |
 | `ProcessResource` / `ProcessMethod` | `POST /process`, `ApiKeyRequired: true`, `AWS_PROXY` integration |
 | `ProcessInvokePermission` | lets API Gateway invoke the Lambda |
@@ -209,10 +233,15 @@ Then fetch `ProcessUrl` + the API key (section 2) and call the endpoint.
   The manual trigger maps its request to an `intake.Event` and submits it.
 - **Step Functions publisher.** `eventbus.NewStepFunctions` implements
   `intake.Publisher`; its `Publish` starts an execution whose input is the exact
-  `{"detail": <event>}` SQS body the worker consumes — so the message contract is
-  unchanged from the worker's perspective.
-- **No window gate.** The state machine starts the host on every run, so the
-  manual trigger has no operating-window logic and needs no EC2 permissions.
-- **One entry point today, many tomorrow.** Additional sources (CLI, Slack, cron,
-  release webhook) can start the same state machine, so the downstream pipeline
-  is unchanged.
+  `{"detail": <event>}` body both machines consume — the serverless
+  `GenerateContent` machine reads `$.detail.owner/name/release_tag` into the
+  Fargate task's env, so the contract is unchanged across the cutover.
+- **Config-flip cutover.** Routing is chosen at runtime by
+  `CONTENT_STATE_MACHINE_ARN` (serverless) vs `STATE_MACHINE_ARN` (legacy), so
+  moving `/process` to serverless — and rolling back — is a one-variable change
+  with no code edit.
+- **No window gate.** Neither path gates on an operating window (serverless has no
+  instance; the legacy machine starts the host itself), so the manual trigger has
+  no window logic and needs no EC2 permissions.
+- **One entry point today, many tomorrow.** Additional sources (CLI, Slack, cron)
+  can start the same state machine, so the downstream pipeline is unchanged.
