@@ -52,6 +52,15 @@ Parameters:
     Type: Number
     Default: 14
     Description: Retention for the renderer + Lambda log groups.
+  EnableSceneImages:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When "true", the renderer generates an AI background image (Amazon Nova
+      Canvas) for each non-diagram scene, falling back to the title card on any
+      throttle/failure. Off by default so image-model throttling never
+      destabilises the pipeline.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
@@ -173,6 +182,12 @@ Resources:
                   StringEquals:
                     kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
                     kms:CallerAccount: !Ref AWS::AccountId
+              # Scene-image generation (ENABLE_SCENE_IMAGES) invokes Amazon Nova
+              # Canvas. Scoped to that one foundation model; harmless when the
+              # feature is off (the renderer never calls it).
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-canvas-v1:0"
 
   VideoTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -194,6 +209,8 @@ Resources:
           Environment:
             - Name: AWS_REGION
               Value: !Ref AWS::Region
+            - Name: ENABLE_SCENE_IMAGES
+              Value: !Ref EnableSceneImages
           LogConfiguration:
             LogDriver: awslogs
             Options:

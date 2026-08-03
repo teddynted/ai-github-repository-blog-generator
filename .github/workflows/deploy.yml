@@ -289,7 +289,8 @@ jobs:
               ArtifactsBucket="$ARTIFACTS_BUCKET" \
               LoadVideoScriptsCodeKey="$SHA/load-video-scripts.zip" \
               PublishVideoManifestCodeKey="$SHA/publish-video-manifest.zip" \
-              RendererImageTag="$SHA"
+              RendererImageTag="$SHA" \
+              EnableSceneImages="${{ vars.ENABLE_SCENE_IMAGES || 'false' }}"
 
           ECR="${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/blog-gen-video-renderer"
           aws ecr get-login-password --region "${{ vars.AWS_REGION }}" \
