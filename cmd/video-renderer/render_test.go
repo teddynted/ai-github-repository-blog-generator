@@ -108,8 +108,12 @@ func TestSegmentArgsColorAndDiagramBackground(t *testing.T) {
 	// No background image → solid colour source.
 	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "")
 	joined := strings.Join(seg, " ")
-	if !strings.Contains(joined, "color=c=0x0B0B12:s=1080x1920") || !strings.Contains(joined, "textfile=/w/cap.txt") || !strings.Contains(joined, "-shortest") {
+	if !strings.Contains(joined, "color=c=0x0F172A:s=1080x1920") || !strings.Contains(joined, "textfile=/w/cap.txt") || !strings.Contains(joined, "-shortest") {
 		t.Errorf("colour segment args = %v", seg)
+	}
+	// Title card: large, centred on both axes.
+	if !strings.Contains(joined, "x=(w-text_w)/2:y=(h-text_h)/2") {
+		t.Errorf("title not centred: %v", seg)
 	}
 	if !slices.Contains(seg, "/w/n.mp3") || !slices.Contains(seg, "/w/s.mp4") {
 		t.Errorf("segment args missing io: %v", seg)

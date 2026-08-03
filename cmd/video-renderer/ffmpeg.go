@@ -22,12 +22,15 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 	var inputs []string
 	var vf string
 	if bgImage != "" {
-		// Loop the diagram image; cover the frame (scale up + centre-crop) then caption it.
+		// Loop the diagram image; cover the frame (scale up + centre-crop) then put
+		// the caption in a lower band so it stays readable over the diagram.
 		inputs = []string{"-loop", "1", "-i", bgImage}
-		vf = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h) + "," + drawtext(captionFile, fontFile, h)
+		vf = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h) + "," + captionBand(captionFile, fontFile, w, h)
 	} else {
+		// No diagram: a proper title slide — deep-slate background with the scene
+		// title large and centred, so it reads as a designed slide, not a black card.
 		inputs = []string{"-f", "lavfi", "-i", sprintfColor(w, h)}
-		vf = drawtext(captionFile, fontFile, h)
+		vf = titleCard(captionFile, fontFile, w, h)
 	}
 	args := []string{"-y"}
 	args = append(args, inputs...)
@@ -39,6 +42,16 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 		"-shortest",
 		out,
 	)
+}
+
+// titleFontsize scales the title to the frame (min dimension), so 16:9 and 9:16
+// both get a large, readable title.
+func titleFontsize(w, h int) int {
+	m := w
+	if h < w {
+		m = h
+	}
+	return m / 11
 }
 
 // rsvgArgs builds the rsvg-convert args that rasterize an SVG diagram to a PNG
@@ -60,15 +73,31 @@ func concatArgs(listFile, out string) []string {
 }
 
 func sprintfColor(w, h int) string {
-	return "color=c=0x0B0B12:s=" + itoa(w) + "x" + itoa(h)
+	// Deep slate — reads as an intentional slide, not a black screen.
+	return "color=c=0x0F172A:s=" + itoa(w) + "x" + itoa(h)
 }
 
-// drawtext centers the caption horizontally, near the lower third, wrapped.
-func drawtext(captionFile, fontFile string, h int) string {
-	y := (h * 72) / 100
+// titleCard renders the scene title large and centred on both axes with a soft
+// box — so a caption-only scene looks like a designed title slide.
+func titleCard(captionFile, fontFile string, w, h int) string {
+	fs := titleFontsize(w, h)
 	return "drawtext=fontfile=" + fontFile +
 		":textfile=" + captionFile +
-		":reload=0:fontcolor=white:fontsize=54:line_spacing=12" +
-		":box=1:boxcolor=0x000000AA:boxborderw=28" +
+		":reload=0:fontcolor=white:fontsize=" + itoa(fs) +
+		":line_spacing=" + itoa(fs/4) +
+		":box=1:boxcolor=0x000000AA:boxborderw=" + itoa(fs/2) +
+		":x=(w-text_w)/2:y=(h-text_h)/2"
+}
+
+// captionBand renders the caption smaller in the lower third, for scenes that
+// have a diagram/image background (kept legible with a stronger box).
+func captionBand(captionFile, fontFile string, w, h int) string {
+	fs := titleFontsize(w, h) * 2 / 3
+	y := (h * 74) / 100
+	return "drawtext=fontfile=" + fontFile +
+		":textfile=" + captionFile +
+		":reload=0:fontcolor=white:fontsize=" + itoa(fs) +
+		":line_spacing=" + itoa(fs/4) +
+		":box=1:boxcolor=0x000000CC:boxborderw=" + itoa(fs/2) +
 		":x=(w-text_w)/2:y=" + itoa(y)
 }

@@ -120,7 +120,9 @@ func run(ctx context.Context) error {
 			return fmt.Errorf("polly scene %d: %w", sc.Number, err)
 		}
 		capFile := filepath.Join(work, fmt.Sprintf("scene_%d.txt", sc.Number))
-		if err := os.WriteFile(capFile, []byte(sc.Title), 0o644); err != nil {
+		// Wrap the title to the frame width so the large centred title fits.
+		caption := wrapText(sc.Title, 2*w/titleFontsize(w, h))
+		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
 		bg := ""
