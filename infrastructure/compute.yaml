@@ -401,6 +401,11 @@ Resources:
                 fi
                 mkdir -p /data/generated-content /data/work /data/memory /data/pending \
                          /data/n8n /data/postgres /data/redis
+                # The n8n container runs as user "node" (uid 1000) with /data/n8n
+                # mounted at /home/node/.n8n; it must be writable so n8n can save
+                # its auto-generated encryption key + config. Without this, n8n
+                # crash-loops on "EACCES: permission denied, open .n8n/config".
+                chown -R 1000:1000 /data/n8n
 
                 # --- Docker + Compose. On a stock AMI these are not present; install
                 # --- them once (arm64). No NVIDIA/GPU runtime — nothing runs a
