@@ -141,37 +141,21 @@ jobs:
             --parameter-overrides $P
 
       - name: deploy compute stack
-        env:
-          NOTIFY_EMAIL_FROM: ${{ vars.NOTIFY_EMAIL_FROM }}
-          NOTIFY_EMAIL_TO: ${{ vars.NOTIFY_EMAIL_TO }}
-          SMTP_USERNAME: ${{ vars.SMTP_USERNAME }}
-          SMTP_HOST: ${{ vars.SMTP_HOST }}
-          NOTIFY_WEBHOOK_URL: ${{ vars.NOTIFY_WEBHOOK_URL }}
         run: |
-          # Only the non-secret notification settings are passed here. The SMTP
-          # password lives in Secrets Manager (NotificationsSecret) — set it once
-          # with: aws secretsmanager put-secret-value \
-          #   --secret-id blog-gen/notifications/smtp-password --secret-string '<pw>'
           # The instance boots the stock Ubuntu 22.04 arm64 AMI and installs
           # Docker + the n8n/PostgreSQL/Redis compose stack at first boot (no
           # pre-baked AMI, no local model). The key pair is managed by the
           # compute stack (AWS::EC2::KeyPair) — no KeyPairName is passed, so
-          # CloudFormation always creates/owns it.
-          # Phase B: the release generator now runs serverless (blog-gen-content
-          # Fargate), so the box no longer installs the worker. Explicitly blank
-          # WorkerCodeKey/ArtifactsBucket (aws cloudformation deploy RETAINS the
-          # previous value for any param not passed, so they must be set empty, not
-          # just omitted). Blank WorkerCodeKey makes the compute userdata skip the
-          # worker install (it guards on `if [ -n "${WorkerCodeKey}" ]`); the box
-          # runs only the n8n + PostgreSQL + Redis compose stack.
-          PARAMS="WorkerCodeKey= ArtifactsBucket="
+          # CloudFormation always creates/owns it. Phase B: the release generator
+          # runs serverless (blog-gen-content Fargate), so the box no longer
+          # installs the worker; the worker/notification params are gone.
+          #
           # Pin the base AMI to the arm64/Graviton Ubuntu path on every deploy.
           # `aws cloudformation deploy` retains the previous value for any param it
           # is not given, so a one-off manual amd64 override would otherwise stick
           # across deploys and fail to launch on an arm64/t4g instance. Passing it
-          # explicitly makes the stack self-heal to arm64 (matches the worker binary
-          # and Docker source, both arm64).
-          PARAMS="$PARAMS LatestUbuntuAmi=/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id"
+          # explicitly makes the stack self-heal to arm64.
+          PARAMS="LatestUbuntuAmi=/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id"
           # Generated content is published to S3 (durable + inspectable) instead
           # of the instance's ephemeral EBS. The compute stack creates and owns a
           # dedicated content bucket (blog-gen-content-<account>-<region>); set the
@@ -180,22 +164,6 @@ jobs:
           # Optional: override the arm64 instance type (default t4g.small). Must
           # stay in an arm64/Graviton family to match the base AMI.
           [ -n "${{ vars.INSTANCE_TYPE }}" ] && PARAMS="$PARAMS InstanceType=${{ vars.INSTANCE_TYPE }}"
-          # Provider Router primary leg: set BEDROCK_MODEL_ID to the Bedrock Claude
-          # model id (e.g. us.anthropic.claude-opus-4-8). Auth is the instance role.
-          [ -n "${{ vars.BEDROCK_MODEL_ID }}" ] && PARAMS="$PARAMS BedrockModelId=${{ vars.BEDROCK_MODEL_ID }}"
-          # Provider Router fallback leg: Bedrock is attempted first; on a quota
-          # error the router falls back to the Anthropic API. Set ANTHROPIC_MODEL to
-          # pin the model id; the key itself lives only in Secrets Manager.
-          [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && PARAMS="$PARAMS AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
-          # Social video rendering (opt-in). Set ENABLE_VIDEO=true to wire the worker
-          # to the video state machine (deployed below). The ARN is deterministic, so
-          # compute needs no dependency on the video stack existing yet.
-          [ "${{ vars.ENABLE_VIDEO }}" = "true" ] && PARAMS="$PARAMS VideoStateMachineArn=arn:aws:states:${{ vars.AWS_REGION }}:${ACCOUNT}:stateMachine:blog-gen-video"
-          [ -n "$NOTIFY_EMAIL_FROM" ] && PARAMS="$PARAMS NotifyEmailFrom=$NOTIFY_EMAIL_FROM"
-          [ -n "$NOTIFY_EMAIL_TO" ]   && PARAMS="$PARAMS NotifyEmailTo=$NOTIFY_EMAIL_TO"
-          [ -n "$SMTP_USERNAME" ]     && PARAMS="$PARAMS SmtpUsername=$SMTP_USERNAME"
-          [ -n "$SMTP_HOST" ]         && PARAMS="$PARAMS SmtpHost=$SMTP_HOST"
-          [ -n "$NOTIFY_WEBHOOK_URL" ] && PARAMS="$PARAMS NotifyWebhookUrl=$NOTIFY_WEBHOOK_URL"
           aws cloudformation deploy \
             --template-file infrastructure/compute.yaml \
             --stack-name blog-gen-compute \
