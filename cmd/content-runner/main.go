@@ -30,9 +30,13 @@ func main() {
 	}
 	// The release run reads repos over the GitHub API and publishes to S3, so it
 	// needs the region, the repositories table + shared secret (for per-repo PATs),
-	// and an output bucket.
-	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID", "OutputS3Bucket"); err != nil {
+	// and an output bucket. OutputS3Bucket is not in Require's field allowlist, so
+	// check it directly (as the worker does).
+	if err := a.Config.Require("AWSRegion", "RepositoriesTable", "RepoSecretID"); err != nil {
 		log.Fatalf("config: %v", err)
+	}
+	if a.Config.OutputS3Bucket == "" {
+		log.Fatalf("config: OUTPUT_S3_BUCKET is required")
 	}
 
 	owner := os.Getenv("OWNER")
