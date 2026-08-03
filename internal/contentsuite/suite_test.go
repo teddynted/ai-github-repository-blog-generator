@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/architecture"
 	rc "github.com/teddynted/ai-github-repository-blog-generator/internal/releasecontext"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/releasegen"
 )
@@ -393,6 +394,31 @@ func TestReuseDep(t *testing.T) {
 	o.Reuse = false
 	if o.reuseDep("visual-assets") {
 		t.Error("reuse must be off when Reuse=false")
+	}
+}
+
+func TestBestArchitectureSVG(t *testing.T) {
+	col := architecture.ArchitectureCollection{Diagrams: []architecture.Diagram{
+		// Empty SVG — never selected even though it is the most connected.
+		{SVG: "", Metadata: architecture.DiagramMeta{NodeCount: 20, EdgeCount: 30}},
+		// Single node — skipped (a lone box is not a diagram).
+		{SVG: "<svg id=lone/>", Metadata: architecture.DiagramMeta{NodeCount: 1, EdgeCount: 0}},
+		// Sparse but valid.
+		{SVG: "<svg id=sparse/>", Metadata: architecture.DiagramMeta{NodeCount: 10, EdgeCount: 1, Confidence: 100}},
+		// Most connected valid diagram — should win.
+		{SVG: "<svg id=rich/>", Metadata: architecture.DiagramMeta{NodeCount: 13, EdgeCount: 12, Confidence: 84}},
+	}}
+	if got := bestArchitectureSVG(col); got != "<svg id=rich/>" {
+		t.Errorf("bestArchitectureSVG = %q, want the most-connected diagram", got)
+	}
+
+	// No renderable diagram → empty, so the caller falls through to errNoDiagram.
+	none := architecture.ArchitectureCollection{Diagrams: []architecture.Diagram{
+		{SVG: "", Metadata: architecture.DiagramMeta{NodeCount: 5, EdgeCount: 5}},
+		{SVG: "<svg/>", Metadata: architecture.DiagramMeta{NodeCount: 1}},
+	}}
+	if got := bestArchitectureSVG(none); got != "" {
+		t.Errorf("bestArchitectureSVG with no valid diagram = %q, want empty", got)
 	}
 }
 
