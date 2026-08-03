@@ -270,13 +270,15 @@ Resources:
                   - HasOutputBucket
                   - !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
                   - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
-              # The content bucket uses SSE-KMS, so publishing requires a data
-              # key. Scope the grant to the S3 service in this account/region
-              # (never direct KMS use) rather than a cross-stack key-ARN import,
-              # so the permission is order-independent and stays least-privilege.
+              # The content bucket uses SSE-KMS, so publishing needs a data key
+              # (GenerateDataKey) and reading existing artifacts for idempotency
+              # reuse needs Decrypt. Scope the grant to the S3 service in this
+              # account/region (never direct KMS use) rather than a cross-stack
+              # key-ARN import, so it is order-independent and least-privilege.
               - Effect: Allow
                 Action:
                   - kms:GenerateDataKey
+                  - kms:Decrypt
                   - kms:DescribeKey
                 Resource: "*"
                 Condition:
