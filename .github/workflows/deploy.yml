@@ -82,9 +82,6 @@ jobs:
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
 
-      - name: build worker (linux/arm64, runs on the t4g EC2 instance)
-        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
-
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
@@ -107,7 +104,6 @@ jobs:
           for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
-          aws s3 cp dist/worker/worker "s3://$ARTIFACTS_BUCKET/$SHA/worker"
 
       - name: deploy network stack
         run: |
@@ -161,7 +157,14 @@ jobs:
           # pre-baked AMI, no local model). The key pair is managed by the
           # compute stack (AWS::EC2::KeyPair) — no KeyPairName is passed, so
           # CloudFormation always creates/owns it.
-          PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker"
+          # Phase B: the release generator now runs serverless (blog-gen-content
+          # Fargate), so the box no longer installs the worker. Explicitly blank
+          # WorkerCodeKey/ArtifactsBucket (aws cloudformation deploy RETAINS the
+          # previous value for any param not passed, so they must be set empty, not
+          # just omitted). Blank WorkerCodeKey makes the compute userdata skip the
+          # worker install (it guards on `if [ -n "${WorkerCodeKey}" ]`); the box
+          # runs only the n8n + PostgreSQL + Redis compose stack.
+          PARAMS="WorkerCodeKey= ArtifactsBucket="
           # Pin the base AMI to the arm64/Graviton Ubuntu path on every deploy.
           # `aws cloudformation deploy` retains the previous value for any param it
           # is not given, so a one-off manual amd64 override would otherwise stick
