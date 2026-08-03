@@ -283,6 +283,13 @@ Resources:
                   - logs:*
                   - cloudwatch:*
                   - sns:*
+                  # Step Functions state machines: the POST /process orchestration
+                  # machine (serverless.yaml) and the opt-in video machine (video.yaml).
+                  - states:*
+                  # Social-video stack (video.yaml, ENABLE_VIDEO=true): the ECS
+                  # Fargate renderer + its ECR image repository.
+                  - ecs:*
+                  - ecr:*
                 Resource: "*"
               # Manage the NotificationsSecret (compute stack) and let deploy.yml
               # seed the SMTP password. Scoped to this project's secrets.
