@@ -47,6 +47,11 @@ func main() {
 
 func run(ctx context.Context) error {
 	format := getenv("FORMAT", "youtube")
+	switch format {
+	case "youtube", "youtube-shorts", "tiktok":
+	default:
+		return fmt.Errorf("unsupported FORMAT %q (want youtube|youtube-shorts|tiktok)", format)
+	}
 	storyboardURI := os.Getenv("STORYBOARD_S3_URI")
 	outputURI := os.Getenv("OUTPUT_S3_URI")
 	aspect := getenv("ASPECT", "16:9")
@@ -93,7 +98,10 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("no narratable scenes for %s", format)
 	}
 
-	work := filepath.Join(renderWorkRoot, format)
+	// filepath.Base strips any path separators so a hostile FORMAT can't escape
+	// renderWorkRoot (defence in depth — FORMAT is validated above and set by the
+	// state machine); this also clears the gosec G703 path-traversal taint.
+	work := filepath.Join(renderWorkRoot, filepath.Base(format))
 	if err := os.MkdirAll(work, 0o755); err != nil {
 		return err
 	}
