@@ -166,6 +166,15 @@ func parseComponents(spec string) ([]component, componentIndex) {
 		isBold := func(s string) bool {
 			return strings.HasPrefix(s, "**") && strings.HasSuffix(s, "**") && len(s) > 4
 		}
+		// A leading "Name: <value>" field also declares a component — some specs
+		// use it instead of a bold header, with the remaining fields as sibling
+		// bullets below. Detect it so those specs still yield nodes.
+		nameKey, nameVal, isNameField := "", "", false
+		if bulletBody != "" {
+			if k, v, ok := splitField(bulletBody); ok {
+				nameKey, nameVal, isNameField = k, v, k == "name"
+			}
+		}
 		switch {
 		case !indented && isBold(t):
 			if name := cleanCell(t); name != "" {
@@ -177,14 +186,15 @@ func parseComponents(spec string) ([]component, componentIndex) {
 				flush()
 				cur = &component{Name: name, Plane: plane}
 			}
-		case bulletBody != "" && cur != nil:
-			if key, val, ok := splitField(bulletBody); ok {
-				switch {
-				case strings.HasPrefix(key, "type"):
-					cur.Type = val
-				case strings.HasPrefix(key, "aws service"):
-					cur.Service = val
-				}
+		case isNameField && nameVal != "":
+			flush()
+			cur = &component{Name: cleanCell(nameVal), Plane: plane}
+		case cur != nil && nameKey != "":
+			switch {
+			case strings.HasPrefix(nameKey, "type"):
+				cur.Type = nameVal
+			case strings.HasPrefix(nameKey, "aws service"):
+				cur.Service = nameVal
 			}
 		}
 	}

@@ -1,6 +1,26 @@
 package archspec
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// The prompt must (a) pin the exact Component bullet shape so the diagram parser
+// reads component names deterministically, and (b) forbid the degenerate
+// single-node / no-connection specs that render as an empty diagram.
+func TestPromptPinsComponentShapeAndMinimumGraph(t *testing.T) {
+	p := (&Generator{}).prompt(ReleasePackage{Context: richContext()})
+	for _, want := range []string{
+		"- **<canonical Name>**", // exact Component header shape
+		"  - AWS Service:",       // field sub-bullet shape
+		"one node is not an architecture",
+		"you MUST populate the Connections section",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt missing required guidance: %q", want)
+		}
+	}
+}
 
 func TestReleaseTopicStripsPlatformSuffix(t *testing.T) {
 	cases := map[string]string{
