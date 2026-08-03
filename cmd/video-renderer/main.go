@@ -7,6 +7,9 @@
 //
 //	FORMAT, SCRIPT_S3_URI, STORYBOARD_S3_URI, VOICEOVER_S3_URI, OUTPUT_S3_URI, ASPECT
 //
+// The render is idempotent: if OUTPUT_S3_URI already exists it is skipped (a
+// re-run reuses the existing MP4). Set FORCE_RENDER=true to regenerate anyway.
+//
 // v1 drives all formats from the storyboard scenes (single, stable schema) and
 // caps short formats to a few scenes; per-format script scene selection and
 // richer visuals (images from visual-assets, diagram overlays) are follow-ups.
@@ -15,18 +18,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/polly"
 	pollytypes "github.com/aws/aws-sdk-go-v2/service/polly/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/imagegen"
 )
 
@@ -67,6 +73,26 @@ func run(ctx context.Context) error {
 	}
 	s3c := s3.NewFromConfig(cfg)
 	pollyc := polly.NewFromConfig(cfg)
+
+	// Idempotency: if this format's MP4 already exists in the video bucket, don't
+	// re-render it — skip and exit successfully so a re-run of the pipeline reuses
+	// the existing video instead of paying for Polly + FFmpeg (+ image gen) again
+	// and overwriting a good render. Set FORCE_RENDER=true to regenerate anyway
+	// (e.g. after a renderer change). Checked before any work is done.
+	outBucket, outKey, err := parseS3URI(outputURI)
+	if err != nil {
+		return err
+	}
+	if !forceRender() {
+		exists, err := objectExists(ctx, s3c, outBucket, outKey)
+		if err != nil {
+			// Don't fail the render on a transient existence-check error — just proceed.
+			log.Printf("could not check whether %s exists (%v); rendering", outputURI, err)
+		} else if exists {
+			log.Printf("video already exists, skipping render: %s (set FORCE_RENDER=true to override)", outputURI)
+			return nil
+		}
+	}
 
 	// Load + parse the storyboard.
 	sbBucket, sbKey, err := parseS3URI(storyboardURI)
@@ -161,11 +187,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("ffmpeg concat: %w", err)
 	}
 
-	// Upload.
-	outBucket, outKey, err := parseS3URI(outputURI)
-	if err != nil {
-		return err
-	}
+	// Upload (outBucket/outKey parsed above for the idempotency check).
 	if err := putObject(ctx, s3c, outBucket, outKey, final); err != nil {
 		return fmt.Errorf("upload final: %w", err)
 	}
@@ -235,6 +257,30 @@ func maybeDiagram(ctx context.Context, s3c *s3.Client, storyboardURI, work strin
 	}
 	log.Printf("using architecture diagram background: %s", uri)
 	return png
+}
+
+// forceRender reports whether FORCE_RENDER=true, which bypasses the
+// already-exists skip so a format is re-rendered even when its MP4 is present.
+func forceRender() bool { return strings.EqualFold(os.Getenv("FORCE_RENDER"), "true") }
+
+// objectExists reports whether an S3 object is present. A NotFound (404) is a
+// clean "no"; any other error is returned so the caller can decide.
+func objectExists(ctx context.Context, c *s3.Client, bucket, key string) (bool, error) {
+	_, err := c.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+	if err == nil {
+		return true, nil
+	}
+	var nf *s3types.NotFound
+	if errors.As(err, &nf) {
+		return false, nil
+	}
+	// HeadObject sometimes surfaces the 404 as a generic response error rather than
+	// the modelled NotFound type, so fall back to matching the status/code text.
+	msg := err.Error()
+	if strings.Contains(msg, "NotFound") || strings.Contains(msg, "status code: 404") {
+		return false, nil
+	}
+	return false, err
 }
 
 func getObject(ctx context.Context, c *s3.Client, bucket, key string) ([]byte, error) {

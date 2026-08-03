@@ -130,6 +130,24 @@ func TestSegmentArgsColorAndDiagramBackground(t *testing.T) {
 	}
 }
 
+func TestForceRender(t *testing.T) {
+	// Default (unset): the already-exists skip is in effect.
+	t.Setenv("FORCE_RENDER", "")
+	if forceRender() {
+		t.Error("FORCE_RENDER unset should not force a render")
+	}
+	for _, v := range []string{"true", "TRUE", "True"} {
+		t.Setenv("FORCE_RENDER", v)
+		if !forceRender() {
+			t.Errorf("FORCE_RENDER=%q should force a render", v)
+		}
+	}
+	t.Setenv("FORCE_RENDER", "1")
+	if forceRender() {
+		t.Error(`only "true" (case-insensitive) forces a render, not "1"`)
+	}
+}
+
 func TestConcatArgs(t *testing.T) {
 	con := concatArgs("/w/list.txt", "/w/final.mp4")
 	cj := strings.Join(con, " ")
