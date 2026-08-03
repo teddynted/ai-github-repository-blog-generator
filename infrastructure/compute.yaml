@@ -339,6 +339,7 @@ Resources:
                 # --- Docker Compose) and installs the generator worker. No local
                 # --- model, GPU, or AMI baking — Claude runs on Bedrock/Anthropic.
                 export DEBIAN_FRONTEND=noninteractive
+                ARCH=$(dpkg --print-architecture)
                 mkdir -p /opt/blog-gen /etc/blog-gen
 
                 # --- Attach the persistent data volume, then mount it at /data.
@@ -459,10 +460,22 @@ Resources:
                   echo "waiting for data volume $VOL_ID (state=$VST holder=$HOLDER) [$i]"; sleep 10
                 done
 
-                # Wait for the block device, format once, and mount at /data.
-                DEV=/dev/xvdf
-                for i in $(seq 1 30); do [ -b "$DEV" ] && break || sleep 5; done
-                if [ -b "$DEV" ]; then
+                # Resolve the attached data volume's block device, then format
+                # once and mount at /data. Nitro/Graviton instances (t4g, t3, …)
+                # expose EBS volumes as NVMe devices (/dev/nvmeXn1), NOT the
+                # requested /dev/sdf|/dev/xvdf, so match by the EBS volume id: the
+                # NVMe serial is "vol" + the volume id with its hyphen removed,
+                # surfaced at /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_<serial>.
+                # Fall back to /dev/xvdf for any legacy (non-Nitro) instance.
+                SERIAL="vol$(echo "$VOL_ID" | sed 's/^vol-//')"
+                BYID="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$SERIAL"
+                DEV=""
+                for i in $(seq 1 30); do
+                  if [ -e "$BYID" ]; then DEV=$(readlink -f "$BYID"); break; fi
+                  if [ -b /dev/xvdf ]; then DEV=/dev/xvdf; break; fi
+                  sleep 5
+                done
+                if [ -n "$DEV" ] && [ -b "$DEV" ]; then
                   blkid "$DEV" || mkfs.ext4 -L blogdata "$DEV"
                   mkdir -p /data
                   grep -q "LABEL=blogdata" /etc/fstab || echo "LABEL=blogdata /data ext4 defaults,nofail 0 2" >> /etc/fstab
@@ -478,7 +491,7 @@ Resources:
                   install -m 0755 -d /etc/apt/keyrings
                   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
                   chmod a+r /etc/apt/keyrings/docker.gpg
-                  echo "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+                  echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
                     > /etc/apt/sources.list.d/docker.list
                   apt-get update -y
                   apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin

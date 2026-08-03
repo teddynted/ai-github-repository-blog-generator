@@ -145,6 +145,13 @@ jobs:
           # compute stack (AWS::EC2::KeyPair) — no KeyPairName is passed, so
           # CloudFormation always creates/owns it.
           PARAMS="ArtifactsBucket=$ARTIFACTS_BUCKET WorkerCodeKey=$SHA/worker"
+          # Pin the base AMI to the arm64/Graviton Ubuntu path on every deploy.
+          # `aws cloudformation deploy` retains the previous value for any param it
+          # is not given, so a one-off manual amd64 override would otherwise stick
+          # across deploys and fail to launch on an arm64/t4g instance. Passing it
+          # explicitly makes the stack self-heal to arm64 (matches the worker binary
+          # and Docker source, both arm64).
+          PARAMS="$PARAMS LatestUbuntuAmi=/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id"
           # Generated content is published to S3 (durable + inspectable) instead
           # of the instance's ephemeral EBS. The compute stack creates and owns a
           # dedicated content bucket (blog-gen-content-<account>-<region>); set the
