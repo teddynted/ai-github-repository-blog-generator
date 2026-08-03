@@ -3,12 +3,16 @@
 #   docker build -f containers/video-renderer/Dockerfile -t <ecr>:<tag> .
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26-bookworm AS build
+# Build on the builder's native platform and cross-compile to the target arch
+# (Go cross-compiles trivially), so the compile is NOT emulated under QEMU on an
+# amd64 runner. $BUILDPLATFORM/$TARGETARCH are buildx-provided build args.
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o /out/video-renderer ./cmd/video-renderer
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o /out/video-renderer ./cmd/video-renderer
 
 FROM debian:bookworm-slim
 # FFmpeg does the encoding; fonts-dejavu-core provides the drawtext font;
