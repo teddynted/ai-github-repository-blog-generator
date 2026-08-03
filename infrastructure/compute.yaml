@@ -180,56 +180,15 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              # Drain the events queue.
-              - Effect: Allow
-                Action:
-                  - sqs:ReceiveMessage
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                Resource:
-                  Fn::ImportValue: !Sub "${ProjectName}-QueueArn"
-              # Read the shared repository-credentials secret (PAT, when cloning)
-              # and the SMTP password (for email).
-              - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource:
-                  - Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
-                  - !Ref NotificationsSecret
-                  - !Ref AnthropicApiKeySecret
-              # Update last-processed commit SHA after a run.
-              - Effect: Allow
-                Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                Resource:
-                  Fn::Sub:
-                    - "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}"
-                    - TableName:
-                        Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
-              # Ship logs.
+              # Ship logs (n8n/PostgreSQL/Redis boot + health).
+              # (Phase B: SQS drain, repo-credentials/SMTP secret reads, and the
+              # last-processed-SHA DynamoDB writes were the worker's — removed with
+              # the worker; the box now runs only the n8n/PG/Redis compose stack.)
               - Effect: Allow
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/${ProjectName}/instance:*"
-              # Invoke Claude on Bedrock — the Provider Router's primary leg (used
-              # when BEDROCK_MODEL_ID is set; on a quota/throttle error the router
-              # falls back to the Anthropic API). Scoped to Anthropic foundation models + inference
-              # profiles — auth is this instance role, so there is no API key. The
-              # foundation-model ARN uses a region wildcard because a cross-region
-              # inference profile (e.g. us.anthropic.*) routes InvokeModel to the
-              # underlying models in several regions.
-              - Effect: Allow
-                Action: bedrock:InvokeModel
-                Resource:
-                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.*"
-                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
-                  - !Sub "arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*"
-              # After a successful release run, start the video state machine to
-              # render social videos. Scoped to this project's fixed-name machine.
-              - Effect: Allow
-                Action: states:StartExecution
-                Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-video"
               # Publish CPU/mem/disk metrics via the CloudWatch agent (scoped to
               # this project's metric namespace; PutMetricData cannot be resource-scoped).
               - Effect: Allow
@@ -255,43 +214,9 @@ Resources:
               - Effect: Allow
                 Action: ec2:DescribeVolumes
                 Resource: "*"
-              # Publish generated content to the dedicated content bucket created
-              # by the bootstrap stack (or the OutputS3Bucket override when one is
-              # supplied). The bucket name is deterministic, so no cross-stack
-              # import is needed.
-              # PutObject stores generated artifacts; GetObject backs the S3
-              # idempotency check (skip artifacts already published — see
-              # internal/artifactstore) so a re-run never regenerates them.
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:GetObject
-                Resource: !If
-                  - HasOutputBucket
-                  - !Sub "arn:${AWS::Partition}:s3:::${OutputS3Bucket}/*"
-                  - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
-              # The content bucket uses SSE-KMS, so publishing needs a data key
-              # (GenerateDataKey) and reading existing artifacts for idempotency
-              # reuse needs Decrypt. Scope the grant to the S3 service in this
-              # account/region (never direct KMS use) rather than a cross-stack
-              # key-ARN import, so it is order-independent and least-privilege.
-              - Effect: Allow
-                Action:
-                  - kms:GenerateDataKey
-                  - kms:Decrypt
-                  - kms:DescribeKey
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
-                    kms:CallerAccount: !Ref AWS::AccountId
-              # Download the worker binary from the artifacts bucket at boot.
-              - !If
-                - HasWorkerCode
-                - Effect: Allow
-                  Action: s3:GetObject
-                  Resource: !Sub "arn:${AWS::Partition}:s3:::${ArtifactsBucket}/*"
-                - !Ref AWS::NoValue
+              # (Phase B: the content-bucket S3 read/write + SSE-KMS grants and the
+              # worker-binary download were the worker's — content generation now
+              # runs on Fargate with its own task role; removed here.)
               # Email notifications go through Turbo SMTP (outbound SMTP over
               # TLS), so no AWS mail permission is required — the worker only
               # needs egress on 587/465 and reads the SMTP password from the
@@ -333,8 +258,7 @@ Resources:
               DeleteOnTermination: true
         UserData:
           Fn::Base64:
-            Fn::Sub:
-              - |
+            Fn::Sub: |
                 #!/bin/bash
                 set -euxo pipefail
                 # --- Boots the orchestration plane (n8n + PostgreSQL + Redis via
@@ -562,90 +486,25 @@ Resources:
                 ExecStop=/usr/bin/docker compose -f /opt/blog-gen/docker-compose.yml down
                 UNIT
 
-                # --- Worker binary + env (stack-specific values). SMTP password is NOT
-                # --- here — the worker reads it from Secrets Manager via the secret ref.
-                if [ -n "${WorkerCodeKey}" ]; then
-                  export AWS_DEFAULT_REGION=${AWS::Region}
-                  command -v aws >/dev/null 2>&1 || { apt-get update -y && apt-get install -y awscli; }
-                  aws s3 cp "s3://${ArtifactsBucket}/${WorkerCodeKey}" /usr/local/bin/blog-gen-worker
-                  chmod +x /usr/local/bin/blog-gen-worker
-                  cat > /etc/blog-gen/worker.env <<'ENVEOF'
-                AWS_REGION=${AWS::Region}
-                QUEUE_URL=${QueueUrl}
-                REPOSITORIES_TABLE=${RepositoriesTable}
-                REPO_SECRET_ID=${RepoSecretId}
-                BEDROCK_MODEL_ID=${BedrockModelId}
-                ANTHROPIC_API_KEY_SECRET=${AnthropicApiKeySecret}
-                ANTHROPIC_MODEL=${AnthropicModel}
-                OUTPUT_DIR=/data/generated-content
-                OUTPUT_S3_BUCKET=${OutputBucketName}
-                VIDEO_STATE_MACHINE_ARN=${VideoStateMachineArn}
-                WORK_DIR=/data/work
-                MEMORY_DIR=/data/memory
-                PENDING_DIR=/data/pending
-                NOTIFY_WEBHOOK_URL=${NotifyWebhookUrl}
-                NOTIFY_EMAIL_FROM=${NotifyEmailFrom}
-                NOTIFY_EMAIL_TO=${NotifyEmailTo}
-                SMTP_HOST=${SmtpHost}
-                SMTP_PORT=${SmtpPort}
-                SMTP_USERNAME=${SmtpUsername}
-                SMTP_PASSWORD_SECRET=${NotificationsSecret}
-                ENVEOF
-                  chmod 600 /etc/blog-gen/worker.env
-                  # The worker drains the SQS queue the Step Functions machine
-                  # feeds and generates artifacts (Bedrock -> Anthropic via the
-                  # Provider Router), skipping any already in S3. No local-model
-                  # dependency, so it starts as soon as the network is up.
-                  cat > /etc/systemd/system/blog-gen-worker.service <<'UNIT'
-                [Unit]
-                Description=blog-gen content generator worker (SQS -> Claude -> S3)
-                After=network-online.target
-                Wants=network-online.target
-                [Service]
-                EnvironmentFile=/etc/blog-gen/worker.env
-                ExecStart=/usr/local/bin/blog-gen-worker
-                Restart=always
-                RestartSec=5
-                [Install]
-                WantedBy=multi-user.target
-                UNIT
-                fi
+                # --- (Phase B) The generator worker no longer runs on this box —
+                # --- release content is generated serverlessly on the blog-gen-content
+                # --- Fargate task. The box runs only the n8n/PostgreSQL/Redis plane.
 
-                # --- Health probe. Reports the orchestration plane + worker state
-                # --- for the 60s health timer configured above.
+                # --- Health probe for the 60s health timer configured above.
                 cat > /opt/blog-gen/health.sh <<'HEALTH'
                 #!/usr/bin/env bash
                 systemctl is-active --quiet docker || { echo "UNHEALTHY: docker down"; exit 1; }
                 curl -sf http://127.0.0.1:5678/healthz >/dev/null 2>&1 || { echo "UNHEALTHY: n8n not ready"; exit 1; }
-                if [ -x /usr/local/bin/blog-gen-worker ]; then
-                  systemctl is-active --quiet blog-gen-worker || { echo "UNHEALTHY: worker not active"; exit 1; }
-                fi
                 echo "READY"
                 HEALTH
                 chmod +x /opt/blog-gen/health.sh
 
-                # --- Auto-start every boot: the orchestration plane and (if the
-                # --- binary is present) the generator worker.
+                # --- Auto-start the orchestration (n8n/PG/Redis compose) plane.
                 systemctl daemon-reload
                 systemctl enable --now blog-gen-orchestration
-                if [ -x /usr/local/bin/blog-gen-worker ]; then
-                  systemctl enable --now blog-gen-worker
-                fi
 
                 /opt/blog-gen/health.sh || echo "not healthy yet; services will converge"
                 echo "instance init complete"
-              - QueueUrl:
-                  Fn::ImportValue: !Sub "${ProjectName}-QueueUrl"
-                RepositoriesTable:
-                  Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
-                RepoSecretId:
-                  Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
-                # Effective output bucket: the OutputS3Bucket override if given,
-                # else the bootstrap-created dedicated content bucket.
-                OutputBucketName: !If
-                  - HasOutputBucket
-                  - !Ref OutputS3Bucket
-                  - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
 
   Instance:
     Type: AWS::EC2::Instance
