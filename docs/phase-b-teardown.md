@@ -1,11 +1,23 @@
 # Phase B Teardown: retire the EC2 worker path after the serverless cutover
 
-**Status:** prepared, NOT executed · **Prereq:** `CUTOVER_CONTENT=true` live + a soak period on serverless · **Date:** 2026-08-03
+**Status: ✅ EXECUTED (2026-08-03).** The teardown below was carried out in three sequenced,
+verified stages and the box was downsized:
 
-Once `POST /process` has run cleanly on the serverless `blog-gen-content` pipeline for a
-soak period, this retires the now-dormant EC2 release path and shrinks the box. **Do not
-start until you're willing to give up the instant `CUTOVER_CONTENT` rollback** — this
-removes it.
+- **Stage 1 — [#136]:** deleted `cmd/worker`; the box stops installing the worker.
+- **Stage 2 — [#137]:** removed the worker IAM + userdata from `compute.yaml` and decoupled
+  it from SQS (dropped the `QueueArn`/`QueueUrl` imports).
+- **Stage 3 — [#138]:** deleted `OrchestrationStateMachine` + the SQS events queue/DLQ +
+  their exports from `serverless.yaml`, and pruned the events-queue CloudWatch alarms.
+- **Downsize:** `INSTANCE_TYPE` → `t4g.medium` (the box now runs only n8n/PostgreSQL/Redis).
+
+Verified: `POST /process` → starts a `blog-gen-content` execution (serverless); the
+orchestration SM + queues are gone; `manual-trigger` env is `CONTENT_STATE_MACHINE_ARN`
+only. `CUTOVER_CONTENT` must remain `true` (no rollback path remains).
+
+The rest of this document is the original teardown plan, kept as the record of what was done.
+
+---
+
 
 ## ⚠️ Assumption to confirm first — snapshot runs
 
