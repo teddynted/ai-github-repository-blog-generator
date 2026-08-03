@@ -33,10 +33,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: %v", err)
 	}
-	// The state machine (not this Lambda) owns the compute-host lifecycle, so
-	// only the region and the target state-machine ARN are required.
-	if err := a.Config.Require("AWSRegion", "StateMachineArn"); err != nil {
+	// The state machine (not this Lambda) owns the downstream work, so only the
+	// region and a target state-machine ARN are required — either the orchestration
+	// machine (default) or the serverless content machine (CONTENT_STATE_MACHINE_ARN).
+	if err := a.Config.Require("AWSRegion"); err != nil {
 		log.Fatalf("config: %v", err)
+	}
+	if a.Config.StateMachineArn == "" && a.Config.ContentStateMachineArn == "" {
+		log.Fatalf("config: one of STATE_MACHINE_ARN or CONTENT_STATE_MACHINE_ARN is required")
 	}
 
 	ctx := context.Background()
@@ -45,8 +49,18 @@ func main() {
 		log.Fatalf("aws config: %v", err)
 	}
 
+	// Default: start the EC2 orchestration machine. When CONTENT_STATE_MACHINE_ARN
+	// is set, start the serverless GenerateContent machine instead — the same
+	// {"detail": <event>} envelope, so the switch is a config flip (the cutover to
+	// serverless content generation once verified). No instance wake is needed for
+	// the content path; the machine runs the generator on Fargate.
+	targetArn := a.Config.StateMachineArn
+	if a.Config.ContentStateMachineArn != "" {
+		targetArn = a.Config.ContentStateMachineArn
+		a.Logger.Info("manual trigger targeting content state machine", slog.String("arn", targetArn))
+	}
 	svc := &intake.Service{
-		Publisher: eventbus.NewStepFunctions(sfn.NewFromConfig(awsCfg), a.Config.StateMachineArn),
+		Publisher: eventbus.NewStepFunctions(sfn.NewFromConfig(awsCfg), targetArn),
 		Logger:    a.Logger,
 	}
 

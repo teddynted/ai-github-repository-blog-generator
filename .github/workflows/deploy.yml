@@ -120,6 +120,10 @@ jobs:
           P="$P ManualTriggerCodeKey=$SHA/manual-trigger.zip"
           P="$P ReleaseContextCodeKey=$SHA/release-context.zip"
           [ -n "$GITHUB_READ_TOKEN" ] && P="$P GitHubReadToken=$GITHUB_READ_TOKEN"
+          # Cutover flip: point POST /process at the serverless GenerateContent
+          # machine (deterministic name). Off by default; set CUTOVER_CONTENT=true
+          # only after the content stack is deployed and a Fargate run is verified.
+          [ "${{ vars.CUTOVER_CONTENT }}" = "true" ] && P="$P ContentStateMachineArn=arn:aws:states:${{ vars.AWS_REGION }}:${ACCOUNT}:stateMachine:blog-gen-content"
           # shellcheck disable=SC2086
           aws cloudformation deploy \
             --template-file infrastructure/serverless.yaml \
@@ -276,4 +280,31 @@ jobs:
             | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           docker buildx build --platform linux/arm64 \
             -f containers/video-renderer/Dockerfile \
+            -t "${ECR}:${SHA}" --push .
+
+      # Serverless content generation (opt-in via ENABLE_SERVERLESS_CONTENT=true).
+      # Deploys the content stack (ECR repo + Fargate task + GenerateContent state
+      # machine), then builds and pushes the content-runner image tagged with the
+      # SHA. The task definition references <repo>:<sha>; pushing after the stack
+      # deploy is fine since the image is only needed when a task runs. Phase A of
+      # the content-generation serverless migration (see docs/); the EC2 worker's
+      # release path stays until this is verified and cut over.
+      - name: deploy content stack + push runner image
+        if: ${{ vars.ENABLE_SERVERLESS_CONTENT == 'true' }}
+        run: |
+          P="RunnerImageTag=$SHA"
+          [ -n "${{ vars.OUTPUT_S3_BUCKET }}" ] && P="$P ContentBucket=${{ vars.OUTPUT_S3_BUCKET }}"
+          [ -n "${{ vars.BEDROCK_MODEL_ID }}" ] && P="$P BedrockModelId=${{ vars.BEDROCK_MODEL_ID }}"
+          [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && P="$P AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
+          aws cloudformation deploy \
+            --template-file infrastructure/content.yaml \
+            --stack-name blog-gen-content \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides $P
+
+          ECR="${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/blog-gen-content-runner"
+          aws ecr get-login-password --region "${{ vars.AWS_REGION }}" \
+            | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
+          docker buildx build --platform linux/arm64 \
+            -f containers/content-runner/Dockerfile \
             -t "${ECR}:${SHA}" --push .

@@ -31,6 +31,13 @@ Parameters:
     Type: String
     Default: release-context.zip
     Description: S3 key of the release-context Lambda package (POST /release-context).
+  ContentStateMachineArn:
+    Type: String
+    Default: ""
+    Description: >
+      When set, POST /process starts this serverless GenerateContent state machine
+      (from the content stack) instead of the EC2 orchestration machine. Blank keeps
+      the orchestration path — the cutover to serverless generation is a config flip.
   GitHubReadToken:
     Type: String
     Default: ""
@@ -194,7 +201,11 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: states:StartExecution
-                Resource: !Ref OrchestrationStateMachine
+                Resource:
+                  - !Ref OrchestrationStateMachine
+                  # The serverless content machine (from the content stack) — a
+                  # deterministic name, so no cross-stack import/ordering needed.
+                  - !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-content"
 
   ReleaseContextRole:
     Type: AWS::IAM::Role
@@ -294,8 +305,11 @@ Resources:
         S3Key: !Ref ManualTriggerCodeKey
       Environment:
         Variables:
-          # POST /process starts an execution of this state machine.
+          # POST /process starts an execution of this state machine — unless
+          # CONTENT_STATE_MACHINE_ARN is set, which switches it to the serverless
+          # GenerateContent machine (same {"detail": <event>} input envelope).
           STATE_MACHINE_ARN: !Ref OrchestrationStateMachine
+          CONTENT_STATE_MACHINE_ARN: !Ref ContentStateMachineArn
       Tags:
         - Key: Project
           Value: !Ref ProjectName

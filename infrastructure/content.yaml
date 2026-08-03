@@ -1,0 +1,349 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub AI Blog Generator - Content Generation stack (serverless). Generates the
+  full release content suite (blog + storyboard + voiceover + social posts + SEO +
+  artifacts JSON) on ECS Fargate instead of the long-running EC2 worker. The
+  GenerateContent state machine runs the content-runner task (from an ECR image),
+  which builds the Release Context and publishes every artifact to the content
+  bucket, then best-effort starts the video state machine. Imports the VPC + public
+  subnet from the network stack.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: blog-gen
+    Description: Resource name prefix and tag value (must match the other stacks).
+  RunnerImageTag:
+    Type: String
+    Default: latest
+    Description: >
+      Tag of the content-runner image in the ECR repo this stack creates (pushed by
+      deploy.yml before a task runs). The task definition references <repo-uri>:<tag>.
+  ContentBucket:
+    Type: String
+    Default: ""
+    Description: >
+      Bucket the runner publishes generated content to. Blank uses the
+      bootstrap-created content bucket (<project>-content-<account>-<region>).
+  BedrockModelId:
+    Type: String
+    Default: ""
+    Description: >
+      Bedrock Claude model id (primary AI leg). Blank runs Anthropic-only, which
+      then requires AnthropicApiKeySecret.
+  AnthropicModel:
+    Type: String
+    Default: ""
+    Description: Anthropic API model id (fallback leg). Blank uses the client default.
+  TaskCpu:
+    Type: String
+    Default: "2048"
+    AllowedValues: ["1024", "2048", "4096"]
+    Description: Fargate task vCPU units for the content runner (2048 = 2 vCPU).
+  TaskMemory:
+    Type: String
+    Default: "4096"
+    Description: Fargate task memory (MiB) — must be valid for the chosen TaskCpu.
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    Description: Retention for the content-runner log group.
+
+Conditions:
+  HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Runner image registry + Fargate cluster/task.
+  # ---------------------------------------------------------------------------
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-content-runner"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules":[{"rulePriority":1,"description":"expire untagged","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":14},"action":{"type":"expire"}}]}
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${ProjectName}-content"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  RunnerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/${ProjectName}/content-runner"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # Fargate tasks run in the public subnet with a public IP so they can reach ECR,
+  # S3, Bedrock, Secrets Manager, DynamoDB, and the GitHub API without a NAT. Egress-only.
+  FargateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${ProjectName} content runner (egress only)"
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}-VpcId"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Outbound to ECR, S3, Bedrock, Secrets Manager, DynamoDB, GitHub, CloudWatch.
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Pulls the image + ships logs (the AWS-managed execution policy covers both).
+  ContentTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+
+  # The runner's own permissions: read/write the content bucket, invoke Bedrock,
+  # read the repositories table + shared secret (per-repo PAT + Anthropic key).
+  ContentTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: content-runner
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Publish generated artifacts + read existing ones (S3 idempotency).
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !If
+                  - HasContentBucket
+                  - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !If
+                  - HasContentBucket
+                  - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+              # AI generation via Bedrock (InvokeModel cannot be tightly resource-scoped
+              # across model ids / inference profiles).
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+              # Per-repo PAT + Anthropic API key live under the project secret prefix.
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*"
+              # Repository metadata (resolves each repo's registered PAT reference).
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - !Sub
+                    - "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${T}"
+                    - T:
+                        Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
+                  - !Sub
+                    - "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${T}/index/*"
+                    - T:
+                        Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
+
+  ContentTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${ProjectName}-content-runner"
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt ContentTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ContentTaskRole.Arn
+      ContainerDefinitions:
+        - Name: runner
+          Image: !Sub "${EcrRepository.RepositoryUri}:${RunnerImageTag}"
+          Essential: true
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: REPOSITORIES_TABLE
+              Value:
+                Fn::ImportValue: !Sub "${ProjectName}-RepositoriesTableName"
+            - Name: REPO_SECRET_ID
+              Value:
+                Fn::ImportValue: !Sub "${ProjectName}-RepoCredentialsSecretArn"
+            - Name: OUTPUT_S3_BUCKET
+              Value: !If
+                - HasContentBucket
+                - !Ref ContentBucket
+                - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+            - Name: OUTPUT_S3_PREFIX
+              Value: generated-content
+            - Name: BEDROCK_MODEL_ID
+              Value: !Ref BedrockModelId
+            - Name: ANTHROPIC_MODEL
+              Value: !Ref AnthropicModel
+            # The Anthropic API key secret is created + owned by the compute stack
+            # under this deterministic name; the task role can read the whole prefix.
+            - Name: ANTHROPIC_API_KEY_SECRET
+              Value: !Sub "${ProjectName}/anthropic/api-key"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref RunnerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: runner
+
+  # ---------------------------------------------------------------------------
+  # Orchestration: generate the suite (Fargate) -> best-effort start the video SM.
+  # ---------------------------------------------------------------------------
+  ContentStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: content-orchestration
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref ContentTaskDefinition
+              - Effect: Allow
+                Action:
+                  - ecs:StopTask
+                  - ecs:DescribeTasks
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !GetAtt ContentTaskExecutionRole.Arn
+                  - !GetAtt ContentTaskRole.Arn
+              # runTask.sync uses the managed EventBridge rule to wait for completion.
+              - Effect: Allow
+                Action:
+                  - events:PutTargets
+                  - events:PutRule
+                  - events:DescribeRule
+                Resource: !Sub "arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForECSTaskRule"
+              # Best-effort trigger of the (deterministically named) video state machine.
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-video"
+
+  ContentStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub "${ProjectName}-content"
+      RoleArn: !GetAtt ContentStateMachineRole.Arn
+      DefinitionString: !Sub
+        - |
+          {
+            "Comment": "Generate the release content suite on Fargate, then start video rendering.",
+            "TimeoutSeconds": 3600,
+            "StartAt": "BuildAndGenerate",
+            "States": {
+              "BuildAndGenerate": {
+                "Type": "Task",
+                "Resource": "arn:${AWS::Partition}:states:::ecs:runTask.sync",
+                "Parameters": {
+                  "LaunchType": "FARGATE",
+                  "Cluster": "${ClusterArn}",
+                  "TaskDefinition": "${TaskDef}",
+                  "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                      "Subnets": ["${SubnetId}"],
+                      "SecurityGroups": ["${SgId}"],
+                      "AssignPublicIp": "ENABLED"
+                    }
+                  },
+                  "Overrides": {
+                    "ContainerOverrides": [{
+                      "Name": "runner",
+                      "Environment": [
+                        {"Name": "OWNER", "Value.$": "$.detail.owner"},
+                        {"Name": "REPO", "Value.$": "$.detail.name"},
+                        {"Name": "RELEASE_TAG", "Value.$": "$.detail.release_tag"}
+                      ]
+                    }]
+                  }
+                },
+                "ResultPath": "$.ecs",
+                "Next": "TriggerVideo"
+              },
+              "TriggerVideo": {
+                "Type": "Task",
+                "Resource": "arn:${AWS::Partition}:states:::states:startExecution",
+                "Parameters": {
+                  "StateMachineArn": "${VideoArn}",
+                  "Input": {
+                    "owner.$": "$.detail.owner",
+                    "name.$": "$.detail.name",
+                    "tag.$": "$.detail.release_tag",
+                    "bucket": "${ContentBucketName}",
+                    "prefix": "generated-content"
+                  }
+                },
+                "ResultPath": "$.video",
+                "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.videoError", "Next": "Done"}],
+                "Next": "Done"
+              },
+              "Done": {"Type": "Succeed"}
+            }
+          }
+        - ClusterArn: !GetAtt EcsCluster.Arn
+          TaskDef: !Ref ContentTaskDefinition
+          SubnetId:
+            Fn::ImportValue: !Sub "${ProjectName}-PublicSubnetId"
+          SgId: !GetAtt FargateSecurityGroup.GroupId
+          VideoArn: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-video"
+          ContentBucketName: !If
+            - HasContentBucket
+            - !Ref ContentBucket
+            - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  ContentStateMachineArn:
+    Description: Content generation state machine (started by manual-trigger / POST /process).
+    Value: !Ref ContentStateMachine
+    Export:
+      Name: !Sub "${ProjectName}-ContentStateMachineArn"
+  EcrRepositoryUri:
+    Description: ECR repo deploy.yml pushes the content-runner image to.
+    Value: !GetAtt EcrRepository.RepositoryUri
