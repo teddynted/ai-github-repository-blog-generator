@@ -149,13 +149,15 @@ Resources:
                   - HasContentBucket
                   - !Sub "arn:${AWS::Partition}:s3:::${ContentBucket}"
                   - !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
-              # The content bucket uses SSE-KMS, so publishing requires a data key.
-              # Scope the grant to the S3 service in this account/region (never
-              # direct KMS use) rather than a cross-stack key-ARN import, so it is
-              # order-independent and stays least-privilege — mirrors the worker.
+              # The content bucket uses SSE-KMS, so publishing needs a data key
+              # (GenerateDataKey) and reading existing artifacts for idempotency
+              # reuse needs Decrypt. Scope the grant to the S3 service in this
+              # account/region (never direct KMS use) rather than a cross-stack
+              # key-ARN import, so it is order-independent and least-privilege.
               - Effect: Allow
                 Action:
                   - kms:GenerateDataKey
+                  - kms:Decrypt
                   - kms:DescribeKey
                 Resource: "*"
                 Condition:
@@ -317,6 +319,7 @@ Resources:
                   }
                 },
                 "ResultPath": "$.ecs",
+                "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "GenerateFailed"}],
                 "Next": "TriggerVideo"
               },
               "TriggerVideo": {
@@ -335,6 +338,11 @@ Resources:
                 "ResultPath": "$.video",
                 "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.videoError", "Next": "Done"}],
                 "Next": "Done"
+              },
+              "GenerateFailed": {
+                "Type": "Fail",
+                "Error": "ContentGenerationFailed",
+                "Cause": "The content-runner Fargate task failed; see the /blog-gen/content-runner CloudWatch logs and this execution's ECS TaskFailed event for the container error."
               },
               "Done": {"Type": "Succeed"}
             }
