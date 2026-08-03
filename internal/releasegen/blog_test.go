@@ -21,7 +21,7 @@ func blogContext() *rc.ReleaseContext {
 
 func TestBlogAssemblesFrontMatterAndBody(t *testing.T) {
 	fm := &fakeModel{reply: func(string) (string, error) {
-		return "## Why This Matters\n\nThe platform decouples ingestion from processing.\n\n## Conclusion\n\nThe pattern holds.", nil
+		return "## The Queue That Absorbed the Storm\n\nThe platform decouples ingestion from processing.\n\n## What Running It Taught Me\n\nThe pattern holds.", nil
 	}}
 	g := &Generator{Model: fm}
 	post, err := g.Blog(context.Background(), blogContext())
@@ -42,7 +42,7 @@ func TestBlogAssemblesFrontMatterAndBody(t *testing.T) {
 	md := post.Markdown
 	for _, want := range []string{
 		"---\n", "title: \"Inside widget v0.2.0\"", "description: ", "tags: [",
-		"# Inside widget v0.2.0", "## Why This Matters", "The platform decouples ingestion from processing.",
+		"# Inside widget v0.2.0", "## The Queue That Absorbed the Storm", "The platform decouples ingestion from processing.",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown missing %q", want)
@@ -54,7 +54,7 @@ func TestBlogAssemblesFrontMatterAndBody(t *testing.T) {
 }
 
 func TestBlogEmbedsMermaidDiagrams(t *testing.T) {
-	fm := &fakeModel{reply: func(string) (string, error) { return "## Why This Matters\n\nProse.", nil }}
+	fm := &fakeModel{reply: func(string) (string, error) { return "## The Log Line That Started It\n\nProse.", nil }}
 	post, err := (&Generator{Model: fm}).Blog(context.Background(), blogContext())
 	if err != nil {
 		t.Fatal(err)
@@ -90,11 +90,11 @@ func TestBlogRetriesUntilValid(t *testing.T) {
 		}
 		articleAttempts++
 		if articleAttempts == 1 {
-			// Invalid: a generic technology lede + no Conclusion.
-			return "## Why This Matters\n\nEvent-driven architectures decouple producers from consumers.", nil
+			// Invalid: a generic technology lede (ungrounded teaching sentence).
+			return "## The Wrong Assumption\n\nEvent-driven architectures decouple producers from consumers.", nil
 		}
-		// Valid: grounded, complete.
-		return "## Why This Matters\n\nThe repository routes events through a durable queue.\n\n## Conclusion\n\nThe pattern holds.", nil
+		// Valid: grounded, complete, story-driven headings (no forbidden ones).
+		return "## The Queue That Absorbed the Storm\n\nThe repository routes events through a durable queue.\n\n## What Running It Taught Me\n\nThe pattern holds.", nil
 	}}
 
 	post, err := (&Generator{Model: fm, MaxBlogAttempts: 3}).Blog(context.Background(), blogContext())
@@ -111,19 +111,19 @@ func TestBlogRetriesUntilValid(t *testing.T) {
 }
 
 func TestBlogFallsBackToBestDraft(t *testing.T) {
-	// Every draft is invalid (missing Conclusion) — Blog must still return the
-	// best-effort draft without erroring.
+	// Every draft is invalid (an ungrounded generic technology lede) — Blog must
+	// still return the best-effort draft without erroring.
 	fm := &fakeModel{reply: func(p string) (string, error) {
 		if strings.Contains(p, "produce a grounded PLAN") {
 			return "TITLE: X\nTHEME: y", nil
 		}
-		return "## Why This Matters\n\nThe repository decouples ingestion from processing.", nil
+		return "## The Wrong Assumption\n\nEvent-driven architectures decouple producers from consumers.", nil
 	}}
 	post, err := (&Generator{Model: fm, MaxBlogAttempts: 3}).Blog(context.Background(), blogContext())
 	if err != nil {
 		t.Fatalf("Blog: %v", err)
 	}
-	if post.Markdown == "" || !strings.Contains(post.Markdown, "## Why This Matters") {
+	if post.Markdown == "" || !strings.Contains(post.Markdown, "## The Wrong Assumption") {
 		t.Error("expected a best-effort draft even when all attempts fail validation")
 	}
 }
@@ -140,7 +140,8 @@ func TestBlogPlanThenWritePrompts(t *testing.T) {
 	plan := fm.prompts[0]
 	for _, want := range []string{
 		"Do NOT write the article yet", "STAGE 1", "STAGE 2", "STAGE 3", "STAGE 4",
-		"THEME", "OUTLINE", "TITLE", // timeless title requested in the plan
+		"THEME", "HEADINGS", "TITLE", // timeless title + story-driven headings requested in the plan
+		"archetype",             // the narrative archetype is chosen at plan time
 		"only the TRIGGER",      // release is trigger, not topic
 		"acme/widget", "v0.2.0", // grounding
 	} {
@@ -151,8 +152,7 @@ func TestBlogPlanThenWritePrompts(t *testing.T) {
 
 	article := fm.prompts[1]
 	for _, want := range []string{
-		"Why This Matters", "The Engineering Constraint", "The Solution", "Why These Decisions Were Made",
-		"Tradeoffs", "What This Enables Next", "Conclusion",
+		"archetype", "story-driven", "FORBIDDEN HEADINGS", "first-person", // narrative + voice contract
 		"Never fabricate", "Omit unknowns silently", "1,400–1,900 words",
 		"Do NOT write YAML front matter",
 		"TIMELESS engineering article", "This release delivers", // timeless framing + forbidden phrase

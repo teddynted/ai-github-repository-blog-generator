@@ -13,11 +13,11 @@ tags: [aws, go]
 
 # Designing an Event-Driven Platform on AWS
 
-## Why This Matters
+## The Queue That Absorbed the Release Storm
 
 The system decouples release events from generation using a queue.
 
-## Conclusion
+## What Running It Taught Me
 
 The pattern generalises to any event-driven workload.
 `
@@ -31,7 +31,7 @@ func TestBlogValidatorPasses(t *testing.T) {
 
 func TestBlogValidatorCatchesRegressions(t *testing.T) {
 	cases := map[string]string{
-		"missing section":   strings.Replace(goodBlog, "## Conclusion", "## Wrap Up", 1),
+		"forbidden heading": goodBlog + "\n## Conclusion\n\nWrap up.\n",
 		"marketing phrase":  goodBlog + "\nThis is a groundbreaking, revolutionary system.\n",
 		"placeholder":       goodBlog + "\nTODO: write this part.\n",
 		"too many diagrams": goodBlog + "\n```mermaid\nA-->B\n```\n```mermaid\nC-->D\n```\n```mermaid\nE-->F\n```\n",
