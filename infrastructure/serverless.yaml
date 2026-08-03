@@ -112,38 +112,9 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  EventsDeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${ProjectName}-events-dlq"
-      SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  EventsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${ProjectName}-events"
-      SqsManagedSseEnabled: true
-      # The worker holds one message for the entire content suite (blog → … →
-      # X thread), which is long-form LLM inference and can run well past the
-      # old 15m. Keep the visibility timeout above the worst-case run so a
-      # slow-but-succeeding message is not redelivered and reprocessed (which
-      # duplicates work and eventually dead-letters at maxReceiveCount).
-      VisibilityTimeout: 3600
-      MessageRetentionPeriod: 1209600
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt EventsDeadLetterQueue.Arn
-        maxReceiveCount: 5
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  # The state machine enqueues jobs onto EventsQueue using its own IAM role
-  # (identity-based sqs:SendMessage), so no queue resource policy is needed —
-  # unlike the former EventBridge target, which required a service principal.
+  # (Phase B) The EventsQueue + DLQ and the OrchestrationStateMachine that fed
+  # them are removed — POST /process now starts the serverless GenerateContent
+  # (Fargate) machine directly, with no EC2 worker to buffer for.
 
   # ---------------------------------------------------------------------------
   # IAM roles (least privilege, one per function)
@@ -201,11 +172,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: states:StartExecution
-                Resource:
-                  - !Ref OrchestrationStateMachine
-                  # The serverless content machine (from the content stack) — a
-                  # deterministic name, so no cross-stack import/ordering needed.
-                  - !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-content"
+                # The serverless content machine (from the content stack) — a
+                # deterministic name, so no cross-stack import/ordering needed.
+                Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-content"
 
   ReleaseContextRole:
     Type: AWS::IAM::Role
@@ -305,10 +274,9 @@ Resources:
         S3Key: !Ref ManualTriggerCodeKey
       Environment:
         Variables:
-          # POST /process starts an execution of this state machine — unless
-          # CONTENT_STATE_MACHINE_ARN is set, which switches it to the serverless
-          # GenerateContent machine (same {"detail": <event>} input envelope).
-          STATE_MACHINE_ARN: !Ref OrchestrationStateMachine
+          # POST /process starts the serverless GenerateContent state machine
+          # (Phase B removed the EC2 orchestration path). CONTENT_STATE_MACHINE_ARN
+          # must be set (deploy.yml passes it when CUTOVER_CONTENT=true).
           CONTENT_STATE_MACHINE_ARN: !Ref ContentStateMachineArn
       Tags:
         - Key: Project
@@ -337,136 +305,6 @@ Resources:
           CONTEXT_BUCKET: !Ref ArtifactsBucket
           # Optional GitHub read token; blank works for public repositories.
           GITHUB_TOKEN: !Ref GitHubReadToken
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-
-  # ---------------------------------------------------------------------------
-  # Step Functions orchestration state machine (the POST /process trigger).
-  # It resolves the compute host by its Project tag, starts it, waits for it to
-  # report ready via SSM, then enqueues the job onto SQS for the worker to drain
-  # (the worker skips any artifact already in S3). Instance power-OFF stays with
-  # the scheduler stack (fixed window / idle-stop).
-  # ---------------------------------------------------------------------------
-  StateMachineRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: states.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: orchestration
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              # Locate the host by tag (DescribeInstances cannot be scoped) and
-              # start it on demand (scoped to this project's tagged instance).
-              - Effect: Allow
-                Action: ec2:DescribeInstances
-                Resource: "*"
-              - Effect: Allow
-                Action: ec2:StartInstances
-                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/Project: !Ref ProjectName
-              # Gate on the host reporting Online (cannot be resource-scoped).
-              - Effect: Allow
-                Action: ssm:DescribeInstanceInformation
-                Resource: "*"
-              # Hand the job to the worker's queue.
-              - Effect: Allow
-                Action: sqs:SendMessage
-                Resource: !GetAtt EventsQueue.Arn
-
-  OrchestrationStateMachine:
-    Type: AWS::StepFunctions::StateMachine
-    Properties:
-      StateMachineName: !Sub "${ProjectName}-orchestration"
-      RoleArn: !GetAtt StateMachineRole.Arn
-      DefinitionString: !Sub |
-        {
-          "Comment": "Start the compute host, wait for SSM ready, enqueue the release job.",
-          "TimeoutSeconds": 900,
-          "StartAt": "FindInstance",
-          "States": {
-            "FindInstance": {
-              "Type": "Task",
-              "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ec2:describeInstances",
-              "Parameters": {
-                "Filters": [
-                  {"Name": "tag:Project", "Values": ["${ProjectName}"]},
-                  {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]}
-                ]
-              },
-              "ResultPath": "$.ec2",
-              "Next": "ExtractInstance"
-            },
-            "ExtractInstance": {
-              "Type": "Pass",
-              "Parameters": {
-                "instanceId.$": "$.ec2.Reservations[0].Instances[0].InstanceId",
-                "detail.$": "$.detail"
-              },
-              "ResultPath": "$",
-              "Next": "StartInstance"
-            },
-            "StartInstance": {
-              "Type": "Task",
-              "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ec2:startInstances",
-              "Parameters": {
-                "InstanceIds.$": "States.Array($.instanceId)"
-              },
-              "ResultPath": "$.start",
-              "Next": "WaitForBoot"
-            },
-            "WaitForBoot": {
-              "Type": "Wait",
-              "Seconds": 30,
-              "Next": "CheckSSM"
-            },
-            "CheckSSM": {
-              "Type": "Task",
-              "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ssm:describeInstanceInformation",
-              "Parameters": {
-                "Filters": [
-                  {"Key": "InstanceIds", "Values.$": "States.Array($.instanceId)"}
-                ]
-              },
-              "ResultPath": "$.ssm",
-              "Next": "IsOnline"
-            },
-            "IsOnline": {
-              "Type": "Choice",
-              "Choices": [
-                {"Variable": "$.ssm.InstanceInformationList[0].PingStatus", "IsPresent": false, "Next": "WaitForBoot"},
-                {"Variable": "$.ssm.InstanceInformationList[0].PingStatus", "StringEquals": "Online", "Next": "BuildBody"}
-              ],
-              "Default": "WaitForBoot"
-            },
-            "BuildBody": {
-              "Type": "Pass",
-              "Parameters": {
-                "detail.$": "$.detail"
-              },
-              "ResultPath": "$.body",
-              "Next": "EnqueueJob"
-            },
-            "EnqueueJob": {
-              "Type": "Task",
-              "Resource": "arn:${AWS::Partition}:states:::sqs:sendMessage",
-              "Parameters": {
-                "QueueUrl": "${EventsQueue}",
-                "MessageBody.$": "States.JsonToString($.body)"
-              },
-              "End": true
-            }
-          }
-        }
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -660,21 +498,3 @@ Outputs:
     Value: !Ref RepoCredentialsSecret
     Export:
       Name: !Sub "${ProjectName}-RepoCredentialsSecretArn"
-  StateMachineArn:
-    Description: Orchestration state machine started by POST /process.
-    Value: !Ref OrchestrationStateMachine
-    Export:
-      Name: !Sub "${ProjectName}-StateMachineArn"
-  QueueUrl:
-    Description: SQS events queue URL.
-    Value: !Ref EventsQueue
-    Export:
-      Name: !Sub "${ProjectName}-QueueUrl"
-  QueueArn:
-    Description: SQS events queue ARN (for the instance role in the compute stack).
-    Value: !GetAtt EventsQueue.Arn
-    Export:
-      Name: !Sub "${ProjectName}-QueueArn"
-  DeadLetterQueueUrl:
-    Description: SQS dead-letter queue URL.
-    Value: !Ref EventsDeadLetterQueue
