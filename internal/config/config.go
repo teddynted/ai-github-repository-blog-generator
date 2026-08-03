@@ -58,6 +58,11 @@ type Config struct {
 	// StateMachineArn is the Step Functions orchestration state machine the
 	// manual trigger starts on POST /process (STATE_MACHINE_ARN).
 	StateMachineArn string
+	// ContentStateMachineArn, when set, makes the manual trigger start the
+	// serverless GenerateContent state machine instead of the EC2 orchestration
+	// machine (CONTENT_STATE_MACHINE_ARN). Blank keeps the orchestration path —
+	// the cutover to serverless content generation is a config flip once verified.
+	ContentStateMachineArn string
 	// VideoStateMachineArn is the Step Functions video state machine the worker
 	// starts after a successful release run to render social videos
 	// (VIDEO_STATE_MACHINE_ARN). Blank disables video rendering.
@@ -142,40 +147,41 @@ type Getenv func(key string) string
 // different subset.
 func Load(getenv Getenv) (Config, error) {
 	cfg := Config{
-		AWSRegion:             getenv("AWS_REGION"),
-		ProjectName:           getenv("PROJECT_NAME"),
-		EventSource:           getenv("EVENT_SOURCE"),
-		PublishTrigger:        firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
-		RepositoriesTable:     getenv("REPOSITORIES_TABLE"),
-		SecretsPrefix:         firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
-		RepoSecretID:          getenv("REPO_SECRET_ID"),
-		EventBusName:          getenv("EVENT_BUS_NAME"),
-		StateMachineArn:       getenv("STATE_MACHINE_ARN"),
-		VideoStateMachineArn:  getenv("VIDEO_STATE_MACHINE_ARN"),
-		QueueURL:              getenv("QUEUE_URL"),
-		InstanceID:            getenv("INSTANCE_ID"),
-		N8NWebhookURL:         getenv("N8N_WEBHOOK_URL"),
-		WebhookURL:            getenv("WEBHOOK_URL"),
-		BedrockModelID:        getenv("BEDROCK_MODEL_ID"),
-		AnthropicAPIKey:       getenv("ANTHROPIC_API_KEY"),
-		AnthropicAPIKeySecret: getenv("ANTHROPIC_API_KEY_SECRET"),
-		AnthropicModel:        getenv("ANTHROPIC_MODEL"),
-		OutputDir:             firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
-		OutputS3Bucket:        getenv("OUTPUT_S3_BUCKET"),
-		OutputS3Prefix:        firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
-		WorkDir:               firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
-		MemoryDir:             firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
-		PendingDir:            firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
-		NotifyWebhookURL:      getenv("NOTIFY_WEBHOOK_URL"),
-		NotifyEmailFrom:       getenv("NOTIFY_EMAIL_FROM"),
-		NotifyEmailTo:         getenv("NOTIFY_EMAIL_TO"),
-		SMTPHost:              firstNonEmpty(getenv("SMTP_HOST"), DefaultSMTPHost),
-		SMTPPort:              DefaultSMTPPort,
-		SMTPUsername:          getenv("SMTP_USERNAME"),
-		SMTPPassword:          getenv("SMTP_PASSWORD"),
-		SMTPPasswordSecret:    getenv("SMTP_PASSWORD_SECRET"),
-		LogLevel:              firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
-		RequireHumanApproval:  DefaultRequireHumanApprove,
+		AWSRegion:              getenv("AWS_REGION"),
+		ProjectName:            getenv("PROJECT_NAME"),
+		EventSource:            getenv("EVENT_SOURCE"),
+		PublishTrigger:         firstNonEmpty(getenv("PUBLISH_TRIGGER"), DefaultPublishTrigger),
+		RepositoriesTable:      getenv("REPOSITORIES_TABLE"),
+		SecretsPrefix:          firstNonEmpty(getenv("SECRETS_PREFIX"), DefaultSecretsPrefix),
+		RepoSecretID:           getenv("REPO_SECRET_ID"),
+		EventBusName:           getenv("EVENT_BUS_NAME"),
+		StateMachineArn:        getenv("STATE_MACHINE_ARN"),
+		ContentStateMachineArn: getenv("CONTENT_STATE_MACHINE_ARN"),
+		VideoStateMachineArn:   getenv("VIDEO_STATE_MACHINE_ARN"),
+		QueueURL:               getenv("QUEUE_URL"),
+		InstanceID:             getenv("INSTANCE_ID"),
+		N8NWebhookURL:          getenv("N8N_WEBHOOK_URL"),
+		WebhookURL:             getenv("WEBHOOK_URL"),
+		BedrockModelID:         getenv("BEDROCK_MODEL_ID"),
+		AnthropicAPIKey:        getenv("ANTHROPIC_API_KEY"),
+		AnthropicAPIKeySecret:  getenv("ANTHROPIC_API_KEY_SECRET"),
+		AnthropicModel:         getenv("ANTHROPIC_MODEL"),
+		OutputDir:              firstNonEmpty(getenv("OUTPUT_DIR"), DefaultOutputDir),
+		OutputS3Bucket:         getenv("OUTPUT_S3_BUCKET"),
+		OutputS3Prefix:         firstNonEmpty(getenv("OUTPUT_S3_PREFIX"), "generated-content"),
+		WorkDir:                firstNonEmpty(getenv("WORK_DIR"), DefaultWorkDir),
+		MemoryDir:              firstNonEmpty(getenv("MEMORY_DIR"), DefaultMemoryDir),
+		PendingDir:             firstNonEmpty(getenv("PENDING_DIR"), DefaultPendingDir),
+		NotifyWebhookURL:       getenv("NOTIFY_WEBHOOK_URL"),
+		NotifyEmailFrom:        getenv("NOTIFY_EMAIL_FROM"),
+		NotifyEmailTo:          getenv("NOTIFY_EMAIL_TO"),
+		SMTPHost:               firstNonEmpty(getenv("SMTP_HOST"), DefaultSMTPHost),
+		SMTPPort:               DefaultSMTPPort,
+		SMTPUsername:           getenv("SMTP_USERNAME"),
+		SMTPPassword:           getenv("SMTP_PASSWORD"),
+		SMTPPasswordSecret:     getenv("SMTP_PASSWORD_SECRET"),
+		LogLevel:               firstNonEmpty(getenv("LOG_LEVEL"), DefaultLogLevel),
+		RequireHumanApproval:   DefaultRequireHumanApprove,
 	}
 
 	if raw := getenv("SMTP_PORT"); raw != "" {
@@ -241,6 +247,8 @@ func (c Config) field(name string) (string, bool) {
 		return c.EventBusName, true
 	case "StateMachineArn":
 		return c.StateMachineArn, true
+	case "ContentStateMachineArn":
+		return c.ContentStateMachineArn, true
 	case "VideoStateMachineArn":
 		return c.VideoStateMachineArn, true
 	case "QueueURL":

@@ -50,3 +50,5 @@ jobs:
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
           echo "building video-renderer"
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/video-renderer/video-renderer ./cmd/video-renderer
+          echo "building content-runner"
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/content-runner/content-runner ./cmd/content-runner
