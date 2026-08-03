@@ -58,26 +58,12 @@ Conditions:
 
 Resources:
   # ---------------------------------------------------------------------------
-  # Storage: rendered videos land here, keyed by owner/name/tag/format.
+  # Rendered videos land in the bootstrap-created bucket
+  # (${ProjectName}-video-<account>-<region>), keyed by owner/name/tag/format.
+  # It is created in the bootstrap stack (not here) because the deploy role has
+  # no s3:CreateBucket; the name is deterministic so this stack references it
+  # without a cross-stack import. See infrastructure/bootstrap.yaml (VideoBucket).
   # ---------------------------------------------------------------------------
-  VideoBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      BucketName: !Sub "${ProjectName}-video-${AWS::AccountId}-${AWS::Region}"
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
 
   # ---------------------------------------------------------------------------
   # Renderer image registry + Fargate cluster/task.
@@ -168,7 +154,7 @@ Resources:
                 Action:
                   - s3:PutObject
                   - s3:GetObject
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${VideoBucket}/*"
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-video-${AWS::AccountId}-${AWS::Region}/*"
               # Polly cannot be resource-scoped for SynthesizeSpeech.
               - Effect: Allow
                 Action: polly:SynthesizeSpeech
@@ -271,7 +257,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: s3:PutObject
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${VideoBucket}/*"
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${ProjectName}-video-${AWS::AccountId}-${AWS::Region}/*"
               - Effect: Allow
                 Action: sns:Publish
                 Resource: !Ref VideoNotificationsTopic
@@ -292,7 +278,7 @@ Resources:
         S3Key: !Ref LoadVideoScriptsCodeKey
       Environment:
         Variables:
-          VIDEO_BUCKET: !Ref VideoBucket
+          VIDEO_BUCKET: !Sub "${ProjectName}-video-${AWS::AccountId}-${AWS::Region}"
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -313,7 +299,7 @@ Resources:
         S3Key: !Ref PublishVideoManifestCodeKey
       Environment:
         Variables:
-          VIDEO_BUCKET: !Ref VideoBucket
+          VIDEO_BUCKET: !Sub "${ProjectName}-video-${AWS::AccountId}-${AWS::Region}"
           SNS_TOPIC_ARN: !Ref VideoNotificationsTopic
       Tags:
         - Key: Project
@@ -578,7 +564,7 @@ Outputs:
       Name: !Sub "${ProjectName}-VideoStateMachineArn"
   VideoBucketName:
     Description: S3 bucket holding rendered videos + the manifest.
-    Value: !Ref VideoBucket
+    Value: !Sub "${ProjectName}-video-${AWS::AccountId}-${AWS::Region}"
     Export:
       Name: !Sub "${ProjectName}-VideoBucketName"
   EcrRepositoryUri:

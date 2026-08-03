@@ -16,7 +16,7 @@ echo "== preflight: $PROJECT =="
 # so `aws cloudformation deploy` won't abort. Healthy and rollback-complete
 # (recoverable) stacks are left untouched.
 STUCK="ROLLBACK_COMPLETE ROLLBACK_FAILED CREATE_FAILED UPDATE_ROLLBACK_FAILED DELETE_FAILED"
-for stack in "$PROJECT-network" "$PROJECT-serverless" "$PROJECT-compute" "$PROJECT-scheduler" "$PROJECT-observability"; do
+for stack in "$PROJECT-network" "$PROJECT-serverless" "$PROJECT-compute" "$PROJECT-scheduler" "$PROJECT-observability" "$PROJECT-video" "$PROJECT-content"; do
 	status="$(aws cloudformation describe-stacks --stack-name "$stack" \
 		--query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo MISSING)"
 	case " $STUCK " in

@@ -157,6 +157,54 @@ Resources:
               Bool:
                 aws:SecureTransport: "false"
 
+  # Dedicated bucket for rendered social videos + the manifest, keyed by
+  # owner/name/tag/format. Created here (not in the video stack) for the same
+  # reason as ContentBucket: the deploy role is not granted s3:CreateBucket, and
+  # the name is deterministic so the video stack references it without a
+  # cross-stack import. AES256 (SSE-S3) is sufficient for rendered media output.
+  VideoBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-video-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-incomplete-mpu
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  VideoBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref VideoBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt VideoBucket.Arn
+              - !Sub "${VideoBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
   # Operator role for the content-admin CLI (history / compare / rollback /
   # promote-latest). It can READ and COPY content — deliberately separate from
   # the worker, which stays write-only. Trusts the account root so an admin can
