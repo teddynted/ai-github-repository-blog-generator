@@ -79,8 +79,10 @@ Resources:
 
   RunnerLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    # Delete (not Retain) so a rolled-back/cleaned stack does not orphan the log
+    # group and collide with "already exists" on the next create.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/${ProjectName}/content-runner"
       RetentionInDays: !Ref LogRetentionDays
