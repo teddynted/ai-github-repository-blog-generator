@@ -297,14 +297,7 @@ Resources:
                 fi
                 mkdir -p "$CW/etc" /var/log/blog-gen
 
-                # Dedicated worker log stream via a systemd drop-in (it starts
-                # after /data mounts, below, so this is in place first).
-                mkdir -p /etc/systemd/system/blog-gen-worker.service.d
-                cat > /etc/systemd/system/blog-gen-worker.service.d/logging.conf <<'DROPIN'
-                [Service]
-                StandardOutput=append:/var/log/blog-gen/worker.log
-                StandardError=append:/var/log/blog-gen/worker.log
-                DROPIN
+                # (Phase B) The worker log drop-in is gone with the worker.
 
                 # 60s health probe -> its own stream (READY / UNHEALTHY: <reason>).
                 cat > /usr/local/bin/blog-gen-health-log.sh <<'HSH'
@@ -360,7 +353,6 @@ Resources:
                         "collect_list": [
                           { "file_path": "/var/log/cloud-init-output.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/boot" },
                           { "file_path": "/var/log/syslog", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/syslog" },
-                          { "file_path": "/var/log/blog-gen/worker.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/worker" },
                           { "file_path": "/var/log/blog-gen/health.log", "log_group_name": "/${ProjectName}/instance", "log_stream_name": "{instance_id}/health" }
                         ]
                       }
