@@ -30,13 +30,12 @@ import (
 )
 
 const (
-	shortSceneCap  = 5    // cap scenes for youtube-shorts / tiktok
-	maxPollyChars  = 2900 // stay within SynthesizeSpeech limits
-	defaultVoice   = "Matthew"
-	defaultFont    = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-	ffmpegBin      = "ffmpeg"
-	rsvgBin        = "rsvg-convert"
-	renderWorkRoot = "/tmp/render"
+	shortSceneCap = 5    // cap scenes for youtube-shorts / tiktok
+	maxPollyChars = 2900 // stay within SynthesizeSpeech limits
+	defaultVoice  = "Matthew"
+	defaultFont   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+	ffmpegBin     = "ffmpeg"
+	rsvgBin       = "rsvg-convert"
 )
 
 func main() {
@@ -98,13 +97,14 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("no narratable scenes for %s", format)
 	}
 
-	// filepath.Base strips any path separators so a hostile FORMAT can't escape
-	// renderWorkRoot (defence in depth — FORMAT is validated above and set by the
-	// state machine); this also clears the gosec G703 path-traversal taint.
-	work := filepath.Join(renderWorkRoot, filepath.Base(format))
-	if err := os.MkdirAll(work, 0o755); err != nil {
+	// Work in an OS-generated temp dir: no env-derived component ever enters a
+	// file path, so there is no path-traversal surface (clears gosec G703). The
+	// task is one-shot, so clean up on exit.
+	work, err := os.MkdirTemp("", "video-render-")
+	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(work)
 	w, h := dimsFor(aspect)
 	log.Printf("rendering %s: %d scenes at %dx%d", format, len(scenes), w, h)
 
