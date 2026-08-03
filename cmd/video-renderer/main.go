@@ -27,6 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/polly"
 	pollytypes "github.com/aws/aws-sdk-go-v2/service/polly/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/imagegen"
 )
 
 const (
@@ -112,6 +113,18 @@ func run(ctx context.Context) error {
 	// the background for architecture/diagram scenes ("" if unavailable).
 	diagramPNG := maybeDiagram(ctx, s3c, storyboardURI, work, w, h)
 
+	// Optional (ENABLE_SCENE_IMAGES): an AI-generated background per non-diagram
+	// scene. Best-effort — if the client can't initialise, every scene simply
+	// falls back to the title card, exactly as when the feature is off.
+	var sceneGen imageGenerator
+	if sceneImagesEnabled() {
+		if g, err := imagegen.New(ctx); err != nil {
+			log.Printf("scene images enabled but client init failed; using title cards: %v", err)
+		} else {
+			sceneGen = g
+		}
+	}
+
 	// Per-scene: narration (Polly) + caption + segment.
 	var listBuf bytes.Buffer
 	for _, sc := range scenes {
@@ -128,6 +141,8 @@ func run(ctx context.Context) error {
 		bg := ""
 		if sc.wantsDiagram() {
 			bg = diagramPNG // "" falls back to a colour card
+		} else {
+			bg = maybeSceneImage(ctx, sceneGen, sc, work, w, h) // "" falls back to a title card
 		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
 		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg)); err != nil {
