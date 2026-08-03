@@ -135,3 +135,30 @@ func firstNonEmpty(vals ...string) string {
 	}
 	return ""
 }
+
+// wrapText word-wraps s to at most cols characters per line (min 12) so a large,
+// centred title fits the frame width instead of overflowing. Existing newlines
+// are preserved as paragraph breaks.
+func wrapText(s string, cols int) string {
+	if cols < 12 {
+		cols = 12
+	}
+	var out []string
+	for _, para := range strings.Split(s, "\n") {
+		words := strings.Fields(para)
+		if len(words) == 0 {
+			continue
+		}
+		line := words[0]
+		for _, wd := range words[1:] {
+			if len(line)+1+len(wd) > cols {
+				out = append(out, line)
+				line = wd
+			} else {
+				line += " " + wd
+			}
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
