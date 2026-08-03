@@ -138,43 +138,9 @@ Resources:
       AlarmActions:
         - !Ref AlarmTopic
 
-  DeadLetterQueueAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${ProjectName}-dlq-not-empty"
-      AlarmDescription: Messages have landed in the dead-letter queue.
-      Namespace: AWS/SQS
-      MetricName: ApproximateNumberOfMessagesVisible
-      Dimensions:
-        - Name: QueueName
-          Value: !Sub "${ProjectName}-events-dlq"
-      Statistic: Maximum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 0
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlarmTopic
-
-  QueueBacklogAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${ProjectName}-queue-backlog"
-      AlarmDescription: Oldest event has been waiting too long (instance not draining).
-      Namespace: AWS/SQS
-      MetricName: ApproximateAgeOfOldestMessage
-      Dimensions:
-        - Name: QueueName
-          Value: !Sub "${ProjectName}-events"
-      Statistic: Maximum
-      Period: 300
-      EvaluationPeriods: 2
-      Threshold: 1800
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlarmTopic
+  # (Phase B) The events-queue DLQ + backlog alarms are removed with the SQS
+  # queue itself — POST /process now runs serverless (no EC2 worker / SQS).
+  # The scheduler's own DLQ alarm (above) stays.
 
   ApiServerErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -231,19 +197,6 @@ Resources:
                   [ "...", "${ProjectName}-manual-trigger" ],
                   [ "...", "${ProjectName}-scheduled-start" ],
                   [ "...", "${ProjectName}-scheduled-stop" ]
-                ]
-              }
-            },
-            {
-              "type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
-              "properties": {
-                "title": "Events queue",
-                "region": "${AWS::Region}",
-                "period": 300,
-                "metrics": [
-                  [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${ProjectName}-events", { "stat": "Maximum" } ],
-                  [ "AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", "${ProjectName}-events", { "stat": "Maximum" } ],
-                  [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${ProjectName}-events-dlq", { "stat": "Maximum" } ]
                 ]
               }
             },
