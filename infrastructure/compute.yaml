@@ -36,30 +36,6 @@ Parameters:
     Default: 20
     MinValue: 20
     Description: Size of the persistent gp3 volume (n8n + PostgreSQL state + Repository Memory).
-  BedrockModelId:
-    Type: String
-    Default: ""
-    Description: >
-      Amazon Bedrock Claude model id — the Provider Router's primary target
-      (e.g. us.anthropic.claude-opus-4-8). Auth is IAM via the instance role, no
-      API key. On a quota/throttle error the router falls back to the Anthropic
-      API. Blank disables the Bedrock leg (Anthropic-only). See internal/airouter.
-  AnthropicModel:
-    Type: String
-    Default: ""
-    Description: >
-      Anthropic API model id used on the fallback leg of the Provider Router
-      (e.g. claude-opus-4-8), active when the Anthropic API key secret holds a
-      key. Blank uses the client default. Bedrock is attempted first; this is the
-      quota fallback. See internal/airouter.
-  VideoStateMachineArn:
-    Type: String
-    Default: ""
-    Description: >
-      ARN of the video Step Functions state machine (from the video stack). When
-      set, the worker starts it after a successful release run to render social
-      videos. Blank disables video rendering. Deterministic name:
-      arn:<partition>:states:<region>:<account>:stateMachine:<project>-video.
   LatestUbuntuAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id
@@ -73,52 +49,12 @@ Parameters:
       stack (<project>-content-<account>-<region>). When set, the instance role
       is granted s3:PutObject on it. Leave blank for the normal case.
 
-  ArtifactsBucket:
-    Type: String
-    Default: ""
-    Description: >
-      S3 bucket holding the worker binary (same bucket used for Lambda
-      artifacts). Required to install the worker service on the instance.
-  WorkerCodeKey:
-    Type: String
-    Default: ""
-    Description: >
-      S3 key of the linux/arm64 worker binary (e.g. "<sha>/worker"). When set
-      with ArtifactsBucket, the instance downloads it and runs it as a systemd
-      service.
-  NotifyEmailFrom:
-    Type: String
-    Default: ""
-    Description: From address for email notifications (blank disables email).
-  NotifyEmailTo:
-    Type: String
-    Default: ""
-    Description: Comma-separated recipient addresses for email notifications.
-  SmtpHost:
-    Type: String
-    Default: pro.turbo-smtp.com
-    Description: SMTP relay host (Turbo SMTP).
-  SmtpPort:
-    Type: Number
-    Default: 587
-    Description: SMTP port (587 STARTTLS or 465 implicit TLS).
-  SmtpUsername:
-    Type: String
-    Default: ""
-    Description: SMTP account username (the password is stored in Secrets Manager).
-  NotifyWebhookUrl:
-    Type: String
-    Default: ""
-    Description: Optional Slack/webhook URL for notifications.
 
 Conditions:
   HasKeyPair: !Not [!Equals [!Ref KeyPairName, ""]]
   # No external key supplied → the stack creates and manages one.
   ManageKeyPair: !Equals [!Ref KeyPairName, ""]
   HasOutputBucket: !Not [!Equals [!Ref OutputS3Bucket, ""]]
-  HasWorkerCode: !And
-    - !Not [!Equals [!Ref ArtifactsBucket, ""]]
-    - !Not [!Equals [!Ref WorkerCodeKey, ""]]
 
 Resources:
   # Container for the SMTP password. CFN creates it with a random placeholder;
