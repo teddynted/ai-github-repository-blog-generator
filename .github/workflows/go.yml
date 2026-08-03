@@ -40,9 +40,13 @@ jobs:
       - name: test
         run: GO_TEST_FLAGS="-race -cover" scripts/hooks/tests.sh
 
-      - name: cross-compile lambdas (linux/arm64)
+      - name: cross-compile lambdas + worker + renderer (linux/arm64)
         run: |
-          for fn in registration webhook-handler manual-trigger scheduled-start scheduled-stop; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest; do
             echo "building $fn"
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
           done
+          echo "building worker"
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/worker/worker ./cmd/worker
+          echo "building video-renderer"
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/video-renderer/video-renderer ./cmd/video-renderer
