@@ -420,7 +420,7 @@ Resources:
               "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ssm:describeInstanceInformation",
               "Parameters": {
                 "Filters": [
-                  {"Key": "InstanceIds", "ValueSet.$": "States.Array($.instanceId)"}
+                  {"Key": "InstanceIds", "Values.$": "States.Array($.instanceId)"}
                 ]
               },
               "ResultPath": "$.ssm",

@@ -203,9 +203,10 @@ func maybeDiagram(ctx context.Context, s3c *s3.Client, storyboardURI, work strin
 	// gosec G703 false positive: `work` is the caller's os.MkdirTemp directory
 	// (OS-generated, no user input) and the filename is a constant, so there is
 	// no path-traversal surface. gosec cannot see this across the function
-	// boundary, so the write is annotated below.
+	// boundary, so the write is annotated below. gosec's directive tag is
+	// literally "#nosec" (with the hash) — "//nosec" is not recognized.
 	svg := filepath.Join(work, "diagram.svg")
-	if err := os.WriteFile(svg, svgBytes, 0o644); err != nil { //nosec G703 -- work is an os.MkdirTemp dir; filename is constant
+	if err := os.WriteFile(svg, svgBytes, 0o644); err != nil { // #nosec G703 -- work is an os.MkdirTemp dir; filename is constant
 		return ""
 	}
 	png := filepath.Join(work, "diagram.png")
