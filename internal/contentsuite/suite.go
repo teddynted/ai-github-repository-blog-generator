@@ -482,11 +482,19 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 				}
 			}
 			// Fallback: the repository-grounded graph render.
-			graphs := diagramGraphs(rctx)
-			if len(graphs) == 0 {
-				return "", errNoDiagram
+			if graphs := diagramGraphs(rctx); len(graphs) > 0 {
+				return svgdiagram.RenderDocument(diagramTitle(rctx, s.Blog), graphs), nil
 			}
-			return svgdiagram.RenderDocument(diagramTitle(rctx, s.Blog), graphs), nil
+			// Last resort: reuse the architecture engine's own output. The M11
+			// architecture stage (joined above) does deeper inference than the raw
+			// release context — it folds AWS services out of parsed Mermaid, the
+			// blog, and CFN — so it produces grounded, already-rendered diagrams for
+			// releases whose release context carries no directly-diagrammable
+			// evidence. Emit its most-connected diagram rather than nothing.
+			if svg := bestArchitectureSVG(s.Architecture); svg != "" {
+				return svg, nil
+			}
+			return "", errNoDiagram
 		}))
 	}
 
@@ -548,6 +556,27 @@ func diagramGraphs(rctx *rc.ReleaseContext) []svgdiagram.Graph {
 		return []svgdiagram.Graph{g}
 	}
 	return nil
+}
+
+// bestArchitectureSVG returns the already-rendered SVG of the most informative
+// diagram in the architecture collection, or "" when none carries a rendered
+// SVG. It ranks by connectivity first (a diagram with edges tells a story), then
+// size, then the engine's own confidence — all precomputed by M11. Diagrams with
+// fewer than two nodes are skipped so a lone box never wins.
+func bestArchitectureSVG(col architecture.ArchitectureCollection) string {
+	best := 0
+	var bestSVG string
+	for _, d := range col.Diagrams {
+		if strings.TrimSpace(d.SVG) == "" || d.Metadata.NodeCount < 2 {
+			continue
+		}
+		score := d.Metadata.EdgeCount*1000 + d.Metadata.NodeCount*10 + d.Metadata.Confidence
+		if score > best {
+			best = score
+			bestSVG = d.SVG
+		}
+	}
+	return bestSVG
 }
 
 // diagramTitle is the SVG document title, anchored to the article topic.
