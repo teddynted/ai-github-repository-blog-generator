@@ -293,6 +293,8 @@ jobs:
             | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           docker buildx build --platform linux/arm64 \
             -f containers/video-renderer/Dockerfile \
+            --cache-from "type=registry,ref=${ECR}:buildcache" \
+            --cache-to "type=registry,ref=${ECR}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true" \
             -t "${ECR}:${SHA}" --push .
 
       # Serverless content generation (opt-in via ENABLE_SERVERLESS_CONTENT=true).
@@ -320,4 +322,6 @@ jobs:
             | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           docker buildx build --platform linux/arm64 \
             -f containers/content-runner/Dockerfile \
+            --cache-from "type=registry,ref=${ECR}:buildcache" \
+            --cache-to "type=registry,ref=${ECR}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true" \
             -t "${ECR}:${SHA}" --push .
