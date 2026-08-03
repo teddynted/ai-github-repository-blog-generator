@@ -12,9 +12,9 @@ Related: [Requirements](./requirements.md) · [Infrastructure](./infrastructure.
 - **On-demand, opt-in generation** — a run happens **only** when the authenticated **`POST /process`** endpoint is called (naming a repository, optionally a release). Nothing runs on repository changes.
 - **One trigger, one pipeline** — `POST /process` starts an **AWS Step Functions** execution; future sources (CLI, Slack, cron, release webhooks) can start the same execution, so the downstream pipeline is identical regardless of how it was triggered.
 - **Managed Claude inference** — every artifact is generated through the **AI Provider Router**: **Amazon Bedrock (Claude Opus 4.8)** first, with automatic fallback to the **Anthropic API** on a quota/throttle error. No local model, no GPU. See [AI Provider Router](./hybrid-ai-routing.md).
-- **Never regenerate** — before generating an artifact the worker checks **Amazon S3**; existing Markdown is reused, never rebuilt, so a re-run spends no tokens on content that already exists.
-- **On-demand compute** — a small **On-Demand t4g.small EC2 instance** is started by the state machine and stopped by a fixed daily window + opt-in idle-stop; compute cost is bounded and predictable.
-- **Durable buffering** — the state machine hands the job to **Amazon SQS** so nothing is lost while the instance boots.
+- **Never regenerate** — before generating an artifact the generator checks **Amazon S3**; existing artifacts are reused, never rebuilt, so a re-run spends no tokens on content that already exists.
+- **On-demand compute (serverless)** — generation runs as a one-shot **ECS Fargate** task started by the `GenerateContent` state machine; there is no instance to power on/off. *(Legacy path: an On-Demand t4g EC2 instance started by the orchestration machine, retired in Phase B.)*
+- **No buffer needed** — Step Functions invokes Fargate directly (`ecs:runTask.sync`); the SQS buffer only existed for the legacy EC2 hand-off while the instance booted.
 - **Persistent state, ephemeral compute** — n8n + PostgreSQL state and **Repository Memory** live on a persistent **gp3 EBS volume**.
 - **Secure by default** — least-privilege IAM, secrets in Secrets Manager (never logged), API-key-gated endpoints, encryption everywhere.
 - **Everything as code** — infrastructure is AWS CloudFormation; workflows are versioned n8n JSON; services run via Docker Compose.
@@ -54,21 +54,28 @@ The metadata store holds only a **reference** to the secret — never the PAT it
 
 ## 3. The `POST /process` Trigger → Step Functions
 
-A run always starts with an authenticated request to `POST /process`. The manual-trigger Lambda validates it and starts a **Step Functions** execution, which owns the compute-host lifecycle and the job hand-off.
+A run always starts with an authenticated request to `POST /process`. The manual-trigger Lambda validates it and starts a **Step Functions** execution.
+
+> **Current architecture — serverless content generation (cutover live).** `/process`
+> now starts the **`GenerateContent`** state machine, which runs generation as a
+> one-shot **ECS Fargate** task (`content-runner`) and publishes the suite to S3 —
+> no EC2, no SQS. The diagram below is the **legacy** orchestration path, kept as
+> the rollback until the [Phase B teardown](./phase-b-teardown.md); routing is a
+> config flip (`CUTOVER_CONTENT`). Full detail:
+> [Serverless content migration](./content-generation-serverless-migration.md).
 
 ```mermaid
 flowchart TB
     C[POST /process<br/>x-api-key] --> LT[Lambda: manual-trigger<br/>validate request]
-    LT -- invalid --> R400[Return 400]
-    LT -- ok --> SFN[StartExecution → Step Functions]
+    LT -- ok --> SFN["StartExecution → GenerateContent"]
     LT --> R202[Return HTTP 202 accepted]
-    subgraph SFN["Orchestration state machine"]
-        FIND[Find host by Project tag] --> START[StartInstances]
-        START --> WAIT[Wait: SSM DescribeInstanceInformation = Online]
-        WAIT --> ENQ[SendMessage → SQS]
+    subgraph SFN["GenerateContent state machine (serverless)"]
+        GEN["ecs:runTask.sync → Fargate content-runner<br/>build context · generate suite · publish to S3"]
+        GEN --> VID[best-effort start blog-gen-video]
     end
-    ENQ --> WK[Worker drains SQS]
 ```
+
+*Legacy path (rollback, pre-cutover): the `OrchestrationStateMachine` finds the host by Project tag → `StartInstances` → waits for SSM `Online` → `SendMessage` to SQS → the EC2 worker drains SQS.*
 
 - The request names the repository and, optionally, a `releaseTag` (release-suite path) or nothing (repository path).
 - The state machine is **idempotent to instance state**: `StartInstances` is a no-op if the host is already running, and the SSM wait loop tolerates a not-yet-registered instance.

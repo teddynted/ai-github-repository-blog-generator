@@ -60,7 +60,7 @@
 
 **GitHub AI Blog Generator** is a fully self-hosted, event-driven AI platform that turns any GitHub repository into publication-ready technical content — **on demand, under your explicit control**.
 
-You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, stores metadata, and stores the token securely in **AWS Secrets Manager**. A run starts when you call the authenticated **`POST /process`** endpoint, naming the repository and release. That request starts an **AWS Step Functions** execution which resolves the compute host by tag, **starts it**, waits until it reports ready via **SSM**, and enqueues the job onto **Amazon SQS**. The worker drains the queue and generates content; the **scheduler stack** powers the host off when the work is done. Nothing runs — and nothing is billed — until you ask.
+You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, stores metadata, and stores the token securely in **AWS Secrets Manager**. A run starts when you call the authenticated **`POST /process`** endpoint, naming the repository and release. That request starts an **AWS Step Functions** execution — the **`GenerateContent`** machine, which runs generation as a one-shot **ECS Fargate** task (`content-runner`) that builds the Release Context, generates the suite, and publishes it to **Amazon S3**, then best-effort triggers video rendering. There is no server to keep running: compute is on-demand and dies with the task. Nothing runs — and nothing is billed — until you ask. *(An earlier EC2-worker path — Step Functions → start host → SSM ready → SQS → worker — remains as the rollback until the [Phase B teardown](./docs/phase-b-teardown.md); see the [serverless migration](./docs/content-generation-serverless-migration.md).)*
 
 When a run fires, the worker generates each artifact through the **AI Provider Router**: **Claude on Amazon Bedrock (Opus 4.8)** first — IAM-authenticated, no API key — falling back to the **Anthropic API** on a quota/throttle error. Before generating an artifact it checks **Amazon S3**; if the Markdown already exists it is **reused, never regenerated**. **n8n** (with PostgreSQL + Redis on the same box) then handles human approval, GitHub PRs, publishing, and notifications. See [Manual Trigger](./docs/manual-trigger.md) and [Content Pipeline Redesign](./docs/content-pipeline-redesign.md).
 
@@ -76,7 +76,7 @@ Supported outputs include technical blog posts, README improvements, documentati
 
 **What works end to end today:**
 
-register repo → **`POST /process`** → Step Functions (start host → wait for SSM ready → enqueue) → SQS → **worker** (generate via Bedrock → Anthropic, skip artifacts already in S3) → quality review → optional human approval → publish Markdown files → record Repository Memory → notify → scheduled/idle stop.
+register repo → **`POST /process`** → Step Functions **`GenerateContent`** → **ECS Fargate `content-runner`** (build Release Context → generate via Bedrock → Anthropic, skip artifacts already in S3) → quality review → publish to S3 → best-effort **video render** → notify. *(Legacy EC2 path, kept as rollback: Step Functions → start host → SSM ready → SQS → worker → n8n approval/publish → scheduled/idle stop.)*
 
 The worker drives **two paths** through the same review/approval/publish stages, both reached via `POST /process`:
 
