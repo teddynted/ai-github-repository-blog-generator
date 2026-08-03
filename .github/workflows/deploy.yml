@@ -54,6 +54,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The renderer/runner images are arm64 (Graviton Fargate) but the runner is
+      # amd64, so cross-arch `docker buildx --platform linux/arm64` needs QEMU
+      # binfmt registered (otherwise the image's RUN steps fail with
+      # "exec /bin/sh: exec format error") and a container-driver buildx builder
+      # that supports building + pushing another architecture.
+      - name: set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
