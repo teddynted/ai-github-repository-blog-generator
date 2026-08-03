@@ -161,6 +161,18 @@ Resources:
               - Effect: Allow
                 Action: polly:SynthesizeSpeech
                 Resource: "*"
+              # The scripts are read from the SSE-KMS content bucket, so reading
+              # them needs kms:Decrypt on the bucket key. Scope via kms:ViaService=s3
+              # (order-independent, least-privilege) — mirrors the worker/content role.
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
+                    kms:CallerAccount: !Ref AWS::AccountId
 
   VideoTaskDefinition:
     Type: AWS::ECS::TaskDefinition
