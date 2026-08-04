@@ -80,8 +80,8 @@ func TestEndToEndFromSampleRelease(t *testing.T) {
 	suite := (&contentsuite.Orchestrator{}).Run(context.Background(), rctx, &blog)
 
 	// 1. Manifest: all 13 stages, in canonical milestone order, none failed.
-	if len(suite.Manifest.Stages) != 13 {
-		t.Fatalf("want 13 stages, got %d", len(suite.Manifest.Stages))
+	if len(suite.Manifest.Stages) != 14 {
+		t.Fatalf("want 14 stages, got %d", len(suite.Manifest.Stages))
 	}
 	for i, st := range suite.Manifest.Stages {
 		if st.Milestone != i+3 {
@@ -98,7 +98,7 @@ func TestEndToEndFromSampleRelease(t *testing.T) {
 		t.Errorf("no stage should fail on the sample release; failed: %v", bad)
 	}
 	// The rich sample release grounds every stage → a full run.
-	if suite.Manifest.Produced != 13 {
+	if suite.Manifest.Produced != 14 {
 		t.Errorf("sample release should produce all 13 artifacts, got %d (skipped %d)", suite.Manifest.Produced, suite.Manifest.Skipped)
 	}
 

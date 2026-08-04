@@ -27,6 +27,7 @@ var versions = map[string]int{
 	"seo-metadata":   1,
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
+	"storyboard-scenes":    1, // deterministic per-scene SDXL image specs derived from the storyboard
 }
 
 // For returns the prompt version string for a content kind (e.g. "blog@6").

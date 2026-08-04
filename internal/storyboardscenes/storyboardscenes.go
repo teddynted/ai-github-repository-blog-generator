@@ -1,0 +1,329 @@
+// Package storyboardscenes converts a generated Storyboard (M4) into a canonical
+// per-scene SDXL visual specification — the storyboard-scenes artifact. Each
+// scene becomes one independently renderable image spec (a Replicate
+// stability-ai/sdxl prompt + negative prompt + camera + motion + duration), so a
+// downstream Fargate worker can render a picture per scene and an FFmpeg pipeline
+// can assemble them into short- and long-form video.
+//
+// It is a DETERMINISTIC transform: every field is derived from the storyboard's
+// own scenes (type, objective, narration, visuals, camera, animations, timing).
+// It invents no architecture and needs no model call.
+package storyboardscenes
+
+import (
+	"fmt"
+	"hash/fnv"
+	"strings"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboard"
+)
+
+// SchemaVersion is the storyboard-scenes document version (SemVer, additive-only).
+const SchemaVersion = "1.0.0"
+
+// ModelTarget is the image model these scene prompts are tuned for.
+const ModelTarget = "stability-ai/sdxl"
+
+// SharedStylePrompt is the reusable style anchor prepended to every scene prompt.
+const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, layered infrastructure planes, clean geometric cloud architecture shapes, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, approachable, engineering-credible, generous negative space, no text, no logos, no watermarks."
+
+// SharedNegativePrompt is the reusable negative prompt applied to every scene.
+const SharedNegativePrompt = "text, letters, numbers, logos, watermarks, signatures, blurry details, clutter, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
+
+// compositions are the cinematic layouts scenes rotate through so consecutive
+// scenes are visually distinct.
+var compositions = []string{
+	"centered orchestration hub",
+	"right-weighted reveal",
+	"diagonal event cascade",
+	"layered infrastructure stack",
+	"radial event burst",
+	"observability control room",
+	"immutable infrastructure pipeline",
+}
+
+// cameraMoves are the FFmpeg-friendly camera directions scenes rotate through
+// when the storyboard scene does not name one.
+var cameraMoves = []string{
+	"slow push in", "slow pull out", "left pan", "right pan",
+	"parallax drift", "orbit move", "diagonal reveal", "zoom and hold",
+}
+
+// SceneSpec is one independently renderable scene.
+type SceneSpec struct {
+	Number             int    `json:"number"`
+	Purpose            string `json:"purpose"`
+	NarrationAlignment string `json:"narrationAlignment"`
+	CameraDirection    string `json:"cameraDirection"`
+	Composition        string `json:"composition"`
+	SDXLPrompt         string `json:"sdxlPrompt"`
+	NegativePrompt     string `json:"negativePrompt"`
+	MotionSuggestion   string `json:"motionSuggestion"`
+	DurationSec        int    `json:"durationSec"`
+}
+
+// SceneCollection is the full storyboard-scenes artifact for one release.
+type SceneCollection struct {
+	SchemaVersion string      `json:"schemaVersion"`
+	Repository    string      `json:"repository"`
+	Release       string      `json:"release"`
+	SourceTitle   string      `json:"sourceTitle"`
+	ModelTarget   string      `json:"modelTarget"`
+	Scenes        []SceneSpec `json:"scenes"`
+}
+
+// Build converts a storyboard into a per-scene SDXL specification. Scenes with
+// empty narration are skipped (nothing to align a visual to).
+func Build(sb storyboard.Storyboard, repository, release string) SceneCollection {
+	col := SceneCollection{
+		SchemaVersion: SchemaVersion,
+		Repository:    repository,
+		Release:       release,
+		SourceTitle:   sb.Metadata.SourceBlogTitle,
+		ModelTarget:   ModelTarget,
+	}
+	base := hashBase(release)
+	n := 0
+	for _, sc := range sb.Scenes {
+		if strings.TrimSpace(sc.Narration) == "" {
+			continue
+		}
+		n++
+		comp := compositions[(base+n)%len(compositions)]
+		col.Scenes = append(col.Scenes, SceneSpec{
+			Number:             n,
+			Purpose:            purposeFor(sc.Type),
+			NarrationAlignment: narrationLead(firstNonEmpty(sc.Narration, sc.Objective)),
+			CameraDirection:    cameraFor(sc, base+n),
+			Composition:        comp,
+			SDXLPrompt:         buildPrompt(sc, comp),
+			NegativePrompt:     SharedNegativePrompt,
+			MotionSuggestion:   motionFor(sc),
+			DurationSec:        durationFor(sc),
+		})
+	}
+	return col
+}
+
+func hashBase(release string) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(release))
+	return int(h.Sum32())
+}
+
+// buildPrompt composes the scene's SDXL prompt: the shared style anchor, the
+// scene's own focal subject (its visuals description, or a grounded metaphor for
+// its type), and the rotated composition — concise, so SDXL keeps a clear focal
+// subject.
+func buildPrompt(sc storyboard.Scene, composition string) string {
+	// Use the storyboard's visual description, but fall back to a grounded
+	// metaphor when it is text/logo-centric (a title card, a caption, a logo) —
+	// those directly contradict the shared "no text, no logos" negative prompt.
+	subject := strings.TrimSpace(sc.Visuals.Description)
+	if subject == "" || mentionsTextOrLogo(subject) {
+		subject = metaphorFor(sc.Type)
+	}
+	subject = trimToWords(subject, 45)
+	return SharedStylePrompt + " " + subject + " Composition: " + composition + "."
+}
+
+// mentionsTextOrLogo reports whether a visual description leans on on-screen text
+// or logos, which SDXL should not render for these illustrations.
+func mentionsTextOrLogo(s string) bool {
+	l := strings.ToLower(s)
+	for _, kw := range []string{"logo", "title card", "release tag", "caption", "headline", "on-screen text", "text overlay", "label", "wordmark"} {
+		if strings.Contains(l, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripMarkdown removes leading Markdown structural markers (heading #, blockquote
+// >, list bullets) so a narration line reads as plain prose.
+func stripMarkdown(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimLeft(s, "#>*-•\t ")
+	return strings.TrimSpace(s)
+}
+
+// purposeFor maps a storyboard scene type to a one-word narrative purpose.
+func purposeFor(sceneType string) string {
+	switch strings.ToLower(sceneType) {
+	case "introduction":
+		return "Hook"
+	case "problem":
+		return "Problem"
+	case "architecture", "diagram":
+		return "Architecture"
+	case "cloudformation":
+		return "Infrastructure as code"
+	case "repository":
+		return "Repository structure"
+	case "implementation":
+		return "Implementation"
+	case "results":
+		return "Results"
+	case "lessons":
+		return "Lesson"
+	case "conclusion":
+		return "Conclusion"
+	default:
+		return "Concept"
+	}
+}
+
+// metaphorFor is the grounded visual metaphor used when a scene has no visuals
+// description — a concept, never an AWS logo collage.
+func metaphorFor(sceneType string) string {
+	switch strings.ToLower(sceneType) {
+	case "introduction":
+		return "A single glowing entry node opening into a layered cloud system, event-driven and orchestrated."
+	case "problem":
+		return "A constricted flow bottlenecking through a narrow gate, slow and inefficient, tension in the composition."
+	case "architecture", "diagram":
+		return "Layered infrastructure planes connected by directional event arrows, a serverless control plane above an on-demand compute plane."
+	case "cloudformation":
+		return "Declarative infrastructure blueprints assembling into provisioned resources, immutable and versioned."
+	case "implementation":
+		return "A build pipeline assembling artifacts left to right into a captured, tagged immutable image."
+	case "results":
+		return "A fast, clean event flow completing end to end, efficient and orchestrated, positive momentum."
+	case "conclusion":
+		return "A complete, calm cloud-native system at rest, orchestrated and observable, resolved composition."
+	default:
+		return "An abstract cloud-native automation flow, event-driven and layered, clean and orchestrated."
+	}
+}
+
+// cameraFor normalises the storyboard scene's camera direction to the
+// FFmpeg-friendly vocabulary, rotating through the set when none is given.
+func cameraFor(sc storyboard.Scene, seed int) string {
+	d := strings.ToLower(strings.TrimSpace(sc.Camera.Direction))
+	switch {
+	case strings.Contains(d, "push") || strings.Contains(d, "zoom in"):
+		return "slow push in"
+	case strings.Contains(d, "pull") || strings.Contains(d, "zoom out"):
+		return "slow pull out"
+	case strings.Contains(d, "pan left") || strings.Contains(d, "left"):
+		return "left pan"
+	case strings.Contains(d, "pan right") || strings.Contains(d, "right"):
+		return "right pan"
+	case strings.Contains(d, "orbit"):
+		return "orbit move"
+	case strings.Contains(d, "parallax"):
+		return "parallax drift"
+	}
+	return cameraMoves[seed%len(cameraMoves)]
+}
+
+// motionFor suggests an animation, derived from the scene's first animation cue
+// or its type.
+func motionFor(sc storyboard.Scene) string {
+	if len(sc.Animations) > 0 {
+		switch t := strings.ToLower(sc.Animations[0].Type); {
+		case strings.Contains(t, "diagram") || strings.Contains(t, "draw") || strings.Contains(t, "arrow"):
+			return "Slow infrastructure reveal"
+		case strings.Contains(t, "highlight") || strings.Contains(t, "pulse"):
+			return "Node pulse animation"
+		case strings.Contains(t, "code") || strings.Contains(t, "typing"):
+			return "Layered depth animation"
+		case strings.Contains(t, "fade"):
+			return "Ken Burns zoom in"
+		}
+	}
+	switch strings.ToLower(sc.Type) {
+	case "problem":
+		return "Ken Burns zoom in"
+	case "architecture", "diagram":
+		return "Event flow animation"
+	case "results", "conclusion":
+		return "Parallax foreground drift"
+	default:
+		return "Ken Burns zoom out"
+	}
+}
+
+// durationFor returns the scene's recommended seconds, defaulting to 5.
+func durationFor(sc storyboard.Scene) int {
+	if sc.Duration.RecommendedSec > 0 {
+		return sc.Duration.RecommendedSec
+	}
+	if sc.Duration.MinSec > 0 {
+		return sc.Duration.MinSec
+	}
+	return 5
+}
+
+// narrationLead returns the first real narration sentence, skipping any leading
+// Markdown heading/blank lines the storyboard narration may carry.
+func narrationLead(s string) string {
+	for _, ln := range strings.Split(s, "\n") {
+		ln = strings.TrimSpace(ln)
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		return firstSentence(stripMarkdown(ln))
+	}
+	return firstSentence(stripMarkdown(s))
+}
+
+func firstSentence(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, ".!?"); i >= 0 {
+		return strings.TrimSpace(s[:i+1])
+	}
+	return s
+}
+
+func trimToWords(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	f := strings.Fields(s)
+	if len(f) <= n {
+		if !strings.HasSuffix(s, ".") {
+			return s + "."
+		}
+		return s
+	}
+	return strings.Join(f[:n], " ") + "."
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// Markdown renders the collection as the storyboard-scenes.md artifact.
+func (col SceneCollection) Markdown() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Storyboard Scenes: %s\n\n", firstNonEmpty(col.SourceTitle, col.Repository))
+	fmt.Fprintf(&b, "_%s · release %s · %d scenes · SDXL-ready_\n\n", col.Repository, col.Release, len(col.Scenes))
+
+	b.WriteString("```yaml\nimage_model:\n  provider: replicate\n")
+	fmt.Fprintf(&b, "  model: %s\n```\n\n", col.ModelTarget)
+
+	b.WriteString("## Shared Visual Style\n\n```text\n")
+	b.WriteString(SharedStylePrompt)
+	b.WriteString("\n```\n\n### Shared Negative Prompt\n\n```text\n")
+	b.WriteString(SharedNegativePrompt)
+	b.WriteString("\n```\n\n")
+
+	for _, s := range col.Scenes {
+		fmt.Fprintf(&b, "---\n\n## Scene %02d\n\n", s.Number)
+		fmt.Fprintf(&b, "### Purpose\n%s\n\n", s.Purpose)
+		fmt.Fprintf(&b, "### Narration Alignment\n%s\n\n", firstNonEmpty(s.NarrationAlignment, "—"))
+		fmt.Fprintf(&b, "### Camera Direction\n%s\n\n", s.CameraDirection)
+		fmt.Fprintf(&b, "### SDXL Prompt\n\n```text\n%s\n```\n\n", s.SDXLPrompt)
+		fmt.Fprintf(&b, "### Negative Prompt\n\n```text\n%s\n```\n\n", s.NegativePrompt)
+		fmt.Fprintf(&b, "### Motion Suggestion\n%s\n\n", s.MotionSuggestion)
+		fmt.Fprintf(&b, "### Duration\n%d seconds\n\n", s.DurationSec)
+	}
+	return strings.TrimRight(b.String(), "\n") + "\n"
+}
