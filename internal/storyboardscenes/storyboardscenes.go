@@ -111,20 +111,34 @@ func hashBase(release string) int {
 	return int(h.Sum32())
 }
 
-// buildPrompt composes the scene's SDXL prompt: the shared style anchor, the
-// scene's own focal subject (its visuals description, or a grounded metaphor for
-// its type), and the rotated composition — concise, so SDXL keeps a clear focal
-// subject.
+// buildPrompt composes the scene's SDXL prompt from the full storyboard scene.
 func buildPrompt(sc storyboard.Scene, composition string) string {
-	// Use the storyboard's visual description, but fall back to a grounded
-	// metaphor when it is text/logo-centric (a title card, a caption, a logo) —
-	// those directly contradict the shared "no text, no logos" negative prompt.
-	subject := strings.TrimSpace(sc.Visuals.Description)
+	return ScenePrompt(sc.Visuals.Description, sc.Type, composition)
+}
+
+// ScenePrompt composes a scene's SDXL prompt: the shared style anchor, the
+// scene's focal subject (its visual direction, or a grounded metaphor for its
+// type when the visual is text/logo-centric — those contradict the shared
+// "no text, no logos" negative), and the rotated composition. Exported so the
+// video renderer produces the SAME prompts as the storyboard-scenes artifact,
+// keeping the spec and the rendered images consistent.
+func ScenePrompt(visual, sceneType, composition string) string {
+	subject := strings.TrimSpace(visual)
 	if subject == "" || mentionsTextOrLogo(subject) {
-		subject = metaphorFor(sc.Type)
+		subject = metaphorFor(sceneType)
 	}
 	subject = trimToWords(subject, 45)
-	return SharedStylePrompt + " " + subject + " Composition: " + composition + "."
+	prompt := SharedStylePrompt + " " + subject
+	if composition != "" {
+		prompt += " Composition: " + composition + "."
+	}
+	return prompt
+}
+
+// ChooseComposition returns the rotated cinematic composition for a scene index
+// within a release — the same rotation the storyboard-scenes artifact uses.
+func ChooseComposition(release string, index int) string {
+	return compositions[(hashBase(release)+index)%len(compositions)]
 }
 
 // mentionsTextOrLogo reports whether a visual description leans on on-screen text
