@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -167,7 +168,39 @@ func TestDiagramURIFromStoryboard(t *testing.T) {
 	}
 }
 
+func TestVisualTextReadsBothShapes(t *testing.T) {
+	// Short-format "visual" string.
+	if got := visualText(rawScene{Visual: "Show the CLI command."}); got != "Show the CLI command." {
+		t.Errorf("short-format visual = %q", got)
+	}
+	// Storyboard "visuals" object with a description (the YouTube path).
+	sb := rawScene{Visuals: json.RawMessage(`{"description":"The architecture diagram: build the graph edge by edge."}`)}
+	if got := visualText(sb); got != "The architecture diagram: build the graph edge by edge." {
+		t.Errorf("storyboard visuals = %q", got)
+	}
+	// A storyboard scene whose visuals call for the diagram must want it, even
+	// though short-format-style Type is absent — this is the YouTube fix.
+	if !collectOne(sb).wantsDiagram() {
+		t.Error("storyboard scene with a diagram 'visuals' description should want the diagram")
+	}
+	// Tolerant of a bare string / array; empty when absent.
+	if got := visualText(rawScene{Visuals: json.RawMessage(`"just a string"`)}); got != "just a string" {
+		t.Errorf("string visuals = %q", got)
+	}
+	if got := visualText(rawScene{}); got != "" {
+		t.Errorf("no direction should be empty, got %q", got)
+	}
+}
+
+// collectOne runs a single rawScene (with a narration) through collect so the
+// scene is populated exactly as the renderer builds it.
+func collectOne(s rawScene) scene {
+	s.Narration = "n"
+	return collect([]rawScene{s})[0]
+}
+
 func TestWantsDiagram(t *testing.T) {
+	// Long-form storyboard: the scene Type drives it.
 	for _, ty := range []string{"architecture", "diagram"} {
 		if !(scene{Type: ty}).wantsDiagram() {
 			t.Errorf("%q should want the diagram", ty)
@@ -176,6 +209,25 @@ func TestWantsDiagram(t *testing.T) {
 	for _, ty := range []string{"introduction", "conclusion", ""} {
 		if (scene{Type: ty}).wantsDiagram() {
 			t.Errorf("%q should not want the diagram", ty)
+		}
+	}
+	// Short formats carry no Type — the "visual" direction is the signal.
+	for _, v := range []string{
+		"Build the architecture diagram node by node.",
+		"Show the component topology.",
+		"Animate the data flow between services.",
+	} {
+		if !(scene{Visual: v}).wantsDiagram() {
+			t.Errorf("visual %q should want the diagram", v)
+		}
+	}
+	for _, v := range []string{
+		"Show the CLI command being typed.",
+		"Zoom into the terminal output.",
+		"",
+	} {
+		if (scene{Visual: v}).wantsDiagram() {
+			t.Errorf("visual %q should NOT want the diagram", v)
 		}
 	}
 }
