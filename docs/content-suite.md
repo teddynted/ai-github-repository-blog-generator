@@ -1,11 +1,17 @@
 # Full Content Suite — one release, every artifact
 
 `internal/contentsuite` + `cmd/generate-all` turn a single Release Context into
-the **complete set of release artifacts (Milestones 3–13) in one run**. Before
+the **complete set of release artifacts (Milestones 3–16) in one run**. Before
 this, the rich multimedia generators (storyboard, voice-over, YouTube, shorts,
 TikTok, visual assets, SEO, architecture, LinkedIn, X thread) were driven only by
 their individual CLIs, so producing everything meant running ~10 commands by hand
 and threading each stage's output file into the next.
+
+Beyond the core graph below, the suite also produces the **architecture-diagram
+spec (M14)** and its rendered **SVG (M15)**, and the per-scene **`storyboard-scenes`
+SDXL image specification (M16)** — a deterministic transform of the storyboard
+into one Replicate `stability-ai/sdxl` prompt (+ camera / composition / motion /
+duration) per scene, which the video renderer uses to render a picture per scene.
 
 The orchestrator composes the existing, tested generator packages **in dependency
 order** — it adds no generation logic of its own:
