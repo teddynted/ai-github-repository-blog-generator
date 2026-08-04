@@ -42,20 +42,35 @@ func TestS3StoreRoundtripAndMiss(t *testing.T) {
 
 	// Missing object → not found, no error, no generation skipped.
 	var d doc
-	if ok, err := s.Load("blog", &d); ok || err != nil {
-		t.Fatalf("miss: ok=%v err=%v", ok, err)
+	if ver, ok, err := s.Load("blog", &d); ok || err != nil || ver != "" {
+		t.Fatalf("miss: ver=%q ok=%v err=%v", ver, ok, err)
 	}
-	// Save then hit → reused.
-	if err := s.Save("blog", doc{N: 7}); err != nil {
+	// Save (with a prompt version) then hit → reused, version round-trips.
+	if err := s.Save("blog", doc{N: 7}, "blog@15"); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if ok, err := s.Load("blog", &d); !ok || err != nil || d.N != 7 {
-		t.Fatalf("hit: ok=%v err=%v d=%+v", ok, err, d)
+	if ver, ok, err := s.Load("blog", &d); !ok || err != nil || d.N != 7 || ver != "blog@15" {
+		t.Fatalf("hit: ver=%q ok=%v err=%v d=%+v", ver, ok, err, d)
 	}
 	// Key layout mirrors the publisher's release layout.
 	want := "gc/acme/widget/releases/v0.6.0/.artifacts/blog.json"
 	if _, ok := f.objs[want]; !ok {
 		t.Errorf("expected key %q; have %v", want, keys(f.objs))
+	}
+}
+
+// TestS3StoreReadsLegacySidecar guards backward compatibility: a bare-struct
+// sidecar written before versioning must still load, reporting an empty version
+// (which the idempotent path treats as stale so it refreshes on the next run).
+func TestS3StoreReadsLegacySidecar(t *testing.T) {
+	f := &fakeS3{objs: map[string][]byte{
+		"gc/acme/widget/releases/v0.6.0/.artifacts/blog.json": []byte(`{"N":9}`),
+	}}
+	s := NewS3(context.Background(), f, "bucket", "gc", "acme", "widget", "v0.6.0", nil)
+	var d doc
+	ver, ok, err := s.Load("blog", &d)
+	if !ok || err != nil || d.N != 9 || ver != "" {
+		t.Fatalf("legacy load: ver=%q ok=%v err=%v d=%+v", ver, ok, err, d)
 	}
 }
 

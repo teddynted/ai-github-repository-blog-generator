@@ -54,31 +54,59 @@ func (s *S3Store) key(stage string) string { return path.Join(s.base, stage+".js
 // Load reports whether the stage's artifact already exists in S3 and, if so,
 // decodes its sidecar into v (so the stage is reused, not regenerated). A missing
 // object returns found=false.
-func (s *S3Store) Load(stage string, v any) (bool, error) {
+// envelope wraps a persisted artifact with the prompt version that produced it,
+// so a later run can detect a stale artifact after a prompt change. A legacy
+// sidecar (written before versioning) is a bare struct with no envelope; Load
+// falls back to decoding it directly and reports an empty version.
+type envelope struct {
+	PromptVersion string          `json:"promptVersion"`
+	Artifact      json.RawMessage `json:"artifact"`
+}
+
+func (s *S3Store) Load(stage string, v any) (string, bool, error) {
 	out, err := s.api.GetObject(s.ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.key(stage))})
 	if err != nil {
 		if isNotFound(err) {
-			return false, nil
+			return "", false, nil
 		}
-		return false, err
+		return "", false, err
 	}
 	defer out.Body.Close()
 	b, err := io.ReadAll(out.Body)
 	if err != nil {
-		return false, err
+		return "", false, err
+	}
+	// Preferred: the versioned envelope. Fall back to a legacy bare-struct sidecar
+	// (no version) so artifacts written before this change still load.
+	var env envelope
+	if err := json.Unmarshal(b, &env); err == nil && len(env.Artifact) > 0 {
+		if err := json.Unmarshal(env.Artifact, v); err != nil {
+			return "", false, err
+		}
+		s.logLoaded(stage)
+		return env.PromptVersion, true, nil
 	}
 	if err := json.Unmarshal(b, v); err != nil {
-		return false, err
+		return "", false, err
 	}
-	if s.logger != nil {
-		s.logger.Info("artifact reused from s3 (no model call)", "stage", stage, "key", s.key(stage))
-	}
-	return true, nil
+	s.logLoaded(stage)
+	return "", true, nil
 }
 
-// Save writes the stage's struct as a JSON sidecar so a later run reuses it.
-func (s *S3Store) Save(stage string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
+func (s *S3Store) logLoaded(stage string) {
+	if s.logger != nil {
+		s.logger.Info("artifact loaded from s3", "stage", stage, "key", s.key(stage))
+	}
+}
+
+// Save writes the stage's struct wrapped in a versioned envelope so a later run
+// can reuse it — or regenerate it when the prompt version has changed.
+func (s *S3Store) Save(stage string, v any, version string) error {
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(envelope{PromptVersion: version, Artifact: payload}, "", "  ")
 	if err != nil {
 		return err
 	}

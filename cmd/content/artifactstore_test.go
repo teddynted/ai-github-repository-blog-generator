@@ -17,20 +17,20 @@ func TestArtifactStoreRoundtrip(t *testing.T) {
 	}
 	st := newArtifactStore(dir, blog)
 
-	if err := st.Save("storyboard", storeDoc{N: 7}); err != nil {
+	if err := st.Save("storyboard", storeDoc{N: 7}, "storyboard@1"); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	var d storeDoc
-	ok, err := st.Load("storyboard", &d)
-	if err != nil || !ok || d.N != 7 {
-		t.Fatalf("roundtrip: ok=%v err=%v d=%+v", ok, err, d)
+	ver, ok, err := st.Load("storyboard", &d)
+	if err != nil || !ok || d.N != 7 || ver != "storyboard@1" {
+		t.Fatalf("roundtrip: ver=%q ok=%v err=%v d=%+v", ver, ok, err, d)
 	}
 	if r, s := st.Stats(); r != 1 || s != 1 {
 		t.Errorf("stats: reused=%d saved=%d", r, s)
 	}
 
 	// A missing sidecar is simply not found (regenerate), not an error.
-	if ok, err := st.Load("missing", &d); ok || err != nil {
+	if _, ok, err := st.Load("missing", &d); ok || err != nil {
 		t.Errorf("missing: ok=%v err=%v", ok, err)
 	}
 }
@@ -42,7 +42,7 @@ func TestArtifactStoreStaleWhenOlderThanBlog(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := newArtifactStore(dir, blog)
-	if err := st.Save("voiceover", storeDoc{N: 1}); err != nil {
+	if err := st.Save("voiceover", storeDoc{N: 1}, "voiceover@1"); err != nil {
 		t.Fatal(err)
 	}
 	// Make the blog newer than the sidecar → the sidecar is stale.
@@ -52,7 +52,7 @@ func TestArtifactStoreStaleWhenOlderThanBlog(t *testing.T) {
 	}
 	st2 := newArtifactStore(dir, blog)
 	var d storeDoc
-	if ok, _ := st2.Load("voiceover", &d); ok {
+	if _, ok, _ := st2.Load("voiceover", &d); ok {
 		t.Error("a sidecar older than the blog must be treated as stale (regenerate)")
 	}
 }

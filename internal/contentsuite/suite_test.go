@@ -275,29 +275,34 @@ func (fakeModel) Generate(_ context.Context, _ string) (string, error) {
 
 // fakeStore is an in-memory ArtifactStore for reuse tests.
 type fakeStore struct {
-	data  map[string][]byte
-	loads int
-	saves int
+	data     map[string][]byte
+	versions map[string]string
+	loads    int
+	saves    int
 }
 
-func (f *fakeStore) Load(stage string, v any) (bool, error) {
+func (f *fakeStore) Load(stage string, v any) (string, bool, error) {
 	b, ok := f.data[stage]
 	if !ok {
-		return false, nil
+		return "", false, nil
 	}
 	f.loads++
-	return true, jsonUnmarshal(b, v)
+	return f.versions[stage], true, jsonUnmarshal(b, v)
 }
 
-func (f *fakeStore) Save(stage string, v any) error {
+func (f *fakeStore) Save(stage string, v any, version string) error {
 	if f.data == nil {
 		f.data = map[string][]byte{}
+	}
+	if f.versions == nil {
+		f.versions = map[string]string{}
 	}
 	b, err := jsonMarshal(v)
 	if err != nil {
 		return err
 	}
 	f.data[stage] = b
+	f.versions[stage] = version
 	f.saves++
 	return nil
 }
@@ -380,6 +385,61 @@ func TestIdempotentModeReusesAnyExistingStage(t *testing.T) {
 	}
 	if _, ok := fs.data["storyboard"]; !ok {
 		t.Error("a freshly generated artifact must be persisted for the next run")
+	}
+}
+
+func TestPromptVersionStaleness(t *testing.T) {
+	render := func(d reuseDoc) string { return d.Title }
+	prov := func(string) (string, string, string) { return "p", "m", "youtube@2" } // current = @2
+
+	// Idempotent + stored version differs → regenerate, and re-persist at current.
+	fs := &fakeStore{}
+	_ = fs.Save("youtube", reuseDoc{Title: "old"}, "youtube@1")
+	o := &Orchestrator{Store: fs, Idempotent: true, Provenance: prov}
+	var dst reuseDoc
+	calls := 0
+	out := reuseOrRun(o, "youtube", 6, "yt.md", &dst, render, func() (string, error) {
+		calls++
+		dst = reuseDoc{Title: "new"}
+		return "new", nil
+	})
+	if calls != 1 || out.md != "new" {
+		t.Errorf("version change must regenerate: calls=%d md=%q", calls, out.md)
+	}
+	if v, _, _ := fs.Load("youtube", &dst); v != "youtube@2" {
+		t.Errorf("regenerated artifact must be re-saved at the current version, got %q", v)
+	}
+
+	// Idempotent + versions match → reuse.
+	fs2 := &fakeStore{}
+	_ = fs2.Save("youtube", reuseDoc{Title: "cached"}, "youtube@2")
+	o2 := &Orchestrator{Store: fs2, Idempotent: true, Provenance: prov}
+	calls = 0
+	out = reuseOrRun(o2, "youtube", 6, "yt.md", &dst, render, func() (string, error) { calls++; return "x", nil })
+	if calls != 0 || out.md != "cached" {
+		t.Errorf("matching version must reuse: calls=%d md=%q", calls, out.md)
+	}
+
+	// Idempotent + legacy artifact (no stored version) → treated as stale, regenerate.
+	fs3 := &fakeStore{data: map[string][]byte{}}
+	legacy, _ := jsonMarshal(reuseDoc{Title: "legacy"})
+	fs3.data["youtube"] = legacy // no versions entry → ""
+	o3 := &Orchestrator{Store: fs3, Idempotent: true, Provenance: prov}
+	calls = 0
+	_ = reuseOrRun(o3, "youtube", 6, "yt.md", &dst, render, func() (string, error) { calls++; return "refreshed", nil })
+	if calls != 1 {
+		t.Errorf("legacy (unversioned) artifact must regenerate under idempotent mode: calls=%d", calls)
+	}
+
+	// Local targeted dep-reuse (NOT idempotent) must reuse even on a version
+	// mismatch — it must never burn model tokens re-running the chain.
+	fs4 := &fakeStore{}
+	_ = fs4.Save("youtube", reuseDoc{Title: "dep"}, "youtube@1")
+	o4 := &Orchestrator{Store: fs4, Reuse: true, Only: map[string]bool{"seo-metadata": true}, Provenance: prov}
+	calls = 0
+	out = reuseOrRun(o4, "youtube", 6, "yt.md", &dst, render, func() (string, error) { calls++; return "x", nil })
+	if calls != 0 || out.md != "dep" {
+		t.Errorf("local dep-reuse must reuse regardless of version: calls=%d md=%q", calls, out.md)
 	}
 }
 
