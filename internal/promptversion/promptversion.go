@@ -12,7 +12,7 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      14, // Tradeoffs must cover the ongoing cost of pre-baked images (snapshot storage growth, rebuild cadence, patching) for baked-image releases
+	"blog":                      15, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
 	"architecture":              2,
 	"linkedin":                  2,
 	"x-thread":                  2,

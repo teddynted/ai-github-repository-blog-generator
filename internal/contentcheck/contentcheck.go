@@ -105,6 +105,28 @@ var hallucinationMarkers = []string{
 
 var mermaidFence = regexp.MustCompile("(?s)```mermaid.*?```")
 
+// ForbiddenBlogHeadings are the generic, template-y section headings the blog
+// must not use — they are the tell of AI-generated structure. The generator
+// bans them in the article prompt; blog() fails them here. Exported so the
+// generator builds the prompt's forbidden list from the same source of truth.
+var ForbiddenBlogHeadings = []string{
+	"Why This Matters",
+	"Existing Architecture",
+	"Current Architecture",
+	"The Problem",
+	"The Engineering Constraint",
+	"The Solution",
+	"Key Implementation Details",
+	"Benefits",
+	"Tradeoffs",
+	"Conclusion",
+	"Final Thoughts",
+}
+
+// headingRe matches a Markdown ATX heading line (##..#### plus its text), used to
+// check headings against the forbidden generic list.
+var headingRe = regexp.MustCompile(`(?m)^#{2,4}\s+(.+?)\s*$`)
+
 // inventedCountRe catches stated counts of repository structure (e.g. "65 files",
 // "15 diagrams", "four top-level directories") — stale statistics the article
 // must replace with relationships. It targets high-signal structural nouns and
@@ -193,10 +215,15 @@ func blog(r *Report, c string) {
 			r.err("front matter missing %q", fm)
 		}
 	}
-	// Required section spine (the deterministic anchors).
-	for _, sec := range []string{"## Why This Matters", "## Conclusion"} {
-		if !strings.Contains(c, sec) {
-			r.err("required section missing: %q", sec)
+	// Forbidden generic headings — the article must use specific, story-driven
+	// headings, not the "Why This Matters / The Solution / Benefits / Conclusion"
+	// template that reads as AI-generated.
+	for _, m := range headingRe.FindAllStringSubmatch(c, -1) {
+		h := strings.TrimSpace(m[1])
+		for _, f := range ForbiddenBlogHeadings {
+			if strings.EqualFold(h, f) {
+				r.err("forbidden generic heading %q — use a specific, story-driven heading", h)
+			}
 		}
 	}
 	// Diagram ceiling.

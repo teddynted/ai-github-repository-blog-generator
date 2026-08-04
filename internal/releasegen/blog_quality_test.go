@@ -236,29 +236,17 @@ func TestBlogPromptRequiresEngineeringDepthOverCommits(t *testing.T) {
 		}
 	}
 
-	// The depth sections must exist and stay in teaching order (constraint →
-	// solution → architecture → implementation → decisions → tradeoffs → next).
-	wantOrder := []string{
-		"The Engineering Constraint", "The Solution", "Architecture Diagram",
-		"Key Implementation Details", "Why These Decisions Were Made", "Tradeoffs",
-		"What This Enables Next",
+	// Structure is now driven by rotating narrative archetypes with story-driven
+	// headings — not a fixed section spine. Guard that the archetype set exists
+	// and the article prompt selects one and demands specific headings.
+	if len(blogArchetypes) < 5 {
+		t.Errorf("expected a set of narrative archetypes, got %d", len(blogArchetypes))
 	}
-	assertSubsequence(t, blogSections, wantOrder)
-}
-
-// assertSubsequence fails if want does not appear as an in-order subsequence of
-// got (extra sections between the wanted ones are fine).
-func assertSubsequence(t *testing.T, got, want []string) {
-	t.Helper()
-	i := 0
-	for _, g := range got {
-		if i < len(want) && g == want[i] {
-			i++
-		}
+	if !containsFold(article, "archetype") {
+		t.Error("article prompt no longer selects a narrative archetype")
 	}
-	if i != len(want) {
-		t.Errorf("blogSections %v does not contain %v in order (matched %d/%d)",
-			got, want, i, len(want))
+	if !containsFold(article, "story-driven") {
+		t.Error("article prompt no longer requires specific, story-driven headings")
 	}
 }
 
