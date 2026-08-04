@@ -41,15 +41,21 @@ func TestTruncateWords(t *testing.T) {
 }
 
 func TestSceneImagePromptExcludesTextAndCarriesSubject(t *testing.T) {
-	p, neg := sceneImagePrompt(scene{Title: "Event-Driven Ingestion", Narration: "A webhook triggers the pipeline."})
-	if !strings.Contains(p, "Event-Driven Ingestion") {
-		t.Errorf("prompt should carry the scene title: %q", p)
+	// The scene's "visual" direction is the primary prompt subject.
+	p, neg := sceneImagePrompt(scene{Title: "Access Control", Visual: "Highlight AWS IAM roles and policies.", Narration: "A webhook triggers the pipeline."})
+	if !strings.Contains(p, "Highlight AWS IAM roles and policies.") {
+		t.Errorf("prompt should lead with the scene's visual direction: %q", p)
 	}
 	if !strings.Contains(strings.ToLower(p), "no text") {
 		t.Errorf("prompt must forbid on-image text: %q", p)
 	}
 	if !strings.Contains(neg, "text") {
 		t.Errorf("negative prompt should exclude text, got %q", neg)
+	}
+	// With no visual direction, it falls back to the scene title.
+	p2, _ := sceneImagePrompt(scene{Title: "Event-Driven Ingestion", Narration: "n"})
+	if !strings.Contains(p2, "Event-Driven Ingestion") {
+		t.Errorf("prompt should fall back to the scene title: %q", p2)
 	}
 }
 

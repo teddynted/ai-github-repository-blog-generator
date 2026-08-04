@@ -258,7 +258,9 @@ jobs:
               LoadVideoScriptsCodeKey="$SHA/load-video-scripts.zip" \
               PublishVideoManifestCodeKey="$SHA/publish-video-manifest.zip" \
               RendererImageTag="$SHA" \
-              EnableSceneImages="${{ vars.ENABLE_SCENE_IMAGES || 'false' }}"
+              EnableSceneImages="${{ vars.ENABLE_SCENE_IMAGES || 'false' }}" \
+              ReplicateTokenSecretArn="${{ vars.REPLICATE_TOKEN_SECRET_ARN }}" \
+              ReplicateImageModel="${{ vars.REPLICATE_IMAGE_MODEL }}"
 
           ECR="${ACCOUNT}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/blog-gen-video-renderer"
           aws ecr get-login-password --region "${{ vars.AWS_REGION }}" \

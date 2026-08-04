@@ -1,10 +1,11 @@
-// Package imagegen renders a text prompt into a raster image using Amazon Nova
-// Canvas on Amazon Bedrock. It exists so the video renderer can give each scene a
-// generated background instead of a plain colour card, and it is deliberately
-// small: one Generate(ctx, Spec) -> PNG bytes call, IAM-authenticated through the
-// default AWS chain (the task role in production), with bounded retry/backoff for
-// Nova Canvas's frequent throttling and no fallback of its own — callers decide
-// what to show when generation is unavailable.
+// Package imagegen renders a text prompt into a raster image so the video
+// renderer can give each scene a generated background instead of a plain colour
+// card. It offers two interchangeable backends behind one Generate(ctx, Spec) ->
+// image bytes port: Amazon Nova Canvas on Bedrock (IAM-authenticated, but blocked
+// by a 0-RPM account quota) and Replicate (a hosted FLUX/SDXL API with real
+// quota). NewFromEnv selects the backend from configuration. Each backend does
+// bounded retry/backoff and has no fallback of its own — callers decide what to
+// show when generation is unavailable.
 package imagegen
 
 import (
@@ -24,6 +25,14 @@ import (
 
 // DefaultModelID is the Bedrock Nova Canvas text-to-image model.
 const DefaultModelID = "amazon.nova-canvas-v1:0"
+
+// Generator is the image backend port: turn a Spec into raster image bytes. Both
+// the Bedrock (*Client) and Replicate (*ReplicateClient) backends implement it,
+// so the renderer depends on the interface and NewFromEnv picks the concrete
+// backend from configuration.
+type Generator interface {
+	Generate(ctx context.Context, spec Spec) ([]byte, error)
+}
 
 // maxRetries bounds the backoff loop; Nova Canvas throttles ("Too many
 // connections"/"Too many requests") aggressively, so a few spaced retries turn a

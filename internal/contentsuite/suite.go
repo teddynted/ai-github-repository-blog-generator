@@ -35,6 +35,7 @@ import (
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/seo"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/shorts"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboard"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboardscenes"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/svgdiagram"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/tiktok"
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/visualassets"
@@ -190,6 +191,7 @@ var stageDeps = map[string][]string{
 	"x-thread":                  {"architecture", "seo-metadata"},
 	"architecture-diagram-spec": {"blog", "architecture"},
 	"architecture-diagram":      {"architecture-diagram-spec"},
+	"storyboard-scenes":         {"storyboard"},
 }
 
 // activeStages returns the set of stages to execute. A nil result means "run
@@ -498,6 +500,20 @@ func (o *Orchestrator) Run(ctx context.Context, rctx *rc.ReleaseContext, blog *r
 		}))
 	}
 
+	// --- M16 Storyboard scenes (per-scene SDXL image specs) ---
+	// A deterministic transform of the storyboard into a canonical, Replicate
+	// stability-ai/sdxl per-scene visual spec (prompt + camera + motion + duration)
+	// for downstream image rendering and FFmpeg assembly. No model call; produced
+	// only when the storyboard actually generated scenes.
+	if run("storyboard-scenes") {
+		s.record(o.run("storyboard-scenes", 16, "14-storyboard-scenes.md", func() (string, error) {
+			if len(s.Storyboard.Scenes) == 0 {
+				return "", errNoStoryboardScenes
+			}
+			return storyboardscenes.Build(s.Storyboard, rctx.Repository.FullName, rctx.Release.Tag).Markdown(), nil
+		}))
+	}
+
 	return s
 }
 
@@ -514,6 +530,10 @@ func sortedKeys(m map[string]bool) []string {
 // errNoDiagram signals the release has nothing diagrammable, so the SVG stage
 // skips gracefully rather than emitting an empty image.
 var errNoDiagram = errors.New("contentsuite: no diagrammable architecture evidence")
+
+// errNoStoryboardScenes signals the storyboard produced no scenes, so the
+// per-scene SDXL spec stage skips gracefully rather than emitting an empty doc.
+var errNoStoryboardScenes = errors.New("contentsuite: storyboard produced no scenes")
 
 // maxSVGDiagrams caps how many diagram panels the SVG embeds (mirrors the blog's
 // two-diagram ceiling).
@@ -696,6 +716,7 @@ func isSkip(err error) bool {
 	return errors.Is(err, architecture.ErrNoInfrastructure) ||
 		errors.Is(err, archspec.ErrNoEvidence) ||
 		errors.Is(err, errNoDiagram) ||
+		errors.Is(err, errNoStoryboardScenes) ||
 		errors.Is(err, shorts.ErrNoMoments) ||
 		errors.Is(err, tiktok.ErrNoTopics)
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/imagegen"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboardscenes"
 )
 
 // imageGenerator is the minimal image port the renderer needs, so scene-image
@@ -37,13 +38,14 @@ func novaDims(w, h int) (int, int) {
 // context, so the background illustrates the scene. Text is explicitly excluded
 // (the renderer burns the caption in itself).
 func sceneImagePrompt(sc scene) (prompt, negative string) {
-	topic := strings.TrimSpace(sc.Title)
-	context := truncateWords(strings.TrimSpace(sc.Narration), 40)
-	prompt = "Editorial flat-vector isometric illustration for a software architecture explainer video. " +
-		"Subject: " + topic + ". " + context + " " +
-		"Deep slate background, teal and amber accents, clean geometric shapes, subtle grid, cinematic depth. No text, no words, no letters, no logos."
-	negative = "text, words, letters, captions, watermark, logo, ui, frame, border, low quality, blurry"
-	return prompt, negative
+	// Use the canonical storyboard-scenes SDXL logic so the rendered image matches
+	// the storyboard-scenes artifact: the scene's visual direction (or a grounded
+	// metaphor for its type) as the focal subject, the shared brand style anchor,
+	// and a cinematic composition rotated per scene. sc.Title seeds the subject
+	// when the scene carries no visual direction.
+	visual := firstNonEmpty(strings.TrimSpace(sc.Visual), strings.TrimSpace(sc.Title))
+	comp := storyboardscenes.ChooseComposition("", sc.Number)
+	return storyboardscenes.ScenePrompt(visual, sc.Type, comp), storyboardscenes.SharedNegativePrompt
 }
 
 // maybeSceneImage best-effort generates a background image for a scene and
