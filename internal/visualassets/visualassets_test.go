@@ -432,3 +432,47 @@ func TestValidateRejectsDuplicates(t *testing.T) {
 		t.Error("expected duplicate asset to be rejected")
 	}
 }
+
+func TestSDXLVisualSystem(t *testing.T) {
+	col, err := newGen().VisualAssets(context.Background(), samplePackage())
+	if err != nil {
+		t.Fatalf("VisualAssets: %v", err)
+	}
+	md := col.Markdown()
+	for _, want := range []string{
+		"## SDXL Visual System", "### Shared SDXL Style Prompt", "### Shared SDXL Negative Prompt",
+		"release_context:", "stability-ai/sdxl", "visual_variation:",
+		"### SDXL Prompt", "### SDXL Parameters", "scheduler:", "refine: expert_ensemble_refiner",
+		"collection_intelligence:", "provider: replicate", "## AI Generation Rules",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("SDXL markdown missing %q", want)
+		}
+	}
+	// Every asset carries SDXL params + a composition archetype.
+	for _, a := range col.Assets {
+		if a.SDXL.Scheduler == "" || a.SDXL.Refine != "expert_ensemble_refiner" || a.SDXL.Width <= 0 {
+			t.Errorf("asset %q missing SDXL params: %+v", a.Type, a.SDXL)
+		}
+		if a.CompositionArchetype == "" {
+			t.Errorf("asset %q missing composition archetype", a.Type)
+		}
+		// Architecture assets get the architecture-tuned scheduler.
+		if isArchitectureAsset(a.Type) && a.SDXL.Scheduler != "K_DPM_2_ANCESTRAL" {
+			t.Errorf("architecture asset %q scheduler = %q, want K_DPM_2_ANCESTRAL", a.Type, a.SDXL.Scheduler)
+		}
+	}
+}
+
+func TestChooseArchetypeRotates(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < len(compositionArchetypes); i++ {
+		seen[chooseArchetype("v0.6.0", i)] = true
+	}
+	if len(seen) != len(compositionArchetypes) {
+		t.Errorf("consecutive indices should cover all %d archetypes, got %d", len(compositionArchetypes), len(seen))
+	}
+	if chooseArchetype("v0.6.0", 2) != chooseArchetype("v0.6.0", 2) {
+		t.Error("archetype selection must be deterministic")
+	}
+}

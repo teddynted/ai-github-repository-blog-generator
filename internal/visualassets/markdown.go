@@ -19,6 +19,9 @@ func (col VisualAssetCollection) Markdown() string {
 		fmt.Fprintf(&b, "> **Notes:** %s\n\n", strings.Join(col.Warnings, "; "))
 	}
 
+	writeSDXLSystem(&b)
+	writeReleaseContext(&b, col.Metadata, col.ContentIntelligence)
+	writeVisualVariation(&b, col.Metadata.Release)
 	writeBranding(&b, col.Branding)
 	writeSharedConstraints(&b)
 
@@ -27,8 +30,47 @@ func (col VisualAssetCollection) Markdown() string {
 	}
 
 	writeIntelligence(&b, col.ContentIntelligence)
+	writeCollectionIntelligenceYAML(&b, col)
+	writeAIGenerationRules(&b)
 	writeValidationMatrix(&b, col.Assets)
 	return b.String()
+}
+
+// writeSDXLSystem renders the reusable SDXL style + negative prompt anchors that
+// every asset builds on.
+func writeSDXLSystem(b *strings.Builder) {
+	b.WriteString("## SDXL Visual System\n\n")
+	fmt.Fprintf(b, "_Target model: `%s` (via Replicate). Reuse these anchors across every asset instead of repeating style boilerplate._\n\n", SDXLModelTarget)
+	b.WriteString("### Shared SDXL Style Prompt\n\n```text\n")
+	b.WriteString(SharedSDXLStylePrompt)
+	b.WriteString("\n```\n\n### Shared SDXL Negative Prompt\n\n```text\n")
+	b.WriteString(SharedSDXLNegativePrompt)
+	b.WriteString("\n```\n\n")
+}
+
+// writeReleaseContext renders the machine-readable release block for Step
+// Functions / Lambda / n8n injection.
+func writeReleaseContext(b *strings.Builder, m Metadata, ci Intelligence) {
+	b.WriteString("### Release Context\n\n```yaml\nrelease_context:\n")
+	fmt.Fprintf(b, "  repository: %s\n", firstNonEmpty(m.Repository, "unknown"))
+	fmt.Fprintf(b, "  release: %s\n", firstNonEmpty(m.Release, "unknown"))
+	fmt.Fprintf(b, "  feature: %s\n", firstNonEmpty(m.SourceBlogTitle, "release update"))
+	fmt.Fprintf(b, "  visual_theme: %s\n", firstNonEmpty(ci.VisualComplexity+" engineering illustration", "engineering illustration"))
+	b.WriteString("```\n\n")
+}
+
+// writeVisualVariation documents the composition archetypes and how releases
+// rotate through them.
+func writeVisualVariation(b *strings.Builder, release string) {
+	b.WriteString("### Visual Variation\n\n")
+	b.WriteString("_Releases rotate composition archetypes so consecutive releases never repeat the same focal arrangement._\n\n")
+	b.WriteString("```yaml\nvisual_variation:\n")
+	fmt.Fprintf(b, "  active_archetype: %s\n", chooseArchetype(release, 0))
+	b.WriteString("  archetypes:\n")
+	for _, a := range compositionArchetypes {
+		fmt.Fprintf(b, "    - %s\n", a)
+	}
+	b.WriteString("```\n\n")
 }
 
 func writeBranding(b *strings.Builder, br Branding) {
@@ -54,13 +96,27 @@ func writeAsset(b *strings.Builder, a Asset, release string) {
 	fmt.Fprintf(b, "- **Purpose:** %s\n", a.Purpose)
 	fmt.Fprintf(b, "- **Recommended filename:** `%s`\n", a.Metadata.RecommendedFilename)
 
-	fmt.Fprintf(b, "\n### Prompt\n\n```text\n%s\n```\n\n", a.Prompt)
+	// SDXL-first block: the shared style anchor + this asset's focal subject and
+	// rotated composition, then the Replicate stability-ai/sdxl parameters.
+	b.WriteString("### SDXL Prompt\n\n```text\n")
+	b.WriteString(SharedSDXLStylePrompt)
+	fmt.Fprintf(b, "\n\n%s", strings.TrimSpace(a.Prompt))
+	if g := archetypeGuidance[a.CompositionArchetype]; g != "" {
+		fmt.Fprintf(b, "\nComposition: %s — %s", a.CompositionArchetype, g)
+	}
+	b.WriteString("\n```\n\n")
+	fmt.Fprintf(b, "### SDXL Parameters\n\n```yaml\n%s\n```\n\n", yamlSDXLParams(a.SDXL))
+
+	fmt.Fprintf(b, "### Prompt (grounded source)\n\n```text\n%s\n```\n\n", a.Prompt)
 
 	if a.NegativePrompt != "" {
 		fmt.Fprintf(b, "### Negative Prompt\n\n```text\n%s\n```\n\n", a.NegativePrompt)
 	}
 
 	b.WriteString("### Composition Notes\n\n")
+	if a.CompositionArchetype != "" {
+		fmt.Fprintf(b, "- **Archetype:** %s — %s\n", a.CompositionArchetype, archetypeGuidance[a.CompositionArchetype])
+	}
 	fmt.Fprintf(b, "- **Composition:** %s\n", a.Style.Composition)
 	fmt.Fprintf(b, "- **Perspective:** %s · **Lighting:** %s\n", a.Style.Perspective, a.Style.Lighting)
 	fmt.Fprintf(b, "- **Mood:** %s · **Technical focus:** %s\n", a.Style.Mood, a.Style.TechnicalFocus)
@@ -170,6 +226,38 @@ func writeIntelligence(b *strings.Builder, ci Intelligence) {
 		for _, n := range ci.ProductionNotes {
 			fmt.Fprintf(b, "  - %s\n", n)
 		}
+	}
+	b.WriteString("\n")
+}
+
+// writeCollectionIntelligenceYAML renders the machine-readable collection block
+// for downstream automation (Step Functions / Lambda / S3).
+func writeCollectionIntelligenceYAML(b *strings.Builder, col VisualAssetCollection) {
+	b.WriteString("---\n\n## Collection Intelligence (machine-readable)\n\n```yaml\ncollection_intelligence:\n")
+	fmt.Fprintf(b, "  assets: %d\n", col.Metadata.AssetCount)
+	fmt.Fprintf(b, "  model_target: %s\n", SDXLModelTarget)
+	fmt.Fprintf(b, "  visual_complexity: %s\n", firstNonEmpty(col.ContentIntelligence.VisualComplexity, "medium-high"))
+	b.WriteString("  token_optimized: true\n")
+	b.WriteString("  automation_ready: true\n")
+	b.WriteString("  provider: replicate\n")
+	b.WriteString("  recommended_refiner: expert_ensemble_refiner\n```\n\n")
+}
+
+// writeAIGenerationRules renders the concluding rules an automated pipeline must
+// follow to keep the SDXL asset system consistent and varied across releases.
+func writeAIGenerationRules(b *strings.Builder) {
+	b.WriteString("---\n\n## AI Generation Rules\n\n")
+	rules := []string{
+		"Reuse the shared SDXL style prompt as the anchor for every asset; add only the asset's focal subject.",
+		"Inject the release_context block dynamically (Step Functions / Lambda / n8n) — never hard-code the release.",
+		"Rotate the composition archetypes between releases; do not reuse the same focal arrangement consecutively.",
+		"Keep each asset's focal prompt concise (~70–140 words) — SDXL favours a clear subject over adjective stacking.",
+		"Preserve the reserved overlay zones so a downstream compositor can add real copy.",
+		"Generate images WITHOUT baked-in text, letters, logos, or watermarks (the shared negative prompt enforces this).",
+		"Feed the per-asset SDXL Parameters block straight to the Replicate stability-ai/sdxl API.",
+	}
+	for i, r := range rules {
+		fmt.Fprintf(b, "%d. %s\n", i+1, r)
 	}
 	b.WriteString("\n")
 }
