@@ -37,10 +37,13 @@ func novaDims(w, h int) (int, int) {
 // context, so the background illustrates the scene. Text is explicitly excluded
 // (the renderer burns the caption in itself).
 func sceneImagePrompt(sc scene) (prompt, negative string) {
-	topic := strings.TrimSpace(sc.Title)
-	context := truncateWords(strings.TrimSpace(sc.Narration), 40)
+	// Prefer the scene's own on-screen direction (the "visual" field) — it
+	// literally describes what should be shown — then fall back to the title, and
+	// enrich with a little narration context.
+	subject := firstNonEmpty(strings.TrimSpace(sc.Visual), strings.TrimSpace(sc.Title), "the system")
+	context := truncateWords(strings.TrimSpace(sc.Narration), 30)
 	prompt = "Editorial flat-vector isometric illustration for a software architecture explainer video. " +
-		"Subject: " + topic + ". " + context + " " +
+		"Subject: " + subject + ". " + context + " " +
 		"Deep slate background, teal and amber accents, clean geometric shapes, subtle grid, cinematic depth. No text, no words, no letters, no logos."
 	negative = "text, words, letters, captions, watermark, logo, ui, frame, border, low quality, blurry"
 	return prompt, negative

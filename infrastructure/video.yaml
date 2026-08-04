@@ -57,13 +57,28 @@ Parameters:
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: >
-      When "true", the renderer generates an AI background image (Amazon Nova
-      Canvas) for each non-diagram scene, falling back to the title card on any
-      throttle/failure. Off by default so image-model throttling never
-      destabilises the pipeline.
+      When "true", the renderer generates an AI image for each non-diagram scene
+      (from the scene's visual direction), falling back to the title card on any
+      failure. Off by default so image-model issues never destabilise the pipeline.
+  ReplicateTokenSecretArn:
+    Type: String
+    Default: ""
+    Description: >
+      Secrets Manager ARN holding a Replicate API token. When set, the renderer
+      generates scene images through Replicate (FLUX/SDXL) instead of Amazon
+      Bedrock — bypassing the account's 0-RPM Bedrock image quota. Create the
+      secret out-of-band (its value is the raw token), then pass its ARN here.
+      Blank uses the Bedrock Nova Canvas path.
+  ReplicateImageModel:
+    Type: String
+    Default: ""
+    Description: >
+      Optional Replicate model "owner/name" (e.g. stability-ai/sdxl). Blank uses
+      the renderer default (black-forest-labs/flux-schnell).
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
+  HasReplicateToken: !Not [!Equals [!Ref ReplicateTokenSecretArn, ""]]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -137,6 +152,18 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      # Injecting the REPLICATE_API_TOKEN container secret requires the execution
+      # role to read that one Secrets Manager secret at task start.
+      Policies: !If
+        - HasReplicateToken
+        - - PolicyName: read-replicate-token
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action: secretsmanager:GetSecretValue
+                  Resource: !Ref ReplicateTokenSecretArn
+        - !Ref AWS::NoValue
 
   # The renderer's own permissions: read scripts from the content bucket,
   # synthesize narration with Polly, write the MP4 to the video bucket.
@@ -211,6 +238,14 @@ Resources:
               Value: !Ref AWS::Region
             - Name: ENABLE_SCENE_IMAGES
               Value: !Ref EnableSceneImages
+            - Name: REPLICATE_IMAGE_MODEL
+              Value: !Ref ReplicateImageModel
+          # Replicate API token injected from Secrets Manager when configured.
+          Secrets: !If
+            - HasReplicateToken
+            - - Name: REPLICATE_API_TOKEN
+                ValueFrom: !Ref ReplicateTokenSecretArn
+            - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs
             Options:

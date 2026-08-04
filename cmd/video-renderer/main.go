@@ -10,9 +10,11 @@
 // The render is idempotent: if OUTPUT_S3_URI already exists it is skipped (a
 // re-run reuses the existing MP4). Set FORCE_RENDER=true to regenerate anyway.
 //
-// v1 drives all formats from the storyboard scenes (single, stable schema) and
-// caps short formats to a few scenes; per-format script scene selection and
-// richer visuals (images from visual-assets, diagram overlays) are follow-ups.
+// Each scene's background comes from its on-screen direction: an architecture
+// diagram when the scene's type/visual calls for one, otherwise — when
+// ENABLE_SCENE_IMAGES is set — an AI-generated image from the scene's visual
+// direction (Replicate FLUX/SDXL, or Amazon Nova Canvas), falling back to a
+// title card on any failure.
 package main
 
 import (
@@ -144,7 +146,7 @@ func run(ctx context.Context) error {
 	// falls back to the title card, exactly as when the feature is off.
 	var sceneGen imageGenerator
 	if sceneImagesEnabled() {
-		if g, err := imagegen.New(ctx); err != nil {
+		if g, err := imagegen.NewFromEnv(ctx); err != nil {
 			log.Printf("scene images enabled but client init failed; using title cards: %v", err)
 		} else {
 			sceneGen = g
