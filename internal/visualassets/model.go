@@ -62,20 +62,24 @@ type Branding struct {
 
 // Asset is one image prompt for a specific platform and format.
 type Asset struct {
-	ID               int               `json:"id"`
-	Type             string            `json:"type"` // YouTube Thumbnail | YouTube Shorts Cover | TikTok Cover | Blog Header | Medium Cover | Dev.to Cover | GitHub Social Card | LinkedIn Banner | X Image | Architecture Illustration | AWS Workflow Diagram | Promotional Graphic | Release Card | Repository Hero Image
-	Platform         string            `json:"platform"`
-	AspectRatio      string            `json:"aspectRatio"`
-	Dimensions       string            `json:"dimensions,omitempty"`
-	Title            string            `json:"title"`
-	Purpose          string            `json:"purpose"`
-	Prompt           string            `json:"prompt"`
-	NegativePrompt   string            `json:"negativePrompt,omitempty"`
-	Style            Style             `json:"style"`
-	Branding         Branding          `json:"branding"`
-	TextPlaceholders []TextPlaceholder `json:"textPlaceholders,omitempty"`
-	References       []string          `json:"references"` // grounded artifact references
-	Metadata         AssetMeta         `json:"metadata"`
+	ID             int      `json:"id"`
+	Type           string   `json:"type"` // YouTube Thumbnail | YouTube Shorts Cover | TikTok Cover | Blog Header | Medium Cover | Dev.to Cover | GitHub Social Card | LinkedIn Banner | X Image | Architecture Illustration | AWS Workflow Diagram | Promotional Graphic | Release Card | Repository Hero Image
+	Platform       string   `json:"platform"`
+	AspectRatio    string   `json:"aspectRatio"`
+	Dimensions     string   `json:"dimensions,omitempty"`
+	Title          string   `json:"title"`
+	Purpose        string   `json:"purpose"`
+	Prompt         string   `json:"prompt"`
+	NegativePrompt string   `json:"negativePrompt,omitempty"`
+	Style          Style    `json:"style"`
+	Branding       Branding `json:"branding"`
+	// SDXL carries the Replicate stability-ai/sdxl generation parameters for this
+	// asset; CompositionArchetype is the rotated layout pattern it uses.
+	SDXL                 SDXLParams        `json:"sdxl"`
+	CompositionArchetype string            `json:"compositionArchetype,omitempty"`
+	TextPlaceholders     []TextPlaceholder `json:"textPlaceholders,omitempty"`
+	References           []string          `json:"references"` // grounded artifact references
+	Metadata             AssetMeta         `json:"metadata"`
 }
 
 // Style is the structured creative direction for an asset.

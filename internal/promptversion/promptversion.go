@@ -23,7 +23,7 @@ var versions = map[string]int{
 	"youtube":        1,
 	"youtube-shorts": 1,
 	"tiktok":         1,
-	"visual-assets":  1,
+	"visual-assets":  2, // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
 	"seo-metadata":   1,
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,

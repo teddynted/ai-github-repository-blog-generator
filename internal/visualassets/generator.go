@@ -84,21 +84,27 @@ func (g *Generator) buildAsset(ctx context.Context, pkg ReleasePackage, c candid
 	placeholders := textPlaceholders(c)
 	promptText := g.prompt(ctx, c, style, b, placeholders)
 
+	// SDXL tuning: parameters keyed to the asset category at its own dimensions,
+	// and a composition archetype rotated per release so releases stay varied.
+	w, h := parseDimensions(c.Dimensions, c.AspectRatio)
+
 	return Asset{
-		ID:               index + 1,
-		Type:             c.Type,
-		Platform:         c.Platform,
-		AspectRatio:      c.AspectRatio,
-		Dimensions:       c.Dimensions,
-		Title:            c.Type + " — " + repoShortName(pkg) + " " + releaseTag(pkg),
-		Purpose:          c.Purpose,
-		Prompt:           promptText,
-		NegativePrompt:   planNegative(c, pkg),
-		Style:            style,
-		Branding:         b,
-		TextPlaceholders: placeholders,
-		References:       dedupe(c.References),
-		Metadata:         planAssetMeta(c, pkg),
+		ID:                   index + 1,
+		Type:                 c.Type,
+		Platform:             c.Platform,
+		AspectRatio:          c.AspectRatio,
+		Dimensions:           c.Dimensions,
+		Title:                c.Type + " — " + repoShortName(pkg) + " " + releaseTag(pkg),
+		Purpose:              c.Purpose,
+		Prompt:               promptText,
+		NegativePrompt:       planNegative(c, pkg),
+		Style:                style,
+		Branding:             b,
+		TextPlaceholders:     placeholders,
+		References:           dedupe(c.References),
+		Metadata:             planAssetMeta(c, pkg),
+		SDXL:                 sdxlParamsFor(c.Type, w, h),
+		CompositionArchetype: chooseArchetype(releaseTag(pkg), index),
 	}
 }
 

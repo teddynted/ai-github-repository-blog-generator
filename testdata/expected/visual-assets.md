@@ -2,6 +2,47 @@
 
 _acme/widget · release v1.0.0 · 14 assets_
 
+## SDXL Visual System
+
+_Target model: `stability-ai/sdxl` (via Replicate). Reuse these anchors across every asset instead of repeating style boilerplate._
+
+### Shared SDXL Style Prompt
+
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+```
+
+### Shared SDXL Negative Prompt
+
+```text
+text, letters, numbers, words, logos, watermarks, signatures, clutter, excessive visual noise, distorted perspective, low resolution, blurry details, photorealistic humans, unrelated cloud services, busy background, tangled connectors, unreadable shapes
+```
+
+### Release Context
+
+```yaml
+release_context:
+  repository: acme/widget
+  release: v1.0.0
+  feature: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
+  visual_theme: high engineering illustration
+```
+
+### Visual Variation
+
+_Releases rotate composition archetypes so consecutive releases never repeat the same focal arrangement._
+
+```yaml
+visual_variation:
+  active_archetype: diagonal event cascade
+  archetypes:
+    - right-weighted reveal
+    - centered orchestration hub
+    - diagonal event cascade
+    - layered infrastructure stack
+    - radial event burst
+```
+
 ## Brand Guidelines
 
 - **Primary colors:** #0B1F33, #12263A
@@ -34,8 +75,28 @@ _Applied to every asset below — referenced by each prompt, not repeated verbat
 - **Platform:** YouTube · **Aspect ratio:** 16:9 (1280x720)
 - **Purpose:** Drive clicks on the long-form release deep dive.
 - **Recommended filename:** `widget-v1-0-0-youtube-thumbnail.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1280
+height: 720
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -49,6 +110,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
 - **Composition:** single bold focal subject offset to the right, large empty headline zone on the left third, strong visual hierarchy, minimal clutter
 - **Perspective:** slight isometric hero angle for depth · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** high-energy, credible, click-worthy without being clickbait · **Technical focus:** release architecture at a glance
@@ -110,8 +172,28 @@ motion_handoff:
 - **Platform:** GitHub · **Aspect ratio:** 16:9 (1600x900)
 - **Purpose:** Hero image for the repository README / landing.
 - **Recommended filename:** `widget-v1-0-0-repository-hero-image.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1600
+height: 900
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -125,6 +207,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
 - **Composition:** wide banner composition with a central-to-right focal graphic and a generous headline zone, announcement-grade framing
 - **Perspective:** hero isometric or gentle three-quarter view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** celebratory but professional, confident release energy · **Technical focus:** what the repository does
@@ -169,8 +252,28 @@ supports_motion: false
 - **Platform:** GitHub · **Aspect ratio:** 1.91:1 (1280x640)
 - **Purpose:** GitHub social preview when the repo is shared.
 - **Recommended filename:** `widget-v1-0-0-github-social-card.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1280
+height: 640
+scheduler: K_EULER
+num_inference_steps: 30
+guidance_scale: 7
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -184,6 +287,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** professional, modern, trustworthy · **Technical focus:** widget v1.0.0
@@ -239,8 +343,28 @@ motion_handoff:
 - **Platform:** LinkedIn · **Aspect ratio:** 1.91:1 (1200x627)
 - **Purpose:** Professional announcement graphic for LinkedIn.
 - **Recommended filename:** `widget-v1-0-0-linkedin-banner.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1200
+height: 627
+scheduler: K_EULER
+num_inference_steps: 30
+guidance_scale: 7
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -254,6 +378,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** professional, modern, trustworthy · **Technical focus:** release announcement
@@ -298,8 +423,28 @@ supports_motion: false
 - **Platform:** X · **Aspect ratio:** 16:9 (1600x900)
 - **Purpose:** Shareable image for an X (Twitter) post.
 - **Recommended filename:** `widget-v1-0-0-x-image.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: centered orchestration hub — put a central orchestration node with supporting planes radiating outward; reserve the lower band for overlay.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1600
+height: 900
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -313,6 +458,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** centered orchestration hub — put a central orchestration node with supporting planes radiating outward; reserve the lower band for overlay.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** punchy, modern, shareable · **Technical focus:** release highlight
@@ -362,8 +508,28 @@ motion_handoff:
 - **Platform:** Blog · **Aspect ratio:** 16:9 (1600x900)
 - **Purpose:** Header image for the technical blog post.
 - **Recommended filename:** `widget-v1-0-0-blog-header.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1600
+height: 900
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -377,6 +543,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
 - **Composition:** editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title
 - **Perspective:** gentle isometric or layered flat scene · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story of the release
@@ -415,8 +582,28 @@ supports_motion: false
 - **Platform:** Dev.to · **Aspect ratio:** 1000:420 (1000x420)
 - **Purpose:** Cover image for the Dev.to cross-post.
 - **Recommended filename:** `widget-v1-0-0-dev-to-cover.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1000
+height: 420
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -430,6 +617,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
 - **Composition:** editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title
 - **Perspective:** gentle isometric or layered flat scene · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story of the release
@@ -468,8 +656,28 @@ supports_motion: false
 - **Platform:** Medium · **Aspect ratio:** 3:2 (1500x1000)
 - **Purpose:** Cover image for the Medium cross-post.
 - **Recommended filename:** `widget-v1-0-0-medium-cover.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1500
+height: 1000
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -483,6 +691,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
 - **Composition:** editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title
 - **Perspective:** gentle isometric or layered flat scene · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story of the release
@@ -521,8 +730,28 @@ supports_motion: false
 - **Platform:** Docs · **Aspect ratio:** 16:9 (1920x1080)
 - **Purpose:** Explain the system architecture in documentation.
 - **Recommended filename:** `widget-v1-0-0-architecture-illustration.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1920
+height: 1080
+scheduler: K_DPM_2_ANCESTRAL
+num_inference_steps: 40
+guidance_scale: 8
+high_noise_frac: 0.75
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -536,6 +765,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
 - **Composition:** clear left-to-right technical diagram flow, labelled component blocks connected by directional arrows, balanced spacing, no text baked in
 - **Perspective:** clean isometric or flat top-down schematic · **Lighting:** even, diagrammatic lighting with soft shadows for layering
 - **Mood:** clear, educational, precise · **Technical focus:** component relationships
@@ -586,8 +816,28 @@ supports_motion: false
 - **Platform:** Docs · **Aspect ratio:** 16:9 (1920x1080)
 - **Purpose:** Illustrate the AWS event flow.
 - **Recommended filename:** `widget-v1-0-0-aws-workflow-diagram.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: centered orchestration hub — put a central orchestration node with supporting planes radiating outward; reserve the lower band for overlay.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1920
+height: 1080
+scheduler: K_DPM_2_ANCESTRAL
+num_inference_steps: 40
+guidance_scale: 8
+high_noise_frac: 0.75
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -601,6 +851,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** centered orchestration hub — put a central orchestration node with supporting planes radiating outward; reserve the lower band for overlay.
 - **Composition:** clear left-to-right technical diagram flow, labelled component blocks connected by directional arrows, balanced spacing, no text baked in
 - **Perspective:** clean isometric or flat top-down schematic · **Lighting:** even, diagrammatic lighting with soft shadows for layering
 - **Mood:** clear, educational, precise · **Technical focus:** AWS service flow
@@ -651,8 +902,28 @@ supports_motion: false
 - **Platform:** Generic · **Aspect ratio:** 1:1 (1080x1080)
 - **Purpose:** Square release-announcement card for feeds.
 - **Recommended filename:** `widget-v1-0-0-release-card.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1080
+height: 1080
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -666,6 +937,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
 - **Composition:** centered square composition with a strong focal graphic, headline zone reserved along the lower third
 - **Perspective:** hero isometric or gentle three-quarter view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** celebratory but professional, confident release energy · **Technical focus:** widget v1.0.0 release
@@ -704,8 +976,28 @@ supports_motion: false
 - **Platform:** Generic · **Aspect ratio:** 1:1 (1080x1080)
 - **Purpose:** Promote the feature / open-source project.
 - **Recommended filename:** `widget-v1-0-0-promotional-graphic.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1080
+height: 1080
+scheduler: K_EULER
+num_inference_steps: 35
+guidance_scale: 7.5
+high_noise_frac: 0.8
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -719,6 +1011,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
 - **Composition:** centered square composition with a strong focal graphic, headline zone reserved along the lower third
 - **Perspective:** hero isometric or gentle three-quarter view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** celebratory but professional, confident release energy · **Technical focus:** the headline feature
@@ -763,8 +1056,28 @@ supports_motion: false
 - **Platform:** YouTube Shorts · **Aspect ratio:** 9:16 (1080x1920)
 - **Purpose:** Vertical cover for the YouTube Short.
 - **Recommended filename:** `widget-v1-0-0-youtube-shorts-cover.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1080
+height: 1920
+scheduler: K_EULER_ANCESTRAL
+num_inference_steps: 32
+guidance_scale: 7.8
+high_noise_frac: 0.82
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -778,6 +1091,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** professional, modern, trustworthy · **Technical focus:** architecture Reveal
@@ -833,8 +1147,28 @@ motion_handoff:
 - **Platform:** TikTok · **Aspect ratio:** 9:16 (1080x1920)
 - **Purpose:** Vertical cover for the TikTok video.
 - **Recommended filename:** `widget-v1-0-0-tiktok-cover.png`
+### SDXL Prompt
 
-### Prompt
+```text
+Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks.
+
+## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+Composition: right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
+```
+
+### SDXL Parameters
+
+```yaml
+width: 1080
+height: 1920
+scheduler: K_EULER_ANCESTRAL
+num_inference_steps: 32
+guidance_scale: 7.8
+high_noise_frac: 0.82
+refine: expert_ensemble_refiner
+```
+
+### Prompt (grounded source)
 
 ```text
 ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
@@ -848,6 +1182,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 
 ### Composition Notes
 
+- **Archetype:** right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
 - **Mood:** professional, modern, trustworthy · **Technical focus:** architecture Insight
@@ -908,6 +1243,33 @@ motion_handoff:
   - Prompts are provider-neutral: usable with GPT Image, DALL·E, Stable Diffusion, Midjourney, Nova Canvas, or Flux.
   - Images render no text — add real copy in the reserved placeholder zones during compositing.
   - Apply the shared Branding across every asset for a consistent visual identity.
+
+---
+
+## Collection Intelligence (machine-readable)
+
+```yaml
+collection_intelligence:
+  assets: 14
+  model_target: stability-ai/sdxl
+  visual_complexity: high
+  token_optimized: true
+  automation_ready: true
+  provider: replicate
+  recommended_refiner: expert_ensemble_refiner
+```
+
+---
+
+## AI Generation Rules
+
+1. Reuse the shared SDXL style prompt as the anchor for every asset; add only the asset's focal subject.
+2. Inject the release_context block dynamically (Step Functions / Lambda / n8n) — never hard-code the release.
+3. Rotate the composition archetypes between releases; do not reuse the same focal arrangement consecutively.
+4. Keep each asset's focal prompt concise (~70–140 words) — SDXL favours a clear subject over adjective stacking.
+5. Preserve the reserved overlay zones so a downstream compositor can add real copy.
+6. Generate images WITHOUT baked-in text, letters, logos, or watermarks (the shared negative prompt enforces this).
+7. Feed the per-asset SDXL Parameters block straight to the Replicate stability-ai/sdxl API.
 
 ---
 
