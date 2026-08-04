@@ -40,37 +40,57 @@ func (s *artifactStore) path(stage string) string {
 // Load decodes the stage's sidecar into v when it exists and is fresh. A missing
 // or stale sidecar returns found=false (the stage regenerates); a corrupt sidecar
 // returns an error so the caller can log and regenerate.
-func (s *artifactStore) Load(stage string, v any) (bool, error) {
+// storeEnvelope wraps a persisted artifact with the prompt version that produced
+// it (mirrors the S3 store), with a legacy fallback for bare-struct sidecars.
+type storeEnvelope struct {
+	PromptVersion string          `json:"promptVersion"`
+	Artifact      json.RawMessage `json:"artifact"`
+}
+
+func (s *artifactStore) Load(stage string, v any) (string, bool, error) {
 	p := s.path(stage)
 	fi, err := os.Stat(p)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			return "", false, nil
 		}
-		return false, err
+		return "", false, err
 	}
 	// Stale when older than the source blog — the blog changed, so downstream
 	// artifacts derived from it must be regenerated.
 	if !s.blogRef.IsZero() && fi.ModTime().Before(s.blogRef) {
-		return false, nil
+		return "", false, nil
 	}
 	b, err := os.ReadFile(p)
 	if err != nil {
-		return false, err
+		return "", false, err
+	}
+	var env storeEnvelope
+	if err := json.Unmarshal(b, &env); err == nil && len(env.Artifact) > 0 {
+		if err := json.Unmarshal(env.Artifact, v); err != nil {
+			return "", false, err
+		}
+		atomic.AddInt64(&s.hits, 1)
+		return env.PromptVersion, true, nil
 	}
 	if err := json.Unmarshal(b, v); err != nil {
-		return false, err
+		return "", false, err
 	}
 	atomic.AddInt64(&s.hits, 1)
-	return true, nil
+	return "", true, nil
 }
 
-// Save writes the stage's struct as a pretty JSON sidecar.
-func (s *artifactStore) Save(stage string, v any) error {
+// Save writes the stage's struct wrapped in a versioned envelope as a pretty
+// JSON sidecar.
+func (s *artifactStore) Save(stage string, v any, version string) error {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(v, "", "  ")
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(storeEnvelope{PromptVersion: version, Artifact: payload}, "", "  ")
 	if err != nil {
 		return err
 	}

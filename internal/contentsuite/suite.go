@@ -164,8 +164,13 @@ type Orchestrator struct {
 // into v; a stale or missing artifact returns found=false so the stage
 // regenerates. Implementations decide freshness (e.g. newer than the source blog).
 type ArtifactStore interface {
-	Load(stage string, v any) (found bool, err error)
-	Save(stage string, v any) error
+	// Load decodes stage's persisted artifact into v and returns the prompt
+	// version it was produced with (empty for a legacy artifact saved before
+	// versions were stored). found is false when the artifact is absent.
+	Load(stage string, v any) (version string, found bool, err error)
+	// Save persists the stage's struct together with the prompt version that
+	// produced it, so a later run can tell whether it is stale.
+	Save(stage string, v any, version string) error
 }
 
 // stageDeps maps each stage to the stages whose output it consumes, mirroring the
@@ -654,27 +659,59 @@ func (o *Orchestrator) reuseDep(name string) bool {
 // generation closure, which populates dst and returns Markdown) and persists the
 // fresh struct for the next run. It is safe to call from concurrent goroutines.
 func reuseOrRun[T any](o *Orchestrator, name string, milestone int, filename string, dst *T, render func(T) string, gen func() (string, error)) stageOutcome {
+	curVer := o.stageVersion(name)
 	if o.reuseDep(name) {
-		if found, err := o.Store.Load(name, dst); err == nil && found {
+		if storedVer, found, err := o.Store.Load(name, dst); err == nil && found {
+			if !o.staleArtifact(curVer, storedVer) {
+				if o.Logger != nil {
+					o.Logger.Info("content stage reused (no model call)", slog.String("stage", name), slog.Int("milestone", milestone))
+				}
+				out := stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: render(*dst)}
+				if o.Provenance != nil {
+					out.provider, out.model, out.promptVersion = o.Provenance(name)
+				}
+				return out
+			}
 			if o.Logger != nil {
-				o.Logger.Info("content stage reused (no model call)", slog.String("stage", name), slog.Int("milestone", milestone))
+				o.Logger.Info("content stage stale — prompt version changed; regenerating",
+					slog.String("stage", name), slog.String("stored", storedVer), slog.String("current", curVer))
 			}
-			out := stageOutcome{name: name, milestone: milestone, filename: filename, status: StageOK, md: render(*dst)}
-			if o.Provenance != nil {
-				out.provider, out.model, out.promptVersion = o.Provenance(name)
-			}
-			return out
 		} else if err != nil && o.Logger != nil {
 			o.Logger.Warn("content stage reuse failed; regenerating", slog.String("stage", name), slog.String("error", err.Error()))
 		}
 	}
 	out := o.run(name, milestone, filename, gen)
 	if out.status == StageOK && o.Store != nil {
-		if err := o.Store.Save(name, *dst); err != nil && o.Logger != nil {
+		if err := o.Store.Save(name, *dst, curVer); err != nil && o.Logger != nil {
 			o.Logger.Warn("content stage persist failed", slog.String("stage", name), slog.String("error", err.Error()))
 		}
 	}
 	return out
+}
+
+// stageVersion returns the current prompt version for a stage (via Provenance),
+// or "" when no Provenance is configured.
+func (o *Orchestrator) stageVersion(name string) string {
+	if o.Provenance == nil {
+		return ""
+	}
+	_, _, v := o.Provenance(name)
+	return v
+}
+
+// staleArtifact reports whether a persisted artifact must be regenerated because
+// its prompt version no longer matches the current one. This applies ONLY in
+// idempotent (cloud) mode: a targeted local dependency-reuse run keeps reusing
+// dependencies regardless of version — that is the whole point of --artifact
+// reuse (it must not burn model tokens re-running the chain). When the current
+// version is unknown (no Provenance) nothing is treated as stale. A legacy
+// artifact with no stored version IS stale, so a run after this change refreshes
+// it to the current prompt.
+func (o *Orchestrator) staleArtifact(current, stored string) bool {
+	if !o.Idempotent || current == "" {
+		return false
+	}
+	return stored != current
 }
 
 // run executes one generator and returns its outcome WITHOUT touching shared
