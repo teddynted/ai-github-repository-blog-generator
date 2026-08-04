@@ -59,17 +59,36 @@ long-form plan its script references by scene index); `youtube-shorts` and
 `videos[0].scenes`), using each scene's on-screen `overlay` as the caption and
 falling back to a capped storyboard if the format script is missing.
 
-**Diagram backgrounds:** for storyboard scenes typed `architecture`/`diagram`,
-the renderer fetches the release's `architecture-diagram.svg` (written by the
-publisher next to the artifacts), rasterizes it once with `rsvg-convert` to the
-frame size, and uses it as the scene background (cover-cropped) instead of a
-plain colour card. Best-effort — a missing diagram falls back to the colour card.
+**Scene backgrounds.** Each scene gets exactly one background, chosen in this order:
 
-> **Still v1.** Remaining follow-ups: **AI imagery** from `visual-assets` (the
-> platform produces image *prompts*, not finished images — needs an
-> image-generation service) and **music / branded intro-outro** (needs bundled
-> static assets). Everything else — per-format scripts, captions, and diagram
-> backgrounds — is implemented.
+1. **Architecture diagram** — when the scene calls for one (its storyboard `type`
+   is `architecture`/`diagram`, or its on-screen `visual` direction names a
+   diagram/architecture/topology/data-flow visual — the latter is how short
+   formats get the diagram too). The renderer fetches the release's
+   `architecture-diagram.svg` (emitted by the content suite — the M15 stage falls
+   back to the M11 architecture collection's rendered SVG so it is present even
+   when the diagram-spec is thin), rasterizes it once with `rsvg-convert`, and
+   cover-crops it behind a caption band.
+2. **AI-generated scene image** — for non-diagram scenes, when `ENABLE_SCENE_IMAGES`
+   is on. The renderer generates a picture from the scene's `visual` direction
+   using the **canonical `storyboardscenes.ScenePrompt`** (the same prompt logic
+   the `storyboard-scenes` artifact uses: shared brand style + focal subject /
+   grounded metaphor + a rotated cinematic composition). The backend is
+   **Replicate** (FLUX.1 [schnell] by default, or SDXL) when a token is
+   configured, else Amazon Bedrock **Nova Canvas**. See [image backends](#41-scene-image-backends).
+3. **Deep-slate title slide** — the fallback for every scene: a `#0F172A`
+   background with the scene title large and centred. Any image/diagram miss
+   (throttle, disabled, no diagram) degrades to this, so a render never fails on
+   a visual.
+
+**Idempotency.** Before doing any Polly/FFmpeg work, the renderer `HeadObject`s
+`OUTPUT_S3_URI`; if the MP4 already exists it skips and exits successfully, so a
+re-run reuses existing videos. Set `FORCE_RENDER=true` (or delete the MP4) to
+regenerate — e.g. after a renderer change.
+
+> **Remaining follow-ups:** **music / branded intro-outro** (needs bundled static
+> assets). Per-scene AI imagery, diagram backgrounds, title slides, per-format
+> scripts, captions, and idempotency are implemented.
 
 ---
 
@@ -96,14 +115,30 @@ Scripts are read from the content bucket's existing artifact layout
 
 | Setting | Where | Purpose |
 | --- | --- | --- |
-| `ENABLE_VIDEO=true` | repo variable | Deploys the video stack + wires the worker |
-| `VIDEO_STATE_MACHINE_ARN` | worker env (compute stack) | The video machine the worker starts; deterministic `…:stateMachine:<project>-video` |
+| `ENABLE_VIDEO=true` | repo variable | Deploys the video stack + wires the release run to it |
 | `RendererImageTag` | video stack param | Renderer image tag (deploy passes the commit SHA) |
 | `TaskCpu` / `TaskMemory` | video stack params | Fargate size (default 2 vCPU / 8 GB) |
+| `ENABLE_SCENE_IMAGES=true` | repo variable → `EnableSceneImages` param → renderer env | Turn on AI images for non-diagram scenes (default off) |
+| `REPLICATE_TOKEN_SECRET_ARN` | repo variable → `ReplicateTokenSecretArn` param | Secrets Manager ARN of a Replicate API token; injected as the `REPLICATE_API_TOKEN` container secret |
+| `REPLICATE_IMAGE_MODEL` | repo variable → `ReplicateImageModel` param | Replicate model `owner/name` (default `black-forest-labs/flux-schnell`; e.g. `stability-ai/sdxl`) |
+| `FORCE_RENDER=true` | renderer env | Bypass the already-exists skip and regenerate |
 
-The worker only starts the video machine when **both** `VIDEO_STATE_MACHINE_ARN`
-and `OUTPUT_S3_BUCKET` are set (the renderer reads scripts from S3). A start
-failure is **non-fatal** — it never fails the release run that already published.
+A start failure of the video machine is **non-fatal** — it never fails the
+release run that already published.
+
+### 4.1 Scene image backends
+
+The renderer selects the image backend at runtime (`imagegen.NewFromEnv`):
+
+- **Replicate** (recommended) when `REPLICATE_API_TOKEN` is present — a hosted
+  FLUX/SDXL API with real quota. Enable it by storing a token in Secrets Manager
+  and pointing `REPLICATE_TOKEN_SECRET_ARN` at it, plus `ENABLE_SCENE_IMAGES=true`.
+- **Amazon Bedrock Nova Canvas** otherwise — IAM-authenticated, no key, but note
+  the account's on-demand image quota is currently `0` and non-adjustable, so
+  Nova Canvas throttles before doing work; use Replicate until that is lifted.
+
+Either way, a generation failure degrades to the title slide — a bad backend
+never breaks a video.
 
 ---
 
