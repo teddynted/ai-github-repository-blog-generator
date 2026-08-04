@@ -8,18 +8,43 @@ import (
 // scene is the minimal per-shot data the renderer needs: a caption (shown as a
 // text card) and the narration (synthesized to speech). Duration is derived from
 // the narration audio length at render time, so it is not needed here. Type is
-// the storyboard scene type (architecture/diagram/…); it drives whether the
-// rendered architecture diagram is used as the scene background.
+// the storyboard scene type (architecture/diagram/…) and Visual is the
+// short-format on-screen direction; either can drive whether the rendered
+// architecture diagram is used as the scene background.
 type scene struct {
 	Number    int
 	Title     string
 	Narration string
 	Type      string
+	Visual    string
+}
+
+// diagramVisualCues are substrings in a short-format scene's "visual" direction
+// (e.g. "Build the architecture diagram node by node") that call for the
+// architecture diagram as the background. The long-form storyboard uses Type
+// instead; the short-format scripts carry no Type, so the direction is the only
+// signal available.
+var diagramVisualCues = []string{
+	"architecture", "diagram", "component", "topology", "data flow", "dataflow",
+	"node by node", "system map", "flowchart", "block diagram",
 }
 
 // wantsDiagram reports whether a scene should use the architecture diagram as its
-// background rather than a plain caption card.
-func (s scene) wantsDiagram() bool { return s.Type == "architecture" || s.Type == "diagram" }
+// background rather than a plain caption card — either because the storyboard
+// typed it as an architecture/diagram scene, or because a short-format scene's
+// visual direction asks for the diagram.
+func (s scene) wantsDiagram() bool {
+	if s.Type == "architecture" || s.Type == "diagram" {
+		return true
+	}
+	lv := strings.ToLower(s.Visual)
+	for _, cue := range diagramVisualCues {
+		if strings.Contains(lv, cue) {
+			return true
+		}
+	}
+	return false
+}
 
 // scenesForFormat selects the best scene source per format:
 //   - youtube uses the storyboard (the long-form video plan the youtube script
@@ -86,14 +111,46 @@ func parseFormatScenes(scriptJSON []byte, collectionKey string) []scene {
 
 // rawScene is the tolerant shape shared by storyboard/shorts/tiktok scenes: they
 // all carry a narration and either a title (storyboard) or an overlay (short
-// formats) that serves as the on-screen caption.
+// formats) that serves as the on-screen caption. Every format also carries an
+// on-screen direction describing what to show, but under a different shape: the
+// short-format scripts use a bare "visual" string; the storyboard uses a
+// "visuals" object ({"description": "..."}). visualText reads whichever exists.
 type rawScene struct {
-	SceneNumber int    `json:"sceneNumber"`
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	Overlay     string `json:"overlay"`
-	Narration   string `json:"narration"`
-	Type        string `json:"type"`
+	SceneNumber int             `json:"sceneNumber"`
+	Number      int             `json:"number"`
+	Title       string          `json:"title"`
+	Overlay     string          `json:"overlay"`
+	Narration   string          `json:"narration"`
+	Type        string          `json:"type"`
+	Visual      string          `json:"visual"`  // short-format direction (string)
+	Visuals     json.RawMessage `json:"visuals"` // storyboard direction (object|string|array)
+}
+
+// visualText returns the scene's on-screen direction as plain text, from the
+// short-format "visual" string or the storyboard "visuals" field (an object with
+// a description, or tolerantly a bare string or array). "" when none is present.
+func visualText(s rawScene) string {
+	if v := strings.TrimSpace(s.Visual); v != "" {
+		return v
+	}
+	if len(s.Visuals) == 0 {
+		return ""
+	}
+	var obj struct {
+		Description string `json:"description"`
+	}
+	if json.Unmarshal(s.Visuals, &obj) == nil && strings.TrimSpace(obj.Description) != "" {
+		return strings.TrimSpace(obj.Description)
+	}
+	var str string
+	if json.Unmarshal(s.Visuals, &str) == nil {
+		return strings.TrimSpace(str)
+	}
+	var arr []string
+	if json.Unmarshal(s.Visuals, &arr) == nil {
+		return strings.TrimSpace(strings.Join(arr, " "))
+	}
+	return ""
 }
 
 func collect(raw []rawScene) []scene {
@@ -105,7 +162,7 @@ func collect(raw []rawScene) []scene {
 		}
 		n := firstNonZero(s.SceneNumber, s.Number, i+1)
 		caption := firstNonEmpty(strings.TrimSpace(s.Title), strings.TrimSpace(s.Overlay), "Scene")
-		out = append(out, scene{Number: n, Title: caption, Narration: narr, Type: s.Type})
+		out = append(out, scene{Number: n, Title: caption, Narration: narr, Type: s.Type, Visual: visualText(s)})
 	}
 	return out
 }
