@@ -13,6 +13,7 @@ package storyboardscenes
 import (
 	"fmt"
 	"hash/fnv"
+	"sort"
 	"strings"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/storyboard"
@@ -137,11 +138,72 @@ func ScenePrompt(visual, sceneType, composition string) string {
 	// actual services and their relationships (wordlessly) rather than a generic
 	// cityscape. Then the composition (framing) + the cinematic quality suffix.
 	prompt := SharedStylePrompt + " Illustrate this concept as cloud-service iconography and flows: " + subject + "."
+	// Ground the imagery in the SPECIFIC services the scene names, so the picture
+	// matches the content — each rendered as its own distinct, recognizable node
+	// (wordless; the shapes carry meaning, never labels).
+	if svc := detectServiceNodes(visual); svc != "" {
+		prompt += " Feature these as distinct, recognizable service nodes connected by directional event-flow arrows (shapes only, absolutely no text labels): " + svc + "."
+	}
 	if composition != "" {
 		prompt += " Composition: " + composition + "."
 	}
 	prompt += " " + SharedQualitySuffix + "."
 	return prompt
+}
+
+// serviceNodes maps recognizable architecture components to a short, evocative
+// visual description SDXL can render wordlessly. Detection is on the scene's own
+// text, so the picture depicts the exact services under discussion.
+var serviceNodes = []struct{ key, node string }{
+	{"eventbridge", "an event-bus hub fanning out event particles"},
+	{"step functions", "a branching state-machine graph"},
+	{"step function", "a branching state-machine graph"},
+	{"lambda", "small serverless function cubes"},
+	{"bedrock", "a cloud inference engine node"},
+	{"cloudwatch", "a convergence/observability node collecting light-lines"},
+	{"dynamodb", "a fast key-value store node"},
+	{"s3", "a glowing object-storage cylinder with asset cards"},
+	{"efs", "a central shared-storage disc"},
+	{"sqs", "a message-queue pipe with buffered tokens"},
+	{"ec2", "an on-demand compute instance block"},
+	{"iam", "a security boundary ring enclosing isolated zones"},
+	{"api gateway", "an entry gateway node"},
+	{"ollama", "a compact local-inference engine node"},
+	{"n8n", "a chain of automation workflow nodes"},
+	{"github", "a source-repository node emitting a commit particle"},
+	{"webhook", "a triggering pulse into the system"},
+	{"claude", "an AI reasoning node"},
+}
+
+// detectServiceNodes returns a comma-joined list of wordless node descriptions
+// for the architecture components named in text (in first-appearance order,
+// de-duplicated), or "" when none are recognized.
+func detectServiceNodes(text string) string {
+	l := strings.ToLower(text)
+	type hit struct {
+		idx  int
+		node string
+	}
+	var hits []hit
+	seen := map[string]bool{}
+	for _, s := range serviceNodes {
+		if i := strings.Index(l, s.key); i >= 0 && !seen[s.node] {
+			seen[s.node] = true
+			hits = append(hits, hit{i, s.node})
+		}
+	}
+	if len(hits) == 0 {
+		return ""
+	}
+	sort.Slice(hits, func(a, b int) bool { return hits[a].idx < hits[b].idx })
+	parts := make([]string, 0, len(hits))
+	for _, h := range hits {
+		parts = append(parts, h.node)
+	}
+	if len(parts) > 5 { // keep the composition legible
+		parts = parts[:5]
+	}
+	return strings.Join(parts, ", ")
 }
 
 // cleanSubject strips storyboard boilerplate ("A supporting visual for: …" and a

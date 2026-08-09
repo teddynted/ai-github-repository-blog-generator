@@ -34,10 +34,11 @@ type Generator interface {
 	Generate(ctx context.Context, spec Spec) ([]byte, error)
 }
 
-// maxRetries bounds the backoff loop; Nova Canvas throttles ("Too many
-// connections"/"Too many requests") aggressively, so a few spaced retries turn a
-// transient failure into a success without stalling a render for long.
-const maxRetries = 4
+// maxRetries bounds the backoff loop. Image APIs throttle (429 "Too many
+// requests") aggressively under a parallel multi-format render — SDXL especially
+// — so several exponentially-spaced retries turn a transient rate-limit into a
+// success instead of a title-card fallback.
+const maxRetries = 7
 
 // invoker is the minimal Bedrock Runtime surface the client needs, so the client
 // is unit-testable with a fake (the real *bedrockruntime.Client satisfies it).
