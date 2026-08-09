@@ -96,6 +96,23 @@ func Derive(awsServices, components, nodes []string) *Registry {
 	return r
 }
 
+// Phrases returns the multi-word protected forms (e.g. "Amazon Bedrock", "AWS
+// Lambda", "Amazon CloudWatch") — the compound identifiers a caption line must
+// never split across a line break.
+func (r *Registry) Phrases() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range r.terms {
+		for _, f := range append([]string{t.Canonical}, t.Allowed...) {
+			if len(strings.Fields(f)) > 1 && !seen[f] {
+				seen[f] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
 // Terms returns the protected canonical forms, sorted, for prompts and reports.
 func (r *Registry) Terms() []string {
 	out := make([]string, 0, len(r.terms))
