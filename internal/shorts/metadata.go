@@ -18,15 +18,15 @@ func planSEO(c candidate, pkg ReleasePackage, index int) SEO {
 	}
 }
 
-func alternativeTitles(c candidate, pkg ReleasePackage) []string {
-	tag := releaseTag(pkg)
+func alternativeTitles(c candidate, _ ReleasePackage) []string {
+	// Evergreen: titles speak to the topic, never the version or repository.
 	switch c.Angle {
 	case "Architecture Reveal":
-		return []string{"The architecture explained fast", tag + " architecture in 60s"}
+		return []string{"The architecture explained fast", "The architecture in 60 seconds"}
 	case "Common Mistake":
 		return []string{"Stop doing this", "The mistake to avoid"}
 	case "Interesting Statistic":
-		return []string{"The numbers don't lie", "By the numbers: " + tag}
+		return []string{"The detail that changes everything", "The one thing to know"}
 	default:
 		return []string{c.Title, "Quick " + strings.ToLower(c.Angle)}
 	}
@@ -45,7 +45,7 @@ func thumbnailText(c candidate, tag string) string {
 	case "CloudFormation Tip":
 		return "IaC TIP"
 	case "Interesting Statistic":
-		return "BY THE NUMBERS"
+		return "THE DETAIL"
 	default:
 		return strings.ToUpper(firstNonEmpty(tag, "DEV TIP"))
 	}

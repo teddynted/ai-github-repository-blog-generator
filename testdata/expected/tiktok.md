@@ -1,6 +1,6 @@
 # TikTok Videos: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 3 videos_
+_acme/widget · release v1.0.0 · 2 videos_
 
 ---
 
@@ -113,64 +113,11 @@ _acme/widget · release v1.0.0 · 3 videos_
 
 ---
 
-## Video 3 — The numbers behind the build
-
-- **Topic:** Interesting Statistic · **Duration:** 0:20 (20s) · **Retention:** 91/100 · **Words:** 27
-- **Hook:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-### Script
-
-> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-### Scene Breakdown
-
-**Scene 1** (5s) — _Push In · Zoom Effects · Zoom_
-  - Visual: Count the numbers up on screen.
-  - Overlay: Interesting Statistic
-  - Narration: ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-**Scene 2** (5s) — _Zoom · Pulse · Slide_
-  - Visual: Show the changed files.
-  - Narration: There's an easier way than the obvious one.
-
-**Scene 3** (5s) — _Pan · Fade · Slide_
-  - Visual: End card: the repository.
-  - Narration: Here's the fix: the work here spans 5 commits.
-
-**Scene 4** (5s) — _Pull Out · Slide · Fade_
-  - Visual: End card: the repository.
-  - Overlay: Follow for more →
-  - Narration: Simple, but it makes a real difference. Does that number surprise you? Read the deep-dive blog — link in bio.
-
-### Captions (burned-in)
-
-- `0:00–0:03` ## Introduction The system decouples _(large-bold)_
-- `0:03–0:06` events from generation. ## Architecture _(highlight)_
-- `0:06–0:09` EventBridge routes to SQS, drained _(highlight)_
-- `0:09–0:12` by an EC2 worker. ## _(highlight)_
-- `0:12–0:15` Conclusion The pattern generalises to
-- `0:15–0:20` event-driven workloads.
-
-### Visual Suggestions
-
-- [Editor View] Count the numbers up on screen. _(ref: acme/widget)_
-- [Repository Screenshot] Show the changed files. _(ref: acme/widget)_
-- [Repository Screenshot] End card: the repository. _(ref: https://github.com/acme/widget)_
-
-- **Camera:** S1:Push In · S2:Zoom · S3:Pan · S4:Pull Out
-- **Animations:** S1:Zoom Effects · S2:Pulse · S3:Fade · S4:Slide
-- **Engagement:** Does that number surprise you?
-- **CTA:** Read the deep-dive blog — link in bio.
-- **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
-- **Caption:** The work here spans 5 commits. Full video in bio.
-
----
-
 ## Collection Intelligence
 
-- **Videos:** 3 · **Total:** 1:00 · **Average:** 20s · **Avg retention:** 94/100
+- **Videos:** 2 · **Total:** 0:40 · **Average:** 20s · **Avg retention:** 96/100
 - **Audience:** Software engineers, cloud, DevOps, and AI developers · **Difficulty:** intermediate
-- **Topics:** Architecture Insight, AWS Tip, Interesting Statistic
+- **Topics:** Architecture Insight, AWS Tip
 - **SEO keywords:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch, go, aws-lambda, amazon-sqs, amazon-eventbridge, aws-cloudformation, software-architecture, cloud-computing
 - **Posting cadence:** Post 1 TikTok per day, staggered to evening/lunch dev-viewing windows.
 - **Production notes:**

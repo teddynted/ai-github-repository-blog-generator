@@ -62,6 +62,6 @@ func hookPrompt(angle, draft string) string {
 		"You are writing the opening hook (first 3–5 seconds, spoken) of a fast-paced technical YouTube Short.\n"+
 			"Angle: %s.\n\n"+
 			"Rewrite the DRAFT into ONE punchy spoken line that stops the scroll. Confident, NOT clickbait. "+
-			"Use ONLY the facts in the draft — invent nothing. Output only the hook line.\n\nDRAFT:\n%s",
+			"Use ONLY the facts in the draft — invent nothing."+evergreenRule+" Output only the hook line.\n\nDRAFT:\n%s",
 		angle, draft)
 }

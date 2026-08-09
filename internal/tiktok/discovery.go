@@ -1,8 +1,6 @@
 package tiktok
 
 import (
-	"fmt"
-
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/youtube"
 )
 
@@ -134,27 +132,11 @@ func chapterToTopic(chapterType string) string {
 	}
 }
 
-func statisticSeed(pkg ReleasePackage) string {
-	c := pkg.Context
-	if c == nil {
-		return ""
-	}
-	commits := c.CommitStats.Analyzed
-	if commits == 0 {
-		commits = c.CommitStats.Total
-	}
-	files := c.FileStats.Total
-	switch {
-	case commits > 0 && files > 0:
-		return fmt.Sprintf("This release landed %d commits across %d changed files.", commits, files)
-	case commits > 0:
-		return fmt.Sprintf("The work here spans %d commits.", commits)
-	case len(c.Changelog.Features) > 0:
-		return fmt.Sprintf("This release shipped %d new features.", len(c.Changelog.Features))
-	default:
-		return ""
-	}
-}
+// statisticSeed is retired for evergreen body copy: a TikTok must speak to what the
+// system does, never a commit / file / line count or "this release" framing. There
+// is no evergreen way to phrase a raw changelog statistic, so this yields no seed
+// and the statistic angle is dropped downstream in favour of substantive topics.
+func statisticSeed(_ ReleasePackage) string { return "" }
 
 // selectDiverse picks up to max topics favouring topic diversity (one per topic
 // first), dropping duplicate titles.

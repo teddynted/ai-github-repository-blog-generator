@@ -56,13 +56,6 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 - **Hashtags:** #AWS #CloudComputing #BestPractices #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
 - **CTA:** Full video on the channel. Follow for more.
 
-### YouTube Shorts — The numbers behind the build
-
-- **Description:** The work here spans 5 commits. Full video + repo in the description. https://github.com/acme/widget
-- **Caption:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-- **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
-- **CTA:** Star the repo — link below.
-
 ### TikTok — The architecture nobody explains
 
 - **Description:** Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget. Full video in bio.
@@ -78,14 +71,6 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 - **Hashtags:** #AWS #CloudComputing #DevOps #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation
 - **Engagement:** Which AWS service would you reach for here?
 - **CTA:** Repo's in the description. Go build it.
-
-### TikTok — The numbers behind the build
-
-- **Description:** The work here spans 5 commits. Full video in bio.
-- **Caption:** The work here spans 5 commits. Full video in bio.
-- **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
-- **Engagement:** Does that number surprise you?
-- **CTA:** Read the deep-dive blog — link in bio.
 
 ---
 

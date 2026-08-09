@@ -24,11 +24,11 @@ var versions = map[string]int{
 	// (The suite has no upstream→downstream staleness cascade, so an idempotent
 	// re-run only refreshes a stage when its OWN version changes.)
 	"voiceover":      2,
-	"youtube":        2,
-	"youtube-shorts": 2,
-	"tiktok":         2,
+	"youtube":        3, // evergreen body copy: hook/intro/chapters/conclusion never name the release/version/repo
+	"youtube-shorts": 3, // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
+	"tiktok":         3, // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
 	"visual-assets":  2, // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
-	"seo-metadata":   1,
+	"seo-metadata":   2, // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
 	"storyboard-scenes":    2, // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)

@@ -19,7 +19,7 @@ func alternativeTitles(t topic) []string {
 	case "Common Mistake":
 		return []string{"Stop doing this", "The mistake to avoid"}
 	case "Interesting Statistic":
-		return []string{"By the numbers", "The numbers don't lie"}
+		return []string{"The detail that changes everything", "The one thing to know"}
 	default:
 		return []string{t.Title, "Quick " + strings.ToLower(t.Topic)}
 	}

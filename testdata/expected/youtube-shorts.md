@@ -1,6 +1,6 @@
 # YouTube Shorts: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 3 shorts_
+_acme/widget · release v1.0.0 · 2 shorts_
 
 ---
 
@@ -99,57 +99,11 @@ _acme/widget · release v1.0.0 · 3 shorts_
 
 ---
 
-## Short 3 — The numbers behind the build
-
-- **Angle:** Interesting Statistic · **Duration:** 0:30 (30s) · **Words:** 27
-- **Hook:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-### Script
-
-> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-### Scene Breakdown
-
-**Scene 1** (10s) — _Zoom In · Zoom · Zoom_
-  - Visual: Count the numbers up on screen.
-  - Overlay: Interesting Statistic
-  - Narration: ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-**Scene 2** (10s) — _Screen Recording · Fade · Slide_
-  - Visual: Show the changed files.
-  - Narration: The work here spans 5 commits.
-
-**Scene 3** (10s) — _Zoom Out · Slide · Fade_
-  - Visual: End card: the repository.
-  - Overlay: Watch the full video →
-  - Narration: Simple, but it makes a real difference. Star the repo — link below.
-
-### Captions (burned-in)
-
-- `0:00–0:06` ## Introduction The system decouples events
-- `0:06–0:12` from generation. ## Architecture EventBridge routes
-- `0:12–0:18` to SQS, drained by an EC2
-- `0:18–0:24` worker. ## Conclusion The pattern generalises
-- `0:24–0:30` to event-driven workloads.
-
-### Visuals
-
-- [Animated Callout] Count the numbers up on screen. _(ref: acme/widget)_
-- [Repository Screenshot] Show the changed files. _(ref: acme/widget)_
-- [Repository Screenshot] End card: the repository. _(ref: https://github.com/acme/widget)_
-
-- **Animations:** S1:Zoom · S2:Fade · S3:Slide
-- **CTA:** Star the repo — link below.
-- **Hashtags:** #OpenSource #DevLife #AWSLambda #AmazonEventBridge #AmazonSQS #AmazonEC2 #AWSCloudFormation #AmazonCloudWatch
-- **Thumbnail:** BY THE NUMBERS
-
----
-
 ## Collection Intelligence
 
-- **Shorts:** 3 · **Total duration:** 1:30 · **Average:** 30s
+- **Shorts:** 2 · **Total duration:** 1:00 · **Average:** 30s
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate
-- **Topics:** Architecture Reveal, AWS Best Practice, Interesting Statistic
+- **Topics:** Architecture Reveal, AWS Best Practice
 - **SEO keywords:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch, go, aws-lambda, amazon-sqs, amazon-eventbridge, aws-cloudformation, software-architecture, cloud-computing
 - **Publish cadence:** Publish 1 Short per weekday, staggered to peak developer-viewing windows.
 - **Production notes:**

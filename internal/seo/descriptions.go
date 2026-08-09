@@ -26,7 +26,7 @@ func (g *Generator) planMetaDescription(ctx context.Context, pkg ReleasePackage)
 func metaDescPrompt(base string) string {
 	return fmt.Sprintf(
 		"Write an SEO meta description (strictly 150–160 characters) for a technical blog post, based on the text "+
-			"below. Accurate, specific, compelling. Use ONLY the facts below — invent nothing. Output only the description.\n\n%s",
+			"below. Accurate, specific, compelling. Use ONLY the facts below — invent nothing."+evergreenRule+" Output only the description.\n\n%s",
 		base)
 }
 

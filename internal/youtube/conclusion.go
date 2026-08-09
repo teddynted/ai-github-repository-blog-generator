@@ -58,7 +58,7 @@ func conclusionPrompt(draft string) string {
 	return fmt.Sprintf(
 		"You are writing the conclusion (20–45 seconds, spoken) of a long-form technical YouTube video.\n\n"+
 			"Rewrite the DRAFT into a satisfying spoken wrap-up that recaps what was built and points to what's next. "+
-			"Warm and confident. Use ONLY the facts in the draft — invent nothing. Output only the conclusion.\n\nDRAFT:\n%s",
+			"Warm and confident. Use ONLY the facts in the draft — invent nothing."+evergreenRule+" Output only the conclusion.\n\nDRAFT:\n%s",
 		draft)
 }
 

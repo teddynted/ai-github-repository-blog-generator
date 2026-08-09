@@ -18,18 +18,18 @@ func (g *Generator) planBlogTitle(ctx context.Context, pkg ReleasePackage) strin
 		repoShortName(pkg)+" "+releaseTag(pkg))
 	title := base
 	if g.Model != nil {
-		if out, err := g.Model.Generate(ctx, blogTitlePrompt(base, releaseTag(pkg))); err == nil {
+		if out, err := g.Model.Generate(ctx, blogTitlePrompt(base)); err == nil {
 			title = sanitizeModelText(out, title)
 		}
 	}
 	return boundTitle(title, blogTitleMax, base)
 }
 
-func blogTitlePrompt(base, tag string) string {
+func blogTitlePrompt(base string) string {
 	return fmt.Sprintf(
 		"Rewrite this technical blog title to be SEO-optimized and click-worthy (NOT clickbait), under 60 characters, "+
-			"keeping it accurate to the release %s. Use ONLY the facts in the title — invent nothing. Output only the title.\n\nTITLE: %s",
-		tag, base)
+			"keeping it accurate to the topic. Use ONLY the facts in the title — invent nothing."+evergreenRule+" Output only the title.\n\nTITLE: %s",
+		base)
 }
 
 // boundTitle caps a title to max characters, falling back to a bounded base when

@@ -78,7 +78,7 @@ func hookPrompt(typ, draft string) string {
 		"You are writing the opening hook (15–30 seconds, spoken) for a long-form technical YouTube video.\n"+
 			"Hook type: %s.\n\n"+
 			"Rewrite the DRAFT into 2–3 punchy, spoken sentences that make an engineer want to keep watching. "+
-			"Be confident but NOT clickbait. Use ONLY the facts in the draft — invent nothing. Output only the hook.\n\n"+
+			"Be confident but NOT clickbait. Use ONLY the facts in the draft — invent nothing."+evergreenRule+" Output only the hook.\n\n"+
 			"DRAFT:\n%s", typ, draft)
 }
 
