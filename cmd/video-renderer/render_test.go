@@ -316,3 +316,30 @@ func TestParseS3URI(t *testing.T) {
 		}
 	}
 }
+
+func TestOverviewKeysHeroSpine(t *testing.T) {
+	// Services collected across scenes → flow-ordered hero spine, capped, OpenClaw
+	// as the orchestrator between the workflow and the inference backends.
+	scenes := []scene{
+		{Type: "title", Title: "Designing a Resilient AI Agent Platform"},
+		{Type: "architecture", Title: "Why OpenClaw Reaches for Ollama Before Amazon Bedrock"},
+		{Type: "architecture", Title: "From a GitHub Webhook Through EventBridge and Lambda"},
+		{Type: "architecture", Title: "The Shared EFS Workspace Where OpenClaw and n8n Meet"},
+		{Type: "architecture", Title: "What OpenClaw and Lambda Stream to CloudWatch"},
+	}
+	got := overviewKeys(scenes)
+	if len(got) == 0 || len(got) > overviewMaxNodes {
+		t.Fatalf("overview keys = %v", got)
+	}
+	// Flow order: github before openclaw before ollama; openclaw present as hub.
+	pos := map[string]int{}
+	for i, k := range got {
+		pos[k] = i
+	}
+	if _, ok := pos["openclaw"]; !ok {
+		t.Errorf("overview must include OpenClaw hub: %v", got)
+	}
+	if pos["github"] > pos["openclaw"] || pos["openclaw"] > pos["ollama"] {
+		t.Errorf("overview not in flow order (github<openclaw<ollama): %v", got)
+	}
+}

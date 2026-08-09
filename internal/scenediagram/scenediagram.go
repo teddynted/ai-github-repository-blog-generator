@@ -196,7 +196,47 @@ func Has(text string) bool { return len(Detect(text, 1)) > 0 }
 // direction (a column for portrait, a row for landscape), connected by arrows.
 // Returns "" if no component is recognized (caller falls back).
 func SVG(text string, w, h int, phase float64) string {
-	keys := Detect(text, 4)
+	return Compose(Detect(text, 4), w, h, phase)
+}
+
+// flowRank orders components by their architectural role, source-to-sink, so an
+// overview reads as the real flow: source → ingress → compute → workflow →
+// orchestrator → inference → storage → observability → security.
+var flowRank = map[string]int{
+	"github": 0, "webhook": 0,
+	"api gateway": 1, "eventbridge": 1, "sqs": 1, "step functions": 1,
+	"lambda": 2, "ec2": 2,
+	"n8n":      3,
+	"openclaw": 4,
+	"ollama":   5, "bedrock": 5, "claude": 5,
+	"efs": 6, "s3": 6, "dynamodb": 6,
+	"cloudwatch": 7,
+	"iam":        8,
+}
+
+// FlowSort returns keys ordered by architectural role (see flowRank), so a set of
+// components collected from a release renders as a coherent source-to-sink spine.
+// Ties keep input order; unknown keys sort last.
+func FlowSort(keys []string) []string {
+	out := append([]string(nil), keys...)
+	rank := func(k string) int {
+		if r, ok := flowRank[k]; ok {
+			return r
+		}
+		return 99
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && rank(out[j]) < rank(out[j-1]); j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
+}
+
+// Compose renders the branded architecture SVG for an explicit, ordered set of
+// component keys (bypassing text detection) — used for the opening system
+// overview. Returns "" for an empty set.
+func Compose(keys []string, w, h int, phase float64) string {
 	if len(keys) == 0 {
 		return ""
 	}
@@ -211,14 +251,20 @@ func SVG(text string, w, h int, phase float64) string {
 	portrait := h >= w
 	n := len(keys)
 	tileSize := 220
-	if portrait && n >= 3 {
+	// A many-node overview uses smaller tiles and the full frame (there is no
+	// caption band to clear); a few-node scene keeps large tiles.
+	topPct, bottomPct := 18, 66
+	switch {
+	case n >= 5:
+		tileSize = 150
+		topPct, bottomPct = 9, 90
+	case portrait && n >= 3:
 		tileSize = 200
 	}
-	// node centres along the primary axis, centred on the cross axis, kept in the
-	// upper-middle so the lower third stays clear for the caption band.
+	// node centres along the primary axis, centred on the cross axis.
 	cx, cy := make([]int, n), make([]int, n)
 	if portrait {
-		top, bottom := h*18/100, h*66/100
+		top, bottom := h*topPct/100, h*bottomPct/100
 		for i := 0; i < n; i++ {
 			cx[i] = w / 2
 			if n == 1 {
