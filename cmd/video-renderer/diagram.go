@@ -20,10 +20,13 @@ import (
 // no hallucinated content and no garbled in-image text.
 func diagramBackground(ctx context.Context, sc scene, work string, w, h int) string {
 	text := strings.Join([]string{sc.Title, sc.Narration, sc.Visual}, " ")
-	if !scenediagram.Has(text) {
+	// A diagram needs a RELATIONSHIP to show — at least two connected components.
+	// A scene that names a single component (common when a short-format narration is
+	// trimmed) would render as one floating icon, so fall back to the heading card.
+	keys := scenediagram.Detect(text, 4)
+	if len(keys) < 2 {
 		return ""
 	}
-	keys := scenediagram.Detect(text, 4)
 	return animatedDiagram(ctx, fmt.Sprintf("scene_%d", sc.Number), work, w, h,
 		func(phase float64) string { return scenediagram.SVG(text, w, h, phase) }, keys)
 }
@@ -65,7 +68,7 @@ func overviewKeys(scenes []scene) []string {
 // GitHub → EventBridge → Lambda → n8n → OpenClaw → Ollama), animated the same way.
 // Returns "" for an empty set or on failure (caller falls back to the title card).
 func overviewBackground(ctx context.Context, keys []string, work string, w, h int) string {
-	if len(keys) == 0 {
+	if len(keys) < 2 { // need a flow to show; a lone tile falls back to the title card
 		return ""
 	}
 	return animatedDiagram(ctx, "overview", work, w, h,
