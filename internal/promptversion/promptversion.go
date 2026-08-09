@@ -28,7 +28,7 @@ var versions = map[string]int{
 	"youtube-shorts": 5, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
 	"tiktok":         5, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
 	"visual-assets":  4, // SDXL quality suffix + wordless hardening // evergreen body copy: focus/title fields never name the release/version/repo // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
-	"seo-metadata":   3, // CTR title framing (problem->outcome, 50-65 chars) // evergreen body copy: title/description/excerpt never name the release/version/repo
+	"seo-metadata":   4, // protected-term integrity (claw->OpenClaw); // CTR title framing (problem->outcome, 50-65 chars) // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
 	"storyboard-scenes":    7, // abstract glowing-node schematic (no literal objects — SDXL rendered engines as cars) // detect named AWS services/nodes in each scene and depict THEM specifically (images match content) // content-driven subject (depict named services as iconography) + recognizable-not-abstract style // SDXL quality suffix + structured prompt // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)

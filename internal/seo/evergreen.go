@@ -1,5 +1,12 @@
 package seo
 
+import "github.com/teddynted/ai-github-repository-blog-generator/internal/terminology"
+
+// termRule locks protected identifiers (OpenClaw, EventBridge, n8n, …) so SEO
+// copy reproduces them verbatim — never the diagram node-id "claw". Appended to
+// the model prompt alongside evergreenRule.
+var termRule = " " + terminology.Base().PromptClause()
+
 // evergreenRule keeps a generator's spoken/on-screen BODY copy evergreen: it must
 // speak to the capability — what the system does — never naming the release, its
 // version, or the repository, and never framing the piece as a changelog. It
