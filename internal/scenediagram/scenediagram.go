@@ -26,7 +26,7 @@ const AnimationFrames = 20
 
 // icons holds the official AWS Architecture Icons (64px SVGs) for the services we
 // diagram. They are embedded into the binary so the renderer needs no runtime
-// asset fetch. Non-AWS nodes (GitHub, Ollama, n8n, Claude, webhook) keep the
+// asset fetch. Non-AWS nodes (OpenClaw, GitHub, Ollama, n8n, Claude, webhook) keep the
 // stylized glyphs in catalog.
 //
 //go:embed icons/*.svg
@@ -127,14 +127,16 @@ var catalog = map[string]tile{
 	"iam":            {"#DD344C", glyphShield},   // security (red)
 	"github":         {"#5A6B86", glyphRepo},     // source (slate)
 	"webhook":        {"#5A6B86", glyphPulse},    //
+	"openclaw":       {"#8C4FFF", glyphAgent},    // orchestrator hub (agent violet)
 }
 
 // detectionOrder lists keys so longer/more-specific ones win (e.g. "step
 // functions" before a bare "step").
 var detectionOrder = []string{
-	"eventbridge", "step functions", "step function", "api gateway", "cloudwatch",
+	// "openclaw" before "claw" so the full name wins and the node-id de-dupes to it.
+	"openclaw", "eventbridge", "step functions", "step function", "api gateway", "cloudwatch",
 	"dynamodb", "lambda", "bedrock", "claude", "ollama", "github", "webhook",
-	"n8n", "iam", "sqs", "efs", "ec2", "s3",
+	"n8n", "iam", "sqs", "efs", "ec2", "s3", "claw",
 }
 
 // Detect returns the ordered, de-duplicated component keys named in text, capped
@@ -177,8 +179,11 @@ func Detect(text string, max int) []string {
 // canonical collapses aliases (step function/step functions, claude→bedrock-ish
 // stays distinct visually but n8n/ollama stay their own tiles).
 func canonical(key string) string {
-	if key == "step function" {
+	switch key {
+	case "step function":
 		return "step functions"
+	case "claw": // the diagram node-id is the orchestrator OpenClaw
+		return "openclaw"
 	}
 	return key
 }
@@ -346,12 +351,15 @@ const (
 	glyphChip     = `<rect x="30" y="30" width="40" height="40" rx="4" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6"><line x1="42" y1="18" x2="42" y2="30"/><line x1="58" y1="18" x2="58" y2="30"/><line x1="42" y1="70" x2="42" y2="82"/><line x1="58" y1="70" x2="58" y2="82"/><line x1="18" y1="42" x2="30" y2="42"/><line x1="18" y1="58" x2="30" y2="58"/><line x1="70" y1="42" x2="82" y2="42"/><line x1="70" y1="58" x2="82" y2="58"/></g>`
 	glyphAI       = `<circle cx="50" cy="50" r="26" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><circle cx="50" cy="50" r="10" fill="` + glyphOn + `"/><g fill="` + glyphOn + `"><circle cx="50" cy="18" r="6"/><circle cx="82" cy="50" r="6"/><circle cx="50" cy="82" r="6"/><circle cx="18" cy="50" r="6"/></g>`
 	glyphNode     = `<circle cx="50" cy="50" r="20" fill="` + glyphOn + `"/>`
-	glyphChain    = `<g fill="` + glyphOn + `"><circle cx="24" cy="50" r="11"/><circle cx="50" cy="50" r="11"/><circle cx="76" cy="50" r="11"/></g><g stroke="` + glyphOn + `" stroke-width="6"><line x1="35" y1="50" x2="39" y2="50"/><line x1="61" y1="50" x2="65" y2="50"/></g>`
-	glyphBucket   = `<path d="M22 30 H78 L72 82 H28 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="22" y1="30" x2="78" y2="30" stroke="` + glyphOn + `" stroke-width="7"/>`
-	glyphDisc     = `<ellipse cx="50" cy="30" rx="30" ry="12" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M20 30 V70 A30 12 0 0 0 80 70 V30" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
-	glyphDb       = `<ellipse cx="50" cy="26" rx="28" ry="11" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M22 26 V74 A28 11 0 0 0 78 74 V26 M22 50 A28 11 0 0 0 78 50" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
-	glyphGauge    = `<path d="M20 66 A30 30 0 0 1 80 66" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="50" y1="66" x2="66" y2="42" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="66" r="6" fill="` + glyphOn + `"/>`
-	glyphShield   = `<path d="M50 14 L80 26 V52 C80 72 66 82 50 88 C34 82 20 72 20 52 V26 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><path d="M38 50 L47 60 L64 40" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
-	glyphRepo     = `<rect x="22" y="20" width="56" height="60" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><line x1="34" y1="34" x2="60" y2="34"/><line x1="34" y1="50" x2="60" y2="50"/><line x1="34" y1="66" x2="50" y2="66"/></g>`
-	glyphPulse    = `<path d="M14 50 H34 L42 28 L54 72 L62 50 H86" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
+	// glyphAgent: an orchestrator hub — a solid core dispatching along three arms to
+	// worker nodes. Marks OpenClaw as the central component that routes the flow.
+	glyphAgent  = `<g stroke="` + glyphOn + `" stroke-width="7" fill="none"><path d="M50 50 L50 20 M50 50 L24 74 M50 50 L76 74"/></g><g fill="` + glyphOn + `"><circle cx="50" cy="50" r="14"/><circle cx="50" cy="18" r="8"/><circle cx="22" cy="76" r="8"/><circle cx="78" cy="76" r="8"/></g>`
+	glyphChain  = `<g fill="` + glyphOn + `"><circle cx="24" cy="50" r="11"/><circle cx="50" cy="50" r="11"/><circle cx="76" cy="50" r="11"/></g><g stroke="` + glyphOn + `" stroke-width="6"><line x1="35" y1="50" x2="39" y2="50"/><line x1="61" y1="50" x2="65" y2="50"/></g>`
+	glyphBucket = `<path d="M22 30 H78 L72 82 H28 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="22" y1="30" x2="78" y2="30" stroke="` + glyphOn + `" stroke-width="7"/>`
+	glyphDisc   = `<ellipse cx="50" cy="30" rx="30" ry="12" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M20 30 V70 A30 12 0 0 0 80 70 V30" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
+	glyphDb     = `<ellipse cx="50" cy="26" rx="28" ry="11" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M22 26 V74 A28 11 0 0 0 78 74 V26 M22 50 A28 11 0 0 0 78 50" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
+	glyphGauge  = `<path d="M20 66 A30 30 0 0 1 80 66" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="50" y1="66" x2="66" y2="42" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="66" r="6" fill="` + glyphOn + `"/>`
+	glyphShield = `<path d="M50 14 L80 26 V52 C80 72 66 82 50 88 C34 82 20 72 20 52 V26 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><path d="M38 50 L47 60 L64 40" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
+	glyphRepo   = `<rect x="22" y="20" width="56" height="60" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><line x1="34" y1="34" x2="60" y2="34"/><line x1="34" y1="50" x2="60" y2="50"/><line x1="34" y1="66" x2="50" y2="66"/></g>`
+	glyphPulse  = `<path d="M14 50 H34 L42 28 L54 72 L62 50 H86" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
 )
