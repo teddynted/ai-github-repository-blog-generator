@@ -64,10 +64,16 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 	// release-management, and docs diagrams and explodes the animation plan.
 	releaseDiagrams := rc.AnalyzeMarkdown(post.Markdown, "release architecture diagram")
 
+	// One-line release subject, so the opening scene can orient the viewer in the
+	// video's first sentence (what this release delivers) before the hook. Grounded
+	// in the blog title, falling back to the repo + tag.
+	subject := releaseSubject(post, rctx)
+
 	scenes := make([]Scene, 0, len(sections))
 	var priorNarration []string // what earlier scenes already said, for de-duplication
 	diagramIntroduced := false  // the primary diagram is built once, then recalled
 	for i, sec := range sections {
+		isLast := i == len(sections)-1
 		typ := sceneType(sec.Title)
 		sc := Scene{
 			SceneNumber: i + 1,
@@ -87,7 +93,7 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 			g.Logger.Info("storyboard narrating scene",
 				slog.Int("scene", i+1), slog.Int("of", len(sections)), slog.String("title", sec.Title))
 		}
-		sc.Narration = g.narration(ctx, sec, typ, nextTitle, strings.Join(priorNarration, " "))
+		sc.Narration = g.narration(ctx, sec, typ, nextTitle, strings.Join(priorNarration, " "), subject, isLast)
 		// Enforce the per-scene timing budget on sentence boundaries so the spoken
 		// narration always fits its allocated slot (the voice-over never marks it
 		// "over"). Trim before timing and dedup so both see the final words.
@@ -141,6 +147,23 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		)
 	}
 	return sb, nil
+}
+
+// releaseSubject is a short, human phrase for what the release is about, used to
+// orient the viewer in the opening scene. It prefers the blog title (grounded,
+// descriptive), falling back to the repository name and tag. It never invents.
+func releaseSubject(post releasegen.BlogPost, rctx *rc.ReleaseContext) string {
+	if t := strings.TrimSpace(post.Title); t != "" {
+		return t
+	}
+	name := rctx.Repository.FullName
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		name = name[i+1:]
+	}
+	if tag := strings.TrimSpace(rctx.Release.Tag); tag != "" {
+		return strings.TrimSpace(name + " " + tag)
+	}
+	return name
 }
 
 func (g *Generator) rate() float64 {

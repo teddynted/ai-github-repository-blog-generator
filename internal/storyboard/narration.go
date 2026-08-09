@@ -10,12 +10,12 @@ import (
 // draft from the section prose (grounded, never invented) and, when a Model is
 // configured, asks it to polish the draft into natural spoken narration — never
 // to add facts. On any model error it falls back to the draft.
-func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle, prior string) string {
+func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle, prior, subject string, isLast bool) string {
 	draft := narrationDraft(sec.Body, typ, sec.Title)
 	if g.Model == nil || strings.TrimSpace(draft) == "" {
 		return draft
 	}
-	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, nextTitle, prior, draft))
+	out, err := g.Model.Generate(ctx, narrationPrompt(sec.Title, typ, nextTitle, prior, draft, subject, isLast))
 	if err != nil {
 		return draft
 	}
@@ -186,7 +186,7 @@ func visualHint(typ string) string {
 	}
 }
 
-func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
+func narrationPrompt(title, typ, nextTitle, prior, draft, subject string, isLast bool) string {
 	target := "2–4 short, spoken sentences (about 35–55 words total"
 	sceneHint := ""
 	if isDeepTechnical(typ) {
@@ -195,14 +195,22 @@ func narrationPrompt(title, typ, nextTitle, prior, draft string) string {
 		target = "3–5 short, spoken sentences (about 55–85 words total"
 		sceneHint = "This is a deep-technical scene: briefly cover EACH distinct mechanism the DRAFT names — the viewer should come away knowing the full set of steps, not just the first one explained at length. Give each mechanism a sentence or clause; do not dwell on only the opening point.\n"
 	}
-	if typ == "conclusion" {
-		// A conference-style close that zooms out to the platform: problem → pattern
-		// → what it enables at the platform level, ending on one memorable line.
-		sceneHint = "This is the closing scene: land it in three quick beats — the problem this solved, the reusable engineering pattern it demonstrates, and what it now enables at the PLATFORM level (separating the control plane from the compute plane, making infrastructure reproducible and observable, and enabling faster recovery and scaling for the event-driven platform). End on ONE short, memorable, forward-looking line. Do not name specific inference products.\n"
+	isOpening := strings.TrimSpace(prior) == ""
+	if isOpening {
+		// Opening scene: orient the viewer FIRST (what this release is), then hook.
+		// A video needs a clear beginning — one sentence of context before tension.
+		subjectClause := ""
+		if s := strings.TrimSpace(subject); s != "" {
+			subjectClause = fmt.Sprintf(" This video is about: %q. In the FIRST sentence, orient the viewer — state in plain terms what this release delivers (do NOT read the title verbatim, and do NOT name the version number).", s)
+		}
+		sceneHint = "This is the OPENING scene of the video." + subjectClause + " Then, in the next one or two sentences, create technical tension — what breaks or becomes expensive, and why it bites an event-driven platform that starts hosts on demand. Open like an architecture retrospective; do NOT start with \"This matters\", \"The platform keeps\", \"Welcome\", or \"Let's look at\".\n"
 	}
-	if strings.TrimSpace(prior) == "" && typ != "conclusion" {
-		// Opening scene: hook like an incident review, not an introduction.
-		sceneHint = "This is the OPENING scene: create immediate technical tension in the first two sentences — what breaks or becomes expensive, why startup latency matters operationally, and why it bites an event-driven platform that starts hosts on demand. Open like an incident review or architecture retrospective; do NOT start with \"This matters\", \"The platform keeps\", or \"Let's look at\".\n"
+	// Closing scene: the LAST scene always lands the video (not only an explicitly
+	// "conclusion"-typed one), so every video has a clear ending. Grounded — no
+	// platform claims the draft did not make. Skip for a single-scene video, where
+	// the opening hint already applies.
+	if typ == "conclusion" || (isLast && !isOpening) {
+		sceneHint = "This is the CLOSING scene: land the video in three quick beats grounded in what it covered — the problem this release solved, the reusable engineering pattern it demonstrates, and what it now makes possible. Close on ONE short, forward-looking line that invites the viewer to explore the release. Ground every claim in the DRAFT; do not introduce products, numbers, or platform claims the draft did not state.\n"
 	}
 	bridge := ""
 	if strings.TrimSpace(nextTitle) != "" {

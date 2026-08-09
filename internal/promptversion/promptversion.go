@@ -18,16 +18,20 @@ var versions = map[string]int{
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
 	// model transforms + deterministic artifacts.
-	"storyboard":     1,
-	"voiceover":      1,
-	"youtube":        1,
-	"youtube-shorts": 1,
-	"tiktok":         1,
+	"storyboard": 2, // narrative arc: opening scene orients the viewer (release subject) before the hook; the LAST scene always lands a grounded close/CTA (not only "conclusion"-typed)
+	// The storyboard-consuming stages are bumped in lockstep with storyboard@2: they
+	// carry the scene narration, so their produced content changes with the new arc.
+	// (The suite has no upstream→downstream staleness cascade, so an idempotent
+	// re-run only refreshes a stage when its OWN version changes.)
+	"voiceover":      2,
+	"youtube":        2,
+	"youtube-shorts": 2,
+	"tiktok":         2,
 	"visual-assets":  2, // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
 	"seo-metadata":   1,
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
-	"storyboard-scenes":    1, // deterministic per-scene SDXL image specs derived from the storyboard
+	"storyboard-scenes":    2, // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
 }
 
 // For returns the prompt version string for a content kind (e.g. "blog@6").
