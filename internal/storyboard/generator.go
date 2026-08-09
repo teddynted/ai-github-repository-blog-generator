@@ -48,10 +48,12 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 	}
 
 	var extraWarnings []string
+	syntheticFallback := false
 	sections := extractSections(post.Markdown)
 	if len(sections) == 0 {
 		// Graceful degradation: scene the blog as a single overview from its body
 		// rather than failing on a section-less (small) release.
+		syntheticFallback = true
 		sections = syntheticSections(post.Markdown, post.Title)
 		if len(sections) == 0 {
 			return sb, fmt.Errorf("storyboard: blog has no sections and no body to scene")
@@ -69,9 +71,40 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 	// in the blog title, falling back to the repo + tag.
 	subject := releaseSubject(post, rctx)
 
-	scenes := make([]Scene, 0, len(sections))
+	scenes := make([]Scene, 0, len(sections)+1)
 	var priorNarration []string // what earlier scenes already said, for de-duplication
 	diagramIntroduced := false  // the primary diagram is built once, then recalled
+
+	// Opening TITLE scene: the video leads with the article title on a clean title
+	// card (no diagram, no AI photo), so it has a clear, on-brand beginning and the
+	// viewer sees WHAT it is before the first content beat. Seeding priorNarration
+	// with its hook makes the first content scene a normal beat (the title scene now
+	// carries the opening orientation), so the two don't both orient.
+	if t := strings.TrimSpace(post.Title); t != "" && !syntheticFallback {
+		firstBody := ""
+		if len(sections) > 0 {
+			firstBody = sections[0].Body
+		}
+		hook := capitalizeFirst(fitToSceneBudget(speakFilePaths(joinFileExtensions(g.titleNarration(ctx, subject, firstBody))), g.rate()))
+		title := Scene{
+			SceneNumber: 1,
+			// Evergreen: the on-screen title card speaks to the topic, never a
+			// shipment — strip any version/"Shipping X vN:" framing the H1 carried.
+			Title:     releasegen.EvergreenTitle(t),
+			Type:      "title",
+			Objective: "Open on the article title and orient the viewer.",
+			Narration: hook,
+			Visuals:   Visuals{Description: "Clean title card: the article title centred on the brand background with a brief motion-graphic intro. No diagram, no photograph."},
+			Camera:    planCamera("introduction"),
+		}
+		title.Duration = planDuration(title.Narration, g.WordsPerSecond)
+		title.MusicMood, title.SoundEffects = planMood("introduction")
+		if strings.TrimSpace(title.Narration) != "" {
+			scenes = append(scenes, title)
+			priorNarration = append(priorNarration, title.Narration)
+		}
+	}
+
 	for i, sec := range sections {
 		isLast := i == len(sections)-1
 		typ := sceneType(sec.Title)
@@ -120,6 +153,12 @@ func (g *Generator) Storyboard(ctx context.Context, post releasegen.BlogPost, rc
 		sc.Visuals = planVisuals(typ, sec.Title, sc.Assets, sc.Diagrams, repeatDiagram)
 		sc.MusicMood, sc.SoundEffects = planMood(typ)
 		scenes = append(scenes, sc)
+	}
+
+	// Renumber sequentially: the content loop numbers from 1, which collides with
+	// the prepended title scene, so assign final scene numbers once all scenes exist.
+	for i := range scenes {
+		scenes[i].SceneNumber = i + 1
 	}
 
 	// Transitions depend on the following scene, so they run once scenes exist.

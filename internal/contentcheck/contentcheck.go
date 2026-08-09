@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/terminology"
 )
 
 // Severity of a validation finding.
@@ -170,6 +172,13 @@ func ungroundedGenericLedes(c string) []string {
 func Validate(kind, content string) Report {
 	r := Report{Artifact: kind}
 	generic(&r, content)
+	// Protected-term integrity applies to every PROSE artifact — the blog and
+	// everything derived from it must reproduce component/service identifiers
+	// verbatim (OpenClaw, EventBridge, n8n, …). Skip the diagram artifacts, whose
+	// content is node-id code (svg XML / a node-graph spec), not prose.
+	if kind != "architecture-diagram" && kind != "architecture-diagram-spec" {
+		terms(&r, content)
+	}
 	switch kind {
 	case "blog":
 		blog(&r, content)
@@ -185,6 +194,15 @@ func Validate(kind, content string) Report {
 		xthread(&r, content)
 	}
 	return r
+}
+
+// terms fails the artifact when a protected identifier was renamed, split,
+// re-cased, or replaced by a synonym (e.g. the diagram node-id "claw" leaking
+// into prose instead of "OpenClaw"). Code blocks are exempt (see terminology).
+func terms(r *Report, c string) {
+	for _, v := range terminology.Base().Violations(c) {
+		r.err("protected term %q altered as %q (%s) — reproduce it verbatim", v.Canonical, v.Found, v.Reason)
+	}
 }
 
 func generic(r *Report, c string) {

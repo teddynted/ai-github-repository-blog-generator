@@ -25,15 +25,16 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 
 - **Title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS (55 chars)
 - **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
-- **Description:** Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker. ⏱ Chapters: 00:00 Intro / Hook 00:15 Introduction 00:26…
+- **Description:** Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ingestion, an SQS buffer with a DLQ, and a hardened EC2 worker. ⏱ Chapters: 00:00 Intro / Hook 00:15 An Event-Driven…
 - **Tags:** event-driven-pipeline, software-architecture, cloud-computing, amazon-eventbridge, go, aws-lambda, amazon-sqs, aws-cloudformation, amazon-ec2, software-engineering, aws
 - **Hashtags:** #Go #AWSLambda #AmazonSQS
 - **Chapters:**
   - `00:00` Intro / Hook
-  - `00:15` Introduction
-  - `00:26` Architecture
-  - `00:37` Architecture Diagrams
-  - `00:48` Conclusion
+  - `00:15` An Event-Driven Pipeline on AWS
+  - `00:26` Introduction
+  - `00:37` Architecture
+  - `00:48` Architecture Diagrams
+  - `00:59` Conclusion
 - **Playlists:** Release Deep Dives, AWS & Cloud Engineering
 - **Thumbnail text:** EVENT-DRIVEN PIPELINE / PRODUCTION-READY EVENT-DRIVEN PIPELINE
 - **Pinned comment:** 📌 Everything in this video is generated from the project's own release analysis. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
@@ -194,7 +195,7 @@ _acme/widget · release v1.0.0 · SEO confidence 100/100_
 - **Content type:** Technical tutorial / release deep dive
 - **Cloud services:** AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2, AWS CloudFormation, Amazon CloudWatch
 - **Languages:** Go
-- **Reading time:** 1 min read · **Watch time:** 0:59
+- **Reading time:** 1 min read · **Watch time:** 1:10
 - **Search intent:** informational / how-to
 - **SEO confidence:** 100/100
 

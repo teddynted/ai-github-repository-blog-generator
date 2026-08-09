@@ -32,6 +32,6 @@ func (g *Generator) planExcerpts(ctx context.Context, pkg ReleasePackage) Excerp
 
 func excerptPrompt(prose string) string {
 	return "Write a compelling ~50-word excerpt for a technical blog post, summarizing the content below for search " +
-		"and social previews. Be accurate and specific; use ONLY the facts below — invent nothing." + evergreenRule + " Output only the excerpt.\n\n" +
+		"and social previews. Be accurate and specific; use ONLY the facts below — invent nothing." + evergreenRule + termRule + " Output only the excerpt.\n\n" +
 		truncateWords(prose, 220)
 }

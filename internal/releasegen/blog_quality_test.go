@@ -370,3 +370,22 @@ func TestBlogTitleIsTopicDrivenNotVersioned(t *testing.T) {
 		t.Errorf("assembled H1 %q contains a version token", h1)
 	}
 }
+
+func TestEvergreenTitleStripsShipmentFraming(t *testing.T) {
+	cases := map[string]string{
+		"Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS": "An Event-Driven Pipeline on AWS",
+		"Introducing Foo v2.3: Rethinking Retries":                "Rethinking Retries",
+		"Announcing the Bar 1.4.2 Release: Faster Cold Starts":    "Faster Cold Starts",
+		// Already timeless — must be a no-op.
+		"Designing a Resilient Event-Driven AI Agent Platform on AWS": "Designing a Resilient Event-Driven AI Agent Platform on AWS",
+		// A legitimate colon title that is not shipment-framed is preserved.
+		"Observability: Watching an Invisible EC2 Schedule": "Observability: Watching an Invisible EC2 Schedule",
+		// Inline version with no prefix is stripped, rest kept.
+		"Cold Starts in v1.2 and Beyond": "Cold Starts in and Beyond",
+	}
+	for in, want := range cases {
+		if got := EvergreenTitle(in); got != want {
+			t.Errorf("EvergreenTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -266,27 +266,35 @@ func TestGeneratorEndToEnd(t *testing.T) {
 	if sb.SchemaVersion != SchemaVersion || sb.Metadata.Repository != "acme/widget" {
 		t.Errorf("envelope = %+v", sb.Metadata)
 	}
-	if len(sb.Scenes) != 5 || sb.Video.SceneCount != 5 {
+	if len(sb.Scenes) != 6 || sb.Video.SceneCount != 6 {
 		t.Fatalf("scenes = %d", len(sb.Scenes))
 	}
-	// Types in order.
+	// Scene 1 is a clean TITLE card: the article title made evergreen (any
+	// version/"Shipping X vN:" shipment framing stripped), no diagram, no photo.
+	if sb.Scenes[0].Type != "title" || sb.Scenes[0].Title != releasegen.EvergreenTitle(samplePost().Title) {
+		t.Errorf("scene 1 should be the evergreen title card, got type=%q title=%q", sb.Scenes[0].Type, sb.Scenes[0].Title)
+	}
+	if len(sb.Scenes[0].Diagrams) != 0 {
+		t.Error("title scene should not reference a diagram")
+	}
+	// Types in order (title scene prepended).
 	gotTypes := make([]string, len(sb.Scenes))
 	for i, s := range sb.Scenes {
 		gotTypes[i] = s.Type
 	}
-	if strings.Join(gotTypes, ",") != "introduction,architecture,implementation,diagram,conclusion" {
+	if strings.Join(gotTypes, ",") != "title,introduction,architecture,implementation,diagram,conclusion" {
 		t.Errorf("scene types = %v", gotTypes)
 	}
 	// Architecture + diagram scenes reference the real diagram; others don't.
-	if len(sb.Scenes[1].Diagrams) != 1 || len(sb.Scenes[3].Diagrams) != 1 {
+	if len(sb.Scenes[2].Diagrams) != 1 || len(sb.Scenes[4].Diagrams) != 1 {
 		t.Error("architecture/diagram scenes should reference the parsed diagram")
 	}
-	if len(sb.Scenes[0].Diagrams) != 0 {
+	if len(sb.Scenes[1].Diagrams) != 0 {
 		t.Error("introduction should not reference a diagram")
 	}
 	// Implementation scene picks up the Go code block.
-	if len(sb.Scenes[2].Code) != 1 || sb.Scenes[2].Code[0].Language != "go" {
-		t.Errorf("implementation code = %+v", sb.Scenes[2].Code)
+	if len(sb.Scenes[3].Code) != 1 || sb.Scenes[3].Code[0].Language != "go" {
+		t.Errorf("implementation code = %+v", sb.Scenes[3].Code)
 	}
 	// Every scene: narration + duration + camera + transition set.
 	for i, s := range sb.Scenes {
@@ -304,7 +312,7 @@ func TestGeneratorEndToEnd(t *testing.T) {
 		t.Errorf("marshal: %v", err)
 	}
 	// Content intelligence populated.
-	if sb.ContentIntelligence.EstimatedVideoLength == "" || len(sb.ContentIntelligence.Chapters) != 5 {
+	if sb.ContentIntelligence.EstimatedVideoLength == "" || len(sb.ContentIntelligence.Chapters) != 6 {
 		t.Errorf("intelligence = %+v", sb.ContentIntelligence)
 	}
 	// Markdown renders scenes.

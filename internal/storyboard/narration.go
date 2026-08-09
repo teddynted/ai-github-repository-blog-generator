@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/terminology"
 )
 
 // narration returns spoken voice-over for a scene. It builds a deterministic
@@ -23,6 +25,44 @@ func (g *Generator) narration(ctx context.Context, sec section, typ, nextTitle, 
 		return r
 	}
 	return draft
+}
+
+// titleNarration produces the spoken hook for the opening TITLE card: it orients
+// the viewer on the capability at the video's centre (evergreen — never a
+// release/version/repository) and creates a little tension, grounded in the
+// opening prose. Falls back to a grounded draft on any model error.
+func (g *Generator) titleNarration(ctx context.Context, subject, openingBody string) string {
+	draft := firstSentences(openingBody, 2, 34)
+	if g.Model == nil || strings.TrimSpace(subject) == "" {
+		return draft
+	}
+	out, err := g.Model.Generate(ctx, titleNarrationPrompt(subject, openingBody))
+	if err != nil {
+		return draft
+	}
+	if r := collapse(stripNarrationPreamble(out)); r != "" {
+		return r
+	}
+	return draft
+}
+
+// titleNarrationPrompt asks for a two-sentence opening hook for the title card:
+// orient then tension, speaking to what the system does, never to a shipment.
+func titleNarrationPrompt(subject, openingBody string) string {
+	return fmt.Sprintf(
+		"You are a senior AWS platform engineer opening a technical explainer video for software and DevOps engineers.\n"+
+			"This is the OPENING TITLE scene, shown over a title card. The video's subject is %q.\n"+
+			"Write TWO short spoken sentences (about 22–34 words total, 12–18 words each).\n"+
+			"FIRST sentence: orient the viewer — name the capability or idea at the video's centre and why it matters, phrased "+
+			"as what the system DOES (e.g. \"Observability turns an invisible EC2 schedule into something you can watch\"). Do "+
+			"NOT read the title verbatim.\n"+
+			"SECOND sentence: create light technical tension that makes an engineer want to keep watching.\n"+
+			"Evergreen rule: NEVER say \"this release\", \"the release\", \"this update\", \"this version\", or \"this feature\"; "+
+			"NEVER state a version number; NEVER name the repository. Describe what the system does, not that a version shipped it.\n"+
+			"Do not begin with \"Welcome\", \"Let's look at\", \"This matters\", \"So\", or \"Now\". Ground every claim in the "+
+			"CONTEXT below; invent nothing. "+terminology.Base().PromptClause()+" Output ONLY the two spoken sentences — no preamble, no quotation marks.\n\n"+
+			"CONTEXT (opening of the article):\n%s",
+		subject, capWords(openingBody, 160))
 }
 
 // fitToSceneBudget trims narration to the words that can be spoken within a
@@ -227,7 +267,7 @@ func narrationPrompt(title, typ, nextTitle, prior, draft, subject string, isLast
 			"them, cover only the NEW angle this scene adds — for example a runtime-problem scene, a one-line mental "+
 			"model, and a step-by-step walkthrough must each say something distinct): %s\n", capWords(p, 220))
 	}
-	return fmt.Sprintf(
+	return terminology.Base().PromptClause() + "\n\n" + fmt.Sprintf(
 		"You are a senior AWS platform engineer narrating one scene of a technical explainer video for an "+
 			"audience of software and DevOps engineers — the tone of a re:Invent speaker or a technical YouTube educator.\n"+
 			"Scene: %q (type: %s).\n"+
