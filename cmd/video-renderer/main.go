@@ -34,6 +34,7 @@ import (
 	pollytypes "github.com/aws/aws-sdk-go-v2/service/polly/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/subtitles"
 )
 
 const (
@@ -154,6 +155,10 @@ func run(ctx context.Context) error {
 	adj := coOccurrence(scenes)
 
 	var listBuf bytes.Buffer
+	// Deterministic captions: accumulate each scene's narration words, timed for the
+	// final video, for the .srt/.ass sidecars (script-driven, never transcribed).
+	var capWords []subtitles.TimedWord
+	offsetMs := 0
 	for _, sc := range scenes {
 		mp3 := filepath.Join(work, fmt.Sprintf("scene_%d.mp3", sc.Number))
 		if err := synthesize(ctx, pollyc, voice, truncate(sc.Narration, maxPollyChars), mp3); err != nil {
@@ -190,6 +195,10 @@ func run(ctx context.Context) error {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
 		}
 		fmt.Fprintf(&listBuf, "file '%s'\n", seg)
+		// Timed caption words for the sidecar subtitles (offset by the scene's start).
+		durMs := int(durSec * 1000)
+		capWords = append(capWords, sceneCaptionWords(ctx, pollyc, voice, sc.Narration, offsetMs, durMs)...)
+		offsetMs += durMs
 	}
 
 	// Concatenate into the final MP4.
@@ -207,6 +216,10 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("upload final: %w", err)
 	}
 	log.Printf("uploaded %s", outputURI)
+
+	// Deterministic caption sidecars (.srt/.ass) next to the MP4 — for platform CC /
+	// upload / accessibility. Not burned into the frame (the video stays cards-only).
+	writeSubtitles(ctx, s3c, capWords, work, outBucket, outKey, w, h)
 	return nil
 }
 
