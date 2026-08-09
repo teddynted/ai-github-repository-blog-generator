@@ -229,6 +229,31 @@ func TestShortCaptionAndTrimNarration(t *testing.T) {
 	}
 }
 
+func TestTitleCaptionNotWordCapped(t *testing.T) {
+	full := "Designing a Resilient AI Agent Platform on AWS: Self-Hosted Inference with a Managed Fallback"
+	// The title card keeps the complete main title (before the colon) — never the
+	// 7-word content-caption cap that clipped it to "…Platform on".
+	if c := titleCaption(full); c != "Designing a Resilient AI Agent Platform on AWS" {
+		t.Errorf("titleCaption = %q, want the complete main title", c)
+	}
+	// A title with no separator is kept whole, not word-capped.
+	whole := "One Release Becomes Blogs Videos And Social Posts Automatically"
+	if c := titleCaption(whole); c != whole {
+		t.Errorf("titleCaption should keep a separator-less title whole: %q", c)
+	}
+	// optimizeForShort must route a title scene through titleCaption, not shortCaption.
+	out := optimizeForShort([]scene{
+		{Number: 1, Type: "title", Title: full, Narration: "Here is the opening hook line."},
+		{Number: 2, Type: "architecture", Title: "Why OpenClaw Reaches for Ollama Before Amazon Bedrock", Narration: "OpenClaw runs Ollama first."},
+	})
+	if len(out) == 0 || out[0].Title != "Designing a Resilient AI Agent Platform on AWS" {
+		t.Errorf("title scene caption = %q, want the complete title", out[0].Title)
+	}
+	if strings.HasSuffix(out[0].Title, " on") {
+		t.Errorf("title scene must not be clipped mid-phrase: %q", out[0].Title)
+	}
+}
+
 func TestForceRender(t *testing.T) {
 	// Default (unset): the already-exists skip is in effect.
 	t.Setenv("FORCE_RENDER", "")
