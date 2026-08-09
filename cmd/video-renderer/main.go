@@ -44,7 +44,7 @@ const (
 	// vertical cut with one crisp idea per scene, rather than a cropped long-form.
 	shortTargetSec         = 45.0 // total runtime target for a Short/TikTok cut
 	shortMaxNarrationWords = 15   // per-scene spoken words (≈ one punchy line)
-	shortCaptionMaxWords   = 6    // per-scene on-screen caption words (mobile-readable)
+	shortCaptionMaxWords   = 5    // per-scene on-screen caption words (mobile-readable)
 	shortWordsPerSec       = 2.6  // neural-Polly spoken pace, for duration estimates
 	shortScenePadSec       = 0.6  // per-scene silence/transition padding
 	maxPollyChars          = 2900 // stay within SynthesizeSpeech limits
@@ -164,8 +164,10 @@ func run(ctx context.Context) error {
 			return fmt.Errorf("polly scene %d: %w", sc.Number, err)
 		}
 		capFile := filepath.Join(work, fmt.Sprintf("scene_%d.txt", sc.Number))
-		// Wrap the title to the frame width so the large centred title fits.
-		caption := wrapText(sc.Title, 2*w/titleFontsize(w, h))
+		// Wrap the title to the frame width so the large centred title fits. Use
+		// ~1.7 chars-per-fontsize (not 2) so real glyph advances leave a side margin
+		// and long words never clip at the frame edge.
+		caption := wrapText(sc.Title, (17*w)/(10*titleFontsize(w, h)))
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}

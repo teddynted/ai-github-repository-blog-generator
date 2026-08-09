@@ -209,7 +209,7 @@ func (c *ReplicateClient) doJSON(ctx context.Context, method, url string, body [
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			c.sleep(time.Duration(attempt) * time.Second)
+			c.sleep(backoffDur(attempt))
 		}
 		var rdr io.Reader
 		if body != nil {
@@ -256,7 +256,7 @@ func (c *ReplicateClient) fetch(ctx context.Context, url string) ([]byte, error)
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			c.sleep(time.Duration(attempt) * time.Second)
+			c.sleep(backoffDur(attempt))
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
@@ -311,6 +311,17 @@ func isTerminal(status string) bool {
 		return true
 	}
 	return false
+}
+
+// backoffDur is the exponential backoff before retry attempt n (1-based):
+// 2, 4, 8, 16, 32… seconds, capped at 45s — long enough for a 429 rate-limit
+// window to clear during a bursty multi-format render.
+func backoffDur(attempt int) time.Duration {
+	d := time.Duration(1<<uint(attempt)) * time.Second
+	if d > 45*time.Second {
+		d = 45 * time.Second
+	}
+	return d
 }
 
 // aspectFor maps pixel dimensions to a Replicate aspect_ratio string.
