@@ -1,6 +1,6 @@
 # Storyboard: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
+_acme/widget · release v1.0.0 · 7 scenes · ~1:41 (short, 9:16)_
 
 **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS  
 **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Production:** medium · **Animation:** low
@@ -9,7 +9,19 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ---
 
-## Scene 1 — The problem
+## Scene 1 — An Event-Driven Pipeline on AWS
+
+- **Objective:** Open on the article title and orient the viewer.
+- **Timing:** 10s recommended (7–15s, medium)
+- **Narration:** The prototype polled for work on a fixed interval. Polling wasted compute when idle, added latency when busy, and coupled ingestion to processing.
+- **Visual:** Clean title card: the article title centred on the brand background with a brief motion-graphic intro. No diagram, no photograph.
+- **Camera:** Slow Zoom In — Ease onto the title to draw the viewer in.
+- **Transition:** Cross Dissolve (0.6s)
+- **Music:** upbeat, energetic intro
+
+---
+
+## Scene 2 — The problem
 
 - **Objective:** Establish the problem and why this change matters.
 - **Timing:** 17s recommended (14–22s, slow)
@@ -26,7 +38,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ---
 
-## Scene 2 — The architecture
+## Scene 3 — The architecture
 
 - **Objective:** Explain the system architecture and how components interact.
 - **Timing:** 25s recommended (22–30s, slow)
@@ -48,7 +60,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ---
 
-## Scene 3 — How it works
+## Scene 4 — How it works
 
 - **Objective:** Explain how the feature was implemented.
 - **Timing:** 24s recommended (21–29s, slow)
@@ -66,7 +78,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ---
 
-## Scene 4 — Security
+## Scene 5 — Security
 
 - **Objective:** Explain: Security.
 - **Timing:** 9s recommended (6–14s, medium)
@@ -83,7 +95,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ---
 
-## Scene 5 — Breaking change
+## Scene 6 — Breaking change
 
 - **Objective:** Explain: Breaking change.
 - **Timing:** 6s recommended (4–11s, fast)
@@ -100,7 +112,7 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ---
 
-## Scene 6 — Wrapping up
+## Scene 7 — Wrapping up
 
 - **Objective:** Summarise the takeaways and point to what's next.
 - **Timing:** 10s recommended (7–15s, medium)
@@ -120,10 +132,11 @@ _acme/widget · release v1.0.0 · 6 scenes · ~1:31 (short, 9:16)_
 
 ## Chapters
 
-- `0:00` The problem
-- `0:17` The architecture
-- `0:42` How it works
-- `1:06` Security
-- `1:15` Breaking change
-- `1:21` Wrapping up
+- `0:00` An Event-Driven Pipeline on AWS
+- `0:10` The problem
+- `0:27` The architecture
+- `0:52` How it works
+- `1:16` Security
+- `1:25` Breaking change
+- `1:31` Wrapping up
 

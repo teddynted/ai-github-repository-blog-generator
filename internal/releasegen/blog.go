@@ -186,7 +186,7 @@ func (g *Generator) planPrompt(rctx *rc.ReleaseContext) string {
 	fmt.Fprintf(&b, "- ARCHETYPE: %s\n", archetype)
 	b.WriteString("- THEME: one sentence naming the engineering problem this repository solves.\n")
 	b.WriteString("- SUPPORTING THEMES / AWS SERVICES / AUDIENCE / SEO KEYWORDS / TAKEAWAYS: short, evidence-backed lists.\n")
-	b.WriteString("- HEADINGS: the 4–7 specific, story-driven section headings in order, one per line under this field. Each must be concrete to this system, not a generic template heading. Every word in a heading must be a REAL, correctly-spelled English word or an actual product/technology/service name (e.g. Lambda, EventBridge, CloudWatch, Claude) — never an invented, garbled, abbreviated, or nonsense token, never a mangled or truncated product name, and never a grammatically incomplete phrase. Use the EXACT names of components as they appear in the Release Context; do not shorten or alter them.\n")
+	b.WriteString("- HEADINGS: the 4–7 specific, story-driven section headings in order, one per line under this field. Each must be concrete to this system, not a generic template heading. Every word in a heading must be a REAL, correctly-spelled English word or an actual product/technology/service name (e.g. Lambda, EventBridge, CloudWatch, Claude) — never an invented, garbled, abbreviated, or nonsense token, never a mangled or truncated product name, and never a grammatically incomplete phrase. Use the EXACT names of components as they appear in the Release Context; do not shorten or alter them. Each heading must NAME THE ENGINEERING IDEA of its section — never describe a figure, picture, label, or where text appears: never a heading about \"the diagram\", \"the graph\", \"a single edge\", \"the word 'X'\", a \"label\", or what is drawn/shown on screen (BAD: \"The Word 'fallback' on a Single Diagram Edge\"; GOOD: \"The Fallback Path That Keeps the Platform Answering\"). Write about the SYSTEM, not the picture of it.\n")
 	b.WriteString("- COMPARISON: YES only when the article's core is a genuine choice between TWO concrete alternatives the context supports (self-hosted vs managed, primary vs fallback, boot-time vs pre-baked) that a single comparison table would clarify; otherwise NO.\n\n")
 	b.WriteString("=== RELEASE CONTEXT ===\n")
 	b.WriteString(ground)
@@ -210,7 +210,7 @@ func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) s
 	b.WriteString("This is a TIMELESS engineering article — the GitHub release is only the TRIGGER that prompted it, never the topic. Write so it stays valuable to an engineer who reads it years from now and never saw the release. Every section should answer at least one real engineering question: why does this matter, how does it work, why was this approach chosen and not another, and what are the trade-offs.\n\n")
 	b.WriteString("NARRATIVE STRUCTURE:\n")
 	fmt.Fprintf(&b, "- This article uses the **%s** archetype: %s\n", archetype, archetypeShapes[archetype])
-	b.WriteString("- Use the SPECIFIC, story-driven ## section headings from the PLAN's HEADINGS field, in order. If the plan gives none, write 4–7 headings that emerge from THIS system's story. Every heading must be concrete to this system (e.g. \"The 4-Minute Boot That Broke the Cost Model\", \"What the CloudWatch Logs Revealed\", \"The Assumption That Turned Out to Be Wrong\") — never a generic template heading. Every word in a heading must be a REAL, correctly-spelled word or an actual product/technology name — never an invented, garbled, or nonsense token, never a mangled or truncated product name, and never a grammatically incomplete phrase.\n")
+	b.WriteString("- Use the SPECIFIC, story-driven ## section headings from the PLAN's HEADINGS field, in order. If the plan gives none, write 4–7 headings that emerge from THIS system's story. Every heading must be concrete to this system (e.g. \"The 4-Minute Boot That Broke the Cost Model\", \"What the CloudWatch Logs Revealed\", \"The Assumption That Turned Out to Be Wrong\") — never a generic template heading. Every word in a heading must be a REAL, correctly-spelled word or an actual product/technology name — never an invented, garbled, or nonsense token, never a mangled or truncated product name, and never a grammatically incomplete phrase. Each heading must NAME THE ENGINEERING IDEA of its section — never describe a figure, picture, label, or where text appears (no heading about \"the diagram\", \"the graph\", \"a single edge\", \"the word 'X'\", or what is drawn on screen; BAD: \"The Word 'fallback' on a Single Diagram Edge\"; GOOD: \"The Fallback Path That Keeps the Platform Answering\"). Write about the SYSTEM, not the picture of it.\n")
 	b.WriteString("- Let the story resolve naturally; do NOT force a summary section if it already lands. A final reflective heading is fine, but never a generic \"Conclusion\".\n\n")
 	b.WriteString("FORBIDDEN HEADINGS — never use any of these as a heading (they are the tell of a template): ")
 	b.WriteString(strings.Join(contentcheck.ForbiddenBlogHeadings, ", "))
@@ -247,7 +247,7 @@ func (g *Generator) articlePrompt(rctx *rc.ReleaseContext, title, plan string) s
 	b.WriteString("- Do NOT write YAML front matter or an H1 title — those are added separately. Start directly at your first ## story-driven heading.\n")
 	b.WriteString("- Use fenced code blocks for commands or configuration cited from the context. Use proper Unicode punctuation; never emit mojibake.\n")
 	b.WriteString("- This article is the source that downstream generators (LinkedIn, X thread, video scripts, SEO metadata) transform. Write for engineers, not social media. Do NOT add calls to action, hashtags, engagement hooks, \"link in bio\" language, subscription prompts, or TikTok-style hooks. Optimise for credible engineering writing first.\n\n")
-	b.WriteString("Before returning, verify: could this article be reused for a DIFFERENT repository by only changing the name? If yes, it is too generic — rewrite it. Does it follow the chosen archetype with specific, story-driven headings and none of the forbidden generic headings? Is the first-person voice grounded in real facts, with no invented incidents, measurements, or numbers? Not a release announcement; every claim grounded in the Release Context; at most two topic-specific Mermaid diagrams; complete sections; valid UTF-8 with no mojibake; every heading uses only real, correctly-spelled words and the exact component names from the Release Context (no invented, garbled, or truncated tokens); reads like an engineer reflecting on a real system, not AI output. If any check fails, rewrite the article before returning it.\n\n")
+	b.WriteString("Before returning, verify: could this article be reused for a DIFFERENT repository by only changing the name? If yes, it is too generic — rewrite it. Does it follow the chosen archetype with specific, story-driven headings and none of the forbidden generic headings? Is the first-person voice grounded in real facts, with no invented incidents, measurements, or numbers? Not a release announcement; every claim grounded in the Release Context; at most two topic-specific Mermaid diagrams; complete sections; valid UTF-8 with no mojibake; every heading uses only real, correctly-spelled words and the exact component names from the Release Context (no invented, garbled, or truncated tokens); every heading names an engineering idea rather than describing a figure, diagram, label, or on-screen text; reads like an engineer reflecting on a real system, not AI output. If any check fails, rewrite the article before returning it.\n\n")
 	if strings.TrimSpace(plan) != "" {
 		b.WriteString("=== PLAN (follow this) ===\n")
 		b.WriteString(plan)
@@ -484,9 +484,39 @@ func planField(plan string, re *regexp.Regexp) string {
 // topic.
 func timelessTitle(plan string, rctx *rc.ReleaseContext) string {
 	if t := sanitizeTitle(planField(plan, planTitleRe)); t != "" {
-		return t
+		return EvergreenTitle(t)
 	}
 	return blogTitle(rctx)
+}
+
+var (
+	// versionTokenRe matches a release/version token (v1.2, 1.2.3) that must never
+	// appear in a timeless, topic-based title.
+	versionTokenRe = regexp.MustCompile(`(?i)\s*\bv?\d+\.\d+(?:\.\d+)?\b`)
+	// shipmentPrefixRe matches a leading "Shipping X v1.2.3:" / "Introducing …:" /
+	// "Announcing …:" style prefix — a shipment framing a timeless title drops in
+	// favour of the topic that follows the colon.
+	shipmentPrefixRe = regexp.MustCompile(`(?i)^\s*(?:shipping|introducing|announcing|releasing|launching|launch|release)\b[^:]*:\s*`)
+)
+
+// EvergreenTitle strips release/shipment framing from a human title so it speaks
+// to the engineering topic, never a shipment — e.g. "Shipping Widget v1.0.0: An
+// Event-Driven Pipeline on AWS" becomes "An Event-Driven Pipeline on AWS". It is
+// a defensive backstop to the prompt's "timeless title" rule and a no-op on an
+// already-timeless title (no version, no shipment prefix).
+func EvergreenTitle(s string) string {
+	s = strings.TrimSpace(s)
+	// Drop a leading shipment-framed prefix, keeping the topic after the colon.
+	if loc := shipmentPrefixRe.FindStringIndex(s); loc != nil {
+		if rest := strings.TrimSpace(s[loc[1]:]); rest != "" {
+			s = rest
+		}
+	}
+	// Drop any inline version token that slipped through.
+	s = versionTokenRe.ReplaceAllString(s, "")
+	// Tidy leftover separators and whitespace.
+	s = strings.Trim(collapseWhitespace(s), " :-—–")
+	return collapseWhitespace(s)
 }
 
 // sanitizeTitle strips Markdown emphasis/heading markers and surrounding quotes

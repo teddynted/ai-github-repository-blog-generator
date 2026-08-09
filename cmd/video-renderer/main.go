@@ -172,13 +172,18 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
-		// Background priority: a deterministic architecture diagram from the
-		// services the scene names (exact + free), else an AI image, else the
-		// title card.
-		bg := diagramBackground(ctx, sc, work, w, h)
-		isDiagram := bg != ""
-		if bg == "" {
-			bg = maybeSceneImage(ctx, sceneGen, sc, work, w, h)
+		// Background priority: the opening TITLE scene is always a clean title card
+		// (the article title, centred) — never a diagram or an AI photo. Otherwise a
+		// deterministic architecture diagram from the services the scene names (exact
+		// + free), else an AI image, else the title card.
+		var bg string
+		isDiagram := false
+		if !strings.EqualFold(sc.Type, "title") {
+			bg = diagramBackground(ctx, sc, work, w, h)
+			isDiagram = bg != ""
+			if bg == "" {
+				bg = maybeSceneImage(ctx, sceneGen, sc, work, w, h)
+			}
 		}
 		// The Ken Burns move needs the exact narration length (zoompan ignores
 		// -shortest); probe the synthesized audio. On any probe miss, durSec is 0

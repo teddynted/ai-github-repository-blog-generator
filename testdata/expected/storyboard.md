@@ -1,13 +1,25 @@
 # Storyboard: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · 4 scenes · ~0:44 (short, 9:16)_
+_acme/widget · release v1.0.0 · 5 scenes · ~0:55 (short, 9:16)_
 
 **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS  
 **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Production:** medium · **Animation:** low
 
 ---
 
-## Scene 1 — Introduction
+## Scene 1 — An Event-Driven Pipeline on AWS
+
+- **Objective:** Open on the article title and orient the viewer.
+- **Timing:** 11s recommended (8–16s, medium)
+- **Narration:** ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+- **Visual:** Clean title card: the article title centred on the brand background with a brief motion-graphic intro. No diagram, no photograph.
+- **Camera:** Slow Zoom In — Ease onto the title to draw the viewer in.
+- **Transition:** Cross Dissolve (0.6s)
+- **Music:** upbeat, energetic intro
+
+---
+
+## Scene 2 — Introduction
 
 - **Objective:** Hook the viewer and frame what the release is about.
 - **Timing:** 11s recommended (8–16s, medium)
@@ -25,7 +37,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 (short, 9:16)_
 
 ---
 
-## Scene 2 — Architecture
+## Scene 3 — Architecture
 
 - **Objective:** Explain the system architecture and how components interact.
 - **Timing:** 11s recommended (8–16s, medium)
@@ -51,7 +63,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 (short, 9:16)_
 
 ---
 
-## Scene 3 — Architecture Diagrams
+## Scene 4 — Architecture Diagrams
 
 - **Objective:** Walk through the architecture diagram visually.
 - **Timing:** 11s recommended (8–16s, medium)
@@ -77,7 +89,7 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 (short, 9:16)_
 
 ---
 
-## Scene 4 — Conclusion
+## Scene 5 — Conclusion
 
 - **Objective:** Summarise the takeaways and point to what's next.
 - **Timing:** 11s recommended (8–16s, medium)
@@ -97,8 +109,9 @@ _acme/widget · release v1.0.0 · 4 scenes · ~0:44 (short, 9:16)_
 
 ## Chapters
 
-- `0:00` Introduction
-- `0:11` Architecture
-- `0:22` Architecture Diagrams
-- `0:33` Conclusion
+- `0:00` An Event-Driven Pipeline on AWS
+- `0:11` Introduction
+- `0:22` Architecture
+- `0:33` Architecture Diagrams
+- `0:44` Conclusion
 

@@ -1,6 +1,6 @@
 # YouTube Script: Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 
-_acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and cloud practitioners · intermediate_
+_acme/widget · release v1.0.0 · long-form · ~1:10 · Software engineers and cloud practitioners · intermediate_
 
 ## Hook (`00:00–00:15`, showcase)
 
@@ -12,14 +12,27 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 - **Technologies:** Go; AWS Lambda; Amazon SQS; Amazon EventBridge; AWS CloudFormation; Amazon EC2; Amazon CloudWatch
 - **You'll learn:** Read the architecture and how the components fit together
-- **Agenda:** Architecture; Architecture Diagrams
+- **Agenda:** An Event-Driven Pipeline on AWS; Architecture; Architecture Diagrams
 
 ---
 
-## Chapter 1 — Introduction
+## Chapter 1 — An Event-Driven Pipeline on AWS
 
 - **Timestamp:** `00:15–00:26` (target 11s; 6–26s)
 - **Storyboard scenes:** 1 · **Voice-over scenes:** 1
+
+### Narration
+
+> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+
+- **Transition:** From here, let's move on to introduction.
+
+---
+
+## Chapter 2 — Introduction
+
+- **Timestamp:** `00:26–00:37` (target 11s; 6–26s)
+- **Storyboard scenes:** 2 · **Voice-over scenes:** 2
 
 ### Narration
 
@@ -29,26 +42,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ---
 
-## Chapter 2 — Architecture
-
-- **Timestamp:** `00:26–00:37` (target 11s; 6–26s)
-- **Storyboard scenes:** 2 · **Voice-over scenes:** 2
-
-### Narration
-
-> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
-
-- **Visual references:** Diagram: ; AWS service icons: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
-**Demonstration:**
-  1. Reveal the diagram — Build release architecture diagram node by node as you narrate.
-**Callouts:**
-  - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
-  - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
-- **Transition:** Now that we've walked the architecture, let's step through the architecture.
-
----
-
-## Chapter 3 — Architecture Diagrams
+## Chapter 3 — Architecture
 
 - **Timestamp:** `00:37–00:48` (target 11s; 6–26s)
 - **Storyboard scenes:** 3 · **Voice-over scenes:** 3
@@ -64,14 +58,33 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
   - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
   - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
 - 💬 **Engage:** Pause here and try to predict how the components talk to each other before I reveal it.
+- **Transition:** Now that we've walked the architecture, let's step through the architecture.
+
+---
+
+## Chapter 4 — Architecture Diagrams
+
+- **Timestamp:** `00:48–00:59` (target 11s; 6–26s)
+- **Storyboard scenes:** 4 · **Voice-over scenes:** 4
+
+### Narration
+
+> ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
+
+- **Visual references:** Diagram: ; AWS service icons: AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon EC2
+**Demonstration:**
+  1. Reveal the diagram — Build release architecture diagram node by node as you narrate.
+**Callouts:**
+  - [Architecture Decision] Widget is an event-driven pipeline: a webhook publishes to EventBridge, which buffers events in SQS; a scheduled EC2 worker drains the queue and processes each widget.
+  - [Best Practice] Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
 - **Transition:** Now that we've walked the architecture, let's wrap up.
 
 ---
 
-## Chapter 4 — Conclusion
+## Chapter 5 — Conclusion
 
-- **Timestamp:** `00:48–00:59` (target 11s; 6–26s)
-- **Storyboard scenes:** 4 · **Voice-over scenes:** 4
+- **Timestamp:** `00:59–01:10` (target 11s; 6–26s)
+- **Storyboard scenes:** 5 · **Voice-over scenes:** 5
 
 ### Narration
 
@@ -81,7 +94,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ---
 
-## Conclusion (`00:48–00:59`)
+## Conclusion (`00:59–01:10`)
 
 > ## Introduction The system decouples events from generation. ## Architecture EventBridge routes to SQS, drained by an EC2 worker. ## Conclusion The pattern generalises to event-driven workloads.
 
@@ -105,7 +118,7 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 0:59 · **Speaking time:** 1:37 · **Words:** 242
+- **Estimated runtime:** 1:10 · **Speaking time:** 1:48 · **Words:** 269
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 - **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
@@ -116,11 +129,12 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 - **Tags:** go; aws-lambda; amazon-sqs; amazon-eventbridge; aws-cloudformation; software-architecture; cloud-computing; AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; software engineering; aws; golang; clean architecture; devops; tutorial; system design
 - **Chapter markers:**
   - `00:00` Intro / Hook
-  - `00:15` Introduction
-  - `00:26` Architecture
-  - `00:37` Architecture Diagrams
-  - `00:48` Conclusion
-  - `00:48` Conclusion
+  - `00:15` An Event-Driven Pipeline on AWS
+  - `00:26` Introduction
+  - `00:37` Architecture
+  - `00:48` Architecture Diagrams
+  - `00:59` Conclusion
+  - `00:59` Conclusion
 - **Pinned comment:** 📌 Everything in this video is generated from the project's own release analysis. Repo: https://github.com/acme/widget What would you like the next deep dive to cover?
 
 ### Suggested Description
@@ -130,11 +144,12 @@ Widget v1.0.0 delivers a production-ready event-driven pipeline: EventBridge ing
 
 ⏱ Chapters:
 00:00 Intro / Hook
-00:15 Introduction
-00:26 Architecture
-00:37 Architecture Diagrams
-00:48 Conclusion
-00:48 Conclusion
+00:15 An Event-Driven Pipeline on AWS
+00:26 Introduction
+00:37 Architecture
+00:48 Architecture Diagrams
+00:59 Conclusion
+00:59 Conclusion
 
 🔗 Repository: https://github.com/acme/widget
 
