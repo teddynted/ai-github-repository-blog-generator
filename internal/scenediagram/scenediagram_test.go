@@ -26,11 +26,23 @@ func TestSVGContainsNodesOrEmpty(t *testing.T) {
 	if !strings.HasPrefix(svg, "<svg") || !strings.Contains(svg, "</svg>") {
 		t.Fatalf("not an svg: %.40q", svg)
 	}
-	// two tiles → two flow arrowheads/lines and two category fills present.
-	if !strings.Contains(svg, "#ED7100") || !strings.Contains(svg, "#C925D3") {
-		t.Errorf("expected lambda+eventbridge category colours in svg")
+	// Two official AWS icons are composed (nested <svg viewBox="0 0 80 80">) and
+	// Lambda's official compute-orange background colour is present.
+	if strings.Count(svg, `viewBox="0 0 80 80"`) < 2 {
+		t.Errorf("expected two nested official icons, got %d", strings.Count(svg, `viewBox="0 0 80 80"`))
+	}
+	if !strings.Contains(svg, "#ED7100") {
+		t.Errorf("expected Lambda official compute-orange in svg")
 	}
 	if Has("just some prose with no services") || SVG("no services here", 1080, 1920) != "" {
 		t.Errorf("expected empty diagram when nothing is detected")
+	}
+}
+
+func TestOfficialIconIDsAreNamespaced(t *testing.T) {
+	// The same icon twice in one scene must not produce duplicate ids.
+	svg := SVG("Lambda calls another Lambda... and one more Lambda", 1080, 1920)
+	if strings.Contains(svg, `id="Icon-Architecture`) {
+		t.Errorf("official icon ids must be namespaced, not raw")
 	}
 }
