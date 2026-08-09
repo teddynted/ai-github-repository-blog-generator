@@ -1,0 +1,255 @@
+// Package scenediagram composes a deterministic, on-brand architecture diagram
+// for a video scene: it detects the AWS services / components named in the
+// scene and lays out clean, text-free service-icon tiles connected by flow
+// arrows on the dark-navy brand background, as an SVG. A rasterizer (rsvg) turns
+// it into the scene's background PNG.
+//
+// Unlike a text-to-image model, this is exact and repeatable — the tiles are the
+// real services under discussion, never a hallucinated cityscape, and there is
+// no garbled in-image text. The stylized glyphs here are brand-consistent
+// placeholders; official AWS Architecture Icons can be swapped into iconFor
+// without changing the layout.
+package scenediagram
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Brand palette (matches the renderer's deep-slate title card and caption band).
+const (
+	bgTop    = "#0F1B2E"
+	bgBottom = "#0A1220"
+	grid     = "#1B2A44"
+	stroke   = "#2C3E5E"
+	flow     = "#FF9900" // AWS orange event/flow lines
+	glyphOn  = "#EAF2FF"
+)
+
+// tile is one service node: a rounded square with a category colour and a simple
+// white glyph, no text.
+type tile struct {
+	color string // category colour
+	glyph string // inner SVG, drawn in a 0..100 local box, stroke/fill glyphOn
+}
+
+// catalog maps a detected component key to its tile. Keys are matched as
+// substrings of the scene text (longest/most-specific first in detect()).
+var catalog = map[string]tile{
+	"eventbridge":    {"#C925D3", glyphEventBus}, // app integration (purple/magenta)
+	"step functions": {"#C925D3", glyphBranch},   //
+	"step function":  {"#C925D3", glyphBranch},   //
+	"sqs":            {"#C925D3", glyphQueue},    //
+	"api gateway":    {"#C925D3", glyphGateway},  //
+	"lambda":         {"#ED7100", glyphBolt},     // compute (orange)
+	"ec2":            {"#ED7100", glyphChip},     //
+	"bedrock":        {"#01A88D", glyphAI},       // ML (teal/green)
+	"claude":         {"#01A88D", glyphAI},       //
+	"ollama":         {"#7AA116", glyphNode},     // local/other (green)
+	"n8n":            {"#7AA116", glyphChain},    //
+	"s3":             {"#7AA116", glyphBucket},   // storage (green)
+	"efs":            {"#7AA116", glyphDisc},     //
+	"dynamodb":       {"#4D72F3", glyphDb},       // database (blue)
+	"cloudwatch":     {"#E7157B", glyphGauge},    // management (pink)
+	"iam":            {"#DD344C", glyphShield},   // security (red)
+	"github":         {"#5A6B86", glyphRepo},     // source (slate)
+	"webhook":        {"#5A6B86", glyphPulse},    //
+}
+
+// detectionOrder lists keys so longer/more-specific ones win (e.g. "step
+// functions" before a bare "step").
+var detectionOrder = []string{
+	"eventbridge", "step functions", "step function", "api gateway", "cloudwatch",
+	"dynamodb", "lambda", "bedrock", "claude", "ollama", "github", "webhook",
+	"n8n", "iam", "sqs", "efs", "ec2", "s3",
+}
+
+// Detect returns the ordered, de-duplicated component keys named in text, capped
+// at max (0 = no cap). Ordering is by first appearance so the diagram reads the
+// way the scene describes the flow.
+func Detect(text string, max int) []string {
+	l := strings.ToLower(text)
+	type hit struct {
+		idx int
+		key string
+	}
+	var hits []hit
+	seen := map[string]bool{}
+	for _, key := range detectionOrder {
+		canon := canonical(key)
+		if seen[canon] {
+			continue
+		}
+		if i := strings.Index(l, key); i >= 0 {
+			seen[canon] = true
+			hits = append(hits, hit{i, canon})
+		}
+	}
+	// stable sort by appearance
+	for i := 1; i < len(hits); i++ {
+		for j := i; j > 0 && hits[j].idx < hits[j-1].idx; j-- {
+			hits[j], hits[j-1] = hits[j-1], hits[j]
+		}
+	}
+	out := make([]string, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, h.key)
+	}
+	if max > 0 && len(out) > max {
+		out = out[:max]
+	}
+	return out
+}
+
+// canonical collapses aliases (step function/step functions, claude→bedrock-ish
+// stays distinct visually but n8n/ollama stay their own tiles).
+func canonical(key string) string {
+	if key == "step function" {
+		return "step functions"
+	}
+	return key
+}
+
+// Has reports whether text names at least one component we can diagram.
+func Has(text string) bool { return len(Detect(text, 1)) > 0 }
+
+// SVG builds the full scene-background SVG (w×h) for the components named in
+// text: brand background + grid, the service tiles laid out along the flow
+// direction (a column for portrait, a row for landscape), connected by arrows.
+// Returns "" if no component is recognized (caller falls back).
+func SVG(text string, w, h int) string {
+	keys := Detect(text, 4)
+	if len(keys) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, w, h, w, h)
+	// background gradient + faint grid
+	fmt.Fprintf(&b, `<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>`, bgTop, bgBottom)
+	b.WriteString(`<pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">`)
+	fmt.Fprintf(&b, `<path d="M64 0H0V64" fill="none" stroke="%s" stroke-width="1"/></pattern></defs>`, grid)
+	fmt.Fprintf(&b, `<rect width="%d" height="%d" fill="url(#bg)"/><rect width="%d" height="%d" fill="url(#grid)" opacity="0.5"/>`, w, h, w, h)
+
+	portrait := h >= w
+	n := len(keys)
+	tileSize := 220
+	if portrait && n >= 3 {
+		tileSize = 200
+	}
+	// node centres along the primary axis, centred on the cross axis, kept in the
+	// upper-middle so the lower third stays clear for the caption band.
+	cx, cy := make([]int, n), make([]int, n)
+	if portrait {
+		top, bottom := h*18/100, h*66/100
+		for i := 0; i < n; i++ {
+			cx[i] = w / 2
+			if n == 1 {
+				cy[i] = (top + bottom) / 2
+			} else {
+				cy[i] = top + (bottom-top)*i/(n-1)
+			}
+		}
+	} else {
+		left, right := w*14/100, w*86/100
+		for i := 0; i < n; i++ {
+			cy[i] = h * 42 / 100
+			if n == 1 {
+				cx[i] = w / 2
+			} else {
+				cx[i] = left + (right-left)*i/(n-1)
+			}
+		}
+	}
+	// flow arrows first (behind tiles)
+	for i := 0; i+1 < n; i++ {
+		b.WriteString(arrow(cx[i], cy[i], cx[i+1], cy[i+1], tileSize/2))
+	}
+	// tiles
+	for i, k := range keys {
+		b.WriteString(drawTile(cx[i], cy[i], tileSize, catalog[k]))
+	}
+	b.WriteString(`</svg>`)
+	return b.String()
+}
+
+// arrow draws a glowing flow line + arrowhead from node a to node b, trimmed so
+// it starts/ends at the tile edge (r = half tile size).
+func arrow(ax, ay, bx, by, r int) string {
+	dx, dy := float64(bx-ax), float64(by-ay)
+	d := hypot(dx, dy)
+	if d == 0 {
+		return ""
+	}
+	ux, uy := dx/d, dy/d
+	x1, y1 := float64(ax)+ux*float64(r+8), float64(ay)+uy*float64(r+8)
+	x2, y2 := float64(bx)-ux*float64(r+22), float64(by)-uy*float64(r+22)
+	// arrowhead
+	hx, hy := float64(bx)-ux*float64(r+8), float64(by)-uy*float64(r+8)
+	px, py := -uy, ux
+	a1x, a1y := hx-ux*22+px*13, hy-uy*22+py*13
+	a2x, a2y := hx-ux*22-px*13, hy-uy*22-py*13
+	return fmt.Sprintf(
+		`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="6" stroke-linecap="round" opacity="0.9"/>`+
+			`<polygon points="%.0f,%.0f %.0f,%.0f %.0f,%.0f" fill="%s"/>`,
+		x1, y1, x2, y2, flow, hx, hy, a1x, a1y, a2x, a2y, flow)
+}
+
+// drawTile renders one service tile centred at (cx,cy) with side `size`.
+func drawTile(cx, cy, size int, t tile) string {
+	x, y := cx-size/2, cy-size/2
+	rad := size / 6
+	var b strings.Builder
+	// soft glow + rounded tile with a subtle top highlight
+	fmt.Fprintf(&b, `<g><rect x="%d" y="%d" width="%d" height="%d" rx="%d" fill="%s" stroke="%s" stroke-width="3"/>`,
+		x, y, size, size, rad, t.color, stroke)
+	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="%d" fill="#FFFFFF" opacity="0.10"/>`,
+		x, y, size, size*2/5, rad)
+	// glyph, scaled into the central 60% of the tile
+	gs := size * 60 / 100
+	gx, gy := cx-gs/2, cy-gs/2
+	fmt.Fprintf(&b, `<g transform="translate(%d,%d) scale(%.3f)">%s</g></g>`, gx, gy, float64(gs)/100.0, t.glyph)
+	return b.String()
+}
+
+func hypot(a, b float64) float64 {
+	if a < 0 {
+		a = -a
+	}
+	if b < 0 {
+		b = -b
+	}
+	if a == 0 {
+		return b
+	}
+	if b == 0 {
+		return a
+	}
+	// good-enough integer-scale hypot without importing math for one call
+	s := a
+	if b > s {
+		s = b
+	}
+	x, y := a/s, b/s
+	return s * (1 + (x*x+y*y-1)/2) // 1st-order; distances here are coarse layout only
+}
+
+// --- glyphs: drawn in a 0..100 box, light strokes/fills (glyphOn) ---
+
+const (
+	glyphBolt     = `<path d="M55 8 L28 56 H48 L42 92 L74 40 H52 Z" fill="` + glyphOn + `"/>`
+	glyphEventBus = `<circle cx="50" cy="50" r="12" fill="` + glyphOn + `"/><g stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"><line x1="50" y1="12" x2="50" y2="30"/><line x1="50" y1="70" x2="50" y2="88"/><line x1="12" y1="50" x2="30" y2="50"/><line x1="70" y1="50" x2="88" y2="50"/><line x1="24" y1="24" x2="37" y2="37"/><line x1="63" y1="63" x2="76" y2="76"/></g>`
+	glyphBranch   = `<g stroke="` + glyphOn + `" stroke-width="7" fill="none"><path d="M20 50 H45 M45 50 C45 25 75 25 75 25 M45 50 C45 75 75 75 75 75"/></g><g fill="` + glyphOn + `"><circle cx="20" cy="50" r="9"/><circle cx="78" cy="25" r="9"/><circle cx="78" cy="75" r="9"/></g>`
+	glyphQueue    = `<rect x="16" y="38" width="68" height="24" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g fill="` + glyphOn + `"><rect x="26" y="44" width="10" height="12"/><rect x="45" y="44" width="10" height="12"/><rect x="64" y="44" width="10" height="12"/></g>`
+	glyphGateway  = `<path d="M25 30 Q50 10 75 30" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><rect x="30" y="34" width="40" height="46" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="7"/>`
+	glyphChip     = `<rect x="30" y="30" width="40" height="40" rx="4" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6"><line x1="42" y1="18" x2="42" y2="30"/><line x1="58" y1="18" x2="58" y2="30"/><line x1="42" y1="70" x2="42" y2="82"/><line x1="58" y1="70" x2="58" y2="82"/><line x1="18" y1="42" x2="30" y2="42"/><line x1="18" y1="58" x2="30" y2="58"/><line x1="70" y1="42" x2="82" y2="42"/><line x1="70" y1="58" x2="82" y2="58"/></g>`
+	glyphAI       = `<circle cx="50" cy="50" r="26" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><circle cx="50" cy="50" r="10" fill="` + glyphOn + `"/><g fill="` + glyphOn + `"><circle cx="50" cy="18" r="6"/><circle cx="82" cy="50" r="6"/><circle cx="50" cy="82" r="6"/><circle cx="18" cy="50" r="6"/></g>`
+	glyphNode     = `<circle cx="50" cy="50" r="20" fill="` + glyphOn + `"/>`
+	glyphChain    = `<g fill="` + glyphOn + `"><circle cx="24" cy="50" r="11"/><circle cx="50" cy="50" r="11"/><circle cx="76" cy="50" r="11"/></g><g stroke="` + glyphOn + `" stroke-width="6"><line x1="35" y1="50" x2="39" y2="50"/><line x1="61" y1="50" x2="65" y2="50"/></g>`
+	glyphBucket   = `<path d="M22 30 H78 L72 82 H28 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="22" y1="30" x2="78" y2="30" stroke="` + glyphOn + `" stroke-width="7"/>`
+	glyphDisc     = `<ellipse cx="50" cy="30" rx="30" ry="12" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M20 30 V70 A30 12 0 0 0 80 70 V30" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
+	glyphDb       = `<ellipse cx="50" cy="26" rx="28" ry="11" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M22 26 V74 A28 11 0 0 0 78 74 V26 M22 50 A28 11 0 0 0 78 50" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
+	glyphGauge    = `<path d="M20 66 A30 30 0 0 1 80 66" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="50" y1="66" x2="66" y2="42" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="66" r="6" fill="` + glyphOn + `"/>`
+	glyphShield   = `<path d="M50 14 L80 26 V52 C80 72 66 82 50 88 C34 82 20 72 20 52 V26 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><path d="M38 50 L47 60 L64 40" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
+	glyphRepo     = `<rect x="22" y="20" width="56" height="60" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><line x1="34" y1="34" x2="60" y2="34"/><line x1="34" y1="50" x2="60" y2="50"/><line x1="34" y1="66" x2="50" y2="66"/></g>`
+	glyphPulse    = `<path d="M14 50 H34 L42 28 L54 72 L62 50 H86" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
+)

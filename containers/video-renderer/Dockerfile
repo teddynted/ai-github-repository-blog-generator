@@ -16,9 +16,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o /out/video
 
 FROM debian:bookworm-slim
 # FFmpeg does the encoding; fonts-dejavu-core provides the drawtext font;
-# ca-certificates lets the AWS SDK reach S3/Polly over TLS.
+# librsvg2-bin (rsvg-convert) rasterizes the composed per-scene architecture
+# diagrams; ca-certificates lets the AWS SDK reach S3/Polly over TLS.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg fonts-dejavu-core ca-certificates \
+      ffmpeg fonts-dejavu-core librsvg2-bin ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/video-renderer /usr/local/bin/video-renderer
 ENTRYPOINT ["/usr/local/bin/video-renderer"]

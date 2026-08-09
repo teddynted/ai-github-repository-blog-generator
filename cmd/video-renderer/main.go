@@ -52,6 +52,7 @@ const (
 	defaultFont            = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 	ffmpegBin              = "ffmpeg"
 	ffprobeBin             = "ffprobe"
+	rsvgBin                = "rsvg-convert" // rasterizes composed scene diagrams
 )
 
 func main() {
@@ -171,14 +172,22 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
-		bg := maybeSceneImage(ctx, sceneGen, sc, work, w, h) // "" falls back to a title card
+		// Background priority: a deterministic architecture diagram from the
+		// services the scene names (exact + free), else an AI image, else the
+		// title card.
+		bg := diagramBackground(ctx, sc, work, w, h)
+		isDiagram := bg != ""
+		if bg == "" {
+			bg = maybeSceneImage(ctx, sceneGen, sc, work, w, h)
+		}
 		// The Ken Burns move needs the exact narration length (zoompan ignores
 		// -shortest); probe the synthesized audio. On any probe miss, durSec is 0
-		// and the scene renders as a static image — never a broken clip.
+		// and the scene renders static — never a broken clip. Diagrams stay crisp
+		// (no zoom upscaling); motion is for AI photos only.
 		durSec := probeDurationSec(ctx, mp3)
 		move := ""
-		if bg != "" && durSec > 0 {
-			move = motionMove(sc.Number) // cinematic camera move on real images only
+		if bg != "" && !isDiagram && durSec > 0 {
+			move = motionMove(sc.Number)
 		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
 		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move, durSec)); err != nil {
