@@ -12,7 +12,7 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      15, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
+	"blog":                      16, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
 	"architecture":              3,  // evergreen: "This design delivers ..." not "This release delivers ..."
 	"linkedin":                  2,
 	"x-thread":                  2,
