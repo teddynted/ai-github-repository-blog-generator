@@ -27,8 +27,13 @@ const ModelTarget = "stability-ai/sdxl"
 // SharedStylePrompt is the reusable style anchor prepended to every scene prompt.
 const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, layered infrastructure planes, clean geometric cloud architecture shapes, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, approachable, engineering-credible, generous negative space. Purely abstract and completely WORDLESS: no text, no words, no letters, no numbers, no labels, no captions, no writing, no UI, no dashboards, no logos, no watermarks of any kind — shapes and light only."
 
+// SharedQualitySuffix is the mandatory cinematic quality modifier appended to
+// every SDXL prompt, so scene imagery reads as art-directed, enterprise-grade
+// visuals rather than generic renders. Coherent with the flat-vector brand look.
+const SharedQualitySuffix = "cinematic lighting, volumetric depth, soft global illumination, crisp clean vector edges, ultra-detailed, professional enterprise technical illustration, high production value, art-directed color grading, sharp focus, 4k, award-winning design"
+
 // SharedNegativePrompt is the reusable negative prompt applied to every scene.
-const SharedNegativePrompt = "text, words, letters, numbers, labels, captions, writing, typography, lettering, alphanumeric characters, gibberish text, fake text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, blurry details, clutter, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
+const SharedNegativePrompt = "text, words, letters, numbers, labels, captions, writing, typography, lettering, alphanumeric characters, gibberish text, fake text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, blurry, blurry details, clutter, cluttered, low detail, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
 
 // compositions are the cinematic layouts scenes rotate through so consecutive
 // scenes are visually distinct.
@@ -128,10 +133,13 @@ func ScenePrompt(visual, sceneType, composition string) string {
 		subject = metaphorFor(sceneType)
 	}
 	subject = trimToWords(subject, 45)
+	// Structured SDXL prompt: subject + style/environment/lighting/mood anchor +
+	// composition (camera framing) + the mandatory cinematic quality suffix.
 	prompt := SharedStylePrompt + " " + subject
 	if composition != "" {
 		prompt += " Composition: " + composition + "."
 	}
+	prompt += " " + SharedQualitySuffix + "."
 	return prompt
 }
 
@@ -325,6 +333,8 @@ func (col SceneCollection) Markdown() string {
 
 	b.WriteString("## Shared Visual Style\n\n```text\n")
 	b.WriteString(SharedStylePrompt)
+	b.WriteString("\n```\n\n### Quality Suffix (appended to every prompt)\n\n```text\n")
+	b.WriteString(SharedQualitySuffix)
 	b.WriteString("\n```\n\n### Shared Negative Prompt\n\n```text\n")
 	b.WriteString(SharedNegativePrompt)
 	b.WriteString("\n```\n\n")

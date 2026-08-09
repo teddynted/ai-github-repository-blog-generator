@@ -15,7 +15,7 @@ Polished flat-vector technical illustration, subtle isometric depth, clean geome
 ### Shared SDXL Negative Prompt
 
 ```text
-text, letters, numbers, words, logos, watermarks, signatures, clutter, excessive visual noise, distorted perspective, low resolution, blurry details, photorealistic humans, unrelated cloud services, busy background, tangled connectors, unreadable shapes
+text, words, letters, numbers, labels, captions, writing, typography, lettering, gibberish text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, clutter, cluttered, low detail, excessive visual noise, distorted perspective, low resolution, blurry, blurry details, photorealistic humans, unrelated cloud services, busy background, tangled connectors, unreadable shapes
 ```
 
 ### Release Context

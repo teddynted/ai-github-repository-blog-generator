@@ -49,7 +49,8 @@ func buildPrompt(c candidate, style Style, b Branding, placeholders []TextPlaceh
 	}
 	// Reference the shared render constraints once, instead of repeating the
 	// lighting / flat-vector / palette / no-text boilerplate in every prompt (#2).
-	sb.WriteString(" Apply the shared render constraints: flat vector with subtle isometric depth, soft directional lighting, brand palette, and render no text, letters, numbers, logos, or watermarks.")
+	sb.WriteString(" Apply the shared render constraints: flat vector with subtle isometric depth, soft directional lighting, brand palette, and a purely WORDLESS image — render no text, words, letters, numbers, labels, captions, UI, dashboards, code, logos, or watermarks of any kind.")
+	sb.WriteString(" " + SharedSDXLQualitySuffix + ".")
 
 	fmt.Fprintf(&sb, " Target format: %s aspect ratio", c.AspectRatio)
 	if c.Dimensions != "" {

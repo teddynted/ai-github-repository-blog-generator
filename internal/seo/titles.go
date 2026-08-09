@@ -27,8 +27,10 @@ func (g *Generator) planBlogTitle(ctx context.Context, pkg ReleasePackage) strin
 
 func blogTitlePrompt(base string) string {
 	return fmt.Sprintf(
-		"Rewrite this technical blog title to be SEO-optimized and click-worthy (NOT clickbait), under 60 characters, "+
-			"keeping it accurate to the topic. Use ONLY the facts in the title — invent nothing."+evergreenRule+" Output only the title.\n\nTITLE: %s",
+		"Rewrite this technical blog title to be SEO-optimized and click-worthy (NOT clickbait), targeting 50–65 characters, "+
+			"keeping it accurate to the topic. Favour a Problem→Outcome or capability framing, like \"How Pre-Baked AMIs Speed Up EC2 Startup\", "+
+			"\"Stop Installing Dependencies on Every EC2 Boot\", or \"The AWS Pattern That Eliminates Slow Provisioning\" — never \"INSANE HACK\", "+
+			"\"You Won't Believe\", or \"changed everything\". Use ONLY the facts in the title — invent nothing."+evergreenRule+" Output only the title.\n\nTITLE: %s",
 		base)
 }
 
