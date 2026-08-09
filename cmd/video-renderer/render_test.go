@@ -343,3 +343,22 @@ func TestOverviewKeysHeroSpine(t *testing.T) {
 		t.Errorf("overview not in flow order (github<openclaw<ollama): %v", got)
 	}
 }
+
+func TestNeighborsFromReleaseGraph(t *testing.T) {
+	// Neighbors are derived from co-occurrence in the release's own scenes — no
+	// hardcoded per-repo relationships. A lone component expands into its
+	// flow-downstream neighbors (its outputs), closest-in-flow first.
+	scenes := []scene{
+		{Title: "Why OpenClaw Reaches for Ollama Before Amazon Bedrock", Narration: "OpenClaw runs Ollama first, then Amazon Bedrock."},
+		{Title: "The Shared EFS Workspace Where OpenClaw and n8n Meet", Narration: "OpenClaw and n8n share EFS."},
+		{Title: "What OpenClaw and Lambda Stream to CloudWatch", Narration: "OpenClaw and Lambda log to CloudWatch."},
+	}
+	adj := coOccurrence(scenes)
+	if got := strings.Join(neighborsFor("openclaw", adj), ","); got != "ollama,bedrock" {
+		t.Errorf("neighborsFor(openclaw) = %q, want ollama,bedrock", got)
+	}
+	// A component with no co-occurrence (nothing to connect to) → no neighbors → card.
+	if n := neighborsFor("s3", map[string]map[string]bool{}); n != nil {
+		t.Errorf("expected nil neighbors, got %v", n)
+	}
+}
