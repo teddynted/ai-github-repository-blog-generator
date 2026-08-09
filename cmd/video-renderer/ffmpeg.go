@@ -18,15 +18,21 @@ func dimsFor(aspect string) (w, h int) {
 // set, otherwise a deep-slate title slide), the scene caption burned in via
 // drawtext (read from a file to avoid escaping), and the narration audio.
 // -shortest makes the clip exactly as long as the narration.
-func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string) []string {
+func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string, durSec float64) []string {
 	var inputs []string
 	var vf string
+	motion := "" // set when a Ken Burns move is applied (needs an explicit -t)
 	if bgImage != "" {
 		// Loop the scene image; give it a slow cinematic camera move (or a static
 		// cover crop when motion is off), then put the caption in a lower band so it
 		// stays readable over the image.
 		inputs = []string{"-loop", "1", "-i", bgImage}
-		bg := motionFilter(move, w, h)
+		if move != "" && durSec > 0 {
+			// zoompan ignores -shortest, so span it over the exact narration length
+			// (frames = duration × 30fps) and bound the clip with -t below.
+			motion = motionFilter(move, w, h, int(durSec*30+0.5))
+		}
+		bg := motion
 		if bg == "" {
 			bg = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h)
 		}
@@ -39,14 +45,16 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 	}
 	args := []string{"-y"}
 	args = append(args, inputs...)
-	return append(args,
+	args = append(args,
 		"-i", narrationMP3,
 		"-vf", vf,
 		"-c:v", "libx264", "-pix_fmt", "yuv420p",
 		"-c:a", "aac", "-b:a", "160k",
-		"-shortest",
-		out,
 	)
+	if motion != "" {
+		args = append(args, "-t", strconv.FormatFloat(durSec, 'f', 3, 64))
+	}
+	return append(args, "-shortest", out)
 }
 
 // titleFontsize scales the title to the frame (min dimension), so 16:9 and 9:16
@@ -66,15 +74,15 @@ func titleFontsize(w, h int) int {
 //
 // The zoom accumulates per output frame (d=1) against a looped image, so the move
 // runs for the scene's full narration-driven length (the segment is -shortest).
-func motionFilter(move string, w, h int) string {
-	if move == "" {
+func motionFilter(move string, w, h, frames int) string {
+	if move == "" || frames <= 0 {
 		return ""
 	}
 	// Over-scale to 1.5x the frame so zooming/cropping never runs out of pixels.
 	cover := "scale=" + itoa(w*3/2) + ":" + itoa(h*3/2) + ":force_original_aspect_ratio=increase,crop=" + itoa(w*3/2) + ":" + itoa(h*3/2)
 	center := ":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
 	zp := func(z string) string {
-		return cover + ",zoompan=z='" + z + "':d=1" + center + ":s=" + itoa(w) + "x" + itoa(h) + ":fps=30"
+		return cover + ",zoompan=z='" + z + "':d=" + itoa(frames) + center + ":s=" + itoa(w) + "x" + itoa(h) + ":fps=30"
 	}
 	switch move {
 	case "dolly_out":

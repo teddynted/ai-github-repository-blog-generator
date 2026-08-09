@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -50,6 +51,7 @@ const (
 	defaultVoice           = "Matthew"
 	defaultFont            = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 	ffmpegBin              = "ffmpeg"
+	ffprobeBin             = "ffprobe"
 )
 
 func main() {
@@ -168,12 +170,16 @@ func run(ctx context.Context) error {
 			return err
 		}
 		bg := maybeSceneImage(ctx, sceneGen, sc, work, w, h) // "" falls back to a title card
+		// The Ken Burns move needs the exact narration length (zoompan ignores
+		// -shortest); probe the synthesized audio. On any probe miss, durSec is 0
+		// and the scene renders as a static image — never a broken clip.
+		durSec := probeDurationSec(ctx, mp3)
 		move := ""
-		if bg != "" {
+		if bg != "" && durSec > 0 {
 			move = motionMove(sc.Number) // cinematic camera move on real images only
 		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
-		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move)); err != nil {
+		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move, durSec)); err != nil {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
 		}
 		fmt.Fprintf(&listBuf, "file '%s'\n", seg)
@@ -214,6 +220,22 @@ func motionMove(sceneNumber int) string {
 	default:
 		return "dolly_in"
 	}
+}
+
+// probeDurationSec returns the duration of an audio file in seconds via ffprobe,
+// or 0 on any error (the caller then renders the scene as a static image).
+func probeDurationSec(ctx context.Context, path string) float64 {
+	out, err := exec.CommandContext(ctx, ffprobeBin,
+		"-v", "error", "-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1", path).Output()
+	if err != nil {
+		return 0
+	}
+	d, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 func synthesize(ctx context.Context, p *polly.Client, voice, text, outMP3 string) error {
