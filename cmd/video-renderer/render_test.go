@@ -29,6 +29,36 @@ func TestParseScenesSkipsEmptyAndDefaults(t *testing.T) {
 	}
 }
 
+func TestParseScenesUnwrapsVersionedEnvelope(t *testing.T) {
+	// The content suite writes artifacts wrapped in {"promptVersion","artifact"};
+	// the renderer must unwrap to the inner storyboard, not see zero scenes.
+	js := []byte(`{"promptVersion":"storyboard@1","artifact":{"scenes":[
+		{"sceneNumber":1,"title":"Intro","narration":"Welcome."}
+	]}}`)
+	got, err := parseScenes(js)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 1 || got[0].Title != "Intro" {
+		t.Fatalf("want the enveloped scene, got %+v", got)
+	}
+	// A bare storyboard (legacy, pre-envelope) must still parse.
+	bare := []byte(`{"scenes":[{"sceneNumber":1,"title":"Bare","narration":"Hi."}]}`)
+	if b, err := parseScenes(bare); err != nil || len(b) != 1 || b[0].Title != "Bare" {
+		t.Fatalf("bare storyboard = %+v err=%v", b, err)
+	}
+}
+
+func TestParseFormatScenesUnwrapsVersionedEnvelope(t *testing.T) {
+	shorts := []byte(`{"promptVersion":"youtube-shorts@1","artifact":{"shorts":[
+		{"id":1,"scenes":[{"number":1,"overlay":"HOOK","narration":"Quick hook."}]}
+	]}}`)
+	got := parseFormatScenes(shorts, "shorts")
+	if len(got) != 1 || got[0].Title != "HOOK" {
+		t.Fatalf("want the enveloped short scene, got %+v", got)
+	}
+}
+
 func TestScenesForFormatUsesNativeScriptForShortFormats(t *testing.T) {
 	storyboard := []byte(`{"scenes":[{"sceneNumber":1,"title":"Long","narration":"Long-form scene."}]}`)
 	shorts := []byte(`{"shorts":[{"id":1,"title":"Short A","scenes":[
