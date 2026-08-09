@@ -85,7 +85,7 @@ flowchart TD
 
 ## Relationship to the Platform
 
-This release delivers **Shipping Widget v1.0.0**. It integrates with the existing platform architecture rather than redefining it, and affects only the components and flows described above.
+This design delivers **Shipping Widget v1.0.0**. It integrates with the existing platform architecture rather than redefining it, and affects only the components and flows described above.
 
 ---
 

@@ -13,7 +13,7 @@ import "fmt"
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
 	"blog":                      15, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
-	"architecture":              2,
+	"architecture":              3,  // evergreen: "This design delivers ..." not "This release delivers ..."
 	"linkedin":                  2,
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
@@ -27,7 +27,7 @@ var versions = map[string]int{
 	"youtube":        3, // evergreen body copy: hook/intro/chapters/conclusion never name the release/version/repo
 	"youtube-shorts": 3, // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
 	"tiktok":         3, // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
-	"visual-assets":  2, // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
+	"visual-assets":  3, // evergreen body copy: focus/title fields never name the release/version/repo // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
 	"seo-metadata":   2, // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,

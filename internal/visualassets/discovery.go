@@ -33,8 +33,6 @@ func discover(pkg ReleasePackage, max int) []candidate {
 	if max <= 0 {
 		max = defaultMaxAssets
 	}
-	repo := repoShortName(pkg)
-	tag := releaseTag(pkg)
 	subject := subjectSeed(pkg)
 	arch := archSubject(pkg)
 	svcRefs := awsServices(pkg, 4)
@@ -52,7 +50,7 @@ func discover(pkg ReleasePackage, max int) []candidate {
 	add(candidate{
 		Type: "YouTube Thumbnail", Platform: "YouTube", AspectRatio: "16:9", Dimensions: "1280x720",
 		Category: catThumbnail, Purpose: "Drive clicks on the long-form release deep dive.",
-		Subject: arch, Focus: "release architecture at a glance",
+		Subject: arch, Focus: "the architecture at a glance",
 	})
 	add(candidate{
 		Type: "Repository Hero Image", Platform: "GitHub", AspectRatio: "16:9", Dimensions: "1600x900",
@@ -62,34 +60,34 @@ func discover(pkg ReleasePackage, max int) []candidate {
 	add(candidate{
 		Type: "GitHub Social Card", Platform: "GitHub", AspectRatio: "1.91:1", Dimensions: "1280x640",
 		Category: catSocial, Purpose: "GitHub social preview when the repo is shared.",
-		Subject: subject, Focus: repo + " " + tag,
+		Subject: subject, Focus: "what the system does",
 	})
 	add(candidate{
 		Type: "LinkedIn Banner", Platform: "LinkedIn", AspectRatio: "1.91:1", Dimensions: "1200x627",
 		Category: catSocial, Purpose: "Professional announcement graphic for LinkedIn.",
-		Subject: subject, Focus: "release announcement",
+		Subject: subject, Focus: "the announcement",
 	})
 	add(candidate{
 		Type: "X Image", Platform: "X", AspectRatio: "16:9", Dimensions: "1600x900",
 		Category: catSocial, Purpose: "Shareable image for an X (Twitter) post.",
-		Subject: subject, Focus: "release highlight",
+		Subject: subject, Focus: "the highlight",
 	})
 
 	// Blog headers (when a blog exists — it always does in the pipeline).
 	add(candidate{
 		Type: "Blog Header", Platform: "Blog", AspectRatio: "16:9", Dimensions: "1600x900",
 		Category: catBlog, Purpose: "Header image for the technical blog post.",
-		Subject: subject, Focus: "the technical story of the release",
+		Subject: subject, Focus: "the technical story",
 	})
 	add(candidate{
 		Type: "Dev.to Cover", Platform: "Dev.to", AspectRatio: "1000:420", Dimensions: "1000x420",
 		Category: catBlog, Purpose: "Cover image for the Dev.to cross-post.",
-		Subject: subject, Focus: "the technical story of the release",
+		Subject: subject, Focus: "the technical story",
 	})
 	add(candidate{
 		Type: "Medium Cover", Platform: "Medium", AspectRatio: "3:2", Dimensions: "1500x1000",
 		Category: catBlog, Purpose: "Cover image for the Medium cross-post.",
-		Subject: subject, Focus: "the technical story of the release",
+		Subject: subject, Focus: "the technical story",
 	})
 
 	// Architecture-driven illustrations (only when there is architecture to show).
@@ -113,7 +111,7 @@ func discover(pkg ReleasePackage, max int) []candidate {
 	add(candidate{
 		Type: "Release Card", Platform: "Generic", AspectRatio: "1:1", Dimensions: "1080x1080",
 		Category: catBanner, Purpose: "Square release-announcement card for feeds.",
-		Subject: subject, Focus: repo + " " + tag + " release",
+		Subject: subject, Focus: "what the system does",
 	})
 	add(candidate{
 		Type: "Promotional Graphic", Platform: "Generic", AspectRatio: "1:1", Dimensions: "1080x1080",

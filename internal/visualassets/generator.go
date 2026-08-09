@@ -94,7 +94,7 @@ func (g *Generator) buildAsset(ctx context.Context, pkg ReleasePackage, c candid
 		Platform:             c.Platform,
 		AspectRatio:          c.AspectRatio,
 		Dimensions:           c.Dimensions,
-		Title:                c.Type + " — " + repoShortName(pkg) + " " + releaseTag(pkg),
+		Title:                c.Type,
 		Purpose:              c.Purpose,
 		Prompt:               promptText,
 		NegativePrompt:       planNegative(c, pkg),

@@ -113,7 +113,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
 - **Composition:** single bold focal subject offset to the right, large empty headline zone on the left third, strong visual hierarchy, minimal clutter
 - **Perspective:** slight isometric hero angle for depth · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** high-energy, credible, click-worthy without being clickbait · **Technical focus:** release architecture at a glance
+- **Mood:** high-energy, credible, click-worthy without being clickbait · **Technical focus:** the architecture at a glance
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left third → headline; lower-left → release tag
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -290,7 +290,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** professional, modern, trustworthy · **Technical focus:** widget v1.0.0
+- **Mood:** professional, modern, trustworthy · **Technical focus:** what the system does
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left half → headline; lower-left → repository name
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -381,7 +381,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** right-weighted reveal — place the focal cluster on the right; keep the left third empty for a headline overlay.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** professional, modern, trustworthy · **Technical focus:** release announcement
+- **Mood:** professional, modern, trustworthy · **Technical focus:** the announcement
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left half → headline; lower-left → repository name
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -461,7 +461,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** centered orchestration hub — put a central orchestration node with supporting planes radiating outward; reserve the lower band for overlay.
 - **Composition:** balanced composition with a clear focal graphic on one side and a reserved text zone on the other, brand-consistent framing
 - **Perspective:** clean front or gentle isometric view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** punchy, modern, shareable · **Technical focus:** release highlight
+- **Mood:** punchy, modern, shareable · **Technical focus:** the highlight
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** left half → headline; lower-left → repository name
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -546,7 +546,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
 - **Composition:** editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title
 - **Perspective:** gentle isometric or layered flat scene · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story of the release
+- **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** center or lower-third → article title
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -620,7 +620,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** layered infrastructure stack — stack the control plane above the compute plane in parallel horizontal layers; reserve the top for a headline.
 - **Composition:** editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title
 - **Perspective:** gentle isometric or layered flat scene · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story of the release
+- **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** center or lower-third → article title
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -694,7 +694,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** radial event burst — emit event paths radially from a single trigger; keep the outer margins clear for overlay text.
 - **Composition:** editorial header composition, a conceptual technical scene with a clear focal point and calm negative space for a title
 - **Perspective:** gentle isometric or layered flat scene · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story of the release
+- **Mood:** thoughtful, technical, inviting · **Technical focus:** the technical story
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** center or lower-third → article title
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS
@@ -940,7 +940,7 @@ no gibberish text, no misspelled words, no watermarks, no signatures, no logos, 
 - **Archetype:** diagonal event cascade — flow events top-left to bottom-right along a diagonal; keep the upper-left corner clear for a title.
 - **Composition:** centered square composition with a strong focal graphic, headline zone reserved along the lower third
 - **Perspective:** hero isometric or gentle three-quarter view · **Lighting:** soft directional key light, gentle rim light on focal shapes, no harsh shadows
-- **Mood:** celebratory but professional, confident release energy · **Technical focus:** widget v1.0.0 release
+- **Mood:** celebratory but professional, confident release energy · **Technical focus:** what the system does
 - **Palette:** #0B1F33, #12263A, #FF9900, #4F9DFF
 - **Text placeholders (render no text):** lower third → release headline; top-left → logo
 - **Grounded in:** widget, v1.0.0, AWS Lambda, Amazon EventBridge, Amazon SQS

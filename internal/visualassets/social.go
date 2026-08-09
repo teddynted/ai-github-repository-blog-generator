@@ -15,6 +15,6 @@ func socialStyle(c candidate, b Branding) Style {
 		Mood:           mood,
 		ColorPalette:   palette(b),
 		Style:          "polished flat vector, " + b.IllustrationStyle,
-		TechnicalFocus: firstNonEmpty(c.Focus, "the release"),
+		TechnicalFocus: firstNonEmpty(c.Focus, "the system"),
 	}
 }
