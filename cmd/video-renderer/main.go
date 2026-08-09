@@ -10,11 +10,9 @@
 // The render is idempotent: if OUTPUT_S3_URI already exists it is skipped (a
 // re-run reuses the existing MP4). Set FORCE_RENDER=true to regenerate anyway.
 //
-// Each scene's background comes from its on-screen direction: an architecture
-// diagram when the scene's type/visual calls for one, otherwise — when
-// ENABLE_SCENE_IMAGES is set — an AI-generated image from the scene's visual
-// direction (Replicate FLUX/SDXL, or Amazon Nova Canvas), falling back to a
-// title card on any failure.
+// Each scene's background is — when ENABLE_SCENE_IMAGES is set — an AI-generated
+// image from the scene's visual direction (Replicate FLUX/SDXL, or Amazon Nova
+// Canvas), falling back to a deep-slate title card on any failure.
 package main
 
 import (
@@ -44,7 +42,6 @@ const (
 	defaultVoice  = "Matthew"
 	defaultFont   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 	ffmpegBin     = "ffmpeg"
-	rsvgBin       = "rsvg-convert"
 )
 
 func main() {
@@ -137,13 +134,9 @@ func run(ctx context.Context) error {
 	w, h := dimsFor(aspect)
 	log.Printf("rendering %s: %d scenes at %dx%d", format, len(scenes), w, h)
 
-	// Best-effort: rasterize the release's architecture diagram once, to use as
-	// the background for architecture/diagram scenes ("" if unavailable).
-	diagramPNG := maybeDiagram(ctx, s3c, storyboardURI, work, w, h)
-
-	// Optional (ENABLE_SCENE_IMAGES): an AI-generated background per non-diagram
-	// scene. Best-effort — if the client can't initialise, every scene simply
-	// falls back to the title card, exactly as when the feature is off.
+	// Optional (ENABLE_SCENE_IMAGES): an AI-generated background per scene.
+	// Best-effort — if the client can't initialise, every scene simply falls
+	// back to the title card, exactly as when the feature is off.
 	var sceneGen imageGenerator
 	if sceneImagesEnabled() {
 		if g, err := imagegen.NewFromEnv(ctx); err != nil {
@@ -166,12 +159,7 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
-		bg := ""
-		if sc.wantsDiagram() {
-			bg = diagramPNG // "" falls back to a colour card
-		} else {
-			bg = maybeSceneImage(ctx, sceneGen, sc, work, w, h) // "" falls back to a title card
-		}
+		bg := maybeSceneImage(ctx, sceneGen, sc, work, w, h) // "" falls back to a title card
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
 		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg)); err != nil {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
@@ -221,44 +209,6 @@ func runFFmpeg(ctx context.Context, args []string) error {
 	cmd := exec.CommandContext(ctx, ffmpegBin, args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
-}
-
-// maybeDiagram fetches the release's architecture-diagram.svg (derived from the
-// storyboard URI) and rasterizes it to a PNG sized to the frame. Best-effort:
-// any miss (no diagram, download or rasterize failure) returns "" and the
-// renderer falls back to colour cards.
-func maybeDiagram(ctx context.Context, s3c *s3.Client, storyboardURI, work string, w, h int) string {
-	uri := diagramURIFromStoryboard(storyboardURI)
-	if uri == "" {
-		return ""
-	}
-	b, k, err := parseS3URI(uri)
-	if err != nil {
-		return ""
-	}
-	svgBytes, err := getObject(ctx, s3c, b, k)
-	if err != nil {
-		log.Printf("no architecture diagram (%s): %v", uri, err)
-		return ""
-	}
-	// gosec G703 false positive: `work` is the caller's os.MkdirTemp directory
-	// (OS-generated, no user input) and the filename is a constant, so there is
-	// no path-traversal surface. gosec cannot see this across the function
-	// boundary, so the write is annotated below. gosec's directive tag is
-	// literally "#nosec" (with the hash) — "//nosec" is not recognized.
-	svg := filepath.Join(work, "diagram.svg")
-	if err := os.WriteFile(svg, svgBytes, 0o644); err != nil { // #nosec G703 -- work is an os.MkdirTemp dir; filename is constant
-		return ""
-	}
-	png := filepath.Join(work, "diagram.png")
-	cmd := exec.CommandContext(ctx, rsvgBin, rsvgArgs(svg, png, w, h)...)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Printf("rasterize diagram failed: %v", err)
-		return ""
-	}
-	log.Printf("using architecture diagram background: %s", uri)
-	return png
 }
 
 // forceRender reports whether FORCE_RENDER=true, which bypasses the

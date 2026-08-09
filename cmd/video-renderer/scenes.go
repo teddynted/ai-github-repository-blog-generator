@@ -8,42 +8,14 @@ import (
 // scene is the minimal per-shot data the renderer needs: a caption (shown as a
 // text card) and the narration (synthesized to speech). Duration is derived from
 // the narration audio length at render time, so it is not needed here. Type is
-// the storyboard scene type (architecture/diagram/…) and Visual is the
-// short-format on-screen direction; either can drive whether the rendered
-// architecture diagram is used as the scene background.
+// the storyboard scene type and Visual is the on-screen direction; both feed the
+// AI scene-image prompt (see images.go).
 type scene struct {
 	Number    int
 	Title     string
 	Narration string
 	Type      string
 	Visual    string
-}
-
-// diagramVisualCues are substrings in a short-format scene's "visual" direction
-// (e.g. "Build the architecture diagram node by node") that call for the
-// architecture diagram as the background. The long-form storyboard uses Type
-// instead; the short-format scripts carry no Type, so the direction is the only
-// signal available.
-var diagramVisualCues = []string{
-	"architecture", "diagram", "component", "topology", "data flow", "dataflow",
-	"node by node", "system map", "flowchart", "block diagram",
-}
-
-// wantsDiagram reports whether a scene should use the architecture diagram as its
-// background rather than a plain caption card — either because the storyboard
-// typed it as an architecture/diagram scene, or because a short-format scene's
-// visual direction asks for the diagram.
-func (s scene) wantsDiagram() bool {
-	if s.Type == "architecture" || s.Type == "diagram" {
-		return true
-	}
-	lv := strings.ToLower(s.Visual)
-	for _, cue := range diagramVisualCues {
-		if strings.Contains(lv, cue) {
-			return true
-		}
-	}
-	return false
 }
 
 // scenesForFormat selects the best scene source per format:
