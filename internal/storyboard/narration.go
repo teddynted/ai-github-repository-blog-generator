@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/terminology"
 )
 
 // narration returns spoken voice-over for a scene. It builds a deterministic
@@ -58,7 +60,7 @@ func titleNarrationPrompt(subject, openingBody string) string {
 			"Evergreen rule: NEVER say \"this release\", \"the release\", \"this update\", \"this version\", or \"this feature\"; "+
 			"NEVER state a version number; NEVER name the repository. Describe what the system does, not that a version shipped it.\n"+
 			"Do not begin with \"Welcome\", \"Let's look at\", \"This matters\", \"So\", or \"Now\". Ground every claim in the "+
-			"CONTEXT below; invent nothing. Output ONLY the two spoken sentences — no preamble, no quotation marks.\n\n"+
+			"CONTEXT below; invent nothing. "+terminology.Base().PromptClause()+" Output ONLY the two spoken sentences — no preamble, no quotation marks.\n\n"+
 			"CONTEXT (opening of the article):\n%s",
 		subject, capWords(openingBody, 160))
 }
@@ -265,7 +267,7 @@ func narrationPrompt(title, typ, nextTitle, prior, draft, subject string, isLast
 			"them, cover only the NEW angle this scene adds — for example a runtime-problem scene, a one-line mental "+
 			"model, and a step-by-step walkthrough must each say something distinct): %s\n", capWords(p, 220))
 	}
-	return fmt.Sprintf(
+	return terminology.Base().PromptClause() + "\n\n" + fmt.Sprintf(
 		"You are a senior AWS platform engineer narrating one scene of a technical explainer video for an "+
 			"audience of software and DevOps engineers — the tone of a re:Invent speaker or a technical YouTube educator.\n"+
 			"Scene: %q (type: %s).\n"+

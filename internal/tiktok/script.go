@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/teddynted/ai-github-repository-blog-generator/internal/terminology"
 )
 
 // script builds the problem/solution/takeaway beats from the grounded seed and
@@ -85,6 +87,6 @@ func scriptPrompt(topicLabel, hook, problem, solution, takeaway, engagement, cta
 			"Weave these beats into ONE conversational, fast-paced spoken script (about 70–120 words):\n"+
 			"HOOK: %s\nPROBLEM: %s\nSOLUTION: %s\nTAKEAWAY: %s\nENGAGEMENT: %s\nCTA: %s\n\n"+
 			"Native to TikTok, technically accurate, one concept. Use ONLY the facts above — invent nothing."+
-			evergreenRule+" Output only the script.",
+			evergreenRule+" "+terminology.Base().PromptClause()+" Output only the script.",
 		topicLabel, hook, problem, solution, takeaway, engagement, cta)
 }

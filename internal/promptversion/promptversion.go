@@ -12,21 +12,21 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      17, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion); headings must NAME THE ENGINEERING IDEA, never describe a figure/diagram/label/on-screen text (no "The Word 'fallback' on a Single Diagram Edge")
+	"blog":                      18, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion); headings must NAME THE ENGINEERING IDEA, never describe a figure/diagram/label/on-screen text (no "The Word 'fallback' on a Single Diagram Edge") // protected-term integrity: reproduce component/service identifiers verbatim (node-id "claw" -> "OpenClaw")
 	"architecture":              3,  // evergreen: "This design delivers ..." not "This release delivers ..."
 	"linkedin":                  2,
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
 	// model transforms + deterministic artifacts.
-	"storyboard": 3, // narrative arc: opening scene orients on the capability (what the system does, never "this release"/version/repo) before the hook; LAST scene always lands a grounded close/CTA; evergreen — narration never references the release/version/repository // prepend a clean TITLE-card scene (article H1, no diagram/photo) with a spoken hook; content scenes follow
+	"storyboard": 4, // narrative arc: opening scene orients on the capability (what the system does, never "this release"/version/repo) before the hook; LAST scene always lands a grounded close/CTA; evergreen — narration never references the release/version/repository // prepend a clean TITLE-card scene (article H1, no diagram/photo) with a spoken hook; content scenes follow
 	// The storyboard-consuming stages are bumped in lockstep with storyboard@2: they
 	// carry the scene narration, so their produced content changes with the new arc.
 	// (The suite has no upstream→downstream staleness cascade, so an idempotent
 	// re-run only refreshes a stage when its OWN version changes.)
 	"voiceover":      2,
 	"youtube":        4, // creator-craft: retention/hook guidance // evergreen body copy: hook/intro/chapters/conclusion never name the release/version/repo
-	"youtube-shorts": 4, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
-	"tiktok":         4, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
+	"youtube-shorts": 5, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
+	"tiktok":         5, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
 	"visual-assets":  4, // SDXL quality suffix + wordless hardening // evergreen body copy: focus/title fields never name the release/version/repo // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
 	"seo-metadata":   3, // CTR title framing (problem->outcome, 50-65 chars) // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
