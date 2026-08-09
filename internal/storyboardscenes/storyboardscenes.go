@@ -26,7 +26,7 @@ const SchemaVersion = "1.0.0"
 const ModelTarget = "stability-ai/sdxl"
 
 // SharedStylePrompt is the reusable style anchor prepended to every scene prompt.
-const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, engineering-credible, generous negative space. Depict RECOGNIZABLE, stylized cloud-infrastructure iconography that evokes the subject — service nodes, event buses, message queues, serverless functions, compute instances, storage volumes, and the directional arrows and data/event flows connecting them. Completely WORDLESS: no text, no words, no letters, no numbers, no labels, no captions, no writing, no UI, no dashboards, no logos, no watermarks of any kind — convey meaning through iconography and flow, never through text."
+const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, engineering-credible, generous negative space. Depict an ABSTRACT SCHEMATIC network of glowing geometric nodes — hexagons, cubes, orbs, discs, rings — connected by thin directional light-lines and flowing particles, like a clean animated cloud-architecture diagram. NEVER physical objects, vehicles, buildings, streets, or people — only glowing geometric nodes and connecting flows. Completely WORDLESS: no text, no words, no letters, no numbers, no labels, no captions, no writing, no UI, no dashboards, no logos, no watermarks of any kind — convey meaning through iconography and flow, never through text."
 
 // SharedQualitySuffix is the mandatory cinematic quality modifier appended to
 // every SDXL prompt, so scene imagery reads as art-directed, enterprise-grade
@@ -34,7 +34,7 @@ const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric 
 const SharedQualitySuffix = "cinematic lighting, volumetric depth, soft global illumination, crisp clean vector edges, ultra-detailed, professional enterprise technical illustration, high production value, art-directed color grading, sharp focus, 4k, award-winning design"
 
 // SharedNegativePrompt is the reusable negative prompt applied to every scene.
-const SharedNegativePrompt = "text, words, letters, numbers, labels, captions, writing, typography, lettering, alphanumeric characters, gibberish text, fake text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, blurry, blurry details, clutter, cluttered, low detail, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
+const SharedNegativePrompt = "text, words, letters, numbers, labels, captions, writing, typography, lettering, alphanumeric characters, gibberish text, fake text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, vehicles, cars, trucks, buses, vans, boats, trains, people, human, faces, animals, buildings, houses, skyscrapers, city, cityscape, streets, roads, furniture, everyday objects, blurry, blurry details, clutter, cluttered, low detail, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
 
 // compositions are the cinematic layouts scenes rotate through so consecutive
 // scenes are visually distinct.
@@ -142,7 +142,7 @@ func ScenePrompt(visual, sceneType, composition string) string {
 	// matches the content — each rendered as its own distinct, recognizable node
 	// (wordless; the shapes carry meaning, never labels).
 	if svc := detectServiceNodes(visual); svc != "" {
-		prompt += " Feature these as distinct, recognizable service nodes connected by directional event-flow arrows (shapes only, absolutely no text labels): " + svc + "."
+		prompt += " Render this as an ABSTRACT SCHEMATIC network diagram of glowing geometric nodes connected by thin directional light lines — never physical objects, vehicles, buildings, or people. The nodes represent, in order: " + svc + "."
 	}
 	if composition != "" {
 		prompt += " Composition: " + composition + "."
@@ -151,28 +151,30 @@ func ScenePrompt(visual, sceneType, composition string) string {
 	return prompt
 }
 
-// serviceNodes maps recognizable architecture components to a short, evocative
-// visual description SDXL can render wordlessly. Detection is on the scene's own
-// text, so the picture depicts the exact services under discussion.
+// serviceNodes maps recognizable architecture components to a PURELY GEOMETRIC
+// glowing-node description. Descriptions are abstract primitives (hexagons,
+// cubes, orbs, discs, rings, lines) — never named physical objects — because
+// diffusion models render literal nouns (e.g. "engine" → a car). Detection is on
+// the scene's own text so the diagram depicts the exact components discussed.
 var serviceNodes = []struct{ key, node string }{
-	{"eventbridge", "an event-bus hub fanning out event particles"},
-	{"step functions", "a branching state-machine graph"},
-	{"step function", "a branching state-machine graph"},
-	{"lambda", "small serverless function cubes"},
-	{"bedrock", "a cloud inference engine node"},
-	{"cloudwatch", "a convergence/observability node collecting light-lines"},
-	{"dynamodb", "a fast key-value store node"},
-	{"s3", "a glowing object-storage cylinder with asset cards"},
-	{"efs", "a central shared-storage disc"},
-	{"sqs", "a message-queue pipe with buffered tokens"},
-	{"ec2", "an on-demand compute instance block"},
-	{"iam", "a security boundary ring enclosing isolated zones"},
-	{"api gateway", "an entry gateway node"},
-	{"ollama", "a compact local-inference engine node"},
-	{"n8n", "a chain of automation workflow nodes"},
-	{"github", "a source-repository node emitting a commit particle"},
-	{"webhook", "a triggering pulse into the system"},
-	{"claude", "an AI reasoning node"},
+	{"eventbridge", "a glowing hexagonal hub with light particles radiating outward"},
+	{"step functions", "a branching graph of small glowing nodes linked by thin lines"},
+	{"step function", "a branching graph of small glowing nodes linked by thin lines"},
+	{"lambda", "a cluster of small glowing cubes"},
+	{"bedrock", "a large luminous orb"},
+	{"cloudwatch", "a glowing node where many thin light lines converge"},
+	{"dynamodb", "a glowing hexagonal prism"},
+	{"s3", "a stack of glowing translucent layers"},
+	{"efs", "a single central glowing disc"},
+	{"sqs", "a row of glowing dots flowing along a channel"},
+	{"ec2", "a solid glowing rectangular block"},
+	{"iam", "a glowing circular boundary ring"},
+	{"api gateway", "a glowing arched portal node"},
+	{"ollama", "a small compact glowing node"},
+	{"n8n", "a chain of small glowing nodes linked in a row"},
+	{"github", "a glowing origin node emitting a single bright particle"},
+	{"webhook", "a bright pulse of light entering the frame"},
+	{"claude", "a softly pulsing spherical node"},
 }
 
 // detectServiceNodes returns a comma-joined list of wordless node descriptions
