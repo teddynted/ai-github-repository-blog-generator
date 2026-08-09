@@ -25,42 +25,49 @@ func dimsFor(aspect string) (w, h int) {
 func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string, durSec float64, animated bool) []string {
 	var inputs []string
 	var vf string
-	motion := "" // set when a Ken Burns move is applied (needs an explicit -t)
-	if animated && bgImage != "" {
-		// Loop the animated architecture diagram (its own motion) under the caption;
-		// -shortest bounds the clip to the narration.
+	bounded := false // clip must be bounded by an explicit -t (looped/zoompan video)
+	switch {
+	case animated && bgImage != "":
+		// Animated architecture diagram: loop it for the narration's length with NO
+		// caption overlaid (text lives only on cards, never over a visual).
+		// -stream_loop makes the video effectively infinite, so bound the clip to the
+		// narration with -t — relying on -shortest alone lets the looped video
+		// overshoot, which accumulates into trailing silence at the end of the video.
 		inputs = []string{"-stream_loop", "-1", "-i", bgImage}
-		vf = captionBand(captionFile, fontFile, w, h)
-	} else if bgImage != "" {
-		// Loop the scene image; give it a slow cinematic camera move (or a static
-		// cover crop when motion is off), then put the caption in a lower band so it
-		// stays readable over the image.
+		vf = ""
+		bounded = durSec > 0
+	case bgImage != "":
+		// Legacy still-image path (retained for parity; AI scene photos are no longer
+		// used). Loop the image with an optional Ken Burns move and a lower-third band.
 		inputs = []string{"-loop", "1", "-i", bgImage}
+		motion := ""
 		if move != "" && durSec > 0 {
-			// zoompan ignores -shortest, so span it over the exact narration length
-			// (frames = duration × 30fps) and bound the clip with -t below.
 			motion = motionFilter(move, w, h, int(durSec*30+0.5))
+			bounded = true // zoompan ignores -shortest
 		}
 		bg := motion
 		if bg == "" {
 			bg = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h)
 		}
 		vf = bg + "," + captionBand(captionFile, fontFile, w, h)
-	} else {
-		// No image: a proper title slide — deep-slate background with the scene
-		// title large and centred, so it reads as a designed slide, not a black card.
+	default:
+		// Clean full-screen CARD: deep-slate background with the scene's title/heading
+		// large and centred — a designed slide, not a black card. This is both the
+		// opening title card and every scene that names no service to diagram.
 		inputs = []string{"-f", "lavfi", "-i", sprintfColor(w, h)}
 		vf = titleCard(captionFile, fontFile, w, h)
 	}
 	args := []string{"-y"}
 	args = append(args, inputs...)
+	args = append(args, "-i", narrationMP3)
+	if vf != "" {
+		args = append(args, "-vf", vf)
+	}
 	args = append(args,
-		"-i", narrationMP3,
-		"-vf", vf,
 		"-c:v", "libx264", "-pix_fmt", "yuv420p",
 		"-c:a", "aac", "-b:a", "160k",
 	)
-	if motion != "" {
+	if bounded {
 		args = append(args, "-t", strconv.FormatFloat(durSec, 'f', 3, 64))
 	}
 	return append(args, "-shortest", out)

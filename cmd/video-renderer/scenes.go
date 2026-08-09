@@ -65,7 +65,11 @@ func optimizeForShort(scenes []scene) []scene {
 		if strings.TrimSpace(s.Narration) == "" {
 			continue
 		}
-		s.Title = shortCaption(s.Title)
+		// Captions are never overlaid on visuals: a scene is either a diagram (no
+		// text) or a full-screen title/heading CARD. So every scene's title is kept
+		// COMPLETE (never word-capped) — on a card it is the whole message, and on a
+		// diagram it is not shown at all.
+		s.Title = titleCaption(s.Title)
 		est := float64(len(strings.Fields(s.Narration)))/shortWordsPerSec + shortScenePadSec
 		if total+est > shortTargetSec && len(out) > 0 {
 			break
@@ -129,6 +133,23 @@ func shortCaption(title string) string {
 		}
 	}
 	return strings.Join(strings.Fields(t)[:shortCaptionMaxWords], " ")
+}
+
+// titleCaption keeps the opening title-card caption COMPLETE — it is never
+// word-capped like a content caption. It prefers the main title before a colon
+// or dash (dropping the subtitle, which reads awkwardly wrapped on a phone),
+// else the whole title. The renderer wraps it to the frame width.
+func titleCaption(title string) string {
+	t := strings.TrimSpace(title)
+	if t == "" {
+		return "Scene"
+	}
+	for _, sep := range []string{": ", " — ", " – ", " - "} {
+		if i := strings.Index(t, sep); i > 0 {
+			return strings.TrimSpace(t[:i])
+		}
+	}
+	return t
 }
 
 // withinCaption reports whether s is a non-empty caption within the word budget.
