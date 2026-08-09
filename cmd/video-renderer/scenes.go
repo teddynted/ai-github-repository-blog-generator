@@ -30,22 +30,87 @@ func scenesForFormat(format string, scriptJSON, storyboardJSON []byte) ([]scene,
 	switch format {
 	case "youtube-shorts":
 		if s := parseFormatScenes(scriptJSON, "shorts"); len(s) > 0 {
-			return s, nil
+			return optimizeForShort(s), nil
 		}
 	case "tiktok":
 		if s := parseFormatScenes(scriptJSON, "videos"); len(s) > 0 {
-			return s, nil
+			return optimizeForShort(s), nil
 		}
 	}
-	// youtube, or a fallback: the storyboard (capped for short formats).
+	// youtube, or a fallback: the storyboard.
 	sb, err := parseScenes(storyboardJSON)
 	if err != nil {
 		return nil, err
 	}
-	if format == "youtube-shorts" || format == "tiktok" {
-		sb = capScenes(sb, shortSceneCap)
+	if isShortFormat(format) {
+		return optimizeForShort(sb), nil
 	}
 	return sb, nil
+}
+
+func isShortFormat(format string) bool {
+	return format == "youtube-shorts" || format == "tiktok"
+}
+
+// optimizeForShort reshapes scenes for a vertical Short/TikTok cut: a fast,
+// retention-first video, not a cropped long-form one. Each scene's narration is
+// trimmed to a single punchy line and its caption to a few large-font words, then
+// scenes are kept only until the cut reaches the short-format duration target —
+// so the runtime lands near shortTargetSec instead of the full long-form length.
+func optimizeForShort(scenes []scene) []scene {
+	out := make([]scene, 0, len(scenes))
+	total := 0.0
+	for _, s := range scenes {
+		s.Narration = trimNarration(s.Narration, shortMaxNarrationWords)
+		if strings.TrimSpace(s.Narration) == "" {
+			continue
+		}
+		s.Title = shortCaption(s.Title)
+		est := float64(len(strings.Fields(s.Narration)))/shortWordsPerSec + shortScenePadSec
+		if total+est > shortTargetSec && len(out) > 0 {
+			break
+		}
+		out = append(out, s)
+		total += est
+	}
+	return out
+}
+
+// trimNarration keeps the first sentence of the narration, capped at maxWords, so
+// a short-format scene speaks one crisp idea in a few seconds.
+func trimNarration(narration string, maxWords int) string {
+	s := strings.TrimSpace(narration)
+	if s == "" {
+		return ""
+	}
+	// First sentence (up to the first ., !, or ?).
+	if i := strings.IndexAny(s, ".!?"); i >= 0 {
+		s = strings.TrimSpace(s[:i+1])
+	}
+	fields := strings.Fields(s)
+	if len(fields) > maxWords {
+		s = strings.Join(fields[:maxWords], " ")
+		s = strings.TrimRight(s, ",;:") + "."
+	}
+	return s
+}
+
+// shortCaption reduces a caption to at most shortCaptionMaxWords words, so it is
+// readable at a glance on a phone. A leading segment before ":" (the punchy part
+// of a "Hook: detail" heading) is preferred; a trailing "…" marks truncation.
+func shortCaption(title string) string {
+	t := strings.TrimSpace(title)
+	if t == "" {
+		return "Scene"
+	}
+	if i := strings.IndexByte(t, ':'); i > 0 && len(strings.Fields(t[:i])) <= shortCaptionMaxWords {
+		t = strings.TrimSpace(t[:i])
+	}
+	fields := strings.Fields(t)
+	if len(fields) > shortCaptionMaxWords {
+		t = strings.Join(fields[:shortCaptionMaxWords], " ") + "…"
+	}
+	return t
 }
 
 // unwrapArtifact unwraps the content suite's versioned envelope

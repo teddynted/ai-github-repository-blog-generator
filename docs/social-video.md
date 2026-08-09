@@ -57,7 +57,18 @@ concatenate → upload the final MP4 to `OUTPUT_S3_URI`.
 long-form plan its script references by scene index); `youtube-shorts` and
 `tiktok` render from their **own native vertical scripts** (`shorts[0].scenes` /
 `videos[0].scenes`), using each scene's on-screen `overlay` as the caption and
-falling back to a capped storyboard if the format script is missing.
+falling back to the storyboard if the format script is missing.
+
+**Short-format cut (Shorts / TikTok).** Vertical formats are re-cut for retention
+rather than cropped from the long-form: each scene's narration is trimmed to one
+punchy line (`shortMaxNarrationWords`) and its caption to a few large-font words
+(`shortCaptionMaxWords`), and scenes are kept only until the runtime reaches the
+`shortTargetSec` (~45s) target — so a Short lands near 45s, not the full long-form
+length.
+
+**Camera motion.** Each scene image gets a slow Ken Burns move (FFmpeg `zoompan`
+— dolly in/out, push in, drift), rotated per scene so consecutive scenes differ.
+On by default for image backgrounds; set `ENABLE_MOTION=false` for static frames.
 
 **Scene backgrounds.** Each scene gets exactly one background, chosen in this order:
 

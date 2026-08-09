@@ -12,7 +12,7 @@ import "fmt"
 // generator's prompt changes in a way that alters output character.
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
-	"blog":                      15, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
+	"blog":                      16, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
 	"architecture":              3,  // evergreen: "This design delivers ..." not "This release delivers ..."
 	"linkedin":                  2,
 	"x-thread":                  2,
@@ -31,7 +31,7 @@ var versions = map[string]int{
 	"seo-metadata":   3, // CTR title framing (problem->outcome, 50-65 chars) // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
-	"storyboard-scenes":    4, // SDXL quality suffix + structured prompt // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
+	"storyboard-scenes":    5, // content-driven subject (depict named services as iconography) + recognizable-not-abstract style // SDXL quality suffix + structured prompt // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
 }
 
 // For returns the prompt version string for a content kind (e.g. "blog@6").

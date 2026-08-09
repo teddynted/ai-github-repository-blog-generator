@@ -25,7 +25,7 @@ const SchemaVersion = "1.0.0"
 const ModelTarget = "stability-ai/sdxl"
 
 // SharedStylePrompt is the reusable style anchor prepended to every scene prompt.
-const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, layered infrastructure planes, clean geometric cloud architecture shapes, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, approachable, engineering-credible, generous negative space. Purely abstract and completely WORDLESS: no text, no words, no letters, no numbers, no labels, no captions, no writing, no UI, no dashboards, no logos, no watermarks of any kind — shapes and light only."
+const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, engineering-credible, generous negative space. Depict RECOGNIZABLE, stylized cloud-infrastructure iconography that evokes the subject — service nodes, event buses, message queues, serverless functions, compute instances, storage volumes, and the directional arrows and data/event flows connecting them. Completely WORDLESS: no text, no words, no letters, no numbers, no labels, no captions, no writing, no UI, no dashboards, no logos, no watermarks of any kind — convey meaning through iconography and flow, never through text."
 
 // SharedQualitySuffix is the mandatory cinematic quality modifier appended to
 // every SDXL prompt, so scene imagery reads as art-directed, enterprise-grade
@@ -128,19 +128,34 @@ func buildPrompt(sc storyboard.Scene, composition string) string {
 // video renderer produces the SAME prompts as the storyboard-scenes artifact,
 // keeping the spec and the rendered images consistent.
 func ScenePrompt(visual, sceneType, composition string) string {
-	subject := strings.TrimSpace(visual)
+	subject := cleanSubject(visual)
 	if subject == "" || mentionsTextOrLogo(subject) {
 		subject = metaphorFor(sceneType)
 	}
 	subject = trimToWords(subject, 45)
-	// Structured SDXL prompt: subject + style/environment/lighting/mood anchor +
-	// composition (camera framing) + the mandatory cinematic quality suffix.
-	prompt := SharedStylePrompt + " " + subject
+	// Frame the subject as a concept to ILLUSTRATE, so SDXL depicts the scene's
+	// actual services and their relationships (wordlessly) rather than a generic
+	// cityscape. Then the composition (framing) + the cinematic quality suffix.
+	prompt := SharedStylePrompt + " Illustrate this concept as cloud-service iconography and flows: " + subject + "."
 	if composition != "" {
 		prompt += " Composition: " + composition + "."
 	}
 	prompt += " " + SharedQualitySuffix + "."
 	return prompt
+}
+
+// cleanSubject strips storyboard boilerplate ("A supporting visual for: …" and a
+// trailing "Assets: …" editing note) so the SDXL subject is the scene's actual
+// concept (its title names the real services/ideas), not meta-noise.
+func cleanSubject(visual string) string {
+	s := strings.TrimSpace(visual)
+	for _, p := range []string{"A supporting visual for:", "A supporting visual for"} {
+		s = strings.TrimSpace(strings.TrimPrefix(s, p))
+	}
+	if i := strings.Index(s, "Assets:"); i >= 0 {
+		s = s[:i]
+	}
+	return strings.Trim(strings.TrimSpace(s), ".: ")
 }
 
 // ChooseComposition returns the rotated cinematic composition for a scene index
@@ -153,7 +168,7 @@ func ChooseComposition(release string, index int) string {
 // or logos, which SDXL should not render for these illustrations.
 func mentionsTextOrLogo(s string) bool {
 	l := strings.ToLower(s)
-	for _, kw := range []string{"logo", "title card", "release tag", "caption", "headline", "on-screen text", "text overlay", "label", "wordmark", "dashboard", "console", "terminal", "screen", "code snippet", "diagram text"} {
+	for _, kw := range []string{"logo", "title card", "release tag", "caption", "headline", "on-screen text", "text overlay", "wordmark"} {
 		if strings.Contains(l, kw) {
 			return true
 		}
