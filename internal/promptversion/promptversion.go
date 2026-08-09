@@ -18,7 +18,7 @@ var versions = map[string]int{
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
 	// model transforms + deterministic artifacts.
-	"storyboard": 2, // narrative arc: opening scene orients the viewer (release subject) before the hook; the LAST scene always lands a grounded close/CTA (not only "conclusion"-typed)
+	"storyboard": 2, // narrative arc: opening scene orients on the capability (what the system does, never "this release"/version/repo) before the hook; LAST scene always lands a grounded close/CTA; evergreen — narration never references the release/version/repository
 	// The storyboard-consuming stages are bumped in lockstep with storyboard@2: they
 	// carry the scene narration, so their produced content changes with the new arc.
 	// (The suite has no upstream→downstream staleness cascade, so an idempotent
