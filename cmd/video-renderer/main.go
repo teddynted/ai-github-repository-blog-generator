@@ -44,7 +44,7 @@ const (
 	// vertical cut with one crisp idea per scene, rather than a cropped long-form.
 	shortTargetSec         = 45.0 // total runtime target for a Short/TikTok cut
 	shortMaxNarrationWords = 15   // per-scene spoken words (≈ one punchy line)
-	shortCaptionMaxWords   = 5    // per-scene on-screen caption words (mobile-readable)
+	shortCaptionMaxWords   = 7    // per-scene on-screen caption words (mobile-readable; complete, never truncated)
 	shortWordsPerSec       = 2.6  // neural-Polly spoken pace, for duration estimates
 	shortScenePadSec       = 0.6  // per-scene silence/transition padding
 	maxPollyChars          = 2900 // stay within SynthesizeSpeech limits

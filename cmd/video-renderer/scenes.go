@@ -103,14 +103,38 @@ func shortCaption(title string) string {
 	if t == "" {
 		return "Scene"
 	}
-	if i := strings.IndexByte(t, ':'); i > 0 && len(strings.Fields(t[:i])) <= shortCaptionMaxWords {
-		t = strings.TrimSpace(t[:i])
+	// Prefer a COMPLETE clause — the segment before the first strong boundary
+	// (colon or dash) reads as a finished phrase, so the caption is never a
+	// dangling fragment.
+	for _, sep := range []string{": ", " — ", " – ", " - ", ": "} {
+		if i := strings.Index(t, sep); i > 0 {
+			if seg := strings.TrimSpace(t[:i]); withinCaption(seg) {
+				return seg
+			}
+		}
 	}
-	fields := strings.Fields(t)
-	if len(fields) > shortCaptionMaxWords {
-		t = strings.Join(fields[:shortCaptionMaxWords], " ") + "…"
+	if i := strings.IndexByte(t, ':'); i > 0 {
+		if seg := strings.TrimSpace(t[:i]); withinCaption(seg) {
+			return seg
+		}
 	}
-	return t
+	if withinCaption(t) {
+		return t
+	}
+	// Still too long: take the first whole clause up to a comma, else the first N
+	// words as a clean phrase — never a truncated "…".
+	if i := strings.IndexByte(t, ','); i > 0 {
+		if seg := strings.TrimSpace(t[:i]); withinCaption(seg) {
+			return seg
+		}
+	}
+	return strings.Join(strings.Fields(t)[:shortCaptionMaxWords], " ")
+}
+
+// withinCaption reports whether s is a non-empty caption within the word budget.
+func withinCaption(s string) bool {
+	n := len(strings.Fields(s))
+	return n > 0 && n <= shortCaptionMaxWords
 }
 
 // unwrapArtifact unwraps the content suite's versioned envelope

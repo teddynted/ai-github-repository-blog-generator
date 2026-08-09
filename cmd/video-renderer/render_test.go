@@ -195,6 +195,15 @@ func TestShortCaptionAndTrimNarration(t *testing.T) {
 	if c := shortCaption("Ollama → Bedrock: the fallback that never drops a request"); c != "Ollama → Bedrock" {
 		t.Errorf("caption = %q, want the pre-colon segment", c)
 	}
+	// Captions are COMPLETE — never a truncated "…", even for a long unbroken title.
+	for _, title := range []string{
+		"Turning A Long Unbroken Heading Into A Complete Caption Here Now",
+		"How A GitHub Webhook Becomes An Automated Agent Run End To End",
+	} {
+		if c := shortCaption(title); strings.Contains(c, "…") {
+			t.Errorf("caption must not be truncated with an ellipsis: %q", c)
+		}
+	}
 	n := trimNarration("This is the first sentence and it runs on with a great many words indeed. Second one here.", shortMaxNarrationWords)
 	if wc := len(strings.Fields(n)); wc > shortMaxNarrationWords {
 		t.Errorf("narration not trimmed: %d words %q", wc, n)
