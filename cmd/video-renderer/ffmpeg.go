@@ -14,20 +14,20 @@ func dimsFor(aspect string) (w, h int) {
 }
 
 // segmentArgs builds the ffmpeg args that render one scene into an MP4: a
-// background sized to the format (the rendered architecture diagram when bgImage
-// is set for a diagram scene, otherwise a solid colour), the scene caption
-// burned in via drawtext (read from a file to avoid escaping), and the narration
-// audio. -shortest makes the clip exactly as long as the narration.
+// background sized to the format (the AI-generated scene image when bgImage is
+// set, otherwise a deep-slate title slide), the scene caption burned in via
+// drawtext (read from a file to avoid escaping), and the narration audio.
+// -shortest makes the clip exactly as long as the narration.
 func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage string) []string {
 	var inputs []string
 	var vf string
 	if bgImage != "" {
-		// Loop the diagram image; cover the frame (scale up + centre-crop) then put
-		// the caption in a lower band so it stays readable over the diagram.
+		// Loop the scene image; cover the frame (scale up + centre-crop) then put
+		// the caption in a lower band so it stays readable over the image.
 		inputs = []string{"-loop", "1", "-i", bgImage}
 		vf = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h) + "," + captionBand(captionFile, fontFile, w, h)
 	} else {
-		// No diagram: a proper title slide — deep-slate background with the scene
+		// No image: a proper title slide — deep-slate background with the scene
 		// title large and centred, so it reads as a designed slide, not a black card.
 		inputs = []string{"-f", "lavfi", "-i", sprintfColor(w, h)}
 		vf = titleCard(captionFile, fontFile, w, h)
@@ -52,12 +52,6 @@ func titleFontsize(w, h int) int {
 		m = h
 	}
 	return m / 11
-}
-
-// rsvgArgs builds the rsvg-convert args that rasterize an SVG diagram to a PNG
-// sized to the format frame.
-func rsvgArgs(svg, png string, w, h int) []string {
-	return []string{"-w", itoa(w), "-h", itoa(h), "-o", png, svg}
 }
 
 // concatArgs builds the ffmpeg args that stitch the per-scene MP4s (listed in
@@ -90,7 +84,7 @@ func titleCard(captionFile, fontFile string, w, h int) string {
 }
 
 // captionBand renders the caption smaller in the lower third, for scenes that
-// have a diagram/image background (kept legible with a stronger box).
+// have an image background (kept legible with a stronger box).
 func captionBand(captionFile, fontFile string, w, h int) string {
 	fs := titleFontsize(w, h) * 2 / 3
 	y := (h * 74) / 100

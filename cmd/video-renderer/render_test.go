@@ -135,7 +135,7 @@ func TestDimsFor(t *testing.T) {
 	}
 }
 
-func TestSegmentArgsColorAndDiagramBackground(t *testing.T) {
+func TestSegmentArgsColorAndImageBackground(t *testing.T) {
 	// No background image → solid colour source.
 	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "")
 	joined := strings.Join(seg, " ")
@@ -150,14 +150,14 @@ func TestSegmentArgsColorAndDiagramBackground(t *testing.T) {
 		t.Errorf("segment args missing io: %v", seg)
 	}
 
-	// With a diagram background → loop the image, cover-crop it, then caption.
-	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/diagram.png")
+	// With a scene image background → loop the image, cover-crop it, then caption.
+	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/scene_bg.png")
 	dj := strings.Join(dseg, " ")
-	if !slices.Contains(dseg, "/w/diagram.png") || strings.Contains(dj, "color=c=") {
-		t.Errorf("diagram bg not used: %v", dseg)
+	if !slices.Contains(dseg, "/w/scene_bg.png") || strings.Contains(dj, "color=c=") {
+		t.Errorf("image bg not used: %v", dseg)
 	}
 	if !strings.Contains(dj, "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080") {
-		t.Errorf("diagram cover-crop filter missing: %v", dseg)
+		t.Errorf("image cover-crop filter missing: %v", dseg)
 	}
 }
 
@@ -187,31 +187,15 @@ func TestConcatArgs(t *testing.T) {
 	}
 }
 
-func TestDiagramURIFromStoryboard(t *testing.T) {
-	in := "s3://b/generated-content/acme/widget/releases/v1.0.0/.artifacts/storyboard.json"
-	want := "s3://b/generated-content/acme/widget/releases/v1.0.0/architecture-diagram.svg"
-	if got := diagramURIFromStoryboard(in); got != want {
-		t.Errorf("diagram uri = %q, want %q", got, want)
-	}
-	if got := diagramURIFromStoryboard("s3://b/some/other/key.json"); got != "" {
-		t.Errorf("unexpected uri for non-storyboard key: %q", got)
-	}
-}
-
 func TestVisualTextReadsBothShapes(t *testing.T) {
 	// Short-format "visual" string.
 	if got := visualText(rawScene{Visual: "Show the CLI command."}); got != "Show the CLI command." {
 		t.Errorf("short-format visual = %q", got)
 	}
 	// Storyboard "visuals" object with a description (the YouTube path).
-	sb := rawScene{Visuals: json.RawMessage(`{"description":"The architecture diagram: build the graph edge by edge."}`)}
-	if got := visualText(sb); got != "The architecture diagram: build the graph edge by edge." {
+	sb := rawScene{Visuals: json.RawMessage(`{"description":"An isometric render of services exchanging events."}`)}
+	if got := visualText(sb); got != "An isometric render of services exchanging events." {
 		t.Errorf("storyboard visuals = %q", got)
-	}
-	// A storyboard scene whose visuals call for the diagram must want it, even
-	// though short-format-style Type is absent — this is the YouTube fix.
-	if !collectOne(sb).wantsDiagram() {
-		t.Error("storyboard scene with a diagram 'visuals' description should want the diagram")
 	}
 	// Tolerant of a bare string / array; empty when absent.
 	if got := visualText(rawScene{Visuals: json.RawMessage(`"just a string"`)}); got != "just a string" {
@@ -219,53 +203,6 @@ func TestVisualTextReadsBothShapes(t *testing.T) {
 	}
 	if got := visualText(rawScene{}); got != "" {
 		t.Errorf("no direction should be empty, got %q", got)
-	}
-}
-
-// collectOne runs a single rawScene (with a narration) through collect so the
-// scene is populated exactly as the renderer builds it.
-func collectOne(s rawScene) scene {
-	s.Narration = "n"
-	return collect([]rawScene{s})[0]
-}
-
-func TestWantsDiagram(t *testing.T) {
-	// Long-form storyboard: the scene Type drives it.
-	for _, ty := range []string{"architecture", "diagram"} {
-		if !(scene{Type: ty}).wantsDiagram() {
-			t.Errorf("%q should want the diagram", ty)
-		}
-	}
-	for _, ty := range []string{"introduction", "conclusion", ""} {
-		if (scene{Type: ty}).wantsDiagram() {
-			t.Errorf("%q should not want the diagram", ty)
-		}
-	}
-	// Short formats carry no Type — the "visual" direction is the signal.
-	for _, v := range []string{
-		"Build the architecture diagram node by node.",
-		"Show the component topology.",
-		"Animate the data flow between services.",
-	} {
-		if !(scene{Visual: v}).wantsDiagram() {
-			t.Errorf("visual %q should want the diagram", v)
-		}
-	}
-	for _, v := range []string{
-		"Show the CLI command being typed.",
-		"Zoom into the terminal output.",
-		"",
-	} {
-		if (scene{Visual: v}).wantsDiagram() {
-			t.Errorf("visual %q should NOT want the diagram", v)
-		}
-	}
-}
-
-func TestRsvgArgs(t *testing.T) {
-	got := rsvgArgs("/w/d.svg", "/w/d.png", 1920, 1080)
-	if strings.Join(got, " ") != "-w 1920 -h 1080 -o /w/d.png /w/d.svg" {
-		t.Errorf("rsvg args = %v", got)
 	}
 }
 

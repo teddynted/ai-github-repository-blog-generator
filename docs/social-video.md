@@ -61,25 +61,23 @@ falling back to a capped storyboard if the format script is missing.
 
 **Scene backgrounds.** Each scene gets exactly one background, chosen in this order:
 
-1. **Architecture diagram** — when the scene calls for one (its storyboard `type`
-   is `architecture`/`diagram`, or its on-screen `visual` direction names a
-   diagram/architecture/topology/data-flow visual — the latter is how short
-   formats get the diagram too). The renderer fetches the release's
-   `architecture-diagram.svg` (emitted by the content suite — the M15 stage falls
-   back to the M11 architecture collection's rendered SVG so it is present even
-   when the diagram-spec is thin), rasterizes it once with `rsvg-convert`, and
-   cover-crops it behind a caption band.
-2. **AI-generated scene image** — for non-diagram scenes, when `ENABLE_SCENE_IMAGES`
-   is on. The renderer generates a picture from the scene's `visual` direction
-   using the **canonical `storyboardscenes.ScenePrompt`** (the same prompt logic
-   the `storyboard-scenes` artifact uses: shared brand style + focal subject /
-   grounded metaphor + a rotated cinematic composition). The backend is
-   **Replicate** (FLUX.1 [schnell] by default, or SDXL) when a token is
-   configured, else Amazon Bedrock **Nova Canvas**. See [image backends](#41-scene-image-backends).
-3. **Deep-slate title slide** — the fallback for every scene: a `#0F172A`
-   background with the scene title large and centred. Any image/diagram miss
-   (throttle, disabled, no diagram) degrades to this, so a render never fails on
-   a visual.
+1. **AI-generated scene image** — when `ENABLE_SCENE_IMAGES` is on. The renderer
+   generates a picture for *every* scene from its `visual` direction using the
+   **canonical `storyboardscenes.ScenePrompt`** (the same prompt logic the
+   `storyboard-scenes` artifact uses: shared brand style + focal subject /
+   grounded metaphor + a rotated cinematic composition). Scenes whose direction
+   is diagram/text/logo-centric resolve to a grounded *metaphor* image for their
+   type, so they still get real imagery. The backend is **Replicate** (FLUX.1
+   [schnell] by default, or SDXL) when a token is configured, else Amazon Bedrock
+   **Nova Canvas**. See [image backends](#41-scene-image-backends).
+2. **Deep-slate title slide** — the fallback for every scene: a `#0F172A`
+   background with the scene title large and centred. Any image miss (throttle,
+   disabled, backend error) degrades to this, so a render never fails on a visual.
+
+> The architecture diagram is **not** used as a video background — it rendered
+> poorly as a full-frame image, so scenes use AI imagery instead. The
+> `architecture-diagram.svg` artifact is still produced by the content suite for
+> other consumers (blog/docs); the renderer simply no longer fetches it.
 
 **Idempotency.** Before doing any Polly/FFmpeg work, the renderer `HeadObject`s
 `OUTPUT_S3_URI`; if the MP4 already exists it skips and exits successfully, so a
@@ -87,8 +85,8 @@ re-run reuses existing videos. Set `FORCE_RENDER=true` (or delete the MP4) to
 regenerate — e.g. after a renderer change.
 
 > **Remaining follow-ups:** **music / branded intro-outro** (needs bundled static
-> assets). Per-scene AI imagery, diagram backgrounds, title slides, per-format
-> scripts, captions, and idempotency are implemented.
+> assets). Per-scene AI imagery, title slides, per-format scripts, captions, and
+> idempotency are implemented.
 
 ---
 
@@ -118,7 +116,7 @@ Scripts are read from the content bucket's existing artifact layout
 | `ENABLE_VIDEO=true` | repo variable | Deploys the video stack + wires the release run to it |
 | `RendererImageTag` | video stack param | Renderer image tag (deploy passes the commit SHA) |
 | `TaskCpu` / `TaskMemory` | video stack params | Fargate size (default 2 vCPU / 8 GB) |
-| `ENABLE_SCENE_IMAGES=true` | repo variable → `EnableSceneImages` param → renderer env | Turn on AI images for non-diagram scenes (default off) |
+| `ENABLE_SCENE_IMAGES=true` | repo variable → `EnableSceneImages` param → renderer env | Turn on AI images for every scene (default off) |
 | `REPLICATE_TOKEN_SECRET_ARN` | repo variable → `ReplicateTokenSecretArn` param | Secrets Manager ARN of a Replicate API token; injected as the `REPLICATE_API_TOKEN` container secret |
 | `REPLICATE_IMAGE_MODEL` | repo variable → `ReplicateImageModel` param | Replicate model `owner/name` (default `black-forest-labs/flux-schnell`; e.g. `stability-ai/sdxl`) |
 | `FORCE_RENDER=true` | renderer env | Bypass the already-exists skip and regenerate |
