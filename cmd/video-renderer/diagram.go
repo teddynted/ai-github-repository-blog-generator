@@ -20,15 +20,20 @@ import (
 // no hallucinated content and no garbled in-image text.
 func diagramBackground(ctx context.Context, sc scene, work string, w, h int) string {
 	text := strings.Join([]string{sc.Title, sc.Narration, sc.Visual}, " ")
-	// A diagram needs a RELATIONSHIP to show — at least two connected components.
-	// A scene that names a single component (common when a short-format narration is
-	// trimmed) would render as one floating icon, so fall back to the heading card.
+	// A diagram needs a RELATIONSHIP to show — at least two connected components. A
+	// scene that names a single component (common when a short-format narration is
+	// trimmed) is expanded with that component's canonical neighbors so it still
+	// forms a meaningful flow (e.g. OpenClaw → Ollama → Bedrock) rather than a lone
+	// tile; only a lone component with no neighbors falls back to the heading card.
 	keys := scenediagram.Detect(text, 4)
+	if len(keys) < 2 {
+		keys = scenediagram.WithNeighbors(keys)
+	}
 	if len(keys) < 2 {
 		return ""
 	}
 	return animatedDiagram(ctx, fmt.Sprintf("scene_%d", sc.Number), work, w, h,
-		func(phase float64) string { return scenediagram.SVG(text, w, h, phase) }, keys)
+		func(phase float64) string { return scenediagram.Compose(keys, w, h, phase) }, keys)
 }
 
 // overviewMaxNodes caps the opening overview so the hero spine stays legible on a
