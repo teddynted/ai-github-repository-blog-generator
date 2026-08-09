@@ -145,6 +145,11 @@ func run(ctx context.Context) error {
 	log.Printf("rendering %s: %d scenes at %dx%d", format, len(scenes), w, h)
 
 	// Per-scene: narration (Polly) + caption + segment.
+	// The opening scene is a SYSTEM-OVERVIEW diagram of the release's architecture
+	// (the flow-ordered hero spine collected across all scenes), so the video opens
+	// on the whole system rather than a plain title card.
+	ovKeys := overviewKeys(scenes)
+
 	var listBuf bytes.Buffer
 	for _, sc := range scenes {
 		mp3 := filepath.Join(work, fmt.Sprintf("scene_%d.mp3", sc.Number))
@@ -159,13 +164,17 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
-		// Background: a deterministic architecture diagram built from the services
-		// the scene names (animated flow, no caption overlaid); otherwise a clean
-		// full-screen CARD (the title/heading centred on brand slate). No AI photos,
-		// and text never sits over a visual. The opening TITLE scene is always a card.
+		// Background: the opening scene is the system-overview diagram (hero spine);
+		// every other scene is a diagram built from the services it names (animated
+		// flow, no caption overlaid). A scene that composes no diagram is a clean
+		// full-screen CARD (title/heading centred on brand slate) — no AI photos, and
+		// text never sits over a visual.
 		var bg string
 		isDiagram := false
-		if !strings.EqualFold(sc.Type, "title") {
+		if strings.EqualFold(sc.Type, "title") {
+			bg = overviewBackground(ctx, ovKeys, work, w, h)
+			isDiagram = bg != ""
+		} else {
 			bg = diagramBackground(ctx, sc, work, w, h)
 			isDiagram = bg != ""
 		}
