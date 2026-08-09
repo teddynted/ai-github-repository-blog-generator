@@ -12,9 +12,76 @@
 package scenediagram
 
 import (
+	"embed"
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+// icons holds the official AWS Architecture Icons (64px SVGs) for the services we
+// diagram. They are embedded into the binary so the renderer needs no runtime
+// asset fetch. Non-AWS nodes (GitHub, Ollama, n8n, Claude, webhook) keep the
+// stylized glyphs in catalog.
+//
+//go:embed icons/*.svg
+var icons embed.FS
+
+// iconFile maps a detected component key to its embedded official-icon filename.
+var iconFile = map[string]string{
+	"eventbridge":    "eventbridge",
+	"step functions": "stepfunctions",
+	"sqs":            "sqs",
+	"api gateway":    "apigateway",
+	"lambda":         "lambda",
+	"ec2":            "ec2",
+	"bedrock":        "bedrock",
+	"s3":             "s3",
+	"efs":            "efs",
+	"dynamodb":       "dynamodb",
+	"cloudwatch":     "cloudwatch",
+	"iam":            "iam",
+}
+
+var idAttr = regexp.MustCompile(`id="([^"]+)"`)
+var idRef = regexp.MustCompile(`url\(#([^)]+)\)`)
+var hrefRef = regexp.MustCompile(`(xlink:href|href)="#([^"]+)"`)
+
+// officialIcon returns the inner SVG of a service's official AWS icon, with all
+// internal ids namespaced by prefix so composing several icons (or the same icon
+// twice) into one document never collides. Returns false for non-AWS components.
+func officialIcon(key, prefix string) (string, bool) {
+	f, ok := iconFile[key]
+	if !ok {
+		return "", false
+	}
+	raw, err := icons.ReadFile("icons/" + f + ".svg")
+	if err != nil {
+		return "", false
+	}
+	s := innerSVG(string(raw))
+	s = idAttr.ReplaceAllString(s, `id="`+prefix+`$1"`)
+	s = idRef.ReplaceAllString(s, `url(#`+prefix+`$1)`)
+	s = hrefRef.ReplaceAllString(s, `$1="#`+prefix+`$2"`)
+	return s, true
+}
+
+// innerSVG returns the content between the outer <svg …> and </svg>.
+func innerSVG(s string) string {
+	i := strings.Index(s, "<svg")
+	if i < 0 {
+		return ""
+	}
+	j := strings.Index(s[i:], ">")
+	if j < 0 {
+		return ""
+	}
+	start := i + j + 1
+	end := strings.LastIndex(s, "</svg>")
+	if end < start {
+		return ""
+	}
+	return s[start:end]
+}
 
 // Brand palette (matches the renderer's deep-slate title card and caption band).
 const (
@@ -164,12 +231,28 @@ func SVG(text string, w, h int) string {
 	for i := 0; i+1 < n; i++ {
 		b.WriteString(arrow(cx[i], cy[i], cx[i+1], cy[i+1], tileSize/2))
 	}
-	// tiles
+	// tiles: official AWS icon where we have one, else the stylized glyph
 	for i, k := range keys {
-		b.WriteString(drawTile(cx[i], cy[i], tileSize, catalog[k]))
+		b.WriteString(drawNode(i, cx[i], cy[i], tileSize, k))
 	}
 	b.WriteString(`</svg>`)
 	return b.String()
+}
+
+// drawNode renders one node: the official AWS icon (rounded-clipped, on the
+// scene) when available, otherwise the stylized fallback tile.
+func drawNode(i, cx, cy, size int, key string) string {
+	if inner, ok := officialIcon(key, fmt.Sprintf("n%d_", i)); ok {
+		x, y := cx-size/2, cy-size/2
+		rad := size / 6
+		clip := fmt.Sprintf("clip%d", i)
+		return fmt.Sprintf(
+			`<g><defs><clipPath id="%s"><rect x="%d" y="%d" width="%d" height="%d" rx="%d"/></clipPath></defs>`+
+				`<g clip-path="url(#%s)"><svg x="%d" y="%d" width="%d" height="%d" viewBox="0 0 80 80" preserveAspectRatio="xMidYMid meet">%s</svg></g>`+
+				`<rect x="%d" y="%d" width="%d" height="%d" rx="%d" fill="none" stroke="%s" stroke-width="3"/></g>`,
+			clip, x, y, size, size, rad, clip, x, y, size, size, inner, x, y, size, size, rad, stroke)
+	}
+	return drawTile(cx, cy, size, catalog[key])
 }
 
 // arrow draws a glowing flow line + arrowhead from node a to node b, trimmed so
