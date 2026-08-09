@@ -191,25 +191,14 @@ func canonical(key string) string {
 // Has reports whether text names at least one component we can diagram.
 func Has(text string) bool { return len(Detect(text, 1)) > 0 }
 
-// neighbors gives a component its canonical related nodes, so a scene that names
-// only that one component still renders a meaningful flow instead of a lone tile.
-var neighbors = map[string][]string{
-	"openclaw": {"ollama", "bedrock"}, // the orchestrator's primary→fallback inference
-}
-
-// WithNeighbors expands a single-component set with that component's canonical
-// neighbors (see neighbors) so it can form a diagram — e.g. ["openclaw"] becomes
-// ["openclaw","ollama","bedrock"]. Multi-component sets, and lone components with
-// no defined neighbors, are returned unchanged.
-func WithNeighbors(keys []string) []string {
-	if len(keys) != 1 {
-		return keys
+// FlowRank returns a component's architectural role rank (source→sink; see
+// flowRank). Unknown components rank last. Exported so callers can order a set of
+// components into a coherent flow without hardcoding relationships.
+func FlowRank(key string) int {
+	if r, ok := flowRank[key]; ok {
+		return r
 	}
-	nb, ok := neighbors[keys[0]]
-	if !ok {
-		return keys
-	}
-	return append([]string{keys[0]}, nb...)
+	return 99
 }
 
 // SVG builds the full scene-background SVG (w×h) for the components named in

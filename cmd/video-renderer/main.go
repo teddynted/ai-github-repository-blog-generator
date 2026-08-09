@@ -149,6 +149,9 @@ func run(ctx context.Context) error {
 	// (the flow-ordered hero spine collected across all scenes), so the video opens
 	// on the whole system rather than a plain title card.
 	ovKeys := overviewKeys(scenes)
+	// Component adjacency from the release's own content, so a lone-component scene
+	// expands into a real flow without hardcoded per-repo relationships.
+	adj := coOccurrence(scenes)
 
 	var listBuf bytes.Buffer
 	for _, sc := range scenes {
@@ -175,7 +178,7 @@ func run(ctx context.Context) error {
 			bg = overviewBackground(ctx, ovKeys, work, w, h)
 			isDiagram = bg != ""
 		} else {
-			bg = diagramBackground(ctx, sc, work, w, h)
+			bg = diagramBackground(ctx, sc, work, w, h, adj)
 			isDiagram = bg != ""
 		}
 		// A diagram's looped video is bounded to the narration with -t (zoompan and
