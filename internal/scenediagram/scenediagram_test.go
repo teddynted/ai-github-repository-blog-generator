@@ -22,7 +22,7 @@ func TestDetectOrdersByAppearanceAndDedups(t *testing.T) {
 }
 
 func TestSVGContainsNodesOrEmpty(t *testing.T) {
-	svg := SVG("EventBridge triggers Lambda", 1080, 1920)
+	svg := SVG("EventBridge triggers Lambda", 1080, 1920, 0)
 	if !strings.HasPrefix(svg, "<svg") || !strings.Contains(svg, "</svg>") {
 		t.Fatalf("not an svg: %.40q", svg)
 	}
@@ -34,14 +34,14 @@ func TestSVGContainsNodesOrEmpty(t *testing.T) {
 	if !strings.Contains(svg, "#ED7100") {
 		t.Errorf("expected Lambda official compute-orange in svg")
 	}
-	if Has("just some prose with no services") || SVG("no services here", 1080, 1920) != "" {
+	if Has("just some prose with no services") || SVG("no services here", 1080, 1920, 0) != "" {
 		t.Errorf("expected empty diagram when nothing is detected")
 	}
 }
 
 func TestOfficialIconIDsAreNamespaced(t *testing.T) {
 	// The same icon twice in one scene must not produce duplicate ids.
-	svg := SVG("Lambda calls another Lambda... and one more Lambda", 1080, 1920)
+	svg := SVG("Lambda calls another Lambda... and one more Lambda", 1080, 1920, 0)
 	if strings.Contains(svg, `id="Icon-Architecture`) {
 		t.Errorf("official icon ids must be namespaced, not raw")
 	}
