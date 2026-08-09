@@ -76,6 +76,23 @@ func scenesForFormat(format string, scriptJSON, storyboardJSON []byte) ([]scene,
 	return sb, nil
 }
 
+// unwrapArtifact unwraps the content suite's versioned envelope
+// ({"promptVersion":"stage@N","artifact":{…}}) to the inner artifact bytes, so
+// the renderer sees the same bare shape whether the artifact was written by the
+// new versioned store or the legacy pipeline. Bare artifacts (no promptVersion)
+// pass through unchanged, keeping older releases (e.g. pre-envelope content)
+// renderable.
+func unwrapArtifact(raw []byte) []byte {
+	var env struct {
+		PromptVersion string          `json:"promptVersion"`
+		Artifact      json.RawMessage `json:"artifact"`
+	}
+	if err := json.Unmarshal(raw, &env); err == nil && env.PromptVersion != "" && len(env.Artifact) > 0 {
+		return env.Artifact
+	}
+	return raw
+}
+
 // parseScenes extracts the ordered scene list from a storyboard.json artifact
 // (see internal/storyboard). Scenes with empty narration are skipped; a blank
 // title falls back to "Scene".
@@ -83,7 +100,7 @@ func parseScenes(storyboardJSON []byte) ([]scene, error) {
 	var sb struct {
 		Scenes []rawScene `json:"scenes"`
 	}
-	if err := json.Unmarshal(storyboardJSON, &sb); err != nil {
+	if err := json.Unmarshal(unwrapArtifact(storyboardJSON), &sb); err != nil {
 		return nil, err
 	}
 	return collect(sb.Scenes), nil
@@ -97,7 +114,7 @@ func parseFormatScenes(scriptJSON []byte, collectionKey string) []scene {
 		return nil
 	}
 	var doc map[string]json.RawMessage
-	if err := json.Unmarshal(scriptJSON, &doc); err != nil {
+	if err := json.Unmarshal(unwrapArtifact(scriptJSON), &doc); err != nil {
 		return nil
 	}
 	var items []struct {
