@@ -25,10 +25,10 @@ const SchemaVersion = "1.0.0"
 const ModelTarget = "stability-ai/sdxl"
 
 // SharedStylePrompt is the reusable style anchor prepended to every scene prompt.
-const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, layered infrastructure planes, clean geometric cloud architecture shapes, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, approachable, engineering-credible, generous negative space, no text, no logos, no watermarks."
+const SharedStylePrompt = "Flat-vector technical illustration, subtle isometric depth, layered infrastructure planes, clean geometric cloud architecture shapes, dark navy gradient background, faint grid texture, AWS-inspired engineering aesthetic, soft directional lighting, gentle rim light, crisp edges, modern, confident, approachable, engineering-credible, generous negative space. Purely abstract and completely WORDLESS: no text, no words, no letters, no numbers, no labels, no captions, no writing, no UI, no dashboards, no logos, no watermarks of any kind — shapes and light only."
 
 // SharedNegativePrompt is the reusable negative prompt applied to every scene.
-const SharedNegativePrompt = "text, letters, numbers, logos, watermarks, signatures, blurry details, clutter, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
+const SharedNegativePrompt = "text, words, letters, numbers, labels, captions, writing, typography, lettering, alphanumeric characters, gibberish text, fake text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, blurry details, clutter, excessive visual noise, photorealistic humans, distorted infrastructure, tangled connectors, low resolution, unreadable shapes"
 
 // compositions are the cinematic layouts scenes rotate through so consecutive
 // scenes are visually distinct.
@@ -38,7 +38,7 @@ var compositions = []string{
 	"diagonal event cascade",
 	"layered infrastructure stack",
 	"radial event burst",
-	"observability control room",
+	"layered observability planes",
 	"immutable infrastructure pipeline",
 }
 
@@ -145,7 +145,7 @@ func ChooseComposition(release string, index int) string {
 // or logos, which SDXL should not render for these illustrations.
 func mentionsTextOrLogo(s string) bool {
 	l := strings.ToLower(s)
-	for _, kw := range []string{"logo", "title card", "release tag", "caption", "headline", "on-screen text", "text overlay", "label", "wordmark"} {
+	for _, kw := range []string{"logo", "title card", "release tag", "caption", "headline", "on-screen text", "text overlay", "label", "wordmark", "dashboard", "console", "terminal", "screen", "code snippet", "diagram text"} {
 		if strings.Contains(l, kw) {
 			return true
 		}

@@ -31,7 +31,7 @@ var versions = map[string]int{
 	"seo-metadata":   2, // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
-	"storyboard-scenes":    2, // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
+	"storyboard-scenes":    3, // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
 }
 
 // For returns the prompt version string for a content kind (e.g. "blog@6").
