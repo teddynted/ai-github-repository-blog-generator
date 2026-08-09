@@ -11,6 +11,6 @@ func thumbnailStyle(c candidate, b Branding) Style {
 		Mood:           "high-energy, credible, click-worthy without being clickbait",
 		ColorPalette:   palette(b),
 		Style:          "bold flat vector with subtle depth, high contrast, " + b.IllustrationStyle,
-		TechnicalFocus: firstNonEmpty(c.Focus, "the release at a glance"),
+		TechnicalFocus: firstNonEmpty(c.Focus, "the system at a glance"),
 	}
 }

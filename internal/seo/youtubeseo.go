@@ -9,7 +9,7 @@ import "strings"
 func planYouTube(pkg ReleasePackage, k Keywords) YouTubeSEO {
 	ci := pkg.YouTube.ContentIntelligence
 
-	title := firstNonEmpty(ci.SuggestedTitle, pkg.YouTube.Video.Title, repoShortName(pkg)+" "+releaseTag(pkg)+" — Full Walkthrough")
+	title := firstNonEmpty(ci.SuggestedTitle, pkg.YouTube.Video.Title, "An AWS Architecture — Full Walkthrough")
 	title = shortenYouTubeTitle(title)
 
 	desc := firstNonEmpty(ci.SuggestedDescription, summary(pkg))
@@ -110,9 +110,11 @@ func releaseTagUpper(pkg ReleasePackage) string {
 	return up
 }
 
-func defaultPinned(pkg ReleasePackage) string {
-	return "📌 Everything in this video is generated from " + repoShortName(pkg) + " " + releaseTag(pkg) +
-		"'s own Release Context. Repo + docs in the description. What should the next deep dive cover?"
+func defaultPinned(_ ReleasePackage) string {
+	// Evergreen: no repo/version in the pinned comment; the repo link lives in the
+	// description.
+	return "📌 Everything in this video is generated from the project's own release analysis. " +
+		"Repo + docs in the description. What should the next deep dive cover?"
 }
 
 // shortenYouTubeTitle keeps a YouTube title within the preferred display length

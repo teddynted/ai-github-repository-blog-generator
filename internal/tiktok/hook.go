@@ -64,6 +64,6 @@ func hookPrompt(topicLabel, draft string) string {
 		"You are writing the opening hook (first 2–3 seconds, spoken) of a fast-paced educational TikTok for "+
 			"software engineers. Topic: %s.\n\n"+
 			"Rewrite the DRAFT into ONE scroll-stopping spoken line. Native to TikTok, confident, but NOT misleading "+
-			"or exaggerated. Use ONLY the facts in the draft — invent nothing. Output only the hook line.\n\nDRAFT:\n%s",
+			"or exaggerated. Use ONLY the facts in the draft — invent nothing."+evergreenRule+" Output only the hook line.\n\nDRAFT:\n%s",
 		topicLabel, draft)
 }

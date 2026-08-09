@@ -152,17 +152,16 @@ func TestDiscoveryAdaptsShorts(t *testing.T) {
 func TestDiscoveryFallbackWithoutShorts(t *testing.T) {
 	pkg := samplePackage()
 	pkg.Shorts = shorts.ShortsCollection{} // no shorts → must mine
-	// Give it a YouTube chapter to mine.
 	cands := discover(pkg, 6)
-	// At minimum the statistic candidate is grounded from commit/file stats.
-	var sawStat bool
+	// The commit/file-count "Interesting Statistic" angle is retired for evergreen
+	// body copy — discovery must never surface a raw changelog statistic, even as a
+	// last-resort fallback (a release with nothing else groundable is skipped, which
+	// is the healthy graceful-degradation outcome). Substantive mining of chapters
+	// and callouts is covered by TestFallbackMinesChaptersAndCallouts.
 	for _, c := range cands {
-		if c.Topic == "Interesting Statistic" && strings.Contains(c.Seed, "9") {
-			sawStat = true
+		if c.Topic == "Interesting Statistic" {
+			t.Errorf("statistic angle should be retired for evergreen copy, got: %+v", c)
 		}
-	}
-	if !sawStat {
-		t.Errorf("fallback should still yield a grounded statistic: %+v", cands)
 	}
 }
 

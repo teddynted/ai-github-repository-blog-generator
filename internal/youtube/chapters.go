@@ -97,7 +97,7 @@ func chapterPrompt(title, typ, base string) string {
 			"Chapter: %q (type: %s).\n\n"+
 			"Expand the NOTES below into engaging, spoken teaching narration — an experienced engineer explaining "+
 			"to a peer. Keep it accurate and on-topic, roughly 3–6 sentences. Use ONLY the facts in the notes; do NOT "+
-			"invent architecture, numbers, or file names. Output only the narration.\n\nNOTES:\n%s",
+			"invent architecture, numbers, or file names."+evergreenRule+" Output only the narration.\n\nNOTES:\n%s",
 		title, typ, base)
 }
 

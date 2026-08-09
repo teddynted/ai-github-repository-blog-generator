@@ -16,10 +16,15 @@ const SDXLModelTarget = "stability-ai/sdxl"
 // best at a clear subject + composition, not adjective stacking).
 const SharedSDXLStylePrompt = "Polished flat-vector technical illustration, subtle isometric depth, clean geometric cloud-infrastructure shapes, layered flat planes with soft drop shadows, dark navy gradient background with faint grid texture, high contrast using #0B1F33, #12263A, #FF9900, and #4F9DFF, modern AWS-native engineering aesthetic, generous negative space, crisp edges, minimal clutter, no photorealistic people, no text, no logos, no watermarks."
 
+// SharedSDXLQualitySuffix is the mandatory cinematic quality modifier appended
+// to every SDXL asset prompt so the output reads as art-directed, enterprise
+// production work rather than a generic render.
+const SharedSDXLQualitySuffix = "cinematic lighting, volumetric depth, soft global illumination, crisp clean vector edges, ultra-detailed, professional enterprise technical illustration, high production value, art-directed color grading, sharp focus, 4k, award-winning design"
+
 // SharedSDXLNegativePrompt is the reusable negative prompt applied to every
 // asset — focused, so SDXL avoids the specific failure modes that hurt these
 // illustrations.
-const SharedSDXLNegativePrompt = "text, letters, numbers, words, logos, watermarks, signatures, clutter, excessive visual noise, distorted perspective, low resolution, blurry details, photorealistic humans, unrelated cloud services, busy background, tangled connectors, unreadable shapes"
+const SharedSDXLNegativePrompt = "text, words, letters, numbers, labels, captions, writing, typography, lettering, gibberish text, UI text, screen text, dashboards, terminal text, code, source code, logos, watermarks, signatures, clutter, cluttered, low detail, excessive visual noise, distorted perspective, low resolution, blurry, blurry details, photorealistic humans, unrelated cloud services, busy background, tangled connectors, unreadable shapes"
 
 // SDXLParams are the Replicate stability-ai/sdxl generation parameters for one
 // asset. The JSON tags mirror the Replicate input names so the block can be fed

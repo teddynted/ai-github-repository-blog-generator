@@ -14,6 +14,6 @@ func bannerStyle(c candidate, b Branding) Style {
 		Mood:           "celebratory but professional, confident release energy",
 		ColorPalette:   palette(b),
 		Style:          "bold flat vector with layered depth, " + b.IllustrationStyle,
-		TechnicalFocus: firstNonEmpty(c.Focus, "the release"),
+		TechnicalFocus: firstNonEmpty(c.Focus, "the system"),
 	}
 }

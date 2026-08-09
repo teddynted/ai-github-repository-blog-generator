@@ -58,7 +58,7 @@ func introPrompt(draft string, agenda []string) string {
 		"You are writing the introduction (30–60 seconds, spoken) for a long-form technical YouTube video.\n\n"+
 			"Rewrite the DRAFT into a warm, confident spoken introduction that frames the video and previews the "+
 			"agenda (%s). Sound like an experienced engineer teaching a peer. Use ONLY the facts in the draft — "+
-			"invent nothing. Output only the introduction.\n\nDRAFT:\n%s",
+			"invent nothing."+evergreenRule+" Output only the introduction.\n\nDRAFT:\n%s",
 		joinAnd(agenda), draft)
 }
 

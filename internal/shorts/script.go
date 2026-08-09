@@ -78,6 +78,6 @@ func scriptPrompt(angle, hook, core, takeaway, cta string) string {
 		"You are scripting a 30–60 second technical YouTube Short (angle: %s).\n\n"+
 			"Weave these beats into ONE energetic, concise spoken script (about 90–130 words): \n"+
 			"HOOK: %s\nCORE: %s\nTAKEAWAY: %s\nCTA: %s\n\n"+
-			"Fast-paced, one idea, spoken English. Use ONLY the facts above — invent nothing. Output only the script.",
+			"Fast-paced, one idea, spoken English. Use ONLY the facts above — invent nothing."+evergreenRule+" Output only the script.",
 		angle, hook, core, takeaway, cta)
 }

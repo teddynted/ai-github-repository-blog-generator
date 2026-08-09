@@ -2,6 +2,7 @@ package imagegen
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -43,6 +44,51 @@ func TestReplicateGenerateSyncSuccess(t *testing.T) {
 	}
 	if gotAuth != "Bearer test-token" || gotPrefer != "wait" {
 		t.Errorf("auth=%q prefer=%q", gotAuth, gotPrefer)
+	}
+}
+
+func TestReplicateSDXLUsesVersionedEndpointWithNegative(t *testing.T) {
+	var predBody string
+	var resolvedVersion bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/models/stability-ai/sdxl":
+			resolvedVersion = true
+			w.Write([]byte(`{"latest_version":{"id":"ver-123"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/predictions":
+			b, _ := io.ReadAll(r.Body)
+			predBody = string(b)
+			w.Write([]byte(`{"status":"succeeded","output":["http://` + r.Host + `/img.png"]}`))
+		case r.URL.Path == "/img.png":
+			w.Write([]byte("PNGDATA"))
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewReplicate("test-token", "stability-ai/sdxl")
+	c.baseURL = srv.URL
+	c.sleep = func(time.Duration) {}
+	got, err := c.Generate(context.Background(), Spec{Prompt: "isometric shapes", NegativePrompt: "text, letters", Width: 720, Height: 1280})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if string(got) != "PNGDATA" {
+		t.Errorf("image = %q", got)
+	}
+	if !resolvedVersion {
+		t.Error("SDXL should resolve its version via GET /models/…")
+	}
+	// The versioned request must carry the version + width/height + negative_prompt,
+	// and NOT the flux-only aspect_ratio/output_format keys.
+	for _, want := range []string{`"version":"ver-123"`, `"width":720`, `"height":1280`, `"negative_prompt":"text, letters"`} {
+		if !strings.Contains(predBody, want) {
+			t.Errorf("prediction body missing %s: %s", want, predBody)
+		}
+	}
+	if strings.Contains(predBody, "aspect_ratio") {
+		t.Errorf("SDXL body should not contain aspect_ratio: %s", predBody)
 	}
 }
 

@@ -115,8 +115,9 @@ func suggestedTags(keywords, topics []string) []string {
 	return topStrings(dedupe(append(append([]string{}, keywords...), append(topics, base...)...)), 20)
 }
 
-func playlist(pkg ReleasePackage) string {
-	return repoName(pkg) + " — Release Deep Dives"
+func playlist(_ ReleasePackage) string {
+	// Evergreen: a series name, never the repository name.
+	return "Release Deep Dives"
 }
 
 // suggestedTitle picks a strong, grounded video title.
@@ -149,7 +150,7 @@ func description(pkg ReleasePackage, markers []ChapterMarker, keywords []string)
 	if c := pkg.Context; c != nil && c.ContentIntelligence.Summary != "" {
 		b.WriteString(c.ContentIntelligence.Summary)
 	} else {
-		fmt.Fprintf(&b, "A full walkthrough of %s %s.", repoName(pkg), releaseTag(pkg))
+		b.WriteString("A full walkthrough of the design and how it works.")
 	}
 	b.WriteString("\n\n⏱ Chapters:\n")
 	for _, m := range markers {

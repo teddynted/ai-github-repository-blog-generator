@@ -13,25 +13,25 @@ import "fmt"
 var versions = map[string]int{
 	// Claude-written, prompt-heavy artifacts.
 	"blog":                      15, // Rotating narrative archetypes + story-driven headings + grounded first-person voice; forbid the generic template headings (Why This Matters/The Solution/Benefits/Conclusion)
-	"architecture":              2,
+	"architecture":              3,  // evergreen: "This design delivers ..." not "This release delivers ..."
 	"linkedin":                  2,
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
 	// model transforms + deterministic artifacts.
-	"storyboard": 2, // narrative arc: opening scene orients the viewer (release subject) before the hook; the LAST scene always lands a grounded close/CTA (not only "conclusion"-typed)
+	"storyboard": 2, // narrative arc: opening scene orients on the capability (what the system does, never "this release"/version/repo) before the hook; LAST scene always lands a grounded close/CTA; evergreen — narration never references the release/version/repository
 	// The storyboard-consuming stages are bumped in lockstep with storyboard@2: they
 	// carry the scene narration, so their produced content changes with the new arc.
 	// (The suite has no upstream→downstream staleness cascade, so an idempotent
 	// re-run only refreshes a stage when its OWN version changes.)
 	"voiceover":      2,
-	"youtube":        2,
-	"youtube-shorts": 2,
-	"tiktok":         2,
-	"visual-assets":  2, // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
-	"seo-metadata":   1,
+	"youtube":        4, // creator-craft: retention/hook guidance // evergreen body copy: hook/intro/chapters/conclusion never name the release/version/repo
+	"youtube-shorts": 4, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
+	"tiktok":         4, // creator-craft: scroll-stopping hooks // evergreen body copy + retired the commit/file-count "statistic" seed & "by the numbers" hooks
+	"visual-assets":  4, // SDXL quality suffix + wordless hardening // evergreen body copy: focus/title fields never name the release/version/repo // SDXL-first: shared style+negative anchors, per-category Replicate stability-ai/sdxl params, rotating composition archetypes, machine-readable release_context + collection_intelligence + AI generation rules
+	"seo-metadata":   3, // CTR title framing (problem->outcome, 50-65 chars) // evergreen body copy: title/description/excerpt never name the release/version/repo
 	// Deterministic renderer (no model prompt), versioned for parity.
 	"architecture-diagram": 1,
-	"storyboard-scenes":    2, // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
+	"storyboard-scenes":    4, // SDXL quality suffix + structured prompt // deterministic per-scene SDXL image specs derived from the storyboard (bumped with storyboard@2: narration-alignment fields change)
 }
 
 // For returns the prompt version string for a content kind (e.g. "blog@6").

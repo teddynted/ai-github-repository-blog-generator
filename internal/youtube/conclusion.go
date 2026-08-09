@@ -37,10 +37,9 @@ func (g *Generator) conclusion(ctx context.Context, pkg ReleasePackage, chapters
 }
 
 func conclusionDraft(pkg ReleasePackage, built []string, next string) string {
-	repo := repoName(pkg)
-	tag := releaseTag(pkg)
 	var b strings.Builder
-	fmt.Fprintf(&b, "So that's %s %s end to end.", repo, tag)
+	// Evergreen: no repo/version in the spoken wrap-up.
+	b.WriteString("So that's the walkthrough, end to end.")
 	if len(built) > 0 {
 		fmt.Fprintf(&b, " We built %s.", joinAnd(topStrings(built, 3)))
 	}
@@ -58,7 +57,7 @@ func conclusionPrompt(draft string) string {
 	return fmt.Sprintf(
 		"You are writing the conclusion (20–45 seconds, spoken) of a long-form technical YouTube video.\n\n"+
 			"Rewrite the DRAFT into a satisfying spoken wrap-up that recaps what was built and points to what's next. "+
-			"Warm and confident. Use ONLY the facts in the draft — invent nothing. Output only the conclusion.\n\nDRAFT:\n%s",
+			"Warm and confident. Use ONLY the facts in the draft — invent nothing."+evergreenRule+" Output only the conclusion.\n\nDRAFT:\n%s",
 		draft)
 }
 

@@ -9,13 +9,14 @@ import (
 // Links are grounded in the Release Context (repo URL, homepage) — never
 // fabricated.
 func (g *Generator) planCTA(pkg ReleasePackage) CallToAction {
-	repo := repoName(pkg)
 	var items []CTAItem
 
+	// Evergreen: CTA text says "the repo" — the actual repository name/identity
+	// lives only in the URL (metadata), never in the spoken/on-screen copy.
 	if url := repoURL(pkg); url != "" {
-		items = append(items, CTAItem{Kind: "GitHub Repository", Text: "Star and explore " + repo, URL: url})
+		items = append(items, CTAItem{Kind: "GitHub Repository", Text: "Star and explore the repo", URL: url})
 	} else {
-		items = append(items, CTAItem{Kind: "GitHub Repository", Text: "Star and explore " + repo})
+		items = append(items, CTAItem{Kind: "GitHub Repository", Text: "Star and explore the repo"})
 	}
 	if docs := docsURL(pkg); docs != "" {
 		items = append(items, CTAItem{Kind: "Documentation", Text: "Read the docs to go deeper", URL: docs})
@@ -28,15 +29,14 @@ func (g *Generator) planCTA(pkg ReleasePackage) CallToAction {
 		CTAItem{Kind: "Contribute", Text: "Open-source contributions are welcome — issues and PRs both"},
 	)
 
-	script := ctaScript(repo)
-	return CallToAction{Script: script, Items: items, PinnedComment: pinnedComment(pkg)}
+	return CallToAction{Script: ctaScript(), Items: items, PinnedComment: pinnedComment(pkg)}
 }
 
-func ctaScript(repo string) string {
-	return collapse(fmt.Sprintf(
-		"If you got something out of this, do three quick things: star %s so you can find it again, "+
-			"subscribe so you catch the next deep dive, and drop a comment with how you'd approach it "+
-			"differently — I read them. Links to the repo and the docs are in the description.", repo))
+func ctaScript() string {
+	return collapse(
+		"If you got something out of this, do three quick things: star the repo so you can find it again, " +
+			"subscribe so you catch the next deep dive, and drop a comment with how you'd approach it " +
+			"differently — I read them. Links to the repo and the docs are in the description.")
 }
 
 // pinnedComment is a short, useful pinned comment grounded in the release.

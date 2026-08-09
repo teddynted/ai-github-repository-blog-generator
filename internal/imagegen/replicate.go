@@ -35,6 +35,7 @@ type ReplicateClient struct {
 	baseURL string
 	token   string
 	model   string
+	version string // resolved once for versioned models (e.g. SDXL)
 	sleep   func(time.Duration)
 }
 
@@ -73,22 +74,7 @@ func (c *ReplicateClient) Generate(ctx context.Context, spec Spec) ([]byte, erro
 	if strings.TrimSpace(c.token) == "" {
 		return nil, errors.New("imagegen: missing Replicate API token")
 	}
-	input := map[string]any{
-		"prompt":        truncate(spec.Prompt, 2000),
-		"aspect_ratio":  aspectFor(spec.Width, spec.Height),
-		"output_format": "png",
-		"num_outputs":   1,
-		"seed":          spec.Seed,
-	}
-	if n := strings.TrimSpace(spec.NegativePrompt); n != "" {
-		input["negative_prompt"] = truncate(n, 2000)
-	}
-	body, err := json.Marshal(map[string]any{"input": input})
-	if err != nil {
-		return nil, fmt.Errorf("imagegen: marshal: %w", err)
-	}
-
-	pred, err := c.createPrediction(ctx, body)
+	pred, err := c.createPrediction(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -106,13 +92,94 @@ func (c *ReplicateClient) Generate(ctx context.Context, spec Spec) ([]byte, erro
 	return c.fetch(ctx, url)
 }
 
-// createPrediction POSTs the run request with Prefer: wait so fast models return
-// a completed prediction in one round-trip.
-func (c *ReplicateClient) createPrediction(ctx context.Context, body []byte) (prediction, error) {
-	url := c.baseURL + "/models/" + c.model + "/predictions"
+// createPrediction builds the model-appropriate input and POSTs the run request
+// with Prefer: wait so fast models return a completed prediction in one
+// round-trip. Two Replicate shapes are supported:
+//
+//   - Official models (FLUX.1 [schnell]) run at /models/<owner>/<name>/predictions
+//     and take an aspect_ratio; they IGNORE negative_prompt.
+//   - Versioned/community models (stability-ai/sdxl) run at /predictions with a
+//     resolved version id and explicit width/height, and DO honour
+//     negative_prompt — which is how we suppress hallucinated in-image text.
+func (c *ReplicateClient) createPrediction(ctx context.Context, spec Spec) (prediction, error) {
 	var pred prediction
-	err := c.doJSON(ctx, http.MethodPost, url, body, map[string]string{"Prefer": "wait"}, &pred)
+	if c.usesVersionedEndpoint() {
+		version, err := c.resolveVersion(ctx)
+		if err != nil {
+			return pred, err
+		}
+		input := map[string]any{
+			"prompt":      truncate(spec.Prompt, 2000),
+			"width":       snapDim(spec.Width),
+			"height":      snapDim(spec.Height),
+			"num_outputs": 1,
+			"seed":        spec.Seed,
+		}
+		if n := strings.TrimSpace(spec.NegativePrompt); n != "" {
+			input["negative_prompt"] = truncate(n, 2000)
+		}
+		body, err := json.Marshal(map[string]any{"version": version, "input": input})
+		if err != nil {
+			return pred, fmt.Errorf("imagegen: marshal: %w", err)
+		}
+		err = c.doJSON(ctx, http.MethodPost, c.baseURL+"/predictions", body, map[string]string{"Prefer": "wait"}, &pred)
+		return pred, err
+	}
+
+	input := map[string]any{
+		"prompt":        truncate(spec.Prompt, 2000),
+		"aspect_ratio":  aspectFor(spec.Width, spec.Height),
+		"output_format": "png",
+		"num_outputs":   1,
+		"seed":          spec.Seed,
+	}
+	body, err := json.Marshal(map[string]any{"input": input})
+	if err != nil {
+		return pred, fmt.Errorf("imagegen: marshal: %w", err)
+	}
+	err = c.doJSON(ctx, http.MethodPost, c.baseURL+"/models/"+c.modelName()+"/predictions", body, map[string]string{"Prefer": "wait"}, &pred)
 	return pred, err
+}
+
+// usesVersionedEndpoint reports whether the configured model must run through the
+// versioned /predictions endpoint (community models like SDXL) rather than the
+// official /models/<owner>/<name>/predictions endpoint. A model pinned as
+// "owner/name:version" or any SDXL-family model uses the versioned path.
+func (c *ReplicateClient) usesVersionedEndpoint() bool {
+	return strings.Contains(c.model, ":") || strings.Contains(strings.ToLower(c.model), "sdxl")
+}
+
+// modelName strips any ":version" suffix, leaving "owner/name".
+func (c *ReplicateClient) modelName() string {
+	if i := strings.IndexByte(c.model, ':'); i >= 0 {
+		return c.model[:i]
+	}
+	return c.model
+}
+
+// resolveVersion returns the version id for the configured model: the pinned
+// suffix when the model is "owner/name:version", otherwise the model's latest
+// version fetched once from the API and cached.
+func (c *ReplicateClient) resolveVersion(ctx context.Context) (string, error) {
+	if i := strings.IndexByte(c.model, ':'); i >= 0 {
+		return c.model[i+1:], nil
+	}
+	if c.version != "" {
+		return c.version, nil
+	}
+	var meta struct {
+		LatestVersion struct {
+			ID string `json:"id"`
+		} `json:"latest_version"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, c.baseURL+"/models/"+c.modelName(), nil, nil, &meta); err != nil {
+		return "", fmt.Errorf("imagegen: resolve version for %s: %w", c.modelName(), err)
+	}
+	if meta.LatestVersion.ID == "" {
+		return "", fmt.Errorf("imagegen: no latest version for %s", c.modelName())
+	}
+	c.version = meta.LatestVersion.ID
+	return c.version, nil
 }
 
 // awaitTerminal polls the prediction's status URL until it reaches a terminal
@@ -252,6 +319,22 @@ func aspectFor(w, h int) string {
 		return "16:9"
 	}
 	return "9:16"
+}
+
+// snapDim rounds a dimension to a multiple of 8 (SDXL requires this) and clamps
+// it to a sane [512, 1536] range so the versioned models accept it.
+func snapDim(d int) int {
+	if d <= 0 {
+		d = 1024
+	}
+	d = (d / 8) * 8
+	if d < 512 {
+		d = 512
+	}
+	if d > 1536 {
+		d = 1536
+	}
+	return d
 }
 
 func firstNonEmptyStr(vals ...string) string {

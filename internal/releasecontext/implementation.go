@@ -1,7 +1,6 @@
 package releasecontext
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -50,22 +49,16 @@ func commitSubjects(rc *ReleaseContext, category string) []string {
 	return out
 }
 
+// whyItMatters is EVERGREEN: it speaks to what the change does, never "Release
+// <tag> … N features and M fixes" (the counts live in structured CommitStats).
 func whyItMatters(rc *ReleaseContext) string {
-	feats := rc.CommitStats.ByCategory["Features"]
-	fixes := rc.CommitStats.ByCategory["Bug Fixes"]
 	switch {
 	case rc.CommitStats.Breaking > 0:
-		return fmt.Sprintf(
-			"Release %s introduces breaking changes alongside %d features and %d fixes — a milestone that reshapes the platform's contract and warrants a migration guide.",
-			rc.Release.Tag, feats, fixes)
-	case feats > 0:
-		return fmt.Sprintf(
-			"Release %s advances the platform with %d new features and %d fixes, extending capability while keeping the existing contract stable.",
-			rc.Release.Tag, feats, fixes)
+		return "This introduces breaking changes that reshape the platform's contract and warrant a migration guide."
+	case rc.CommitStats.ByCategory["Features"] > 0:
+		return "This advances the platform with new capability while keeping the existing contract stable."
 	default:
-		return fmt.Sprintf(
-			"Release %s hardens the platform with %d fixes and maintenance changes, improving reliability and developer experience.",
-			rc.Release.Tag, fixes)
+		return "This hardens the platform with fixes and maintenance changes, improving reliability and the developer experience."
 	}
 }
 

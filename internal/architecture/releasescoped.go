@@ -246,7 +246,7 @@ func relationshipStatement(theme string) string {
 	if short == "" {
 		short = "the changes described above"
 	}
-	return "This release delivers **" + short + "**. It integrates with the existing platform " +
+	return "This design delivers **" + short + "**. It integrates with the existing platform " +
 		"architecture rather than redefining it, and affects only the components and flows described above."
 }
 

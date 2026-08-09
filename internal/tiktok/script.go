@@ -84,7 +84,7 @@ func scriptPrompt(topicLabel, hook, problem, solution, takeaway, engagement, cta
 		"You are scripting a 20–60 second educational TikTok for software engineers (topic: %s).\n\n"+
 			"Weave these beats into ONE conversational, fast-paced spoken script (about 70–120 words):\n"+
 			"HOOK: %s\nPROBLEM: %s\nSOLUTION: %s\nTAKEAWAY: %s\nENGAGEMENT: %s\nCTA: %s\n\n"+
-			"Native to TikTok, technically accurate, one concept. Use ONLY the facts above — invent nothing. "+
-			"Output only the script.",
+			"Native to TikTok, technically accurate, one concept. Use ONLY the facts above — invent nothing."+
+			evergreenRule+" Output only the script.",
 		topicLabel, hook, problem, solution, takeaway, engagement, cta)
 }
