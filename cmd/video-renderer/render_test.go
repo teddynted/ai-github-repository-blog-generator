@@ -149,7 +149,7 @@ func TestDimsFor(t *testing.T) {
 
 func TestSegmentArgsColorAndImageBackground(t *testing.T) {
 	// No background image → solid colour source.
-	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "", "", 0)
+	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "", "", 0, false)
 	joined := strings.Join(seg, " ")
 	if !strings.Contains(joined, "color=c=0x0F172A:s=1080x1920") || !strings.Contains(joined, "textfile=/w/cap.txt") || !strings.Contains(joined, "-shortest") {
 		t.Errorf("colour segment args = %v", seg)
@@ -163,7 +163,7 @@ func TestSegmentArgsColorAndImageBackground(t *testing.T) {
 	}
 
 	// With a scene image background → loop the image, cover-crop it, then caption.
-	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/scene_bg.png", "", 0)
+	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/scene_bg.png", "", 0, false)
 	dj := strings.Join(dseg, " ")
 	if !slices.Contains(dseg, "/w/scene_bg.png") || strings.Contains(dj, "color=c=") {
 		t.Errorf("image bg not used: %v", dseg)
@@ -175,15 +175,31 @@ func TestSegmentArgsColorAndImageBackground(t *testing.T) {
 
 func TestSegmentArgsCameraMotion(t *testing.T) {
 	// A move on an image scene adds a zoompan Ken Burns chain outputting the frame.
-	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/bg.png", "dolly_in", 4.0)
+	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/bg.png", "dolly_in", 4.0, false)
 	j := strings.Join(seg, " ")
 	if !strings.Contains(j, "zoompan=z='min(zoom+0.0010,1.12)'") || !strings.Contains(j, "s=1080x1920") {
 		t.Errorf("dolly_in zoompan missing: %v", seg)
 	}
 	// Empty move → static cover crop, no zoompan.
-	stat := strings.Join(segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/bg.png", "", 4.0), " ")
+	stat := strings.Join(segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/bg.png", "", 4.0, false), " ")
 	if strings.Contains(stat, "zoompan") {
 		t.Errorf("no-move segment should not zoompan: %s", stat)
+	}
+}
+
+func TestSegmentArgsAnimatedDiagram(t *testing.T) {
+	// An animated diagram background is a short video looped under the caption:
+	// -stream_loop the input, no zoompan, no cover-crop, bounded by -shortest.
+	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/scene_1_diagram.mp4", "", 5.0, true)
+	j := strings.Join(seg, " ")
+	if !strings.Contains(j, "-stream_loop -1 -i /w/scene_1_diagram.mp4") {
+		t.Errorf("animated diagram not stream-looped: %v", seg)
+	}
+	if strings.Contains(j, "zoompan") || strings.Contains(j, "force_original_aspect_ratio") {
+		t.Errorf("animated diagram should not zoompan/cover-crop (motion is baked in): %s", j)
+	}
+	if !strings.Contains(j, "-shortest") || !strings.Contains(j, "textfile=/w/cap.txt") {
+		t.Errorf("animated diagram missing caption/shortest: %v", seg)
 	}
 }
 

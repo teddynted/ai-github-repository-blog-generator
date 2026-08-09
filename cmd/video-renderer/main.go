@@ -190,7 +190,7 @@ func run(ctx context.Context) error {
 			move = motionMove(sc.Number)
 		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
-		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move, durSec)); err != nil {
+		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move, durSec, isDiagram)); err != nil {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
 		}
 		fmt.Fprintf(&listBuf, "file '%s'\n", seg)

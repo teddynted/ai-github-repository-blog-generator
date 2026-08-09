@@ -14,9 +14,15 @@ package scenediagram
 import (
 	"embed"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
+
+// AnimationFrames is the number of frames in one seamless flow-animation loop;
+// the renderer rasterizes SVG(...,phase) for phase = i/AnimationFrames and loops
+// the result under the caption for the scene's duration.
+const AnimationFrames = 20
 
 // icons holds the official AWS Architecture Icons (64px SVGs) for the services we
 // diagram. They are embedded into the binary so the renderer needs no runtime
@@ -184,7 +190,7 @@ func Has(text string) bool { return len(Detect(text, 1)) > 0 }
 // text: brand background + grid, the service tiles laid out along the flow
 // direction (a column for portrait, a row for landscape), connected by arrows.
 // Returns "" if no component is recognized (caller falls back).
-func SVG(text string, w, h int) string {
+func SVG(text string, w, h int, phase float64) string {
 	keys := Detect(text, 4)
 	if len(keys) == 0 {
 		return ""
@@ -227,9 +233,9 @@ func SVG(text string, w, h int) string {
 			}
 		}
 	}
-	// flow arrows first (behind tiles)
+	// flow arrows first (behind tiles), with particles at this animation phase
 	for i := 0; i+1 < n; i++ {
-		b.WriteString(arrow(cx[i], cy[i], cx[i+1], cy[i+1], tileSize/2))
+		b.WriteString(arrow(cx[i], cy[i], cx[i+1], cy[i+1], tileSize/2, phase))
 	}
 	// tiles: official AWS icon where we have one, else the stylized glyph
 	for i, k := range keys {
@@ -257,7 +263,7 @@ func drawNode(i, cx, cy, size int, key string) string {
 
 // arrow draws a glowing flow line + arrowhead from node a to node b, trimmed so
 // it starts/ends at the tile edge (r = half tile size).
-func arrow(ax, ay, bx, by, r int) string {
+func arrow(ax, ay, bx, by, r int, phase float64) string {
 	dx, dy := float64(bx-ax), float64(by-ay)
 	d := hypot(dx, dy)
 	if d == 0 {
@@ -271,10 +277,23 @@ func arrow(ax, ay, bx, by, r int) string {
 	px, py := -uy, ux
 	a1x, a1y := hx-ux*22+px*13, hy-uy*22+py*13
 	a2x, a2y := hx-ux*22-px*13, hy-uy*22-py*13
-	return fmt.Sprintf(
-		`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="6" stroke-linecap="round" opacity="0.9"/>`+
+	var b strings.Builder
+	fmt.Fprintf(&b,
+		`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="6" stroke-linecap="round" opacity="0.55"/>`+
 			`<polygon points="%.0f,%.0f %.0f,%.0f %.0f,%.0f" fill="%s"/>`,
 		x1, y1, x2, y2, flow, hx, hy, a1x, a1y, a2x, a2y, flow)
+	// Flow particles: dots travelling start→end, spaced so the loop is seamless.
+	const dots = 2
+	for k := 0; k < dots; k++ {
+		t := phase + float64(k)/dots
+		t -= math.Floor(t)
+		cxk := x1 + (x2-x1)*t
+		cyk := y1 + (y2-y1)*t
+		fmt.Fprintf(&b,
+			`<circle cx="%.0f" cy="%.0f" r="17" fill="%s" opacity="0.22"/><circle cx="%.0f" cy="%.0f" r="8" fill="%s"/>`,
+			cxk, cyk, flow, cxk, cyk, flow)
+	}
+	return b.String()
 }
 
 // drawTile renders one service tile centred at (cx,cy) with side `size`.

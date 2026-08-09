@@ -18,11 +18,20 @@ func dimsFor(aspect string) (w, h int) {
 // set, otherwise a deep-slate title slide), the scene caption burned in via
 // drawtext (read from a file to avoid escaping), and the narration audio.
 // -shortest makes the clip exactly as long as the narration.
-func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string, durSec float64) []string {
+//
+// When animated is set, bgImage is a short looping diagram video (already at the
+// frame size, with flow particles baked in): loop it under the caption for the
+// narration's length instead of applying a Ken Burns move to a still.
+func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string, durSec float64, animated bool) []string {
 	var inputs []string
 	var vf string
 	motion := "" // set when a Ken Burns move is applied (needs an explicit -t)
-	if bgImage != "" {
+	if animated && bgImage != "" {
+		// Loop the animated architecture diagram (its own motion) under the caption;
+		// -shortest bounds the clip to the narration.
+		inputs = []string{"-stream_loop", "-1", "-i", bgImage}
+		vf = captionBand(captionFile, fontFile, w, h)
+	} else if bgImage != "" {
 		// Loop the scene image; give it a slow cinematic camera move (or a static
 		// cover crop when motion is off), then put the caption in a lower band so it
 		// stays readable over the image.
