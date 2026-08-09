@@ -128,15 +128,35 @@ var catalog = map[string]tile{
 	"github":         {"#5A6B86", glyphRepo},     // source (slate)
 	"webhook":        {"#5A6B86", glyphPulse},    //
 	"openclaw":       {"#8C4FFF", glyphAgent},    // orchestrator hub (agent violet)
+	// Broader platform stack (stylized glyphs; official AWS icons can be dropped
+	// into iconFor later without changing the layout).
+	"fargate":         {"#ED7100", glyphContainer}, // compute (orange)
+	"ecs":             {"#ED7100", glyphContainer}, //
+	"cloudformation":  {"#E7157B", glyphStack},     // management / IaC (pink)
+	"ecr":             {"#7AA116", glyphContainer}, // container registry (green)
+	"secrets manager": {"#DD344C", glyphKey},       // security (red)
+	"kms":             {"#DD344C", glyphKey},       //
+	"sns":             {"#C925D3", glyphCast},      // app integration (magenta)
+	"polly":           {"#01A88D", glyphWave},      // ML / media (teal)
+	"replicate":       {"#01A88D", glyphAI},        //
+	"anthropic":       {"#01A88D", glyphAI},        //
+	"nova":            {"#01A88D", glyphAI},        //
+	"docker":          {"#2496ED", glyphContainer}, // containers (docker blue)
+	"ffmpeg":          {"#5A6B86", glyphFilm},      // media tool (slate)
+	"mcp":             {"#5A6B86", glyphChain},     // protocol (slate)
+	"github actions":  {"#5A6B86", glyphGear},      // CI (slate)
 }
 
 // detectionOrder lists keys so longer/more-specific ones win (e.g. "step
 // functions" before a bare "step").
 var detectionOrder = []string{
-	// "openclaw" before "claw" so the full name wins and the node-id de-dupes to it.
-	"openclaw", "eventbridge", "step functions", "step function", "api gateway", "cloudwatch",
-	"dynamodb", "lambda", "bedrock", "claude", "ollama", "github", "webhook",
-	"n8n", "iam", "sqs", "efs", "ec2", "s3", "claw",
+	// Multi-word / more-specific keys first so they win over a contained substring
+	// (e.g. "github actions" before "github", "step functions" before "step").
+	"openclaw", "github actions", "secrets manager", "step functions", "step function",
+	"api gateway", "cloudformation", "cloudwatch", "eventbridge", "dynamodb",
+	"fargate", "lambda", "bedrock", "anthropic", "replicate", "nova", "polly",
+	"claude", "ollama", "docker", "ffmpeg", "github", "webhook", "n8n", "mcp",
+	"ecr", "ecs", "iam", "kms", "sns", "sqs", "efs", "ec2", "s3", "claw",
 }
 
 // Detect returns the ordered, de-duplicated component keys named in text, capped
@@ -145,8 +165,8 @@ var detectionOrder = []string{
 func Detect(text string, max int) []string {
 	l := strings.ToLower(text)
 	type hit struct {
-		idx int
-		key string
+		idx, end int
+		key      string
 	}
 	var hits []hit
 	seen := map[string]bool{}
@@ -155,10 +175,26 @@ func Detect(text string, max int) []string {
 		if seen[canon] {
 			continue
 		}
-		if i := strings.Index(l, key); i >= 0 {
-			seen[canon] = true
-			hits = append(hits, hit{i, canon})
+		i := strings.Index(l, key)
+		if i < 0 {
+			continue
 		}
+		end := i + len(key)
+		// Skip a match contained within a longer, already-accepted one (e.g. the
+		// "github" inside "github actions"). detectionOrder lists the longer/more
+		// specific keys first, so the containing match is accepted before this one.
+		contained := false
+		for _, h := range hits {
+			if i >= h.idx && end <= h.end {
+				contained = true
+				break
+			}
+		}
+		if contained {
+			continue
+		}
+		seen[canon] = true
+		hits = append(hits, hit{i, end, canon})
 	}
 	// stable sort by appearance
 	for i := 1; i < len(hits); i++ {
@@ -213,15 +249,15 @@ func SVG(text string, w, h int, phase float64) string {
 // overview reads as the real flow: source → ingress → compute → workflow →
 // orchestrator → inference → storage → observability → security.
 var flowRank = map[string]int{
-	"github": 0, "webhook": 0,
-	"api gateway": 1, "eventbridge": 1, "sqs": 1, "step functions": 1,
-	"lambda": 2, "ec2": 2,
-	"n8n":      3,
+	"github": 0, "webhook": 0, "github actions": 0,
+	"api gateway": 1, "eventbridge": 1, "sqs": 1, "step functions": 1, "sns": 1,
+	"lambda": 2, "ec2": 2, "fargate": 2, "ecs": 2, "docker": 2, "ffmpeg": 2,
+	"n8n": 3, "mcp": 3,
 	"openclaw": 4,
-	"ollama":   5, "bedrock": 5, "claude": 5,
-	"efs": 6, "s3": 6, "dynamodb": 6,
-	"cloudwatch": 7,
-	"iam":        8,
+	"ollama":   5, "bedrock": 5, "claude": 5, "anthropic": 5, "replicate": 5, "nova": 5, "polly": 5,
+	"efs": 6, "s3": 6, "dynamodb": 6, "ecr": 6,
+	"cloudwatch": 7, "cloudformation": 7,
+	"iam": 8, "kms": 8, "secrets manager": 8,
 }
 
 // FlowSort returns keys ordered by architectural role (see flowRank), so a set of
@@ -409,13 +445,21 @@ const (
 	glyphNode     = `<circle cx="50" cy="50" r="20" fill="` + glyphOn + `"/>`
 	// glyphAgent: an orchestrator hub — a solid core dispatching along three arms to
 	// worker nodes. Marks OpenClaw as the central component that routes the flow.
-	glyphAgent  = `<g stroke="` + glyphOn + `" stroke-width="7" fill="none"><path d="M50 50 L50 20 M50 50 L24 74 M50 50 L76 74"/></g><g fill="` + glyphOn + `"><circle cx="50" cy="50" r="14"/><circle cx="50" cy="18" r="8"/><circle cx="22" cy="76" r="8"/><circle cx="78" cy="76" r="8"/></g>`
-	glyphChain  = `<g fill="` + glyphOn + `"><circle cx="24" cy="50" r="11"/><circle cx="50" cy="50" r="11"/><circle cx="76" cy="50" r="11"/></g><g stroke="` + glyphOn + `" stroke-width="6"><line x1="35" y1="50" x2="39" y2="50"/><line x1="61" y1="50" x2="65" y2="50"/></g>`
-	glyphBucket = `<path d="M22 30 H78 L72 82 H28 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="22" y1="30" x2="78" y2="30" stroke="` + glyphOn + `" stroke-width="7"/>`
-	glyphDisc   = `<ellipse cx="50" cy="30" rx="30" ry="12" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M20 30 V70 A30 12 0 0 0 80 70 V30" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
-	glyphDb     = `<ellipse cx="50" cy="26" rx="28" ry="11" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M22 26 V74 A28 11 0 0 0 78 74 V26 M22 50 A28 11 0 0 0 78 50" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
-	glyphGauge  = `<path d="M20 66 A30 30 0 0 1 80 66" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="50" y1="66" x2="66" y2="42" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="66" r="6" fill="` + glyphOn + `"/>`
-	glyphShield = `<path d="M50 14 L80 26 V52 C80 72 66 82 50 88 C34 82 20 72 20 52 V26 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><path d="M38 50 L47 60 L64 40" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
-	glyphRepo   = `<rect x="22" y="20" width="56" height="60" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><line x1="34" y1="34" x2="60" y2="34"/><line x1="34" y1="50" x2="60" y2="50"/><line x1="34" y1="66" x2="50" y2="66"/></g>`
-	glyphPulse  = `<path d="M14 50 H34 L42 28 L54 72 L62 50 H86" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
+	glyphAgent = `<g stroke="` + glyphOn + `" stroke-width="7" fill="none"><path d="M50 50 L50 20 M50 50 L24 74 M50 50 L76 74"/></g><g fill="` + glyphOn + `"><circle cx="50" cy="50" r="14"/><circle cx="50" cy="18" r="8"/><circle cx="22" cy="76" r="8"/><circle cx="78" cy="76" r="8"/></g>`
+	glyphChain = `<g fill="` + glyphOn + `"><circle cx="24" cy="50" r="11"/><circle cx="50" cy="50" r="11"/><circle cx="76" cy="50" r="11"/></g><g stroke="` + glyphOn + `" stroke-width="6"><line x1="35" y1="50" x2="39" y2="50"/><line x1="61" y1="50" x2="65" y2="50"/></g>`
+	// Additional stylized glyphs so every technology the platform uses has a tile.
+	glyphContainer = `<rect x="20" y="26" width="60" height="48" rx="5" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><line x1="20" y1="42" x2="80" y2="42" stroke="` + glyphOn + `" stroke-width="6"/><circle cx="31" cy="34" r="3" fill="` + glyphOn + `"/><g fill="` + glyphOn + `"><rect x="30" y="52" width="12" height="14"/><rect x="46" y="52" width="12" height="14"/></g>`
+	glyphWave      = `<g stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"><line x1="24" y1="42" x2="24" y2="58"/><line x1="38" y1="30" x2="38" y2="70"/><line x1="52" y1="22" x2="52" y2="78"/><line x1="66" y1="34" x2="66" y2="66"/><line x1="80" y1="44" x2="80" y2="56"/></g>`
+	glyphKey       = `<circle cx="34" cy="50" r="16" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><line x1="48" y1="50" x2="82" y2="50"/><line x1="70" y1="50" x2="70" y2="64"/><line x1="82" y1="50" x2="82" y2="62"/></g>`
+	glyphStack     = `<g fill="none" stroke="` + glyphOn + `" stroke-width="6" stroke-linejoin="round"><path d="M50 20 L82 34 L50 48 L18 34 Z"/><path d="M18 50 L50 64 L82 50"/><path d="M18 64 L50 78 L82 64"/></g>`
+	glyphFilm      = `<rect x="20" y="28" width="60" height="44" rx="5" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g fill="` + glyphOn + `"><rect x="26" y="34" width="8" height="8"/><rect x="26" y="58" width="8" height="8"/><rect x="66" y="34" width="8" height="8"/><rect x="66" y="58" width="8" height="8"/></g><line x1="44" y1="28" x2="44" y2="72" stroke="` + glyphOn + `" stroke-width="5"/><line x1="56" y1="28" x2="56" y2="72" stroke="` + glyphOn + `" stroke-width="5"/>`
+	glyphGear      = `<circle cx="50" cy="50" r="13" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="8" stroke-linecap="round"><line x1="50" y1="20" x2="50" y2="30"/><line x1="50" y1="70" x2="50" y2="80"/><line x1="20" y1="50" x2="30" y2="50"/><line x1="70" y1="50" x2="80" y2="50"/><line x1="29" y1="29" x2="36" y2="36"/><line x1="64" y1="64" x2="71" y2="71"/><line x1="71" y1="29" x2="64" y2="36"/><line x1="36" y1="64" x2="29" y2="71"/></g>`
+	glyphCast      = `<g fill="none" stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><path d="M30 38 A16 16 0 0 1 30 62"/><path d="M42 30 A28 28 0 0 1 42 70"/></g><circle cx="24" cy="50" r="7" fill="` + glyphOn + `"/><line x1="58" y1="50" x2="78" y2="50" stroke="` + glyphOn + `" stroke-width="6"/><circle cx="80" cy="50" r="7" fill="` + glyphOn + `"/>`
+	glyphBucket    = `<path d="M22 30 H78 L72 82 H28 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="22" y1="30" x2="78" y2="30" stroke="` + glyphOn + `" stroke-width="7"/>`
+	glyphDisc      = `<ellipse cx="50" cy="30" rx="30" ry="12" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M20 30 V70 A30 12 0 0 0 80 70 V30" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
+	glyphDb        = `<ellipse cx="50" cy="26" rx="28" ry="11" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><path d="M22 26 V74 A28 11 0 0 0 78 74 V26 M22 50 A28 11 0 0 0 78 50" fill="none" stroke="` + glyphOn + `" stroke-width="6"/>`
+	glyphGauge     = `<path d="M20 66 A30 30 0 0 1 80 66" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><line x1="50" y1="66" x2="66" y2="42" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="66" r="6" fill="` + glyphOn + `"/>`
+	glyphShield    = `<path d="M50 14 L80 26 V52 C80 72 66 82 50 88 C34 82 20 72 20 52 V26 Z" fill="none" stroke="` + glyphOn + `" stroke-width="7"/><path d="M38 50 L47 60 L64 40" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
+	glyphRepo      = `<rect x="22" y="20" width="56" height="60" rx="6" fill="none" stroke="` + glyphOn + `" stroke-width="6"/><g stroke="` + glyphOn + `" stroke-width="6" stroke-linecap="round"><line x1="34" y1="34" x2="60" y2="34"/><line x1="34" y1="50" x2="60" y2="50"/><line x1="34" y1="66" x2="50" y2="66"/></g>`
+	glyphPulse     = `<path d="M14 50 H34 L42 28 L54 72 L62 50 H86" fill="none" stroke="` + glyphOn + `" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
 )

@@ -46,3 +46,33 @@ func TestOfficialIconIDsAreNamespaced(t *testing.T) {
 		t.Errorf("official icon ids must be namespaced, not raw")
 	}
 }
+
+func TestExtendedTechCoverage(t *testing.T) {
+	// Every technology the platform uses should detect a tile, and a multi-word key
+	// must not also yield its contained substring (github actions vs github).
+	cases := map[string]string{
+		"The renderer runs on AWS Fargate":       "fargate",
+		"CloudFormation provisions the stack":    "cloudformation",
+		"Secrets Manager holds it; KMS encrypts": "secrets manager",
+		"Amazon Polly synthesizes the narration": "polly",
+		"Scene images come from Replicate":       "replicate",
+		"FFmpeg concatenates the segments":       "ffmpeg",
+		"An MCP server exposes the tools":        "mcp",
+		"pushed to ECR then run on ECS":          "ecr",
+		"an SNS topic fans out notifications":    "sns",
+	}
+	for text, want := range cases {
+		found := false
+		for _, k := range Detect(text, 4) {
+			if k == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("Detect(%q) missing %q — got %v", text, want, Detect(text, 4))
+		}
+	}
+	if g := Detect("The build runs in GitHub Actions", 4); len(g) != 1 || g[0] != "github actions" {
+		t.Errorf("GitHub Actions should not also emit a bare github tile: %v", g)
+	}
+}
