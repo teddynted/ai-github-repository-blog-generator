@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -82,22 +83,33 @@ func TestScenesForFormatUsesNativeScriptForShortFormats(t *testing.T) {
 	}
 }
 
-func TestScenesForFormatFallsBackToStoryboard(t *testing.T) {
-	storyboard := []byte(`{"scenes":[
-		{"sceneNumber":1,"title":"S1","narration":"one"},
-		{"sceneNumber":2,"title":"S2","narration":"two"},
-		{"sceneNumber":3,"title":"S3","narration":"three"},
-		{"sceneNumber":4,"title":"S4","narration":"four"},
-		{"sceneNumber":5,"title":"S5","narration":"five"},
-		{"sceneNumber":6,"title":"S6","narration":"six"}
-	]}`)
-	// No/blank format script → storyboard, capped for the short format.
+func TestScenesForFormatShortFormatIsDurationCapped(t *testing.T) {
+	// 20 scenes with long narration; the short cut must trim each scene's
+	// narration + caption and keep only enough scenes to land near the target.
+	var parts []string
+	for i := 1; i <= 20; i++ {
+		parts = append(parts, fmt.Sprintf(`{"sceneNumber":%d,"title":"Scene %d: A Fairly Long Heading About Some Concept","narration":"This is a long narration sentence that keeps going with plenty of words. And here is a whole second sentence as well."}`, i, i))
+	}
+	storyboard := []byte(`{"scenes":[` + strings.Join(parts, ",") + `]}`)
 	got, err := scenesForFormat("tiktok", nil, storyboard)
 	if err != nil {
 		t.Fatalf("fallback: %v", err)
 	}
-	if len(got) != shortSceneCap {
-		t.Fatalf("expected storyboard capped to %d, got %d", shortSceneCap, len(got))
+	if len(got) == 0 || len(got) >= 20 {
+		t.Fatalf("short cut should be duration-capped, got %d of 20 scenes", len(got))
+	}
+	total := 0.0
+	for _, s := range got {
+		if wc := len(strings.Fields(s.Narration)); wc > shortMaxNarrationWords {
+			t.Errorf("narration not trimmed (%d words): %q", wc, s.Narration)
+		}
+		if wc := len(strings.Fields(strings.TrimSuffix(s.Title, "…"))); wc > shortCaptionMaxWords {
+			t.Errorf("caption not shortened: %q", s.Title)
+		}
+		total += float64(len(strings.Fields(s.Narration)))/shortWordsPerSec + shortScenePadSec
+	}
+	if total > shortTargetSec+shortScenePadSec {
+		t.Errorf("estimated runtime %.1fs exceeds target %.0fs", total, shortTargetSec)
 	}
 }
 
@@ -137,7 +149,7 @@ func TestDimsFor(t *testing.T) {
 
 func TestSegmentArgsColorAndImageBackground(t *testing.T) {
 	// No background image → solid colour source.
-	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "")
+	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "", "")
 	joined := strings.Join(seg, " ")
 	if !strings.Contains(joined, "color=c=0x0F172A:s=1080x1920") || !strings.Contains(joined, "textfile=/w/cap.txt") || !strings.Contains(joined, "-shortest") {
 		t.Errorf("colour segment args = %v", seg)
@@ -151,13 +163,44 @@ func TestSegmentArgsColorAndImageBackground(t *testing.T) {
 	}
 
 	// With a scene image background → loop the image, cover-crop it, then caption.
-	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/scene_bg.png")
+	dseg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1920, 1080, "/font.ttf", "/w/scene_bg.png", "")
 	dj := strings.Join(dseg, " ")
 	if !slices.Contains(dseg, "/w/scene_bg.png") || strings.Contains(dj, "color=c=") {
 		t.Errorf("image bg not used: %v", dseg)
 	}
 	if !strings.Contains(dj, "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080") {
 		t.Errorf("image cover-crop filter missing: %v", dseg)
+	}
+}
+
+func TestSegmentArgsCameraMotion(t *testing.T) {
+	// A move on an image scene adds a zoompan Ken Burns chain outputting the frame.
+	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/bg.png", "dolly_in")
+	j := strings.Join(seg, " ")
+	if !strings.Contains(j, "zoompan=z='min(zoom+0.0010,1.12)'") || !strings.Contains(j, "s=1080x1920") {
+		t.Errorf("dolly_in zoompan missing: %v", seg)
+	}
+	// Empty move → static cover crop, no zoompan.
+	stat := strings.Join(segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/bg.png", ""), " ")
+	if strings.Contains(stat, "zoompan") {
+		t.Errorf("no-move segment should not zoompan: %s", stat)
+	}
+}
+
+func TestShortCaptionAndTrimNarration(t *testing.T) {
+	if c := shortCaption("Ollama First, Bedrock When It Isn't: Two Inference Engines, One Contract"); len(strings.Fields(strings.TrimSuffix(c, "…"))) > shortCaptionMaxWords {
+		t.Errorf("caption too long: %q", c)
+	}
+	// Prefers the punchy segment before a colon when it's short enough.
+	if c := shortCaption("Ollama → Bedrock: the fallback that never drops a request"); c != "Ollama → Bedrock" {
+		t.Errorf("caption = %q, want the pre-colon segment", c)
+	}
+	n := trimNarration("This is the first sentence and it runs on with a great many words indeed. Second one here.", shortMaxNarrationWords)
+	if wc := len(strings.Fields(n)); wc > shortMaxNarrationWords {
+		t.Errorf("narration not trimmed: %d words %q", wc, n)
+	}
+	if strings.Contains(n, "Second one") {
+		t.Errorf("narration should keep only the first sentence: %q", n)
 	}
 }
 

@@ -18,14 +18,19 @@ func dimsFor(aspect string) (w, h int) {
 // set, otherwise a deep-slate title slide), the scene caption burned in via
 // drawtext (read from a file to avoid escaping), and the narration audio.
 // -shortest makes the clip exactly as long as the narration.
-func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage string) []string {
+func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string) []string {
 	var inputs []string
 	var vf string
 	if bgImage != "" {
-		// Loop the scene image; cover the frame (scale up + centre-crop) then put
-		// the caption in a lower band so it stays readable over the image.
+		// Loop the scene image; give it a slow cinematic camera move (or a static
+		// cover crop when motion is off), then put the caption in a lower band so it
+		// stays readable over the image.
 		inputs = []string{"-loop", "1", "-i", bgImage}
-		vf = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h) + "," + captionBand(captionFile, fontFile, w, h)
+		bg := motionFilter(move, w, h)
+		if bg == "" {
+			bg = "scale=" + itoa(w) + ":" + itoa(h) + ":force_original_aspect_ratio=increase,crop=" + itoa(w) + ":" + itoa(h)
+		}
+		vf = bg + "," + captionBand(captionFile, fontFile, w, h)
 	} else {
 		// No image: a proper title slide — deep-slate background with the scene
 		// title large and centred, so it reads as a designed slide, not a black card.
@@ -52,6 +57,35 @@ func titleFontsize(w, h int) int {
 		m = h
 	}
 	return m / 11
+}
+
+// motionFilter builds a Ken Burns zoompan filter chain that gives a still scene
+// image a slow, cinematic camera move, output at the frame size (WxH). The image
+// is over-scaled first for pan/zoom headroom. move selects the motion; "" means
+// motion is disabled and the caller uses a static cover crop instead.
+//
+// The zoom accumulates per output frame (d=1) against a looped image, so the move
+// runs for the scene's full narration-driven length (the segment is -shortest).
+func motionFilter(move string, w, h int) string {
+	if move == "" {
+		return ""
+	}
+	// Over-scale to 1.5x the frame so zooming/cropping never runs out of pixels.
+	cover := "scale=" + itoa(w*3/2) + ":" + itoa(h*3/2) + ":force_original_aspect_ratio=increase,crop=" + itoa(w*3/2) + ":" + itoa(h*3/2)
+	center := ":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+	zp := func(z string) string {
+		return cover + ",zoompan=z='" + z + "':d=1" + center + ":s=" + itoa(w) + "x" + itoa(h) + ":fps=30"
+	}
+	switch move {
+	case "dolly_out":
+		return zp("if(eq(on,1),1.12,max(zoom-0.0009,1.0))")
+	case "push_in":
+		return zp("min(zoom+0.0014,1.16)")
+	case "drift_in":
+		return zp("min(zoom+0.0006,1.08)")
+	default: // dolly_in
+		return zp("min(zoom+0.0010,1.12)")
+	}
 }
 
 // concatArgs builds the ffmpeg args that stitch the per-scene MP4s (listed in

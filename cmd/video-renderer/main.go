@@ -37,11 +37,19 @@ import (
 )
 
 const (
-	shortSceneCap = 5    // cap scenes for youtube-shorts / tiktok
-	maxPollyChars = 2900 // stay within SynthesizeSpeech limits
-	defaultVoice  = "Matthew"
-	defaultFont   = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-	ffmpegBin     = "ffmpeg"
+	shortSceneCap = 5 // legacy scene cap (superseded by the duration-based cut)
+
+	// Short-format (youtube-shorts / tiktok) retention tuning: aim for a ~45s
+	// vertical cut with one crisp idea per scene, rather than a cropped long-form.
+	shortTargetSec         = 45.0 // total runtime target for a Short/TikTok cut
+	shortMaxNarrationWords = 15   // per-scene spoken words (≈ one punchy line)
+	shortCaptionMaxWords   = 6    // per-scene on-screen caption words (mobile-readable)
+	shortWordsPerSec       = 2.6  // neural-Polly spoken pace, for duration estimates
+	shortScenePadSec       = 0.6  // per-scene silence/transition padding
+	maxPollyChars          = 2900 // stay within SynthesizeSpeech limits
+	defaultVoice           = "Matthew"
+	defaultFont            = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+	ffmpegBin              = "ffmpeg"
 )
 
 func main() {
@@ -160,8 +168,12 @@ func run(ctx context.Context) error {
 			return err
 		}
 		bg := maybeSceneImage(ctx, sceneGen, sc, work, w, h) // "" falls back to a title card
+		move := ""
+		if bg != "" {
+			move = motionMove(sc.Number) // cinematic camera move on real images only
+		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
-		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg)); err != nil {
+		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move)); err != nil {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
 		}
 		fmt.Fprintf(&listBuf, "file '%s'\n", seg)
@@ -183,6 +195,25 @@ func run(ctx context.Context) error {
 	}
 	log.Printf("uploaded %s", outputURI)
 	return nil
+}
+
+// motionMove picks a cinematic camera move for a scene, rotating through moves so
+// consecutive scenes differ. Motion is on by default; set ENABLE_MOTION=false to
+// render static images (e.g. to isolate a render issue).
+func motionMove(sceneNumber int) string {
+	if strings.EqualFold(os.Getenv("ENABLE_MOTION"), "false") {
+		return ""
+	}
+	switch sceneNumber % 4 {
+	case 1:
+		return "push_in"
+	case 2:
+		return "dolly_out"
+	case 3:
+		return "drift_in"
+	default:
+		return "dolly_in"
+	}
 }
 
 func synthesize(ctx context.Context, p *polly.Client, voice, text, outMP3 string) error {
