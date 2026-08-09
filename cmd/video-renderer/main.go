@@ -34,7 +34,6 @@ import (
 	pollytypes "github.com/aws/aws-sdk-go-v2/service/polly/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/teddynted/ai-github-repository-blog-generator/internal/imagegen"
 )
 
 const (
@@ -145,18 +144,6 @@ func run(ctx context.Context) error {
 	w, h := dimsFor(aspect)
 	log.Printf("rendering %s: %d scenes at %dx%d", format, len(scenes), w, h)
 
-	// Optional (ENABLE_SCENE_IMAGES): an AI-generated background per scene.
-	// Best-effort — if the client can't initialise, every scene simply falls
-	// back to the title card, exactly as when the feature is off.
-	var sceneGen imageGenerator
-	if sceneImagesEnabled() {
-		if g, err := imagegen.NewFromEnv(ctx); err != nil {
-			log.Printf("scene images enabled but client init failed; using title cards: %v", err)
-		} else {
-			sceneGen = g
-		}
-	}
-
 	// Per-scene: narration (Polly) + caption + segment.
 	var listBuf bytes.Buffer
 	for _, sc := range scenes {
@@ -172,30 +159,22 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
-		// Background priority: the opening TITLE scene is always a clean title card
-		// (the article title, centred) — never a diagram or an AI photo. Otherwise a
-		// deterministic architecture diagram from the services the scene names (exact
-		// + free), else an AI image, else the title card.
+		// Background: a deterministic architecture diagram built from the services
+		// the scene names (animated flow, no caption overlaid); otherwise a clean
+		// full-screen CARD (the title/heading centred on brand slate). No AI photos,
+		// and text never sits over a visual. The opening TITLE scene is always a card.
 		var bg string
 		isDiagram := false
 		if !strings.EqualFold(sc.Type, "title") {
 			bg = diagramBackground(ctx, sc, work, w, h)
 			isDiagram = bg != ""
-			if bg == "" {
-				bg = maybeSceneImage(ctx, sceneGen, sc, work, w, h)
-			}
 		}
-		// The Ken Burns move needs the exact narration length (zoompan ignores
-		// -shortest); probe the synthesized audio. On any probe miss, durSec is 0
-		// and the scene renders static — never a broken clip. Diagrams stay crisp
-		// (no zoom upscaling); motion is for AI photos only.
+		// A diagram's looped video is bounded to the narration with -t (zoompan and
+		// -stream_loop both ignore -shortest); probe the synthesized audio for that
+		// length. On any probe miss, durSec is 0 and the clip falls back to -shortest.
 		durSec := probeDurationSec(ctx, mp3)
-		move := ""
-		if bg != "" && !isDiagram && durSec > 0 {
-			move = motionMove(sc.Number)
-		}
 		seg := filepath.Join(work, fmt.Sprintf("scene_%d.mp4", sc.Number))
-		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, move, durSec, isDiagram)); err != nil {
+		if err := runFFmpeg(ctx, segmentArgs(capFile, mp3, seg, w, h, fontFile, bg, "", durSec, isDiagram)); err != nil {
 			return fmt.Errorf("ffmpeg scene %d: %w", sc.Number, err)
 		}
 		fmt.Fprintf(&listBuf, "file '%s'\n", seg)
@@ -219,27 +198,8 @@ func run(ctx context.Context) error {
 	return nil
 }
 
-// motionMove picks a cinematic camera move for a scene, rotating through moves so
-// consecutive scenes differ. Motion is on by default; set ENABLE_MOTION=false to
-// render static images (e.g. to isolate a render issue).
-func motionMove(sceneNumber int) string {
-	if strings.EqualFold(os.Getenv("ENABLE_MOTION"), "false") {
-		return ""
-	}
-	switch sceneNumber % 4 {
-	case 1:
-		return "push_in"
-	case 2:
-		return "dolly_out"
-	case 3:
-		return "drift_in"
-	default:
-		return "dolly_in"
-	}
-}
-
 // probeDurationSec returns the duration of an audio file in seconds via ffprobe,
-// or 0 on any error (the caller then renders the scene as a static image).
+// or 0 on any error (the caller then bounds the clip with -shortest instead).
 func probeDurationSec(ctx context.Context, path string) float64 {
 	out, err := exec.CommandContext(ctx, ffprobeBin,
 		"-v", "error", "-show_entries", "format=duration",

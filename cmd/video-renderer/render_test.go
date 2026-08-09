@@ -188,8 +188,9 @@ func TestSegmentArgsCameraMotion(t *testing.T) {
 }
 
 func TestSegmentArgsAnimatedDiagram(t *testing.T) {
-	// An animated diagram background is a short video looped under the caption:
-	// -stream_loop the input, no zoompan, no cover-crop, bounded by -shortest.
+	// An animated diagram is a short looping video with NO caption overlaid, bounded
+	// to the narration by an explicit -t (so the looped video never overshoots into
+	// trailing silence), plus -shortest as a backstop.
 	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/scene_1_diagram.mp4", "", 5.0, true)
 	j := strings.Join(seg, " ")
 	if !strings.Contains(j, "-stream_loop -1 -i /w/scene_1_diagram.mp4") {
@@ -198,8 +199,13 @@ func TestSegmentArgsAnimatedDiagram(t *testing.T) {
 	if strings.Contains(j, "zoompan") || strings.Contains(j, "force_original_aspect_ratio") {
 		t.Errorf("animated diagram should not zoompan/cover-crop (motion is baked in): %s", j)
 	}
-	if !strings.Contains(j, "-shortest") || !strings.Contains(j, "textfile=/w/cap.txt") {
-		t.Errorf("animated diagram missing caption/shortest: %v", seg)
+	// No caption is drawn on a diagram.
+	if strings.Contains(j, "drawtext") || strings.Contains(j, "textfile") || strings.Contains(j, "-vf") {
+		t.Errorf("animated diagram must not overlay a caption: %s", j)
+	}
+	// Bounded to the narration length, and -shortest as a backstop.
+	if !strings.Contains(j, "-t 5.000") || !strings.Contains(j, "-shortest") {
+		t.Errorf("animated diagram must be -t bounded + -shortest: %v", seg)
 	}
 }
 

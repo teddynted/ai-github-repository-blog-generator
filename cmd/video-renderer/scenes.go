@@ -65,13 +65,11 @@ func optimizeForShort(scenes []scene) []scene {
 		if strings.TrimSpace(s.Narration) == "" {
 			continue
 		}
-		// The opening title card is the video's NAME, not a scannable content
-		// label — keep it complete (never word-capped), unlike content captions.
-		if strings.EqualFold(s.Type, "title") {
-			s.Title = titleCaption(s.Title)
-		} else {
-			s.Title = shortCaption(s.Title)
-		}
+		// Captions are never overlaid on visuals: a scene is either a diagram (no
+		// text) or a full-screen title/heading CARD. So every scene's title is kept
+		// COMPLETE (never word-capped) — on a card it is the whole message, and on a
+		// diagram it is not shown at all.
+		s.Title = titleCaption(s.Title)
 		est := float64(len(strings.Fields(s.Narration)))/shortWordsPerSec + shortScenePadSec
 		if total+est > shortTargetSec && len(out) > 0 {
 			break
