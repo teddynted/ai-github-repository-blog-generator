@@ -92,9 +92,9 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ## Call to Action
 
-> If you got something out of this, do three quick things: star acme/widget so you can find it again, subscribe so you catch the next deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
+> If you got something out of this, do three quick things: star the repo so you can find it again, subscribe so you catch the next deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
 
-- **GitHub Repository** — Star and explore acme/widget (https://github.com/acme/widget)
+- **GitHub Repository** — Star and explore the repo (https://github.com/acme/widget)
 - **Subscribe** — Subscribe for the next deep dive
 - **Like** — Like the video if the walkthrough helped
 - **Comment** — Comment with how you'd build this differently
@@ -105,12 +105,12 @@ _acme/widget · release v1.0.0 · long-form · ~0:59 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 0:59 · **Speaking time:** 1:36 · **Words:** 241
+- **Estimated runtime:** 0:59 · **Speaking time:** 1:37 · **Words:** 242
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 - **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
 - **Thumbnail text:** AWS LAMBDA · ARCHITECTURE
-- **Playlist:** acme/widget — Release Deep Dives
+- **Playlist:** Release Deep Dives
 - **Technical topics:** AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; Go
 - **SEO keywords:** go; aws-lambda; amazon-sqs; amazon-eventbridge; aws-cloudformation; software-architecture; cloud-computing; AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch
 - **Tags:** go; aws-lambda; amazon-sqs; amazon-eventbridge; aws-cloudformation; software-architecture; cloud-computing; AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; software engineering; aws; golang; clean architecture; devops; tutorial; system design

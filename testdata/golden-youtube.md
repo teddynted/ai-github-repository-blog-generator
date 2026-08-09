@@ -108,7 +108,7 @@ _acme/widget · release v1.0.0 · long-form · ~1:46 · Software engineers and c
 
 ## Conclusion (`01:36–01:46`)
 
-> So that's acme/widget v1.0.0 end to end. Next up: we keep building the pipeline release by release. Thanks for watching.
+> So that's the walkthrough, end to end. Next up: we keep building the pipeline release by release. Thanks for watching.
 
 - **Key takeaways:** Keep the diagram the single source of truth — the storyboard and this script both reference it rather than redrawing it.
 - **Next:** we keep building the pipeline release by release
@@ -117,9 +117,9 @@ _acme/widget · release v1.0.0 · long-form · ~1:46 · Software engineers and c
 
 ## Call to Action
 
-> If you got something out of this, do three quick things: star acme/widget so you can find it again, subscribe so you catch the next deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
+> If you got something out of this, do three quick things: star the repo so you can find it again, subscribe so you catch the next deep dive, and drop a comment with how you'd approach it differently — I read them. Links to the repo and the docs are in the description.
 
-- **GitHub Repository** — Star and explore acme/widget (https://github.com/acme/widget)
+- **GitHub Repository** — Star and explore the repo (https://github.com/acme/widget)
 - **Subscribe** — Subscribe for the next deep dive
 - **Like** — Like the video if the walkthrough helped
 - **Comment** — Comment with how you'd build this differently
@@ -130,12 +130,12 @@ _acme/widget · release v1.0.0 · long-form · ~1:46 · Software engineers and c
 
 ## Production Metadata
 
-- **Estimated runtime:** 1:46 · **Speaking time:** 3:02 · **Words:** 454
+- **Estimated runtime:** 1:46 · **Speaking time:** 3:02 · **Words:** 455
 - **Audience:** Software engineers and cloud practitioners · **Difficulty:** intermediate · **Reading level:** intermediate
 - **Suggested title:** Shipping Widget v1.0.0: An Event-Driven Pipeline on AWS
 - **Alternative titles:** How This Architecture Actually Works; An Event-Driven AWS Architecture: A Full Walkthrough
 - **Thumbnail text:** AWS LAMBDA · ARCHITECTURE
-- **Playlist:** acme/widget — Release Deep Dives
+- **Playlist:** Release Deep Dives
 - **Technical topics:** AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; Go
 - **SEO keywords:** AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; Go
 - **Tags:** AWS Lambda; Amazon EventBridge; Amazon SQS; Amazon EC2; AWS CloudFormation; Amazon CloudWatch; Go; software engineering; aws; golang; clean architecture; devops; tutorial; system design

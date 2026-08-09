@@ -76,7 +76,8 @@ func socialHeadline(pkg ReleasePackage) string {
 	if f := firstSentences(featureName(pkg), 1); !isGenericKeyword(f) {
 		return f
 	}
-	return repoShortName(pkg) + " " + releaseTag(pkg)
+	// Evergreen last resort: a topic phrase, never the repo name + version.
+	return "an event-driven AWS architecture"
 }
 
 // socialSummaryBase is the grounded summary source for social copy: the blog meta

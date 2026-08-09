@@ -37,10 +37,9 @@ func (g *Generator) conclusion(ctx context.Context, pkg ReleasePackage, chapters
 }
 
 func conclusionDraft(pkg ReleasePackage, built []string, next string) string {
-	repo := repoName(pkg)
-	tag := releaseTag(pkg)
 	var b strings.Builder
-	fmt.Fprintf(&b, "So that's %s %s end to end.", repo, tag)
+	// Evergreen: no repo/version in the spoken wrap-up.
+	b.WriteString("So that's the walkthrough, end to end.")
 	if len(built) > 0 {
 		fmt.Fprintf(&b, " We built %s.", joinAnd(topStrings(built, 3)))
 	}

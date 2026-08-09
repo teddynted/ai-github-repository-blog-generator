@@ -12,14 +12,15 @@ import (
 // for one.
 func buildContentIntelligence(rc *ReleaseContext) ContentIntelligence {
 	var ci ContentIntelligence
-	feats := rc.CommitStats.ByCategory["Features"]
-	fixes := rc.CommitStats.ByCategory["Bug Fixes"]
 
-	ci.Summary = fmt.Sprintf(
-		"%s release %s delivers %d analyzed changes (%d features, %d fixes) across %d files. %s",
-		rc.Repository.Name, rc.Release.Tag, rc.CommitStats.Analyzed, feats, fixes, rc.FileStats.Total,
-		firstSentence(rc.Implementation.WhyItMatters),
-	)
+	// Evergreen: the human-facing summary speaks to what the release DOES, not
+	// "<repo> release <tag> delivers N analyzed changes (F features, X fixes)
+	// across M files" — that changelog/stats framing must never reach body copy.
+	// The commit/file counts remain available as structured CommitStats/FileStats.
+	ci.Summary = strings.TrimSpace(firstSentence(rc.Implementation.WhyItMatters))
+	if ci.Summary == "" {
+		ci.Summary = strings.TrimSpace(firstSentence(rc.Architecture.Overview))
+	}
 
 	ci.TechnicalHighlights = implementationHighlights(rc.Implementation)
 	if len(ci.TechnicalHighlights) == 0 {
@@ -129,16 +130,16 @@ func seoKeywords(rc *ReleaseContext) []string {
 	return topN(dedupeStrings(lowered), 20)
 }
 
+// blogTitles are EVERGREEN suggested titles — topic-led, never naming the
+// repository or version (that identity lives in structural metadata only).
 func blogTitles(rc *ReleaseContext) []string {
-	name := rc.Repository.Name
-	tag := rc.Release.Tag
 	titles := []string{
-		fmt.Sprintf("Inside %s %s: What Changed and Why It Matters", name, tag),
-		fmt.Sprintf("Shipping %s: An Event-Driven, AWS-Native Release Walkthrough", tag),
-		fmt.Sprintf("From Commits to Content: How %s Turns a Release into Insight", name),
+		"What Changed and Why It Matters",
+		"An Event-Driven, AWS-Native Walkthrough",
+		"How the Architecture Actually Works",
 	}
 	if rc.CommitStats.Breaking > 0 {
-		titles = append(titles, fmt.Sprintf("Migrating to %s: Breaking Changes, Explained", tag))
+		titles = append(titles, "Breaking Changes, Explained")
 	}
 	return titles
 }
@@ -164,11 +165,15 @@ func articleOutline(rc *ReleaseContext) []string {
 }
 
 func linkedInPost(rc *ReleaseContext) string {
-	feats := rc.CommitStats.ByCategory["Features"]
+	// Evergreen: speak to the capability, not "<repo> <tag> is out" with commit/
+	// file counts. The lead is the grounded "why it matters" sentence.
+	lead := strings.TrimSpace(firstSentence(rc.Implementation.WhyItMatters))
+	if lead == "" {
+		lead = strings.TrimSpace(firstSentence(rc.Architecture.Overview))
+	}
 	return fmt.Sprintf(
-		"🚀 %s %s is out.\n\n%s\n\n%d features, %d fixes, %d files touched. Built event-driven on AWS with Infrastructure as Code.\n\n#golang #aws #serverless #devops #opensource",
-		rc.Repository.Name, rc.Release.Tag, firstSentence(rc.Implementation.WhyItMatters),
-		feats, rc.CommitStats.ByCategory["Bug Fixes"], rc.FileStats.Total,
+		"%s\n\nBuilt event-driven on AWS with Infrastructure as Code.\n\n#golang #aws #serverless #devops #opensource",
+		lead,
 	)
 }
 
