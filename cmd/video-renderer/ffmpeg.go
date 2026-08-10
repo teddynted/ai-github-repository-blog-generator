@@ -111,14 +111,19 @@ func motionFilter(move string, w, h, frames int) string {
 
 // concatArgs builds the ffmpeg args that stitch the per-scene MP4s (listed in
 // listFile, ffmpeg concat demuxer format) into the final video. Re-encoding
-// (not -c copy) so mismatched segment params never corrupt the join.
-func concatArgs(listFile, out string) []string {
-	return []string{
+// (not -c copy) so mismatched segment params never corrupt the join. When assFile
+// is non-empty its one-word "TikTok" captions are burned in during this same
+// encode (the concat already re-encodes the video, so it costs no extra pass);
+// caption timings are absolute over the concatenated timeline.
+func concatArgs(listFile, out, assFile string) []string {
+	args := []string{
 		"-y",
 		"-f", "concat", "-safe", "0", "-i", listFile,
-		"-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
-		out,
 	}
+	if assFile != "" {
+		args = append(args, "-vf", "ass="+assFile)
+	}
+	return append(args, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", out)
 }
 
 func sprintfColor(w, h int) string {

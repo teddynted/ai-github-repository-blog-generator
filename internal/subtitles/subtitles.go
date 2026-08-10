@@ -7,8 +7,10 @@
 // captions: there is no transcription step and therefore no phonetic
 // hallucination (never "claw"→"cloud", "Ollama"→"Obama", "n8n"→"Nathan").
 //
-// These are SIDECAR files shipped alongside the MP4 (for platform CC / upload /
-// accessibility); the renderer does not burn them into the frame.
+// SRT and ASS are SIDECAR files shipped alongside the MP4 (for platform CC /
+// upload / accessibility); the renderer does not burn them into the frame.
+// ASSWordPop is different: it is a one-word-at-a-time "TikTok" caption track the
+// renderer BURNS into the video (a pink box behind each spoken word).
 package subtitles
 
 import (
@@ -178,6 +180,48 @@ func ASS(cues []Cue, w, h int) string {
 		fmt.Fprintf(&b, "Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", assTime(c.StartMs), assTime(c.EndMs), strings.Join(c.Lines, `\N`))
 	}
 	return b.String()
+}
+
+// wordBoxColour is the pink/red box drawn behind each spoken word, in ASS's
+// &HAABBGGRR byte order — #FE2C55 (the TikTok red-pink) with full opacity.
+const wordBoxColour = "&H00552CFE"
+
+// ASSWordPop renders "TikTok"-style captions: one narration word at a time, large
+// and centred, on a pink box, timed to exactly when it is spoken. Unlike SRT/ASS
+// it is BURNED into the video, so word VALUES stay verbatim — protected
+// terminology is never uppercased or transcribed. Words are contiguous (each ends
+// where the next begins), so one word is always on screen. Deterministic:
+// identical input → identical output. w×h is the caption reference frame.
+func ASSWordPop(words []TimedWord, w, h int) string {
+	fs := min(w, h) / 9 // large, mobile-first single word
+	pad := fs / 4       // box padding, drawn via BorderStyle=3 outline width
+	x, y := w/2, h*72/100
+	var b strings.Builder
+	fmt.Fprintf(&b, "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\n\n", w, h)
+	b.WriteString("[V4+ Styles]\n")
+	b.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
+	// BorderStyle=3 → OutlineColour is painted as an opaque box (Outline = its
+	// padding); Alignment=5 centres on \pos. DejaVu Sans ships in the render image.
+	fmt.Fprintf(&b, "Style: Pop,DejaVu Sans,%d,&H00FFFFFF,&H00FFFFFF,%s,&H64000000,-1,0,0,0,100,100,0,0,3,%d,0,5,0,0,0,1\n\n", fs, wordBoxColour, pad)
+	b.WriteString("[Events]\n")
+	b.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+	for _, wd := range words {
+		start, end := wd.StartMs, wd.EndMs
+		if end <= start {
+			end = start + 200 // guard against zero/negative-length cues
+		}
+		// \pos centres the single word; an 80ms scale-in gives the word a "pop".
+		txt := fmt.Sprintf(`{\pos(%d,%d)\fscx82\fscy82\t(0,80,\fscx100\fscy100)}%s`, x, y, assEscape(wd.Word))
+		fmt.Fprintf(&b, "Dialogue: 0,%s,%s,Pop,,0,0,0,,%s\n", assTime(start), assTime(end), txt)
+	}
+	return b.String()
+}
+
+// assEscape neutralises the few characters libass treats as markup, so a word is
+// rendered literally (narration rarely contains these, but a stray brace or
+// backslash must never open an override block).
+func assEscape(s string) string {
+	return strings.NewReplacer("\\", "/", "{", "(", "}", ")").Replace(s)
 }
 
 func srtTime(ms int) string {

@@ -84,6 +84,39 @@ func TestSRTFormat(t *testing.T) {
 	}
 }
 
+func TestASSWordPopBoxesEachWordVerbatim(t *testing.T) {
+	words := tw("OpenClaw", "runs", "n8n")
+	got := ASSWordPop(words, 1080, 1920)
+	// One Dialogue event per spoken word, each on the pink box style.
+	if n := strings.Count(got, "Dialogue: 0,"); n != len(words) {
+		t.Errorf("want %d word events, got %d:\n%s", len(words), n, got)
+	}
+	for _, want := range []string{
+		"PlayResX: 1080", "PlayResY: 1920",
+		"Style: Pop,DejaVu Sans,120,", wordBoxColour, // pink/red box, fontsize=min/9
+		",3,30,0,5,",     // BorderStyle=3 box, pad=30, centred
+		`\pos(540,1382)`, // centred word position
+		`\fscx82\fscy82\t(0,80,\fscx100\fscy100)`, // pop-in animation
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ASSWordPop missing %q:\n%s", want, got)
+		}
+	}
+	// Protected terminology must stay verbatim (never uppercased/transcribed).
+	for _, term := range []string{"OpenClaw", "n8n"} {
+		if !strings.Contains(got, ","+term+"\n") && !strings.Contains(got, "}"+term+"\n") {
+			t.Errorf("term %q not preserved verbatim as a word event:\n%s", term, got)
+		}
+	}
+}
+
+func TestASSWordPopGuardsZeroLengthCue(t *testing.T) {
+	got := ASSWordPop([]TimedWord{{Word: "solo", StartMs: 1000, EndMs: 1000}}, 1080, 1920)
+	if !strings.Contains(got, "0:00:01.00,0:00:01.20") {
+		t.Errorf("zero-length cue not extended to a visible span:\n%s", got)
+	}
+}
+
 func TestASSHasVerticalStyleAndTiming(t *testing.T) {
 	got := ASS([]Cue{{StartMs: 0, EndMs: 2500, Lines: []string{"line one", "line two"}}}, 1080, 1920)
 	for _, want := range []string{
