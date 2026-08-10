@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/scenediagram"
@@ -83,7 +84,8 @@ func neighborsFor(key string, adj map[string]map[string]bool) []string {
 	if len(pick) == 0 {
 		pick = up
 	}
-	pick = scenediagram.FlowSort(pick) // closest-in-flow first
+	sort.Strings(pick)                 // deterministic tie-break (map iteration is random)
+	pick = scenediagram.FlowSort(pick) // then order by flow role (stable within a rank)
 	if len(pick) > 2 {
 		pick = pick[:2]
 	}
