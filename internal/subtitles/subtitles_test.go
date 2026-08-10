@@ -35,6 +35,12 @@ func TestWrapConstraintsAndSentenceBreaks(t *testing.T) {
 			t.Errorf("cue end before start: %+v", c)
 		}
 	}
+	// Cues must be monotonic and non-overlapping (each starts at/after the prior end).
+	for i := 1; i < len(cues); i++ {
+		if cues[i].StartMs < cues[i-1].EndMs {
+			t.Errorf("cue %d starts (%d) before cue %d ends (%d)", i, cues[i].StartMs, i-1, cues[i-1].EndMs)
+		}
+	}
 	// The first cue ends at the first sentence boundary.
 	if !strings.Contains(strings.Join(cues[0].Lines, " "), "EventBridge") {
 		t.Errorf("first cue = %v", cues[0].Lines)
