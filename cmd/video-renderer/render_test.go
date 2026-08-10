@@ -193,8 +193,13 @@ func TestSegmentArgsAnimatedDiagram(t *testing.T) {
 	// trailing silence), plus -shortest as a backstop.
 	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/scene_1_diagram.mp4", "", 5.0, true)
 	j := strings.Join(seg, " ")
-	if !strings.Contains(j, "-stream_loop -1 -i /w/scene_1_diagram.mp4") {
-		t.Errorf("animated diagram not stream-looped: %v", seg)
+	// The looped diagram is bounded by an INPUT-side -t (before -i), then the narration
+	// is a second input; streams are mapped explicitly.
+	if !strings.Contains(j, "-stream_loop -1 -t 5.000 -i /w/scene_1_diagram.mp4") {
+		t.Errorf("animated diagram not input-bounded stream loop: %v", seg)
+	}
+	if !strings.Contains(j, "-i /w/n.mp3 -map 0:v -map 1:a") {
+		t.Errorf("animated diagram must map video+audio explicitly: %v", seg)
 	}
 	if strings.Contains(j, "zoompan") || strings.Contains(j, "force_original_aspect_ratio") {
 		t.Errorf("animated diagram should not zoompan/cover-crop (motion is baked in): %s", j)
@@ -203,9 +208,22 @@ func TestSegmentArgsAnimatedDiagram(t *testing.T) {
 	if strings.Contains(j, "drawtext") || strings.Contains(j, "textfile") || strings.Contains(j, "-vf") {
 		t.Errorf("animated diagram must not overlay a caption: %s", j)
 	}
-	// Bounded to the narration length, and -shortest as a backstop.
-	if !strings.Contains(j, "-t 5.000") || !strings.Contains(j, "-shortest") {
-		t.Errorf("animated diagram must be -t bounded + -shortest: %v", seg)
+	// Bounded by -t (durSec>0), so -shortest is NOT used (it desyncs video/audio).
+	if strings.Contains(j, "-shortest") {
+		t.Errorf("animated diagram must not use -shortest when -t bounded: %v", seg)
+	}
+}
+
+func TestSegmentArgsShortestOnlyWhenDurationUnknown(t *testing.T) {
+	// durSec>0 → bounded by -t, no -shortest (which desyncs infinite sources).
+	withDur := strings.Join(segmentArgs("/w/c.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/f.ttf", "", "", 4.0, false), " ")
+	if strings.Contains(withDur, "-shortest") || !strings.Contains(withDur, "-t 4.000") {
+		t.Errorf("card with known duration must be -t bounded, no -shortest: %s", withDur)
+	}
+	// durSec<=0 → -shortest fallback (duration unknown).
+	noDur := strings.Join(segmentArgs("/w/c.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/f.ttf", "", "", 0, false), " ")
+	if !strings.Contains(noDur, "-shortest") {
+		t.Errorf("card with unknown duration must fall back to -shortest: %s", noDur)
 	}
 }
 
