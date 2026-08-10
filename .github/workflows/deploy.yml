@@ -77,7 +77,7 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed daily window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest notify-n8n; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -101,7 +101,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest notify-n8n; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
 
@@ -285,6 +285,13 @@ jobs:
           [ -n "${{ vars.OUTPUT_S3_BUCKET }}" ] && P="$P ContentBucket=${{ vars.OUTPUT_S3_BUCKET }}"
           [ -n "${{ vars.BEDROCK_MODEL_ID }}" ] && P="$P BedrockModelId=${{ vars.BEDROCK_MODEL_ID }}"
           [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && P="$P AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
+          # n8n trigger-ingress (Option B): opt-in via ENABLE_N8N_NOTIFY=true. Passes
+          # the artifacts bucket + notify-n8n code key so the state machine can hand
+          # each release to n8n's private webhook after generation.
+          if [ "${{ vars.ENABLE_N8N_NOTIFY }}" = "true" ]; then
+            P="$P EnableN8nNotify=true ArtifactsBucket=$ARTIFACTS_BUCKET NotifyN8nCodeKey=$SHA/notify-n8n.zip"
+            [ -n "${{ vars.N8N_WEBHOOK_PATH }}" ] && P="$P N8nWebhookPath=${{ vars.N8N_WEBHOOK_PATH }}"
+          fi
           aws cloudformation deploy \
             --template-file infrastructure/content.yaml \
             --stack-name blog-gen-content \

@@ -48,9 +48,33 @@ Parameters:
     Type: Number
     Default: 14
     Description: Retention for the content-runner log group.
+  # --- n8n trigger-ingress (Option B): after generation, hand the release to the
+  # --- n8n review/approval workflow via its private webhook. Opt-in.
+  EnableN8nNotify:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When "true", the state machine starts the n8n host, resolves its private
+      IP, and invokes the notify-n8n Lambda to POST the release to n8n's webhook
+      after content generation. Requires the compute stack (exports InstanceId)
+      and the review workflow's webhook to be active.
+  ArtifactsBucket:
+    Type: String
+    Default: ""
+    Description: S3 bucket holding the notify-n8n Lambda zip (required when EnableN8nNotify=true).
+  NotifyN8nCodeKey:
+    Type: String
+    Default: notify-n8n.zip
+    Description: S3 key of the notify-n8n Lambda package in ArtifactsBucket.
+  N8nWebhookPath:
+    Type: String
+    Default: release-review
+    Description: n8n production webhook path the review workflow listens on.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
+  EnableN8n: !Equals [!Ref EnableN8nNotify, "true"]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -99,6 +123,85 @@ Resources:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: Outbound to ECR, S3, Bedrock, Secrets Manager, DynamoDB, GitHub, CloudWatch.
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # --- n8n trigger-ingress (Option B), all gated on EnableN8nNotify -----------
+  # SG for the notify-n8n Lambda. Egress-only; the matching ingress on the n8n
+  # host SG (below) is what opens the path to n8n's port.
+  NotifyN8nSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: EnableN8n
+    Properties:
+      GroupDescription: !Sub "${ProjectName} notify-n8n Lambda (egress only)"
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}-VpcId"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Outbound to the n8n host (private IP) on the n8n port.
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Open the n8n port on the host SG only to the notify-n8n Lambda SG — no public
+  # exposure. The host SG is created in the network stack and imported here.
+  NotifyN8nIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: EnableN8n
+    Properties:
+      GroupId:
+        Fn::ImportValue: !Sub "${ProjectName}-InstanceSecurityGroupId"
+      IpProtocol: tcp
+      FromPort: 5678
+      ToPort: 5678
+      SourceSecurityGroupId: !GetAtt NotifyN8nSecurityGroup.GroupId
+      Description: n8n webhook from the notify-n8n Lambda.
+
+  NotifyN8nRole:
+    Type: AWS::IAM::Role
+    Condition: EnableN8n
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      # VPC access policy grants the ENI management + log shipping the function needs.
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+
+  NotifyN8nFunction:
+    Type: AWS::Lambda::Function
+    Condition: EnableN8n
+    # ArtifactsBucket is always supplied by deploy.yml when EnableN8nNotify=true;
+    # its empty default only exists for the disabled case (function not created).
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [W1030]
+    Properties:
+      FunctionName: !Sub "${ProjectName}-notify-n8n"
+      Runtime: provided.al2023
+      Architectures: [arm64]
+      Handler: bootstrap
+      MemorySize: 128
+      Timeout: 240
+      Role: !GetAtt NotifyN8nRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref NotifyN8nCodeKey
+      Environment:
+        Variables:
+          N8N_WEBHOOK_PATH: !Ref N8nWebhookPath
+      VpcConfig:
+        SubnetIds:
+          - Fn::ImportValue: !Sub "${ProjectName}-PublicSubnetId"
+        SecurityGroupIds:
+          - !GetAtt NotifyN8nSecurityGroup.GroupId
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -281,6 +384,32 @@ Resources:
                 Action: states:StartExecution
                 Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-video"
 
+  # Extra grants for the n8n hand-off branch, kept as a conditional policy so the
+  # base role is unchanged when the feature is off.
+  ContentStateMachineN8nPolicy:
+    Type: AWS::IAM::Policy
+    Condition: EnableN8n
+    Properties:
+      PolicyName: content-n8n-notify
+      Roles:
+        - !Ref ContentStateMachineRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Start the On-Demand n8n host (DescribeInstances cannot be resource-scoped).
+          - Effect: Allow
+            Action: ec2:StartInstances
+            Resource: !Sub
+              - "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${I}"
+              - I:
+                  Fn::ImportValue: !Sub "${ProjectName}-InstanceId"
+          - Effect: Allow
+            Action: ec2:DescribeInstances
+            Resource: "*"
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: !GetAtt NotifyN8nFunction.Arn
+
   ContentStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
@@ -320,8 +449,9 @@ Resources:
                 },
                 "ResultPath": "$.ecs",
                 "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "GenerateFailed"}],
-                "Next": "TriggerVideo"
+                "Next": "${AfterGenerate}"
               },
+              ${N8nStates}
               "TriggerVideo": {
                 "Type": "Task",
                 "Resource": "arn:${AWS::Partition}:states:::states:startExecution",
@@ -357,6 +487,50 @@ Resources:
             - HasContentBucket
             - !Ref ContentBucket
             - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+          # When EnableN8nNotify=true, generation flows through the n8n hand-off
+          # states before video; otherwise it goes straight to TriggerVideo and
+          # N8nStates is empty (identical to the base machine).
+          AfterGenerate: !If [EnableN8n, "StartN8nHost", "TriggerVideo"]
+          N8nStates: !If
+            - EnableN8n
+            - !Sub
+              - |-
+                "StartN8nHost": {
+                    "Type": "Task",
+                    "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ec2:startInstances",
+                    "Parameters": {"InstanceIds": ["${InstanceId}"]},
+                    "ResultPath": "$.n8nStart",
+                    "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.n8nError", "Next": "TriggerVideo"}],
+                    "Next": "DescribeN8nHost"
+                  },
+                  "DescribeN8nHost": {
+                    "Type": "Task",
+                    "Resource": "arn:${AWS::Partition}:states:::aws-sdk:ec2:describeInstances",
+                    "Parameters": {"InstanceIds": ["${InstanceId}"]},
+                    "ResultPath": "$.n8nHost",
+                    "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.n8nError", "Next": "TriggerVideo"}],
+                    "Next": "NotifyN8n"
+                  },
+                  "NotifyN8n": {
+                    "Type": "Task",
+                    "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+                    "Parameters": {
+                      "FunctionName": "${NotifyArn}",
+                      "Payload": {
+                        "private_ip.$": "$.n8nHost.Reservations[0].Instances[0].PrivateIpAddress",
+                        "owner.$": "$.detail.owner",
+                        "name.$": "$.detail.name",
+                        "release_tag.$": "$.detail.release_tag"
+                      }
+                    },
+                    "ResultPath": "$.n8nNotify",
+                    "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.n8nError", "Next": "TriggerVideo"}],
+                    "Next": "TriggerVideo"
+                  },
+              - InstanceId:
+                  Fn::ImportValue: !Sub "${ProjectName}-InstanceId"
+                NotifyArn: !GetAtt NotifyN8nFunction.Arn
+            - ""
       Tags:
         - Key: Project
           Value: !Ref ProjectName
