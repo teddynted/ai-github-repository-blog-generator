@@ -193,7 +193,7 @@ const wordBoxColour = "&H00552CFE"
 // where the next begins), so one word is always on screen. Deterministic:
 // identical input → identical output. w×h is the caption reference frame.
 func ASSWordPop(words []TimedWord, w, h int) string {
-	fs := min(w, h) / 14 // TikTok-sized single word (not oversized)
+	fs := min(w, h) / 16 // TikTok-sized single word (not oversized)
 	pad := fs / 4        // box padding, drawn via BorderStyle=3 outline width
 	// Bottom-anchored like TikTok captions, but above the platform UI chrome.
 	x, y := w/2, h*84/100
@@ -203,7 +203,7 @@ func ASSWordPop(words []TimedWord, w, h int) string {
 	b.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
 	// BorderStyle=3 → OutlineColour is painted as an opaque box (Outline = its
 	// padding); Alignment=5 centres on \pos. DejaVu Sans ships in the render image.
-	fmt.Fprintf(&b, "Style: Pop,DejaVu Sans,%d,&H00FFFFFF,&H00FFFFFF,%s,&H64000000,-1,0,0,0,100,100,0,0,3,%d,0,5,0,0,0,1\n\n", fs, wordBoxColour, pad)
+	fmt.Fprintf(&b, "Style: Pop,DejaVu Sans,%d,&H00FFFFFF,&H00FFFFFF,%s,&H64000000,0,0,0,0,100,100,0,0,3,%d,0,5,0,0,0,1\n\n", fs, wordBoxColour, pad)
 	b.WriteString("[Events]\n")
 	b.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 	for _, wd := range words {
