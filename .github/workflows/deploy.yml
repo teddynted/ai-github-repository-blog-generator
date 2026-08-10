@@ -287,8 +287,8 @@ jobs:
           [ -n "${{ vars.ANTHROPIC_MODEL }}" ] && P="$P AnthropicModel=${{ vars.ANTHROPIC_MODEL }}"
           # Auto-trigger the approval gate: opt-in via ENABLE_PUBLISH_DISPATCH=true.
           # Fires a GitHub repository_dispatch after generation so publish-content.yml
-          # opens the approval issue. Set the real token once with:
-          #   aws secretsmanager put-secret-value --secret-id blog-gen/github/dispatch-token --secret-string '<token>'
+          # opens the approval issue. Set the real token once in SSM Parameter Store:
+          #   aws ssm put-parameter --name /blog-gen/github/dispatch-token --type SecureString --value '<token>'
           if [ "${{ vars.ENABLE_PUBLISH_DISPATCH }}" = "true" ]; then
             P="$P EnablePublishDispatch=true ArtifactsBucket=$ARTIFACTS_BUCKET DispatchCodeKey=$SHA/dispatch-publish.zip"
             [ -n "${{ vars.DISPATCH_REPO }}" ] && P="$P DispatchRepo=${{ vars.DISPATCH_REPO }}"

@@ -74,6 +74,13 @@ Parameters:
     Type: String
     Default: content-generated
     Description: repository_dispatch event_type publish-content.yml listens for.
+  DispatchTokenParam:
+    Type: String
+    Default: /blog-gen/github/dispatch-token
+    Description: >
+      SSM Parameter Store (SecureString) name holding the GitHub token
+      (Contents:write on DispatchRepo). Create it out-of-band; CloudFormation
+      cannot create SecureString parameters.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
@@ -131,21 +138,12 @@ Resources:
           Value: !Ref ProjectName
 
   # --- Auto-trigger the approval gate (Option: EnablePublishDispatch) ----------
-  # Holds the GitHub token (Contents: write on DispatchRepo) used to fire the
-  # repository_dispatch. CFN seeds a random placeholder; set the real token
-  # out-of-band so it never appears in the template or parameter history:
-  #   aws secretsmanager put-secret-value \
-  #     --secret-id blog-gen/github/dispatch-token --secret-string '<token>'
-  DispatchTokenSecret:
-    Type: AWS::SecretsManager::Secret
-    Condition: EnableDispatch
-    Properties:
-      Name: !Sub "${ProjectName}/github/dispatch-token"
-      Description: GitHub token (Contents:write on DispatchRepo) for repository_dispatch.
-      GenerateSecretString:
-        PasswordLength: 40
-        ExcludePunctuation: true
-
+  # The GitHub token (Contents: write on DispatchRepo) lives in an SSM Parameter
+  # Store SecureString at DispatchTokenParam. CloudFormation cannot create
+  # SecureString parameters, so create it once out-of-band (the value never
+  # appears in the template or parameter history):
+  #   aws ssm put-parameter --name /blog-gen/github/dispatch-token \
+  #     --type SecureString --value '<token>'
   DispatchPublishRole:
     Type: AWS::IAM::Role
     Condition: EnableDispatch
@@ -164,9 +162,19 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Read the SecureString token parameter.
               - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource: !Ref DispatchTokenSecret
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${DispatchTokenParam}"
+              # Decrypt it. When the SecureString uses the AWS-managed SSM key the
+              # ARN is not known at template time, so scope by service (kms:ViaService)
+              # rather than a key-ARN import — the same pattern used for S3/KMS above.
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
 
   DispatchPublishFunction:
     Type: AWS::Lambda::Function
@@ -192,7 +200,7 @@ Resources:
         Variables:
           DISPATCH_REPO: !Ref DispatchRepo
           DISPATCH_EVENT_TYPE: !Ref DispatchEventType
-          GITHUB_TOKEN_SECRET_ARN: !Ref DispatchTokenSecret
+          GITHUB_TOKEN_PARAM: !Ref DispatchTokenParam
       Tags:
         - Key: Project
           Value: !Ref ProjectName

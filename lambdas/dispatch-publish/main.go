@@ -4,8 +4,9 @@
 // published a release's content. It is the last hop of the content state machine.
 //
 // It calls the public GitHub API (POST /repos/{repo}/dispatches), so it runs
-// outside any VPC and needs only a token read from Secrets Manager — the token
-// must have Contents: write on the dispatch repo (the one holding the workflow).
+// outside any VPC and needs only a token read from SSM Parameter Store (a
+// SecureString) — the token must have Contents: write on the dispatch repo (the
+// one holding the workflow).
 package main
 
 import (
@@ -22,7 +23,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/teddynted/ai-github-repository-blog-generator/internal/app"
 )
@@ -56,9 +57,9 @@ func main() {
 
 	dispatchRepo := os.Getenv("DISPATCH_REPO") // "owner/repo" holding the workflow
 	eventType := envStr("DISPATCH_EVENT_TYPE", "content-generated")
-	tokenSecret := os.Getenv("GITHUB_TOKEN_SECRET_ARN")
-	if dispatchRepo == "" || tokenSecret == "" {
-		log.Fatalf("DISPATCH_REPO and GITHUB_TOKEN_SECRET_ARN are required")
+	tokenParam := os.Getenv("GITHUB_TOKEN_PARAM") // SSM SecureString parameter name
+	if dispatchRepo == "" || tokenParam == "" {
+		log.Fatalf("DISPATCH_REPO and GITHUB_TOKEN_PARAM are required")
 	}
 
 	ctx := context.Background()
@@ -70,20 +71,26 @@ func main() {
 	if err != nil {
 		log.Fatalf("aws config: %v", err)
 	}
-	sm := secretsmanager.NewFromConfig(awsCfg)
+	ssmClient := ssm.NewFromConfig(awsCfg)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	lambda.Start(func(ctx context.Context, ev Event) (string, error) {
 		if ev.ReleaseTag == "" {
 			return "", fmt.Errorf("dispatch-publish: event has no release_tag")
 		}
-		out, err := sm.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(tokenSecret)})
+		out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+			Name:           aws.String(tokenParam),
+			WithDecryption: aws.Bool(true),
+		})
 		if err != nil {
-			return "", fmt.Errorf("read github token secret: %w", err)
+			return "", fmt.Errorf("read github token parameter: %w", err)
 		}
-		token := aws.ToString(out.SecretString)
+		token := ""
+		if out.Parameter != nil {
+			token = aws.ToString(out.Parameter.Value)
+		}
 		if token == "" {
-			return "", fmt.Errorf("github token secret is empty (set the real token with put-secret-value)")
+			return "", fmt.Errorf("github token parameter %s is empty (set it with: aws ssm put-parameter --type SecureString)", tokenParam)
 		}
 
 		payload, _ := json.Marshal(dispatchBody{
