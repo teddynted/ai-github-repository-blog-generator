@@ -18,7 +18,7 @@ var versions = map[string]int{
 	"x-thread":                  2,
 	"architecture-diagram-spec": 1,
 	// model transforms + deterministic artifacts.
-	"storyboard": 4, // narrative arc: opening scene orients on the capability (what the system does, never "this release"/version/repo) before the hook; LAST scene always lands a grounded close/CTA; evergreen — narration never references the release/version/repository // prepend a clean TITLE-card scene (article H1, no diagram/photo) with a spoken hook; content scenes follow
+	"storyboard": 5, // narrative arc: opening scene orients on the capability (what the system does, never "this release"/version/repo) before the hook; LAST scene always lands a grounded close/CTA; evergreen — narration never references the release/version/repository // prepend a clean TITLE-card scene (article H1, no diagram/photo) with a spoken hook; content scenes follow // speak config in prose, never literal KEY=value; product names keep correct capitalisation (Ollama, not ollama) even where a config token lowercases them
 	// The storyboard-consuming stages are bumped in lockstep with storyboard@2: they
 	// carry the scene narration, so their produced content changes with the new arc.
 	// (The suite has no upstream→downstream staleness cascade, so an idempotent
