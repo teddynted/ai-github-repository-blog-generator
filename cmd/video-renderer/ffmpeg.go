@@ -14,36 +14,37 @@ func dimsFor(aspect string) (w, h int) {
 }
 
 // segmentArgs builds the ffmpeg args that render one scene into an MP4: a
-// background sized to the format (the AI-generated scene image when bgImage is
-// set, otherwise a deep-slate title slide), the scene caption burned in via
-// drawtext (read from a file to avoid escaping), and the narration audio.
-// -shortest makes the clip exactly as long as the narration.
+// background sized to the format (an animated architecture-diagram loop, or a
+// deep-slate title/heading card), plus the narration audio.
 //
-// When animated is set, bgImage is a short looping diagram video (already at the
-// frame size, with flow particles baked in): loop it under the caption for the
-// narration's length instead of applying a Ken Burns move to a still.
+// The video source is bounded to the narration length by an INPUT-side -t (each
+// source — a -stream_loop diagram, a looped still, or an infinite lavfi color —
+// is otherwise unbounded), and the two streams are mapped explicitly. -shortest
+// is NOT used: it is unreliable with an infinite video source (it lets the video
+// overshoot or truncates the audio), which desynced video and audio length. When
+// the narration duration is unknown (durSec<=0) it is the last-resort fallback.
 func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string, durSec float64, animated bool) []string {
+	bound := func(pre []string) []string {
+		if durSec > 0 {
+			return append(pre, "-t", strconv.FormatFloat(durSec, 'f', 3, 64))
+		}
+		return pre
+	}
 	var inputs []string
 	var vf string
-	bounded := false // clip must be bounded by an explicit -t (looped/zoompan video)
 	switch {
 	case animated && bgImage != "":
-		// Animated architecture diagram: loop it for the narration's length with NO
-		// caption overlaid (text lives only on cards, never over a visual).
-		// -stream_loop makes the video effectively infinite, so bound the clip to the
-		// narration with -t — relying on -shortest alone lets the looped video
-		// overshoot, which accumulates into trailing silence at the end of the video.
-		inputs = []string{"-stream_loop", "-1", "-i", bgImage}
+		// Animated architecture diagram, looped for the narration's length, NO caption
+		// overlaid (text lives only on cards, never over a visual).
+		inputs = append(bound([]string{"-stream_loop", "-1"}), "-i", bgImage)
 		vf = ""
-		bounded = durSec > 0
 	case bgImage != "":
 		// Legacy still-image path (retained for parity; AI scene photos are no longer
 		// used). Loop the image with an optional Ken Burns move and a lower-third band.
-		inputs = []string{"-loop", "1", "-i", bgImage}
+		inputs = append(bound([]string{"-loop", "1"}), "-i", bgImage)
 		motion := ""
 		if move != "" && durSec > 0 {
 			motion = motionFilter(move, w, h, int(durSec*30+0.5))
-			bounded = true // zoompan ignores -shortest
 		}
 		bg := motion
 		if bg == "" {
@@ -52,14 +53,13 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 		vf = bg + "," + captionBand(captionFile, fontFile, w, h)
 	default:
 		// Clean full-screen CARD: deep-slate background with the scene's title/heading
-		// large and centred — a designed slide, not a black card. This is both the
-		// opening title card and every scene that names no service to diagram.
-		inputs = []string{"-f", "lavfi", "-i", sprintfColor(w, h)}
+		// large and centred. Both the opening title card and any scene with no diagram.
+		inputs = append(bound([]string{"-f", "lavfi"}), "-i", sprintfColor(w, h))
 		vf = titleCard(captionFile, fontFile, w, h)
 	}
 	args := []string{"-y"}
 	args = append(args, inputs...)
-	args = append(args, "-i", narrationMP3)
+	args = append(args, "-i", narrationMP3, "-map", "0:v", "-map", "1:a")
 	if vf != "" {
 		args = append(args, "-vf", vf)
 	}
@@ -67,10 +67,10 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 		"-c:v", "libx264", "-pix_fmt", "yuv420p",
 		"-c:a", "aac", "-b:a", "160k",
 	)
-	if bounded {
-		args = append(args, "-t", strconv.FormatFloat(durSec, 'f', 3, 64))
+	if durSec <= 0 {
+		args = append(args, "-shortest") // fallback only when the narration length is unknown
 	}
-	return append(args, "-shortest", out)
+	return append(args, out)
 }
 
 // titleFontsize scales the title to the frame (min dimension), so 16:9 and 9:16
