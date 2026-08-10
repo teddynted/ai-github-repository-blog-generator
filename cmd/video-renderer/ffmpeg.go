@@ -17,31 +17,27 @@ func dimsFor(aspect string) (w, h int) {
 // background sized to the format (an animated architecture-diagram loop, or a
 // deep-slate title/heading card), plus the narration audio.
 //
-// The video source is bounded to the narration length by an INPUT-side -t (each
-// source — a -stream_loop diagram, a looped still, or an infinite lavfi color —
-// is otherwise unbounded), and the two streams are mapped explicitly. -shortest
-// is NOT used: it is unreliable with an infinite video source (it lets the video
-// overshoot or truncates the audio), which desynced video and audio length. When
-// the narration duration is unknown (durSec<=0) it is the last-resort fallback.
+// Both streams are forced to EXACTLY the narration length durSec: the audio is
+// padded with apad and the output bounded with -t (so it is never short), and the
+// video runs at a constant -r 30 bounded by the same -t. This exact per-segment
+// match is essential — the concat demuxer that stitches the scenes together
+// drifts badly when a segment's video and audio lengths differ (that desynced the
+// final video by ~17s). -shortest is only a last-resort fallback when the
+// narration length is unknown (durSec<=0); it is unreliable with the infinite
+// video sources used here (a -stream_loop diagram or an infinite lavfi color).
 func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgImage, move string, durSec float64, animated bool) []string {
-	bound := func(pre []string) []string {
-		if durSec > 0 {
-			return append(pre, "-t", strconv.FormatFloat(durSec, 'f', 3, 64))
-		}
-		return pre
-	}
 	var inputs []string
 	var vf string
 	switch {
 	case animated && bgImage != "":
-		// Animated architecture diagram, looped for the narration's length, NO caption
-		// overlaid (text lives only on cards, never over a visual).
-		inputs = append(bound([]string{"-stream_loop", "-1"}), "-i", bgImage)
+		// Animated architecture diagram, looped, NO caption overlaid (text lives only
+		// on cards, never over a visual).
+		inputs = []string{"-stream_loop", "-1", "-i", bgImage}
 		vf = ""
 	case bgImage != "":
 		// Legacy still-image path (retained for parity; AI scene photos are no longer
 		// used). Loop the image with an optional Ken Burns move and a lower-third band.
-		inputs = append(bound([]string{"-loop", "1"}), "-i", bgImage)
+		inputs = []string{"-loop", "1", "-i", bgImage}
 		motion := ""
 		if move != "" && durSec > 0 {
 			motion = motionFilter(move, w, h, int(durSec*30+0.5))
@@ -54,7 +50,7 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 	default:
 		// Clean full-screen CARD: deep-slate background with the scene's title/heading
 		// large and centred. Both the opening title card and any scene with no diagram.
-		inputs = append(bound([]string{"-f", "lavfi"}), "-i", sprintfColor(w, h))
+		inputs = []string{"-f", "lavfi", "-i", sprintfColor(w, h)}
 		vf = titleCard(captionFile, fontFile, w, h)
 	}
 	args := []string{"-y"}
@@ -63,11 +59,12 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 	if vf != "" {
 		args = append(args, "-vf", vf)
 	}
-	args = append(args,
-		"-c:v", "libx264", "-pix_fmt", "yuv420p",
-		"-c:a", "aac", "-b:a", "160k",
-	)
-	if durSec <= 0 {
+	args = append(args, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k")
+	if durSec > 0 {
+		// Pad audio + constant fps + a shared output -t → video and audio are BOTH
+		// exactly durSec, so concatenated segments stay in sync.
+		args = append(args, "-af", "apad", "-r", "30", "-t", strconv.FormatFloat(durSec, 'f', 3, 64))
+	} else {
 		args = append(args, "-shortest") // fallback only when the narration length is unknown
 	}
 	return append(args, out)

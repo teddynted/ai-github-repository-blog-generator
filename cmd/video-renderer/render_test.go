@@ -193,10 +193,8 @@ func TestSegmentArgsAnimatedDiagram(t *testing.T) {
 	// trailing silence), plus -shortest as a backstop.
 	seg := segmentArgs("/w/cap.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/font.ttf", "/w/scene_1_diagram.mp4", "", 5.0, true)
 	j := strings.Join(seg, " ")
-	// The looped diagram is bounded by an INPUT-side -t (before -i), then the narration
-	// is a second input; streams are mapped explicitly.
-	if !strings.Contains(j, "-stream_loop -1 -t 5.000 -i /w/scene_1_diagram.mp4") {
-		t.Errorf("animated diagram not input-bounded stream loop: %v", seg)
+	if !strings.Contains(j, "-stream_loop -1 -i /w/scene_1_diagram.mp4") {
+		t.Errorf("animated diagram not stream-looped: %v", seg)
 	}
 	if !strings.Contains(j, "-i /w/n.mp3 -map 0:v -map 1:a") {
 		t.Errorf("animated diagram must map video+audio explicitly: %v", seg)
@@ -208,22 +206,23 @@ func TestSegmentArgsAnimatedDiagram(t *testing.T) {
 	if strings.Contains(j, "drawtext") || strings.Contains(j, "textfile") || strings.Contains(j, "-vf") {
 		t.Errorf("animated diagram must not overlay a caption: %s", j)
 	}
-	// Bounded by -t (durSec>0), so -shortest is NOT used (it desyncs video/audio).
-	if strings.Contains(j, "-shortest") {
-		t.Errorf("animated diagram must not use -shortest when -t bounded: %v", seg)
+	// BOTH streams forced to exactly durSec (apad + constant fps + shared -t), never
+	// -shortest, so concatenated segments stay in sync.
+	if !strings.Contains(j, "-af apad -r 30 -t 5.000") || strings.Contains(j, "-shortest") {
+		t.Errorf("animated diagram must be apad+fps+-t bounded, no -shortest: %v", seg)
 	}
 }
 
-func TestSegmentArgsShortestOnlyWhenDurationUnknown(t *testing.T) {
-	// durSec>0 → bounded by -t, no -shortest (which desyncs infinite sources).
+func TestSegmentArgsBothStreamsBounded(t *testing.T) {
+	// durSec>0 → apad + -r 30 + -t (both streams exactly durSec), no -shortest.
 	withDur := strings.Join(segmentArgs("/w/c.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/f.ttf", "", "", 4.0, false), " ")
-	if strings.Contains(withDur, "-shortest") || !strings.Contains(withDur, "-t 4.000") {
-		t.Errorf("card with known duration must be -t bounded, no -shortest: %s", withDur)
+	if strings.Contains(withDur, "-shortest") || !strings.Contains(withDur, "-af apad -r 30 -t 4.000") {
+		t.Errorf("card with known duration must be apad+fps+-t bounded: %s", withDur)
 	}
-	// durSec<=0 → -shortest fallback (duration unknown).
+	// durSec<=0 → -shortest fallback (duration unknown), no apad (would run forever).
 	noDur := strings.Join(segmentArgs("/w/c.txt", "/w/n.mp3", "/w/s.mp4", 1080, 1920, "/f.ttf", "", "", 0, false), " ")
-	if !strings.Contains(noDur, "-shortest") {
-		t.Errorf("card with unknown duration must fall back to -shortest: %s", noDur)
+	if !strings.Contains(noDur, "-shortest") || strings.Contains(noDur, "apad") {
+		t.Errorf("card with unknown duration must fall back to -shortest, no apad: %s", noDur)
 	}
 }
 
@@ -372,8 +371,8 @@ func TestNeighborsFromReleaseGraph(t *testing.T) {
 		{Title: "What OpenClaw and Lambda Stream to CloudWatch", Narration: "OpenClaw and Lambda log to CloudWatch."},
 	}
 	adj := coOccurrence(scenes)
-	if got := strings.Join(neighborsFor("openclaw", adj), ","); got != "ollama,bedrock" {
-		t.Errorf("neighborsFor(openclaw) = %q, want ollama,bedrock", got)
+	if got := strings.Join(neighborsFor("openclaw", adj), ","); got != "bedrock,ollama" {
+		t.Errorf("neighborsFor(openclaw) = %q, want bedrock,ollama (deterministic)", got)
 	}
 	// A component with no co-occurrence (nothing to connect to) → no neighbors → card.
 	if n := neighborsFor("s3", map[string]map[string]bool{}); n != nil {
