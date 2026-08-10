@@ -48,9 +48,36 @@ Parameters:
     Type: Number
     Default: 14
     Description: Retention for the content-runner log group.
+  # --- Auto-trigger the approval gate: after generation, fire a GitHub
+  # --- repository_dispatch so publish-content.yml opens the approval issue. Opt-in.
+  EnablePublishDispatch:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When "true", the state machine invokes the dispatch-publish Lambda after
+      generation to fire a GitHub repository_dispatch (event_type
+      DispatchEventType) at DispatchRepo, which opens the content-approval issue.
+  ArtifactsBucket:
+    Type: String
+    Default: ""
+    Description: S3 bucket holding the dispatch-publish Lambda zip (required when EnablePublishDispatch=true).
+  DispatchCodeKey:
+    Type: String
+    Default: dispatch-publish.zip
+    Description: S3 key of the dispatch-publish Lambda package in ArtifactsBucket.
+  DispatchRepo:
+    Type: String
+    Default: teddynted/ai-github-repository-blog-generator
+    Description: "owner/repo that holds publish-content.yml (the repository_dispatch target)."
+  DispatchEventType:
+    Type: String
+    Default: content-generated
+    Description: repository_dispatch event_type publish-content.yml listens for.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
+  EnableDispatch: !Equals [!Ref EnablePublishDispatch, "true"]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -99,6 +126,73 @@ Resources:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: Outbound to ECR, S3, Bedrock, Secrets Manager, DynamoDB, GitHub, CloudWatch.
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # --- Auto-trigger the approval gate (Option: EnablePublishDispatch) ----------
+  # Holds the GitHub token (Contents: write on DispatchRepo) used to fire the
+  # repository_dispatch. CFN seeds a random placeholder; set the real token
+  # out-of-band so it never appears in the template or parameter history:
+  #   aws secretsmanager put-secret-value \
+  #     --secret-id blog-gen/github/dispatch-token --secret-string '<token>'
+  DispatchTokenSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: EnableDispatch
+    Properties:
+      Name: !Sub "${ProjectName}/github/dispatch-token"
+      Description: GitHub token (Contents:write on DispatchRepo) for repository_dispatch.
+      GenerateSecretString:
+        PasswordLength: 40
+        ExcludePunctuation: true
+
+  DispatchPublishRole:
+    Type: AWS::IAM::Role
+    Condition: EnableDispatch
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: read-dispatch-token
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref DispatchTokenSecret
+
+  DispatchPublishFunction:
+    Type: AWS::Lambda::Function
+    Condition: EnableDispatch
+    # ArtifactsBucket is always supplied by deploy.yml when EnablePublishDispatch=true;
+    # its empty default only exists for the disabled case (function not created).
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [W1030]
+    Properties:
+      FunctionName: !Sub "${ProjectName}-dispatch-publish"
+      Runtime: provided.al2023
+      Architectures: [arm64]
+      Handler: bootstrap
+      MemorySize: 128
+      Timeout: 30
+      Role: !GetAtt DispatchPublishRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref DispatchCodeKey
+      Environment:
+        Variables:
+          DISPATCH_REPO: !Ref DispatchRepo
+          DISPATCH_EVENT_TYPE: !Ref DispatchEventType
+          GITHUB_TOKEN_SECRET_ARN: !Ref DispatchTokenSecret
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -281,6 +375,22 @@ Resources:
                 Action: states:StartExecution
                 Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-video"
 
+  # Lets the state machine invoke the dispatch-publish Lambda; conditional so the
+  # base role is unchanged when the auto-trigger is off.
+  ContentStateMachineDispatchPolicy:
+    Type: AWS::IAM::Policy
+    Condition: EnableDispatch
+    Properties:
+      PolicyName: content-dispatch-publish
+      Roles:
+        - !Ref ContentStateMachineRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: !GetAtt DispatchPublishFunction.Arn
+
   ContentStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
@@ -320,8 +430,9 @@ Resources:
                 },
                 "ResultPath": "$.ecs",
                 "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "GenerateFailed"}],
-                "Next": "TriggerVideo"
+                "Next": "${AfterGenerate}"
               },
+              ${DispatchStates}
               "TriggerVideo": {
                 "Type": "Task",
                 "Resource": "arn:${AWS::Partition}:states:::states:startExecution",
@@ -357,6 +468,31 @@ Resources:
             - HasContentBucket
             - !Ref ContentBucket
             - !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"
+          # When EnablePublishDispatch=true, generation flows through DispatchPublish
+          # (fire the approval repository_dispatch) before video; otherwise it goes
+          # straight to TriggerVideo and DispatchStates is empty (base machine).
+          AfterGenerate: !If [EnableDispatch, "DispatchPublish", "TriggerVideo"]
+          DispatchStates: !If
+            - EnableDispatch
+            - !Sub
+              - |-
+                "DispatchPublish": {
+                    "Type": "Task",
+                    "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+                    "Parameters": {
+                      "FunctionName": "${DispatchArn}",
+                      "Payload": {
+                        "owner.$": "$.detail.owner",
+                        "name.$": "$.detail.name",
+                        "release_tag.$": "$.detail.release_tag"
+                      }
+                    },
+                    "ResultPath": "$.dispatch",
+                    "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.dispatchError", "Next": "TriggerVideo"}],
+                    "Next": "TriggerVideo"
+                  },
+              - DispatchArn: !GetAtt DispatchPublishFunction.Arn
+            - ""
       Tags:
         - Key: Project
           Value: !Ref ProjectName
