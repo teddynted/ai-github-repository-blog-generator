@@ -153,6 +153,10 @@ func run(ctx context.Context) error {
 	// Component adjacency from the release's own content, so a lone-component scene
 	// expands into a real flow without hardcoded per-repo relationships.
 	adj := coOccurrence(scenes)
+	// Build the system-overview loop once. It opens the video AND serves as no-text
+	// visual b-roll for any scene that names no service — the video carries NO
+	// burned-in captions/overlays; the words live only in the .srt/.ass sidecars.
+	overviewMP4 := overviewBackground(ctx, ovKeys, work, w, h)
 
 	var listBuf bytes.Buffer
 	// Deterministic captions: accumulate each scene's narration words, timed for the
@@ -172,20 +176,19 @@ func run(ctx context.Context) error {
 		if err := os.WriteFile(capFile, []byte(caption), 0o644); err != nil {
 			return err
 		}
-		// Background: the opening scene is the system-overview diagram (hero spine);
-		// every other scene is a diagram built from the services it names (animated
-		// flow, no caption overlaid). A scene that composes no diagram is a clean
-		// full-screen CARD (title/heading centred on brand slate) — no AI photos, and
-		// text never sits over a visual.
+		// Background: the opening scene is the system overview; every other scene is a
+		// diagram built from the services it names (animated flow, no caption). A scene
+		// that names no service falls back to the system-overview loop as visual b-roll
+		// — NEVER a text card — so nothing burns text/overlays onto the frame.
 		var bg string
-		isDiagram := false
 		if strings.EqualFold(sc.Type, "title") {
-			bg = overviewBackground(ctx, ovKeys, work, w, h)
-			isDiagram = bg != ""
+			bg = overviewMP4
+		} else if d := diagramBackground(ctx, sc, work, w, h, adj); d != "" {
+			bg = d
 		} else {
-			bg = diagramBackground(ctx, sc, work, w, h, adj)
-			isDiagram = bg != ""
+			bg = overviewMP4
 		}
+		isDiagram := bg != ""
 		// A diagram's looped video is bounded to the narration with -t (zoompan and
 		// -stream_loop both ignore -shortest); probe the synthesized audio for that
 		// length. On any probe miss, durSec is 0 and the clip falls back to -shortest.
@@ -218,7 +221,8 @@ func run(ctx context.Context) error {
 	log.Printf("uploaded %s", outputURI)
 
 	// Deterministic caption sidecars (.srt/.ass) next to the MP4 — for platform CC /
-	// upload / accessibility. Not burned into the frame (the video stays cards-only).
+	// upload / accessibility. Not burned into the frame (the video carries no text —
+	// diagram/overview b-roll only; the words live solely in these sidecars).
 	writeSubtitles(ctx, s3c, capWords, work, outBucket, outKey, w, h)
 	return nil
 }

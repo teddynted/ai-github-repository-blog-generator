@@ -30,8 +30,8 @@ func segmentArgs(captionFile, narrationMP3, out string, w, h int, fontFile, bgIm
 	var vf string
 	switch {
 	case animated && bgImage != "":
-		// Animated architecture diagram, looped, NO caption overlaid (text lives only
-		// on cards, never over a visual).
+		// Animated architecture diagram (or overview b-roll), looped, NO caption
+		// overlaid — the video carries no burned-in text; captions live in the sidecars.
 		inputs = []string{"-stream_loop", "-1", "-i", bgImage}
 		vf = ""
 	case bgImage != "":
