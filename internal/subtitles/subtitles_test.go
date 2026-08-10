@@ -93,9 +93,9 @@ func TestASSWordPopBoxesEachWordVerbatim(t *testing.T) {
 	}
 	for _, want := range []string{
 		"PlayResX: 1080", "PlayResY: 1920",
-		"Style: Pop,DejaVu Sans,120,", wordBoxColour, // pink/red box, fontsize=min/9
-		",3,30,0,5,",     // BorderStyle=3 box, pad=30, centred
-		`\pos(540,1382)`, // centred word position
+		"Style: Pop,DejaVu Sans,77,", wordBoxColour, // pink/red box, fontsize=min/14
+		",3,19,0,5,",     // BorderStyle=3 box, pad=19, centred
+		`\pos(540,1612)`, // centred, bottom-anchored word position
 		`\fscx82\fscy82\t(0,80,\fscx100\fscy100)`, // pop-in animation
 	} {
 		if !strings.Contains(got, want) {

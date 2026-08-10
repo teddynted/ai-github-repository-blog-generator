@@ -193,9 +193,10 @@ const wordBoxColour = "&H00552CFE"
 // where the next begins), so one word is always on screen. Deterministic:
 // identical input → identical output. w×h is the caption reference frame.
 func ASSWordPop(words []TimedWord, w, h int) string {
-	fs := min(w, h) / 9 // large, mobile-first single word
-	pad := fs / 4       // box padding, drawn via BorderStyle=3 outline width
-	x, y := w/2, h*72/100
+	fs := min(w, h) / 14 // TikTok-sized single word (not oversized)
+	pad := fs / 4        // box padding, drawn via BorderStyle=3 outline width
+	// Bottom-anchored like TikTok captions, but above the platform UI chrome.
+	x, y := w/2, h*84/100
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\n\n", w, h)
 	b.WriteString("[V4+ Styles]\n")
