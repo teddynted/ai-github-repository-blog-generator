@@ -50,7 +50,9 @@ func Wrap(words []TimedWord, atomic []string) []Cue {
 	var startMs, endMs int
 	haveCue := false
 
-	flush := func() {
+	// closeCue emits the current cue with the timing of the words actually in it
+	// (endMs is only advanced when a word is ADDED below), so cues never overlap.
+	closeCue := func() {
 		if cur != "" {
 			lines = append(lines, cur)
 			cur = ""
@@ -63,37 +65,35 @@ func Wrap(words []TimedWord, atomic []string) []Cue {
 	}
 
 	for _, tk := range tokens {
-		if !haveCue {
-			startMs = tk.StartMs
-			haveCue = true
-		}
-		endMs = tk.EndMs
-		// Would this token overflow the current line?
 		candidate := tk.Word
 		if cur != "" {
 			candidate = cur + " " + tk.Word
 		}
+		// Line full: push the line. If that fills the cue, close it BEFORE adding this
+		// token — so the overflowing word starts the next cue, not the closing one.
 		if len(candidate) > MaxLineChars && cur != "" {
 			lines = append(lines, cur)
-			cur = tk.Word
+			cur = ""
 			if len(lines) >= MaxLines {
-				// Cue full — close it (the just-started word carries into the next).
-				pending := cur
-				ps, pe := tk.StartMs, tk.EndMs
-				cur = ""
-				flush()
-				cur = pending
-				startMs, endMs, haveCue = ps, pe, true
+				closeCue()
 			}
-		} else {
-			cur = candidate
 		}
+		if !haveCue {
+			startMs = tk.StartMs
+			haveCue = true
+		}
+		if cur == "" {
+			cur = tk.Word
+		} else {
+			cur += " " + tk.Word
+		}
+		endMs = tk.EndMs // advanced only for words actually in the current cue
 		// Break the cue at a sentence boundary so captions align to spoken sentences.
 		if endsSentence(tk.Word) {
-			flush()
+			closeCue()
 		}
 	}
-	flush()
+	closeCue()
 	return cues
 }
 
