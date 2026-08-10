@@ -153,9 +153,9 @@ func run(ctx context.Context) error {
 	// Component adjacency from the release's own content, so a lone-component scene
 	// expands into a real flow without hardcoded per-repo relationships.
 	adj := coOccurrence(scenes)
-	// Build the system-overview loop once. It opens the video AND serves as no-text
-	// visual b-roll for any scene that names no service — the video carries NO
-	// burned-in captions/overlays; the words live only in the .srt/.ass sidecars.
+	// Build the system-overview loop once. It opens the video AND serves as visual
+	// b-roll for any scene that names no service. The b-roll itself carries no text;
+	// one-word "TikTok" captions are burned over it at the concat step (see below).
 	overviewMP4 := overviewBackground(ctx, ovKeys, work, w, h)
 
 	var listBuf bytes.Buffer
@@ -210,7 +210,17 @@ func run(ctx context.Context) error {
 		return err
 	}
 	final := filepath.Join(work, "final.mp4")
-	if err := runFFmpeg(ctx, concatArgs(listFile, final)); err != nil {
+	// One-word "TikTok" captions (a pink box behind each spoken word) burned into
+	// the video during the concat encode. Default on; CAPTION_BURN=false keeps the
+	// clean no-text b-roll (captions then live only in the sidecars).
+	assFile := ""
+	if burnCaptions() && len(capWords) > 0 {
+		assFile = filepath.Join(work, "words.ass")
+		if err := os.WriteFile(assFile, []byte(subtitles.ASSWordPop(capWords, w, h)), 0o644); err != nil {
+			return err
+		}
+	}
+	if err := runFFmpeg(ctx, concatArgs(listFile, final, assFile)); err != nil {
 		return fmt.Errorf("ffmpeg concat: %w", err)
 	}
 
@@ -221,8 +231,8 @@ func run(ctx context.Context) error {
 	log.Printf("uploaded %s", outputURI)
 
 	// Deterministic caption sidecars (.srt/.ass) next to the MP4 — for platform CC /
-	// upload / accessibility. Not burned into the frame (the video carries no text —
-	// diagram/overview b-roll only; the words live solely in these sidecars).
+	// upload / accessibility. These sidecars are standard bottom-centred cues, kept
+	// even when the one-word pop captions are burned into the frame above.
 	writeSubtitles(ctx, s3c, capWords, work, outBucket, outKey, w, h)
 	return nil
 }
@@ -272,6 +282,11 @@ func runFFmpeg(ctx context.Context, args []string) error {
 // forceRender reports whether FORCE_RENDER=true, which bypasses the
 // already-exists skip so a format is re-rendered even when its MP4 is present.
 func forceRender() bool { return strings.EqualFold(os.Getenv("FORCE_RENDER"), "true") }
+
+// burnCaptions reports whether one-word "TikTok" captions are burned into the
+// final video. On by default; set CAPTION_BURN=false to keep clean no-text
+// b-roll (the words then live only in the .srt/.ass sidecars).
+func burnCaptions() bool { return !strings.EqualFold(os.Getenv("CAPTION_BURN"), "false") }
 
 // objectExists reports whether an S3 object is present. A NotFound (404) is a
 // clean "no"; any other error is returned so the caller can decide.

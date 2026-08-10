@@ -296,10 +296,18 @@ func TestForceRender(t *testing.T) {
 }
 
 func TestConcatArgs(t *testing.T) {
-	con := concatArgs("/w/list.txt", "/w/final.mp4")
+	con := concatArgs("/w/list.txt", "/w/final.mp4", "")
 	cj := strings.Join(con, " ")
 	if !strings.Contains(cj, "-f concat") || !slices.Contains(con, "/w/final.mp4") {
 		t.Errorf("concat args = %v", con)
+	}
+	if strings.Contains(cj, "-vf") {
+		t.Errorf("no assFile should mean no burn-in filter: %v", con)
+	}
+	// With an assFile the one-word captions are burned in during the same encode.
+	burn := strings.Join(concatArgs("/w/list.txt", "/w/final.mp4", "/w/words.ass"), " ")
+	if !strings.Contains(burn, "-vf ass=/w/words.ass") {
+		t.Errorf("expected ass burn-in filter, got %q", burn)
 	}
 }
 
