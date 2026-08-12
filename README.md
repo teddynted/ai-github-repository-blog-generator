@@ -62,7 +62,7 @@
 
 You onboard a repository once (for the MVP, with its URL and a **GitHub Personal Access Token**); the platform validates access, stores metadata, and stores the token securely in **AWS Secrets Manager**. A run starts when you call the authenticated **`POST /process`** endpoint, naming the repository and release. That request starts an **AWS Step Functions** execution — the **`GenerateContent`** machine, which runs generation as a one-shot **ECS Fargate** task (`content-runner`) that builds the Release Context, generates the suite, and publishes it to **Amazon S3**, then best-effort triggers video rendering. There is no server to keep running: compute is on-demand and dies with the task. Nothing runs — and nothing is billed — until you ask. *(An earlier EC2-worker path — Step Functions → start host → SSM ready → SQS → worker — remains as the rollback until the [Phase B teardown](./docs/phase-b-teardown.md); see the [serverless migration](./docs/content-generation-serverless-migration.md).)*
 
-When a run fires, the worker generates each artifact through the **AI Provider Router**: **Claude on Amazon Bedrock (Opus 4.8)** first — IAM-authenticated, no API key — falling back to the **Anthropic API** on a quota/throttle error. Before generating an artifact it checks **Amazon S3**; if the Markdown already exists it is **reused, never regenerated**. **n8n** (with PostgreSQL + Redis on the same box) then handles human approval, GitHub PRs, publishing, and notifications. See [Manual Trigger](./docs/manual-trigger.md) and [Content Pipeline Redesign](./docs/content-pipeline-redesign.md).
+When a run fires, the **`content-runner` Fargate task** generates each artifact through the **AI Provider Router**: **Claude on Amazon Bedrock (Opus 4.8)** first — IAM-authenticated, no API key — falling back to the **Anthropic API** on a quota/throttle error. Before generating an artifact it checks **Amazon S3**; if the Markdown already exists it is **reused, never regenerated**. The machine then starts the on-demand host and hands the release to **n8n** (with PostgreSQL + Redis on the box): n8n **opens a GitHub approval issue**, a scheduled **poller** acts on an authorized **`/approve`**, and n8n then **publishes and notifies**. See [Manual Trigger](./docs/manual-trigger.md) and [Content Pipeline Redesign](./docs/content-pipeline-redesign.md).
 
 Supported outputs include technical blog posts, README improvements, documentation, architecture summaries, API documentation, project overviews, release notes, changelogs, and technical tutorials — all emitted as clean, portable Markdown.
 
@@ -78,7 +78,7 @@ Supported outputs include technical blog posts, README improvements, documentati
 
 register repo → **`POST /process`** → Step Functions **`GenerateContent`** → **ECS Fargate `content-runner`** (build Release Context → generate via Bedrock → Anthropic, skip artifacts already in S3) → quality review → publish to S3 → best-effort **video render** → notify. *(Legacy EC2 path, kept as rollback: Step Functions → start host → SSM ready → SQS → worker → n8n approval/publish → scheduled/idle stop.)*
 
-The worker drives **two paths** through the same review/approval/publish stages, both reached via `POST /process`:
+The pipeline drives **two paths** through the same review/approval/publish stages, both reached via `POST /process`:
 
 - **A published GitHub Release** (a `/process` call with a release tag) → SemVer gate → Release Context → the **complete content suite** (blog, storyboard, voice-over, YouTube, Shorts, TikTok, visual assets, SEO, architecture, LinkedIn, X thread). See [Full Content Suite](./docs/content-suite.md).
 - **A repository run** (a `/process` call without a release tag) → clone repo (go-git) → read README/docs/commits → generate the written core (blog, README, docs, architecture summary, release notes, architecture diagram).
@@ -89,8 +89,9 @@ The worker drives **two paths** through the same review/approval/publish stages,
 | --- | --- |
 | Repository registration (URL + PAT → Secrets Manager + DynamoDB) | ✅ Implemented |
 | Trigger — authenticated `POST /process` → Step Functions execution | ✅ Implemented |
-| Orchestration — Step Functions: start host → SSM ready gate → SQS enqueue | ✅ Implemented |
-| Instance lifecycle — on-demand start + scheduled/idle stop | ✅ Implemented |
+| Orchestration — Step Functions: run `content-runner` on Fargate → video render → notify n8n | ✅ Implemented |
+| Approval — n8n opens a GitHub approval issue; scheduled poller acts on `/approve` → publish + notify | ✅ Implemented |
+| Instance lifecycle — on-demand start on a release + scheduled/idle stop | ✅ Implemented |
 | Release pipeline — release tag → SemVer gate → Release Context → **full content suite** (11 artifacts) → review, approval, publish | ✅ Implemented |
 | Repository pipeline — repo run → clone, analyse, generate written core, review, approval, publish, memory, notify | ✅ Implemented |
 | AI Provider Router — Bedrock (Claude Opus 4.8) → Anthropic API fallback | ✅ Implemented |
@@ -100,7 +101,7 @@ The worker drives **two paths** through the same review/approval/publish stages,
 | Deploy to AWS + end-to-end validation | ⏳ Needs your AWS account + Bedrock/Anthropic access |
 | Future roadmap — email notifications, extra trigger sources, GitHub Apps, a web approvals UI | ⏳ Planned |
 
-> **Implementation note.** The MVP runtime is a **Go worker** (`cmd/worker`) that drains SQS and drives the pipeline — chosen for testability. The **n8n** orchestration described throughout these docs remains a valid alternative for the same seams; the pipeline stages are composable ports either can drive. See the [Development Plan](./docs/development-plan.md) for the runtime decision.
+> **Implementation note.** Generation runs serverlessly as the **`content-runner`** Go binary on **ECS Fargate** (chosen for testability and zero idle cost). **n8n** on the on-demand EC2 host owns the review/approval/publish/notify stages. *(A legacy EC2 Go worker that drained SQS remains as rollback until the [Phase B teardown](./docs/phase-b-teardown.md).)* See the [Development Plan](./docs/development-plan.md) for the runtime decision.
 
 ---
 
@@ -240,13 +241,13 @@ Each repository still carries an optional **Trigger Pattern** (`blog:` by defaul
 
 ## Content Generation Workflow
 
-> **Conceptual reference** of the end-to-end AI content pipeline — a `POST /process` request flows through Step Functions, the worker's Claude generation (Bedrock → Anthropic), artifact generation, and human-reviewed publishing. This is a high-level target overview; for the exact MVP request lifecycle and the components actually deployed, see [Architecture](#architecture) below. An interactive, theme-aware version lives at [`docs/orchestration-diagram.html`](./docs/orchestration-diagram.html).
+> **Conceptual reference** of the end-to-end AI content pipeline — a `POST /process` request flows through Step Functions, serverless **ECS Fargate** generation (Claude on Bedrock → Anthropic), and **n8n-orchestrated** human-reviewed publishing. This is a high-level overview; for the exact request lifecycle and the components actually deployed, see [Architecture](#architecture) below. An interactive, theme-aware version lives at [`docs/orchestration-diagram.html`](./docs/orchestration-diagram.html).
 
 <div align="center">
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/orchestration-diagram-dark.svg">
-  <img alt="AI content generation workflow: POST /process triggers Step Functions, which starts the host and enqueues to SQS, the worker generates through the Bedrock-to-Anthropic Provider Router, fanning out to blog, visual, video and social artifacts, then Amazon S3, n8n and publishing to a pull request and blog platform, with CloudWatch monitoring." src="./docs/assets/orchestration-diagram-light.svg" width="620">
+  <img alt="AI content generation workflow: POST /process triggers Step Functions, which runs the content-runner on ECS Fargate to generate through the Bedrock-to-Anthropic Provider Router (blog, visual, video and social artifacts) and publish to Amazon S3, then notify-n8n starts the on-demand EC2 host where n8n opens a GitHub approval issue and, on /approve, publishes and notifies, with CloudWatch monitoring." src="./docs/assets/orchestration-diagram-light.svg" width="620">
 </picture>
 
 </div>
@@ -255,33 +256,19 @@ Each repository still carries an optional **Trigger Pattern** (`blog:` by defaul
 
 ## Architecture
 
-The platform is **on-demand and API-triggered**. `POST /process` starts an AWS Step Functions execution that orchestrates the whole run; there is no local model inference and no GitHub webhook ingress.
+The platform is **on-demand and API-triggered**. `POST /process` starts an AWS Step Functions execution; **content generation runs serverlessly on ECS Fargate**, and **n8n on an on-demand EC2 host owns human approval, publishing, and notifications**. There is no local model inference and no GitHub webhook ingress.
 
 ```mermaid
 flowchart TD
     CALLER["Caller (CI, CLI, or n8n)"] -->|"POST /process (x-api-key)"| APIGW["Amazon API Gateway"]
     APIGW --> L1["Lambda: manual-trigger"]
-    L1 -->|"StartExecution"| SFN["AWS Step Functions"]
+    L1 -->|"StartExecution"| SFN["Step Functions: GenerateContent"]
 
-    subgraph SFN["Orchestration state machine"]
-        FIND["Find host by Project tag"]
-        START["StartInstances"]
-        WAIT["Wait for SSM: instance Online"]
-        ENQ["SendMessage → SQS"]
-        FIND --> START --> WAIT --> ENQ
-    end
-
-    ENQ --> SQS[("Amazon SQS (durable buffer + DLQ)")]
-
-    subgraph EC2["EC2 On-Demand t4g.small (Ubuntu arm64 + Docker Compose)"]
-        WK["Worker (content generator)"]
-        N8N["n8n (orchestrator)"]
-        PG[("PostgreSQL")]
-        RD[("Redis")]
-        MEM[("Repository Memory")]
-        WK -->|poll| SQS
-        N8N --- PG
-        N8N --- RD
+    subgraph SFN["blog-gen-content state machine (serverless)"]
+        GEN["ECS Fargate: content-runner<br/>build Release Context → generate suite → publish"]
+        VID["Start blog-gen-video<br/>(Fargate render)"]
+        NTF["notify-n8n Lambda<br/>start host → POST webhook"]
+        GEN --> VID --> NTF
     end
 
     subgraph ROUTER["AI Provider Router"]
@@ -289,15 +276,25 @@ flowchart TD
         AN["Anthropic API (fallback on quota)"]
         BR -.quota/throttle.-> AN
     end
-    WK --> ROUTER
-    WK -->|"check exists? else generate"| S3[("Amazon S3 (artifacts, idempotent)")]
+    GEN --> ROUTER
+    GEN -->|"check exists? else generate"| S3[("Amazon S3 (artifacts, idempotent)")]
 
-    S3 --> N8N
-    N8N --> APP{"Optional human approval"}
-    APP -->|"approved / auto"| PUB["Publish (blog / social / video) + GitHub PR"]
+    NTF -->|"POST /webhook/release-review"| N8N
+
+    subgraph EC2["EC2 On-Demand (Ubuntu arm64 + Docker Compose)"]
+        N8N["n8n (orchestrator)"]
+        PG[("PostgreSQL")]
+        RD[("Redis")]
+        N8N --- PG
+        N8N --- RD
+    end
+
+    N8N -->|"create issue"| APPR{"GitHub approval issue<br/>reviewer comments /approve"}
+    APPR --> POLL["n8n Approval Poller (scheduled)"]
+    POLL -->|"approved"| PUB["Publish (blog / social / video)"]
     PUB --> NOTIFY["Notify (Gmail / webhook)"]
 
-    SCHED["EventBridge Scheduler / idle-stop"] -->|"StopInstances"| EC2
+    SCHED["EventBridge Scheduler / idle-stop"] -->|"start on release · stop when idle"| EC2
     EBS[("Persistent gp3 EBS Volume")] --- EC2
     CW["Amazon CloudWatch"] -.logs/metrics.- EC2
 ```
@@ -305,12 +302,12 @@ flowchart TD
 ### Request lifecycle
 
 1. A caller (your CI, the CLI, or an n8n flow) sends **`POST /process`** with an `x-api-key`, naming the repository and release.
-2. **API Gateway** invokes the **manual-trigger Lambda**, which validates the request and **starts a Step Functions execution**, returning HTTP 202.
-3. The **state machine** resolves the compute host by its `Project` tag, **starts it**, and **waits until it reports `Online` via SSM** — then sends the job to the **SQS** durable buffer.
-4. The **worker** on the instance drains SQS and generates each artifact through the **AI Provider Router**: **Amazon Bedrock (Claude Opus 4.8)** first, falling back to the **Anthropic API** on a quota/throttle error.
-5. Before generating an artifact the worker **checks S3** — if the Markdown already exists it is **reused, never regenerated** (no wasted tokens); otherwise it generates and stores it.
-6. **n8n** (with PostgreSQL + Redis on the same box) handles **human approval, GitHub PRs, publishing** (blog / social / video), and **notifications** (Gmail / webhook).
-7. The **scheduler stack** (fixed daily window / idle-stop) powers the instance **off** when the work is done.
+2. **API Gateway** invokes the **manual-trigger Lambda**, which validates the request and **starts the `blog-gen-content` Step Functions execution**, returning HTTP 202.
+3. The state machine runs the **`content-runner` task on ECS Fargate** (serverless — no EC2 worker, no SQS): it builds the **Release Context**, generates each artifact through the **AI Provider Router** (**Amazon Bedrock / Claude Opus 4.8** first, falling back to the **Anthropic API** on a quota/throttle error), and publishes the Markdown to **Amazon S3**.
+4. Before generating an artifact the runner **checks S3** — if the Markdown already exists it is **reused, never regenerated** (no wasted tokens).
+5. The machine then **starts the `blog-gen-video` render** (Fargate) and invokes the **`notify-n8n` Lambda**, which **starts the on-demand EC2 host** and **POSTs the release to n8n's `/release-review` webhook**.
+6. **n8n** (with PostgreSQL + Redis on the same box) is the orchestrator: its **review workflow opens a GitHub approval issue**, and a scheduled **Approval Poller** watches for an authorized **`/approve`** comment, then **publishes** (blog / social / video) and **notifies** (Gmail / webhook). `/reject` cancels.
+7. The **scheduler stack** (daily window / idle-stop) powers the instance **off** when the work is done.
 
 For a deeper treatment, see [`docs/architecture.md`](./docs/architecture.md).
 
@@ -323,35 +320,35 @@ sequenceDiagram
     participant CAL as Caller
     participant API as API Gateway
     participant LT as Lambda (manual-trigger)
-    participant SFN as Step Functions
-    participant SQS as Amazon SQS
-    participant EC2 as EC2 t4g.small
-    participant WK as Worker
+    participant SFN as Step Functions (blog-gen-content)
+    participant FG as ECS Fargate (content-runner)
     participant RTR as Provider Router
     participant S3 as Amazon S3
-    participant N8N as n8n
+    participant NL as Lambda (notify-n8n)
+    participant N8N as n8n (on EC2)
+    participant GH as GitHub (approval issue)
 
     CAL->>API: POST /process (x-api-key)
     API->>LT: invoke
     LT->>SFN: StartExecution
     LT-->>CAL: HTTP 202 (accepted)
-    SFN->>EC2: StartInstances (find by Project tag)
-    SFN->>EC2: wait for SSM Online
-    SFN->>SQS: SendMessage (release job)
-    WK->>SQS: poll
-    SQS-->>WK: release job
+    SFN->>FG: RunTask (content-runner)
     loop each artifact
-        WK->>S3: exists?
+        FG->>S3: exists?
         alt already in S3
-            S3-->>WK: reuse (skip generation)
+            S3-->>FG: reuse (skip generation)
         else missing
-            WK->>RTR: generate (Bedrock → Anthropic on quota)
-            WK->>S3: store artifact
+            FG->>RTR: generate (Bedrock → Anthropic on quota)
+            FG->>S3: store artifact
         end
     end
-    S3->>N8N: artifacts ready
-    N8N->>N8N: (approval) → publish → GitHub PR → notify
-    Note over EC2: scheduler / idle-stop powers the host off
+    SFN->>SFN: start blog-gen-video (Fargate render)
+    SFN->>NL: invoke
+    NL->>N8N: start host + POST /webhook/release-review
+    N8N->>GH: open approval issue
+    Note over N8N,GH: reviewer comments /approve
+    N8N->>N8N: Approval Poller detects /approve → publish → notify
+    Note over N8N: idle-stop powers the host off when done
 ```
 
 The full node-by-node n8n pipeline is documented in [`docs/workflows.md`](./docs/workflows.md).
@@ -616,14 +613,15 @@ Release Context, not static templates), so there is nothing to externalise.
 | **Trigger** | `POST /process` (API Gateway, x-api-key) | Named, on-demand run request |
 | **Ingress** | Amazon API Gateway | HTTPS endpoints for registration + `/process` |
 | **Serverless** | AWS Lambda | Registration, manual-trigger, release-context, scheduled start/stop |
-| **Orchestration (control)** | AWS Step Functions | Start host → wait for SSM ready → enqueue job |
+| **Orchestration (control)** | AWS Step Functions (`blog-gen-content`) | Run content-runner on Fargate → start video render → notify n8n |
+| **Content generation** | Amazon ECS Fargate (`content-runner`, arm64) | Serverless generation of the full content suite — no EC2 worker, no SQS |
+| **Video render** | Amazon ECS Fargate (`blog-gen-video`) | Serverless social-video rendering |
 | **AI Provider Router** | Amazon Bedrock (Claude Opus 4.8) → Anthropic API | Primary on Bedrock; auto-fallback to Anthropic on quota |
-| **Queue** | Amazon SQS | Durable buffer between the state machine and the worker |
-| **Compute** | EC2 On-Demand t4g.small (Ubuntu arm64) | Runs the worker + n8n; no GPU, no local model |
+| **Compute (orchestrator)** | EC2 On-Demand (Ubuntu arm64) | Runs **n8n**; started on a release, stopped when idle; no GPU, no local model |
 | **Idempotent store** | Amazon S3 | Generated artifacts; existing Markdown is reused, never regenerated |
 | **Storage** | gp3 EBS Volume | Persistent n8n + PostgreSQL state and Repository Memory |
 | **Runtime** | Docker + Docker Compose | n8n + PostgreSQL + Redis on the instance |
-| **Orchestration (workflow)** | n8n | Human approval, GitHub PRs, publishing, notifications |
+| **Orchestration (workflow)** | n8n | Owns approval end-to-end: opens a GitHub approval issue, a scheduled poller acts on `/approve`, then publishes + notifies |
 | **Memory** | Repository Memory | Per-repo continuity and topic de-duplication |
 | **IaC** | AWS CloudFormation | Modular, reusable infrastructure templates |
 | **Observability** | Amazon CloudWatch | Logs, metrics, and alarms |
