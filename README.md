@@ -251,7 +251,7 @@ flowchart LR
     FG --> S3[("Amazon S3")]
     SFN --> NL["notify-n8n → n8n<br/>(on-demand EC2)"]
     NL --> APR{"GitHub approval issue"}
-    APR -->|"/approve"| PUB["Publish: blog PR + S3 promote"]
+    APR -->|"/approve"| PUB["publish-release: blog PR + S3 promote + cross-post"]
     PUB --> NOT["Notify"]
 ```
 
@@ -294,10 +294,11 @@ flowchart TD
 
     N8N -->|"create issue"| APPR{"GitHub approval issue<br/>reviewer comments /approve"}
     APPR --> POLL["n8n Approval Poller (scheduled)"]
-    POLL -->|"approved"| PUB["Publish (blog / social / video)"]
+    POLL -->|"approved"| PUB["publish-release Lambda (API GW)<br/>blog PR + S3 promote + cross-post"]
+    PUB --> XP["Dev.to · Hashnode · Medium"]
     PUB --> NOTIFY["Notify (Gmail / webhook)"]
 
-    SCHED["EventBridge Scheduler / idle-stop"] -->|"start on release · stop when idle"| EC2
+    SCHED["idle-stop (EventBridge)"] -->|"stop when idle · start is event-driven on a release"| EC2
     EBS[("Persistent gp3 EBS Volume")] --- EC2
     CW["Amazon CloudWatch"] -.logs/metrics.- EC2
 ```
@@ -309,7 +310,7 @@ flowchart TD
 3. The state machine runs the **`content-runner` task on ECS Fargate** (serverless — no EC2 worker, no SQS): it builds the **Release Context**, generates each artifact through the **AI Provider Router** (**Amazon Bedrock / Claude Opus 4.8** first, falling back to the **Anthropic API** on a quota/throttle error), and publishes the Markdown to **Amazon S3**.
 4. Before generating an artifact the runner **checks S3** — if the Markdown already exists it is **reused, never regenerated** (no wasted tokens).
 5. The machine then **starts the `blog-gen-video` render** (Fargate) and invokes the **`notify-n8n` Lambda**, which **starts the on-demand EC2 host** and **POSTs the release to n8n's `/release-review` webhook**.
-6. **n8n** (with PostgreSQL + Redis on the same box) is the orchestrator: its **review workflow opens a GitHub approval issue**, and a scheduled **Approval Poller** watches for an authorized **`/approve`** comment, then **publishes** (blog / social / video) and **notifies** (Gmail / webhook). `/reject` cancels.
+6. **n8n** (with PostgreSQL + Redis on the same box) is the orchestrator: its **review workflow opens a GitHub approval issue**, and a scheduled **Approval Poller** watches for an authorized **`/approve`** comment, then calls the **`publish-release`** Lambda (via an API Gateway HTTP API) to **open a blog PR**, **promote** the artifacts to an approved-only `published/` S3 prefix, and **cross-post** (Dev.to / Hashnode / Medium), and **notifies**. `/reject` cancels.
 7. The **scheduler stack** (daily window / idle-stop) powers the instance **off** when the work is done.
 
 For a deeper treatment, see [`docs/architecture.md`](./docs/architecture.md).
@@ -350,7 +351,7 @@ sequenceDiagram
     NL->>N8N: start host + POST /webhook/release-review
     N8N->>GH: open approval issue
     Note over N8N,GH: reviewer comments /approve
-    N8N->>N8N: Approval Poller detects /approve → publish → notify
+    N8N->>N8N: Approval Poller detects /approve → publish-release (PR + S3 promote + cross-post) → notify
     Note over N8N: idle-stop powers the host off when done
 ```
 
@@ -615,7 +616,7 @@ Release Context, not static templates), so there is nothing to externalise.
 | **Metadata** | Amazon DynamoDB | Per-repository metadata (secret reference, trigger pattern, …) |
 | **Trigger** | `POST /process` (API Gateway, x-api-key) | Named, on-demand run request |
 | **Ingress** | Amazon API Gateway | HTTPS endpoints for registration + `/process` |
-| **Serverless** | AWS Lambda | Registration, manual-trigger, release-context, scheduled start/stop |
+| **Serverless** | AWS Lambda | Registration, manual-trigger, release-context, scheduled/idle start·stop, `notify-n8n`, `publish-release` |
 | **Orchestration (control)** | AWS Step Functions (`blog-gen-content`) | Run content-runner on Fargate → start video render → notify n8n |
 | **Content generation** | Amazon ECS Fargate (`content-runner`, arm64) | Serverless generation of the full content suite — no EC2 worker, no SQS |
 | **Video render** | Amazon ECS Fargate (`blog-gen-video`) | Serverless social-video rendering |
@@ -625,6 +626,9 @@ Release Context, not static templates), so there is nothing to externalise.
 | **Storage** | gp3 EBS Volume | Persistent n8n + PostgreSQL state and Repository Memory |
 | **Runtime** | Docker + Docker Compose | n8n + PostgreSQL + Redis on the instance |
 | **Orchestration (workflow)** | n8n | Owns approval end-to-end: opens a GitHub approval issue, a scheduled poller acts on `/approve`, then publishes + notifies |
+| **Publishing (on approval)** | Lambda `publish-release` behind an API Gateway HTTP API | On `/approve`: opens a **blog PR**, **promotes** the release's artifacts to an approved-only `published/` S3 prefix, and cross-posts |
+| **Cross-post targets** | Dev.to · Hashnode · Medium (legacy token only) | Optional external blog publishing; each skipped unless its SSM token is set |
+| **Instance lifecycle** | EventBridge (idle-stop Lambda) | Powers the host **off** after sustained idle; start is event-driven (on a release) |
 | **Memory** | Repository Memory | Per-repo continuity and topic de-duplication |
 | **IaC** | AWS CloudFormation | Modular, reusable infrastructure templates |
 | **Observability** | Amazon CloudWatch | Logs, metrics, and alarms |
