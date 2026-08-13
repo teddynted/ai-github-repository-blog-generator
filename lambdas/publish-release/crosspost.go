@@ -33,16 +33,23 @@ func (e *env) crosspost(ctx context.Context, title, body string, logger interfac
 			logger.Info("crossposted", "platform", name, "url", url)
 		}
 	}
-	if e.devtoToken != "" {
+	if isSet(e.devtoToken) {
 		try("devto", func() (string, error) { return e.postDevto(ctx, title, body) })
 	}
-	if e.hashnodeToken != "" && e.hashnodePub != "" {
+	if isSet(e.hashnodeToken) && e.hashnodePub != "" {
 		try("hashnode", func() (string, error) { return e.postHashnode(ctx, title, body) })
 	}
-	if e.mediumToken != "" {
+	if isSet(e.mediumToken) {
 		try("medium", func() (string, error) { return e.postMedium(ctx, title, body) })
 	}
 	return out
+}
+
+// isSet reports whether a token is a real, configured value — an empty string or
+// a "REPLACE_ME…" placeholder both count as unset, so a not-yet-provisioned
+// platform is silently skipped rather than attempting a doomed publish.
+func isSet(v string) bool {
+	return v != "" && !strings.HasPrefix(v, "REPLACE_ME")
 }
 
 // splitTitle pulls the first H1 as the title and returns the body without it, so
