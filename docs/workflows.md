@@ -1,6 +1,8 @@
 # Workflows
 
-Control flow spans two layers. `POST /process` starts an **AWS Step Functions** execution that starts the host, waits for it to report ready via SSM, and enqueues the job onto **Amazon SQS**. The **worker** on the On-Demand EC2 instance drains the queue and generates each artifact through the **Provider Router** (Bedrock → Anthropic), reusing anything already in S3; then **n8n** drives quality review, optional human approval, GitHub PRs, publishing, and notifications.
+Control flow spans two layers. `POST /process` starts the **`blog-gen-content` Step Functions** execution, which runs the **`content-runner` task on ECS Fargate** (serverless — no EC2 worker, no SQS): it generates each artifact through the **Provider Router** (Bedrock → Anthropic), reusing anything already in S3, and publishes to **S3**. The machine then starts the video render and invokes the **`notify-n8n` Lambda**, which **starts the on-demand EC2 host** and **POSTs the release to n8n's `/release-review` webhook**. From there **n8n is the orchestrator**: it opens a **GitHub approval issue**, a scheduled **Approval Poller** acts on an authorized `/approve`, then n8n **publishes and notifies**.
+
+> **Legacy note.** An earlier design drained an **Amazon SQS** queue with a Go **worker** on the EC2 host. That path is retained only as rollback ([Phase B teardown](./phase-b-teardown.md)); the SQS/worker mentions in the deeper sections below refer to it.
 
 > **Registration is not an n8n workflow.** Onboarding a repository (URL + PAT → validate → store metadata + PAT) is handled by the **Registration Lambda** ([Architecture §2](./architecture.md#2-repository-registration-mvp)). These workflows cover only the per-run generation pipeline.
 
@@ -18,16 +20,15 @@ flowchart TB
     LT -- invalid --> R400[400]
     LT -- ok --> SFN[StartExecution]
     LT --> R202[HTTP 202 accepted]
-    subgraph SFN["Orchestration state machine"]
-        FIND[Find host by Project tag] --> START[StartInstances]
-        START --> WAIT[Wait: SSM Online]
-        WAIT --> ENQ[SendMessage → SQS]
+    subgraph SFN["blog-gen-content state machine"]
+        GEN[ECS Fargate: content-runner<br/>generate → publish to S3] --> VID[Start blog-gen-video]
+        VID --> NTF[notify-n8n Lambda<br/>start host → POST webhook]
     end
-    ENQ --> WK[Worker drains SQS]
+    NTF --> N8N[n8n review workflow<br/>opens approval issue]
 ```
 
 - The manual-trigger Lambda does **only**: validate → `states:StartExecution` → 202. No analysis, inference, or PAT access.
-- The **state machine** starts the host on demand (no operating-window gate) and hands the job to SQS. Power-**off** is owned by the [scheduler](./scheduling.md).
+- The **state machine** runs generation on Fargate, then starts the host on demand and hands the release to n8n. Power-**off** is owned by the [scheduler](./scheduling.md) (idle-stop).
 
 ### 1a. Run sequence (end to end)
 
@@ -41,10 +42,10 @@ sequenceDiagram
     participant API as API Gateway
     participant LT as manual-trigger
     participant SFN as Step Functions
-    participant SSM as SSM
-    participant SQS as SQS
-    participant SEC as Secrets Manager
-    participant W as Worker (on EC2)
+    participant FG as ECS Fargate (content-runner)
+    participant S3 as Amazon S3
+    participant NL as notify-n8n Lambda
+    participant N8N as n8n (on EC2)
 
     C->>API: POST /process (x-api-key)
     API->>LT: invoke
@@ -53,35 +54,30 @@ sequenceDiagram
     else valid
         LT->>SFN: StartExecution
         LT-->>C: 202 accepted
-        SFN->>SFN: Find host by Project tag → StartInstances
-        SFN->>SSM: wait for DescribeInstanceInformation = Online
-        SFN->>SQS: SendMessage (release job)
+        SFN->>FG: RunTask (content-runner)
+        FG->>FG: build Release Context → generate (Bedrock → Anthropic) → skip-if-in-S3 → review
+        FG->>S3: publish artifacts
+        SFN->>SFN: start blog-gen-video render
+        SFN->>NL: invoke
+        NL->>N8N: start host + POST /webhook/release-review
+        N8N->>N8N: open approval issue → poller acts on /approve → publish → notify
     end
-
-    Note over SQS,W: once the host is running
-    W->>SQS: long-poll / receive
-    W->>SEC: read shared secret → pat[owner/name]
-    W->>W: clone → analyze → generate (Bedrock → Anthropic) → skip-if-in-S3 → review → publish → memory → notify
-    W->>SQS: delete message on success
 ```
 
 ---
 
 ## 2. Workflow Catalog (n8n)
 
-| Workflow | File | Trigger | Purpose |
-| --- | --- | --- | --- |
-| Event Ingestion | `event-ingestion.json` | **SQS poll** | Pulls jobs, parses the payload |
-| Repository Analysis | `repository-analysis.json` | Called by ingestion | Checkout + structure/README/source/config analysis |
-| Repository Memory | `repository-memory.json` | Called by analysis | Looks up prior analyses and published topics; records new ones |
-| Content Generation | `content-generation.json` | Called by analysis | Topic ID, outline, and generation via the Provider Router (Bedrock → Anthropic) per content type; skips artifacts already in S3 |
-| Quality Review | `quality-review.json` | Called by generation | Reviews drafts before publishing |
-| Approval & Publishing | `approval-publishing.json` | Called by review | Optional human approval, GitHub PR, then publishes Markdown |
-| Notifications | `notifications.json` | Called on success/failure | Notifies users |
+Generation, review/scoring, and S3 publishing already run inside the serverless **`content-runner`**. n8n owns the **human-approval loop** on top of that, as two active workflows:
 
-Each workflow can also be executed independently for testing ([WF-8](./requirements.md#4-workflow-requirements)).
+| Workflow | Trigger | Purpose |
+| --- | --- | --- |
+| **Release Review & Approval** | Webhook `POST /webhook/release-review` (from the `notify-n8n` Lambda) | Opens a **GitHub approval issue** for the release (body carries a machine-readable marker) using the `githubApi` credential |
+| **Approval Poller** | Schedule (every few minutes, while the host is up) | Searches open approval issues, reads comments, and on an authorized **`/approve`** posts a confirmation + **closes** the issue and **notifies**; **`/reject`** cancels |
 
-> **Trigger note:** every job in SQS was enqueued by the Step Functions state machine after `POST /process`. Instance start is handled by the state machine; stop by EventBridge Scheduler / idle-stop — **not** by n8n.
+Authorization is enforced by the commenter's `author_association` (OWNER / COLLABORATOR / MEMBER). Because the approval issue lives on GitHub, a pending approval survives the host powering off — the poller resumes on the next wake. The reference JSON exports ([`n8n-review-workflow.json`](./n8n-review-workflow.json), [`n8n-publishing-workflow.json`](./n8n-publishing-workflow.json)) are illustrative templates; the live workflows are the two above.
+
+> **Trigger note:** n8n is invoked by the state machine's `notify-n8n` step after generation — there is no SQS. Instance **start** is triggered by that step (on a release) and the daily window; **stop** by EventBridge Scheduler / idle-stop.
 
 ---
 
@@ -214,19 +210,14 @@ A review stage checks drafts before they can be published ([FR-3.12](./requireme
 
 ```mermaid
 flowchart TB
-    C[Reviewed content set] --> G{Human approval required?<br/>REQUIRE_HUMAN_APPROVAL}
-    G -- yes --> WAIT[Notify approver + wait for decision]
-    WAIT --> DEC{Approved?}
-    DEC -- no --> REJ[Discard draft + log + notify]
-    DEC -- yes --> PUB
-    G -- no --> PUB[Render Markdown + publish]
-    PUB --> REC[Record published topics → Repository Memory]
-    REC --> SHA[Update last processed commit SHA → DynamoDB]
-    SHA --> ME[Emit CloudWatch metrics]
-    ME --> OK[Success → Notifications]
+    RV[Reviewed content in S3] --> ISS[n8n review workflow<br/>open GitHub approval issue]
+    ISS --> HUM{Reviewer comments}
+    HUM -- /approve --> PUB[n8n poller: publish + notify + close issue]
+    HUM -- /reject --> REJ[Poller: comment + close, no publish]
+    HUM -- none --> WAIT[Issue stays open<br/>poller re-checks on next wake]
 ```
 
-**Optional human approval** (`REQUIRE_HUMAN_APPROVAL`, default `false`) pauses the pipeline for a human decision before publishing. All output is **GitHub-flavoured Markdown**; a failure never corrupts previously published output ([FR-5.5](./requirements.md#16-reliability-retry-logging--error-handling)).
+**Human approval is a GitHub issue, owned by n8n.** After generation, n8n opens an approval issue for the release; the scheduled **Approval Poller** acts on an authorized `/approve` (publish + notify + close) or `/reject` (cancel). Because the decision lives on the issue, a pending approval **survives the host powering off** — the poller resumes on the next wake. All output is **GitHub-flavoured Markdown**; a failure never corrupts previously published output ([FR-5.5](./requirements.md#16-reliability-retry-logging--error-handling)).
 
 ---
 
@@ -250,7 +241,7 @@ flowchart LR
 
 1. Start the instance and open n8n over an **SSH tunnel** (the UI is not publicly exposed — see [Deployment §5](./deployment.md#5-import-the-n8n-workflows)); locally it's `http://localhost:5678`.
 2. **Workflows → Import from File** and select each JSON in `workflows/`.
-3. Configure **Credentials** (AWS/SQS, GitHub, notification channel).
+3. Configure the **`githubApi` credential** (a token with `Contents` + `Issues` write on this repo) that the review workflow and poller use; and any notification channel.
 4. Activate the workflows.
 
 ### Exporting after changes
