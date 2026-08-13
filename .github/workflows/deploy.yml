@@ -305,6 +305,11 @@ jobs:
           if [ "${{ vars.ENABLE_PUBLISH_ON_APPROVE }}" = "true" ]; then
             P="$P EnablePublishOnApprove=true ArtifactsBucket=$ARTIFACTS_BUCKET PublishCodeKey=$SHA/publish-release.zip"
             [ -n "${{ vars.TARGET_REPO }}" ] && P="$P TargetRepo=${{ vars.TARGET_REPO }}"
+            # Optional cross-post config (tokens themselves live in SSM SecureStrings:
+            # /blog-gen/devto/api-key, /blog-gen/hashnode/token, /blog-gen/medium/token).
+            [ -n "${{ vars.HASHNODE_PUBLICATION_ID }}" ] && P="$P HashnodePublicationId=${{ vars.HASHNODE_PUBLICATION_ID }}"
+            [ -n "${{ vars.PUBLISH_DRAFT }}" ] && P="$P PublishDraft=${{ vars.PUBLISH_DRAFT }}"
+            [ -n "${{ vars.CROSSPOST_TAGS }}" ] && P="$P CrosspostTags=${{ vars.CROSSPOST_TAGS }}"
           fi
           aws cloudformation deploy \
             --template-file infrastructure/content.yaml \

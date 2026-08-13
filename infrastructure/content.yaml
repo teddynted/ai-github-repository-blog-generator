@@ -101,6 +101,33 @@ Parameters:
     Type: String
     Default: /blog-gen/publish/shared-secret
     Description: SSM SecureString name holding the shared secret the poller sends in X-Publish-Secret.
+  # --- Optional external cross-post targets (each skipped unless its SSM
+  # --- SecureString holds a token). Set the tokens out-of-band.
+  DevtoTokenParam:
+    Type: String
+    Default: /blog-gen/devto/api-key
+    Description: SSM SecureString name for the Dev.to API key (empty param = skip Dev.to).
+  HashnodeTokenParam:
+    Type: String
+    Default: /blog-gen/hashnode/token
+    Description: SSM SecureString name for the Hashnode PAT (empty param = skip Hashnode).
+  HashnodePublicationId:
+    Type: String
+    Default: ""
+    Description: Hashnode publication id to publish into (required for Hashnode).
+  MediumTokenParam:
+    Type: String
+    Default: /blog-gen/medium/token
+    Description: SSM SecureString name for a legacy Medium integration token (empty = skip Medium).
+  PublishDraft:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: When "true", cross-posts are created as drafts instead of live.
+  CrosspostTags:
+    Type: String
+    Default: ""
+    Description: Optional comma-separated tags applied to cross-posts.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
@@ -274,12 +301,15 @@ Resources:
                   StringEquals:
                     kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
                     kms:CallerAccount: !Ref AWS::AccountId
-              # Read the GitHub token + shared secret (SecureString).
+              # Read the GitHub token + shared secret + optional cross-post tokens.
               - Effect: Allow
                 Action: ssm:GetParameter
                 Resource:
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PublishTokenParam}"
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PublishSecretParam}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${DevtoTokenParam}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${HashnodeTokenParam}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${MediumTokenParam}"
               - Effect: Allow
                 Action: kms:Decrypt
                 Resource: "*"
@@ -311,6 +341,12 @@ Resources:
           TARGET_REPO: !Ref TargetRepo
           GITHUB_TOKEN_PARAM: !Ref PublishTokenParam
           SHARED_SECRET_PARAM: !Ref PublishSecretParam
+          DEVTO_TOKEN_PARAM: !Ref DevtoTokenParam
+          HASHNODE_TOKEN_PARAM: !Ref HashnodeTokenParam
+          HASHNODE_PUBLICATION_ID: !Ref HashnodePublicationId
+          MEDIUM_TOKEN_PARAM: !Ref MediumTokenParam
+          PUBLISH_DRAFT: !Ref PublishDraft
+          CROSSPOST_TAGS: !Ref CrosspostTags
       Tags:
         - Key: Project
           Value: !Ref ProjectName
