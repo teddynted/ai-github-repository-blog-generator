@@ -102,12 +102,16 @@ Resources:
     Properties:
       # Note: >- (not >) so there is no trailing newline — EC2 rejects a
       # security-group description containing characters outside its allowed set.
+      # GroupDescription is IMMUTABLE (changing it replaces the SG, which would
+      # change the exported InstanceSecurityGroupId that compute+content import),
+      # so it is left at its original text even though SSH ingress is now removed.
       GroupDescription: >-
-        EC2 On-Demand host - no inbound SSH (shell access is via SSM Session
-        Manager). n8n (5678) is opened only to the notify-n8n Lambda SG by a rule
-        in the content stack. Egress open for cloning, image pulls, and AWS APIs.
+        EC2 On-Demand host - inbound SSH from the operator CIDR only; n8n (5678) and
+        Ollama (11434) are never exposed. Egress open for cloning, image pulls,
+        and AWS API access.
       VpcId: !Ref Vpc
       # No SSH ingress: access is via SSM (agent-outbound), so no port is exposed.
+      # (Removing the rule is an in-place SG update — no replacement.)
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
