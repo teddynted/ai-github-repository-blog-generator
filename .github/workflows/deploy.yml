@@ -9,7 +9,6 @@ name: deploy
 #   var    AWS_REGION           - e.g. us-east-1
 #   (ARTIFACTS_BUCKET is derived automatically as blog-gen-artifacts-<account>-<region>,
 #    matching bootstrap.yaml — no variable needed.)
-#   var    OPERATOR_CIDR        - (optional) SSH source CIDR
 #   var    DEPLOY_ENABLED       - "true" to arm this workflow
 #   var    INSTANCE_TYPE        - (optional) override the EC2 type; must be arm64/Graviton
 #   var    ENABLE_VIDEO         - (optional) "true" to deploy the social-video pipeline
@@ -109,8 +108,9 @@ jobs:
         run: |
           # SUBNET_AZ places the On-Demand host in a specific AZ (e.g. us-east-1b)
           # when the default AZ is short on the chosen instance type.
+          # No SSH ingress on the host (shell access is via SSM), so OperatorCidr
+          # is gone — nothing to pass here for it.
           P=""
-          [ -n "${{ vars.OPERATOR_CIDR }}" ] && P="$P OperatorCidr=${{ vars.OPERATOR_CIDR }}"
           [ -n "${{ vars.SUBNET_AZ }}" ]     && P="$P AvailabilityZone=${{ vars.SUBNET_AZ }}"
           aws cloudformation deploy \
             --template-file infrastructure/network.yaml \
