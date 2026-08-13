@@ -289,7 +289,12 @@ jobs:
           # the artifacts bucket + notify-n8n code key so the state machine can hand
           # each release to n8n's private webhook after generation.
           if [ "${{ vars.ENABLE_N8N_NOTIFY }}" = "true" ]; then
-            P="$P EnableN8nNotify=true ArtifactsBucket=$ARTIFACTS_BUCKET NotifyN8nCodeKey=$SHA/notify-n8n.zip"
+            # Pass the n8n host's InstanceId as a parameter (resolved from the compute
+            # stack's output) rather than Fn::ImportValue, so the compute stack can
+            # replace the instance without a cross-stack export lock.
+            N8N_INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name blog-gen-compute \
+              --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
+            P="$P EnableN8nNotify=true ArtifactsBucket=$ARTIFACTS_BUCKET NotifyN8nCodeKey=$SHA/notify-n8n.zip N8nInstanceId=$N8N_INSTANCE_ID"
             [ -n "${{ vars.N8N_WEBHOOK_PATH }}" ] && P="$P N8nWebhookPath=${{ vars.N8N_WEBHOOK_PATH }}"
           fi
           aws cloudformation deploy \
