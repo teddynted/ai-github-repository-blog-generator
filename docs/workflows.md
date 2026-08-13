@@ -75,7 +75,7 @@ Generation, review/scoring, and S3 publishing already run inside the serverless 
 | **Release Review & Approval** | Webhook `POST /webhook/release-review` (from the `notify-n8n` Lambda) | Opens a **GitHub approval issue** for the release (body carries a machine-readable marker) using the `githubApi` credential |
 | **Approval Poller** | Schedule (every few minutes, while the host is up) | Searches open approval issues, reads comments, and on an authorized **`/approve`** posts a confirmation + **closes** the issue and **notifies**; **`/reject`** cancels |
 
-Authorization is enforced by the commenter's `author_association` (OWNER / COLLABORATOR / MEMBER). Because the approval issue lives on GitHub, a pending approval survives the host powering off — the poller resumes on the next wake. On `/approve` the poller calls the **publish-release** API (`POST /publish`, `X-Publish-Secret`-gated) which opens a blog PR and promotes the release's artifacts to an approved-only `published/` S3 prefix. The exact live workflows are committed at [`n8n-review-workflow.json`](./n8n-review-workflow.json) and [`n8n-approval-poller.json`](./n8n-approval-poller.json).
+Authorization is enforced by the commenter's `author_association` (OWNER / COLLABORATOR / MEMBER). Because the approval issue lives on GitHub, a pending approval survives the host powering off — the poller resumes on the next wake. On `/approve` the poller calls the **publish-release** API (`POST /publish`, `X-Publish-Secret`-gated) which opens a blog PR, promotes the release's artifacts to an approved-only `published/` S3 prefix, and **cross-posts** the blog to any configured platforms (Dev.to, Hashnode, and Medium with a legacy token) — each skipped unless its SSM token is set. The exact live workflows are committed at [`n8n-review-workflow.json`](./n8n-review-workflow.json) and [`n8n-approval-poller.json`](./n8n-approval-poller.json).
 
 > **Trigger note:** n8n is invoked by the state machine's `notify-n8n` step after generation — there is no SQS. Instance **start** is triggered by that step (on a release) and the daily window; **stop** by EventBridge Scheduler / idle-stop.
 
@@ -212,7 +212,7 @@ A review stage checks drafts before they can be published ([FR-3.12](./requireme
 flowchart TB
     RV[Reviewed content in S3] --> ISS[n8n review workflow<br/>open GitHub approval issue]
     ISS --> HUM{Reviewer comments}
-    HUM -- /approve --> PUB[n8n poller: publish + notify + close issue]
+    HUM -- /approve --> PUB[poller → publish-release Lambda<br/>PR + S3 promote + cross-post, then notify + close]
     HUM -- /reject --> REJ[Poller: comment + close, no publish]
     HUM -- none --> WAIT[Issue stays open<br/>poller re-checks on next wake]
 ```
