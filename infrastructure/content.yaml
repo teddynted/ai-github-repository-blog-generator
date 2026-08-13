@@ -71,6 +71,13 @@ Parameters:
     Type: String
     Default: release-review
     Description: n8n production webhook path the review workflow listens on.
+  N8nInstanceId:
+    Type: String
+    Default: ""
+    Description: >
+      EC2 instance id of the n8n host, passed in by deploy.yml (resolved from the
+      compute stack's InstanceId output). A parameter — not Fn::ImportValue — so
+      the compute stack can replace the instance without a cross-stack export lock.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
@@ -399,10 +406,7 @@ Resources:
           # Start the On-Demand n8n host (DescribeInstances cannot be resource-scoped).
           - Effect: Allow
             Action: ec2:StartInstances
-            Resource: !Sub
-              - "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${I}"
-              - I:
-                  Fn::ImportValue: !Sub "${ProjectName}-InstanceId"
+            Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${N8nInstanceId}"
           - Effect: Allow
             Action: ec2:DescribeInstances
             Resource: "*"
@@ -527,8 +531,7 @@ Resources:
                     "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.n8nError", "Next": "TriggerVideo"}],
                     "Next": "TriggerVideo"
                   },
-              - InstanceId:
-                  Fn::ImportValue: !Sub "${ProjectName}-InstanceId"
+              - InstanceId: !Ref N8nInstanceId
                 NotifyArn: !GetAtt NotifyN8nFunction.Arn
             - ""
       Tags:
