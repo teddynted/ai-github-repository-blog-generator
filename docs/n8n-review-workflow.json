@@ -1,99 +1,58 @@
 {
   "name": "Release Review & Approval",
-  "meta": {
-    "description": "Milestone 14 governance loop: on a published GitHub Release, build the Release Context, generate content, run the govern CLI (validation + AI review + scoring + grounding), branch on the exit code, request a human approval when needed, then publish. The govern CLI exits 0 when content passes (Approved/Published) and 3 when it needs revision or is rejected."
-  },
   "nodes": [
     {
-      "id": "trigger",
-      "name": "GitHub Release Published",
-      "type": "n8n-nodes-base.githubTrigger",
+      "name": "Pipeline Webhook",
+      "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [200, 300],
-      "parameters": { "events": ["release"], "owner": "acme", "repository": "widget" }
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "db61bf1c-8778-4f18-baac-a39d2f396c9c",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "release-review",
+        "responseMode": "onReceived"
+      }
     },
     {
-      "id": "context",
-      "name": "Build Release Context",
-      "type": "n8n-nodes-base.executeCommand",
+      "name": "Post Approval Issue",
+      "type": "n8n-nodes-base.github",
       "typeVersion": 1,
-      "position": [440, 300],
-      "parameters": { "command": "go run ./cmd/blog --release {{$json.release.tag_name}} --emit-context --out /tmp/ctx.json" }
-    },
-    {
-      "id": "generate",
-      "name": "Generate Content",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [680, 300],
-      "parameters": { "command": "go run ./cmd/blog --context /tmp/ctx.json --out /tmp/post.md" }
-    },
-    {
-      "id": "govern",
-      "name": "Govern (validate + AI review + score)",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [920, 300],
-      "parameters": { "command": "go run ./cmd/govern --content /tmp/post.md --type \"Technical Blog\" --context /tmp/ctx.json --format json --out /tmp/review.json" }
-    },
-    {
-      "id": "needsRevision",
-      "name": "Needs Revision?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [1160, 300],
-      "parameters": { "conditions": { "number": [{ "value1": "={{$node[\"govern\"].exitCode}}", "operation": "equal", "value2": 3 }] } }
-    },
-    {
-      "id": "regenerate",
-      "name": "Regenerate Affected Sections",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [1160, 140],
-      "parameters": { "command": "go run ./cmd/blog --context /tmp/ctx.json --revise /tmp/review.json --out /tmp/post.md" }
-    },
-    {
-      "id": "humanApproval",
-      "name": "Human Approval Gate",
-      "type": "n8n-nodes-base.githubIssueComment",
-      "typeVersion": 1,
-      "position": [1400, 460],
-      "parameters": { "notes": "Post the review report to the release discussion / PR and wait for a Reviewer approval." }
-    },
-    {
-      "id": "approved",
-      "name": "Approved?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [1640, 460],
-      "parameters": { "conditions": { "string": [{ "value1": "={{$json.status}}", "operation": "equal", "value2": "Approved" }] } }
-    },
-    {
-      "id": "publish",
-      "name": "Publishing Pipeline",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [1880, 380],
-      "parameters": { "command": "go run ./cmd/govern --content /tmp/post.md --context /tmp/ctx.json --auto-approve" }
-    },
-    {
-      "id": "analytics",
-      "name": "Analytics",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [2120, 380],
-      "parameters": {}
+      "position": [
+        320,
+        0
+      ],
+      "parameters": {
+        "resource": "issue",
+        "operation": "create",
+        "owner": "teddynted",
+        "repository": "ai-github-repository-blog-generator",
+        "title": "=Approve release {{ $json.body.owner }}/{{ $json.body.name }} {{ $json.body.release.tag_name }}",
+        "body": "=Release content for {{ $json.body.owner }}/{{ $json.body.name }} **{{ $json.body.release.tag_name }}** has been generated and is awaiting approval.\n\n- Comment `/approve` to publish (notify).\n- Comment `/reject` to cancel.\n\nOnly repository owners/collaborators can approve.\n\n<!-- release-approval owner={{ $json.body.owner }} repo={{ $json.body.name }} tag={{ $json.body.release.tag_name }} -->"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
     }
   ],
   "connections": {
-    "GitHub Release Published": { "main": [[{ "node": "Build Release Context", "type": "main", "index": 0 }]] },
-    "Build Release Context": { "main": [[{ "node": "Generate Content", "type": "main", "index": 0 }]] },
-    "Generate Content": { "main": [[{ "node": "Govern (validate + AI review + score)", "type": "main", "index": 0 }]] },
-    "Govern (validate + AI review + score)": { "main": [[{ "node": "Needs Revision?", "type": "main", "index": 0 }]] },
-    "Needs Revision?": { "main": [[{ "node": "Regenerate Affected Sections", "type": "main", "index": 0 }], [{ "node": "Human Approval Gate", "type": "main", "index": 0 }]] },
-    "Regenerate Affected Sections": { "main": [[{ "node": "Govern (validate + AI review + score)", "type": "main", "index": 0 }]] },
-    "Human Approval Gate": { "main": [[{ "node": "Approved?", "type": "main", "index": 0 }]] },
-    "Approved?": { "main": [[{ "node": "Publishing Pipeline", "type": "main", "index": 0 }], [{ "node": "Human Approval Gate", "type": "main", "index": 0 }]] },
-    "Publishing Pipeline": { "main": [[{ "node": "Analytics", "type": "main", "index": 0 }]] }
-  }
+    "Pipeline Webhook": {
+      "main": [
+        [
+          {
+            "node": "Post Approval Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "active": false
 }

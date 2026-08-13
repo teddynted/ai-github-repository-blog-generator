@@ -75,7 +75,7 @@ Generation, review/scoring, and S3 publishing already run inside the serverless 
 | **Release Review & Approval** | Webhook `POST /webhook/release-review` (from the `notify-n8n` Lambda) | Opens a **GitHub approval issue** for the release (body carries a machine-readable marker) using the `githubApi` credential |
 | **Approval Poller** | Schedule (every few minutes, while the host is up) | Searches open approval issues, reads comments, and on an authorized **`/approve`** posts a confirmation + **closes** the issue and **notifies**; **`/reject`** cancels |
 
-Authorization is enforced by the commenter's `author_association` (OWNER / COLLABORATOR / MEMBER). Because the approval issue lives on GitHub, a pending approval survives the host powering off — the poller resumes on the next wake. The reference JSON exports ([`n8n-review-workflow.json`](./n8n-review-workflow.json), [`n8n-publishing-workflow.json`](./n8n-publishing-workflow.json)) are illustrative templates; the live workflows are the two above.
+Authorization is enforced by the commenter's `author_association` (OWNER / COLLABORATOR / MEMBER). Because the approval issue lives on GitHub, a pending approval survives the host powering off — the poller resumes on the next wake. On `/approve` the poller calls the **publish-release** API (`POST /publish`, `X-Publish-Secret`-gated) which opens a blog PR and promotes the release's artifacts to an approved-only `published/` S3 prefix. The exact live workflows are committed at [`n8n-review-workflow.json`](./n8n-review-workflow.json) and [`n8n-approval-poller.json`](./n8n-approval-poller.json).
 
 > **Trigger note:** n8n is invoked by the state machine's `notify-n8n` step after generation — there is no SQS. Instance **start** is triggered by that step (on a release) and the daily window; **stop** by EventBridge Scheduler / idle-stop.
 
@@ -239,10 +239,15 @@ flowchart LR
 
 ## 11. Importing Workflows
 
-1. Start the instance and open n8n over an **SSH tunnel** (the UI is not publicly exposed — see [Deployment §5](./deployment.md#5-import-the-n8n-workflows)); locally it's `http://localhost:5678`.
-2. **Workflows → Import from File** and select each JSON in `workflows/`.
-3. Configure the **`githubApi` credential** (a token with `Contents` + `Issues` write on this repo) that the review workflow and poller use; and any notification channel.
-4. Activate the workflows.
+The live workflows are exported to `docs/`; to recreate them on a fresh n8n:
+
+1. Reach n8n (SSH tunnel, or `docker exec` over SSM — the UI/port is not publicly exposed). CLI import: `n8n import:workflow --input=<file>` (this n8n build needs an `id` in the JSON — inject a 16-char nanoid first).
+2. Import [`n8n-review-workflow.json`](./n8n-review-workflow.json) (webhook `release-review` → opens the approval issue) and [`n8n-approval-poller.json`](./n8n-approval-poller.json) (schedule → `/approve` → publish + close).
+3. Create the credentials the nodes reference:
+   - **`githubApi`** ("GitHub (blog-gen)") — a token with `Contents`, `Issues`, `PRs` write.
+   - **`httpHeaderAuth`** ("Publish Secret (header)") — header `X-Publish-Secret` = the value in SSM `/blog-gen/publish/shared-secret` (only if publish-on-approve is enabled).
+4. Set `N8N_RUNNERS_ENABLED=false` (the poller's Code node needs the in-process executor) — already baked into the compute stack's compose.
+5. Activate both workflows and **restart n8n** so the webhook + schedule register.
 
 ### Exporting after changes
 
