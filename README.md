@@ -241,16 +241,19 @@ Each repository still carries an optional **Trigger Pattern** (`blog:` by defaul
 
 ## Content Generation Workflow
 
-> **Conceptual reference** of the end-to-end AI content pipeline — a `POST /process` request flows through Step Functions, serverless **ECS Fargate** generation (Claude on Bedrock → Anthropic), and **n8n-orchestrated** human-reviewed publishing. This is a high-level overview; for the exact request lifecycle and the components actually deployed, see [Architecture](#architecture) below. An interactive, theme-aware version lives at [`docs/orchestration-diagram.html`](./docs/orchestration-diagram.html).
+A high-level view of the end-to-end pipeline — a `POST /process` request flows through Step Functions, serverless **ECS Fargate** generation (Claude on Bedrock → Anthropic), and **n8n-orchestrated** human-reviewed publishing. For the exact request lifecycle and the components actually deployed, see [Architecture](#architecture) below.
 
-<div align="center">
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/orchestration-diagram-dark.svg">
-  <img alt="AI content generation workflow: POST /process triggers Step Functions, which runs the content-runner on ECS Fargate to generate through the Bedrock-to-Anthropic Provider Router (blog, visual, video and social artifacts) and publish to Amazon S3, then notify-n8n starts the on-demand EC2 host where n8n opens a GitHub approval issue and, on /approve, publishes and notifies, with CloudWatch monitoring." src="./docs/assets/orchestration-diagram-light.svg" width="620">
-</picture>
-
-</div>
+```mermaid
+flowchart LR
+    P["POST /process"] --> SFN["Step Functions<br/>blog-gen-content"]
+    SFN --> FG["ECS Fargate<br/>content-runner"]
+    FG --> RTR["Provider Router<br/>Bedrock → Anthropic"]
+    FG --> S3[("Amazon S3")]
+    SFN --> NL["notify-n8n → n8n<br/>(on-demand EC2)"]
+    NL --> APR{"GitHub approval issue"}
+    APR -->|"/approve"| PUB["Publish: blog PR + S3 promote"]
+    PUB --> NOT["Notify"]
+```
 
 ---
 
