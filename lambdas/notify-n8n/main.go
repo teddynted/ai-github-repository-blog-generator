@@ -66,10 +66,14 @@ func main() {
 		}
 		base := fmt.Sprintf("http://%s:%d", ev.PrivateIP, port)
 
+		// One overall deadline for "get n8n ready and deliver", bounded well under
+		// the Lambda timeout so health-wait + webhook-retry never overrun.
+		deadline := time.Now().Add(readyTimeout)
+
 		// n8n takes a little while to come up after a cold host start; wait for
 		// /healthz. Fail-loud so the state machine records a missed hand-off
 		// rather than silently dropping the release.
-		if err := waitForHealthy(ctx, httpClient, base, time.Now().Add(readyTimeout), a.Logger); err != nil {
+		if err := waitForHealthy(ctx, httpClient, base, deadline, a.Logger); err != nil {
 			a.Logger.Error("n8n never became healthy", "base", base, "error", err.Error())
 			return "", err
 		}
@@ -79,24 +83,44 @@ func main() {
 		body.Owner, body.Name = ev.Owner, ev.Name
 		payload, _ := json.Marshal(body)
 
+		// After /healthz is OK the active workflow's production webhook can take a
+		// few more seconds to register — a cold start returns 404 "Cannot POST
+		// /webhook/…". Retry past that (and transient connection blips) until the
+		// shared deadline, so the hand-off is robust when the host was just started.
 		url := base + "/webhook/" + path
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-		if err != nil {
-			return "", err
+		for {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+			if err != nil {
+				return "", err
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				if time.Now().After(deadline) {
+					a.Logger.Error("post to n8n webhook failed", "url", url, "error", err.Error())
+					return "", err
+				}
+				a.Logger.Info("webhook post retry (connection)", "url", url, "error", err.Error())
+				if serr := sleep(ctx, 5*time.Second); serr != nil {
+					return "", serr
+				}
+				continue
+			}
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusNotFound && time.Now().Before(deadline) {
+				a.Logger.Info("webhook not registered yet; retrying", "url", url)
+				if serr := sleep(ctx, 5*time.Second); serr != nil {
+					return "", serr
+				}
+				continue
+			}
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				return "", fmt.Errorf("n8n webhook %s returned %d: %s", url, resp.StatusCode, string(respBody))
+			}
+			a.Logger.Info("release handed to n8n", "url", url, "tag", ev.ReleaseTag, "status", resp.StatusCode)
+			return "ok", nil
 		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			a.Logger.Error("post to n8n webhook failed", "url", url, "error", err.Error())
-			return "", err
-		}
-		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return "", fmt.Errorf("n8n webhook %s returned %d: %s", url, resp.StatusCode, string(respBody))
-		}
-		a.Logger.Info("release handed to n8n", "url", url, "tag", ev.ReleaseTag, "status", resp.StatusCode)
-		return "ok", nil
 	})
 }
 
