@@ -400,8 +400,16 @@ Resources:
                       DB_POSTGRESDB_PASSWORD: ${!POSTGRES_PASSWORD}
                       QUEUE_BULL_REDIS_HOST: redis
                       N8N_DIAGNOSTICS_ENABLED: "false"
+                      # Run Code nodes in-process (legacy executor). The task-runner
+                      # sandbox in this n8n build cannot use httpRequestWithAuthentication,
+                      # which the Approval Poller's Code node needs.
+                      N8N_RUNNERS_ENABLED: "false"
                     ports:
-                      - "127.0.0.1:5678:5678"
+                      # Bind on the instance interface (not just loopback) so the in-VPC
+                      # notify-n8n Lambda can POST to n8n's /release-review webhook at the
+                      # host's private IP. Access is restricted to the notify-n8n Lambda's
+                      # security group by the ingress rule in content.yaml — not public.
+                      - "0.0.0.0:5678:5678"
                     volumes:
                       - /data/n8n:/home/node/.n8n
                 COMPOSE
