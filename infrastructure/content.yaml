@@ -315,22 +315,49 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
-  # Function URL (edge-unauthenticated; the handler enforces X-Publish-Secret).
-  PublishReleaseUrl:
-    Type: AWS::Lambda::Url
+  # HTTP API in front of the Lambda (public Lambda Function URLs are blocked in
+  # this account). No API-key/JWT authorizer — the handler enforces the shared
+  # X-Publish-Secret, so only the n8n poller can invoke it.
+  PublishApi:
+    Type: AWS::ApiGatewayV2::Api
     Condition: EnablePublish
     Properties:
-      TargetFunctionArn: !GetAtt PublishReleaseFunction.Arn
-      AuthType: NONE
+      Name: !Sub "${ProjectName}-publish"
+      ProtocolType: HTTP
 
-  PublishReleaseUrlPermission:
+  PublishApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: EnablePublish
+    Properties:
+      ApiId: !Ref PublishApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt PublishReleaseFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  PublishApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: EnablePublish
+    Properties:
+      ApiId: !Ref PublishApi
+      RouteKey: "POST /publish"
+      Target: !Sub "integrations/${PublishApiIntegration}"
+
+  PublishApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: EnablePublish
+    Properties:
+      ApiId: !Ref PublishApi
+      StageName: "$default"
+      AutoDeploy: true
+
+  PublishApiPermission:
     Type: AWS::Lambda::Permission
     Condition: EnablePublish
     Properties:
       FunctionName: !Ref PublishReleaseFunction
-      Action: lambda:InvokeFunctionUrl
-      Principal: "*"
-      FunctionUrlAuthType: NONE
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${PublishApi}/*/*/publish"
 
   # Pulls the image + ships logs (the AWS-managed execution policy covers both).
   ContentTaskExecutionRole:
@@ -666,7 +693,7 @@ Outputs:
   EcrRepositoryUri:
     Description: ECR repo deploy.yml pushes the content-runner image to.
     Value: !GetAtt EcrRepository.RepositoryUri
-  PublishReleaseUrl:
+  PublishApiUrl:
     Condition: EnablePublish
-    Description: Function URL the n8n Approval Poller POSTs to on /approve (with X-Publish-Secret).
-    Value: !GetAtt PublishReleaseUrl.FunctionUrl
+    Description: HTTP API endpoint the n8n Approval Poller POSTs to on /approve (POST /publish with X-Publish-Secret).
+    Value: !Sub "https://${PublishApi}.execute-api.${AWS::Region}.amazonaws.com/publish"

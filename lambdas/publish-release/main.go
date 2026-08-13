@@ -84,8 +84,8 @@ func main() {
 	e.githubToken = mustParam(ctx, sm, os.Getenv("GITHUB_TOKEN_PARAM"))
 	e.sharedSecret = mustParam(ctx, sm, os.Getenv("SHARED_SECRET_PARAM"))
 
-	lambda.Start(func(ctx context.Context, evt events.LambdaFunctionURLRequest) (events.LambdaFunctionURLResponse, error) {
-		if subtle.ConstantTimeCompare([]byte(header(evt, "x-publish-secret")), []byte(e.sharedSecret)) != 1 {
+	lambda.Start(func(ctx context.Context, evt events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+		if subtle.ConstantTimeCompare([]byte(header(evt.Headers, "x-publish-secret")), []byte(e.sharedSecret)) != 1 {
 			return resp(401, map[string]string{"error": "unauthorized"}), nil
 		}
 		var req Request
@@ -255,8 +255,8 @@ func mustParam(ctx context.Context, sm *ssm.Client, name string) string {
 	return v
 }
 
-func header(evt events.LambdaFunctionURLRequest, key string) string {
-	for k, v := range evt.Headers {
+func header(headers map[string]string, key string) string {
+	for k, v := range headers {
 		if strings.EqualFold(k, key) {
 			return v
 		}
@@ -277,9 +277,9 @@ func nestedString(m map[string]any, keys ...string) (string, bool) {
 	return s, ok
 }
 
-func resp(code int, body any) events.LambdaFunctionURLResponse {
+func resp(code int, body any) events.APIGatewayV2HTTPResponse {
 	b, _ := json.Marshal(body)
-	return events.LambdaFunctionURLResponse{StatusCode: code, Headers: map[string]string{"Content-Type": "application/json"}, Body: string(b)}
+	return events.APIGatewayV2HTTPResponse{StatusCode: code, Headers: map[string]string{"Content-Type": "application/json"}, Body: string(b)}
 }
 
 func envStr(key, def string) string {
