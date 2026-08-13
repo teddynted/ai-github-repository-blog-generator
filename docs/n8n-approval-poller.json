@@ -1,0 +1,355 @@
+{
+  "name": "Approval Poller",
+  "nodes": [
+    {
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search Approval Issues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "parameters": {
+        "url": "https://api.github.com/search/issues",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "repo:teddynted/ai-github-repository-blog-generator is:issue is:open release-approval in:body"
+            },
+            {
+              "name": "per_page",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
+    },
+    {
+      "name": "List Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        0
+      ],
+      "parameters": {
+        "url": "https://api.github.com/repos/teddynted/ai-github-repository-blog-generator/issues/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "per_page",
+              "value": "100"
+            },
+            {
+              "name": "sort",
+              "value": "created"
+            },
+            {
+              "name": "direction",
+              "value": "desc"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
+    },
+    {
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const auth = new Set(['OWNER','COLLABORATOR','MEMBER']);\nconst sItems = $('Search Approval Issues').all().map(i => i.json);\nconst issues = (sItems.length===1 && sItems[0] && Array.isArray(sItems[0].items)) ? sItems[0].items : sItems.flatMap(x => (x && x.items) ? x.items : [x]);\nconst cItems = $('List Comments').all().map(i => i.json);\nconst comments = (cItems.length===1 && Array.isArray(cItems[0])) ? cItems[0] : cItems;\nconst out = [];\nfor (const issue of issues) {\n  const m = /<!-- release-approval owner=(\\S+) repo=(\\S+) tag=(\\S+) -->/.exec(issue.body || '');\n  const mine = comments.filter(c => c && c.issue_url === issue.url && auth.has(c.author_association));\n  let decision = null, actor = null;\n  for (const c of mine) {\n    const b = (c.body || '').trim();\n    if (b.startsWith('/approve')) { decision='approve'; actor=c.user.login; }\n    else if (b.startsWith('/reject')) { decision='reject'; actor=c.user.login; }\n  }\n  if (!decision) continue;\n  out.push({ json: { number: issue.number, decision, actor, owner: m?m[1]:'', repo: m?m[2]:'', tag: m?m[3]:'' } });\n}\nreturn out;"
+      }
+    },
+    {
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "9c246586-ba46-4d9e-b8d0-72f655a0e8d7",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Call Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -120
+      ],
+      "parameters": {
+        "url": "https://ijif7nppdj.execute-api.us-east-1.amazonaws.com/publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"owner\": $json.owner, \"name\": $json.repo, \"release_tag\": $json.tag } }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2730d51f19e95ba4",
+          "name": "Publish Secret (header)"
+        }
+      }
+    },
+    {
+      "name": "Comment Approved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        -120
+      ],
+      "parameters": {
+        "url": "=https://api.github.com/repos/teddynted/ai-github-repository-blog-generator/issues/{{ $('Decide').item.json.number }}/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"body\": \"\u2705 Approved by @\" + $('Decide').item.json.actor + \" & published: \" + $json.pr } }}"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
+    },
+    {
+      "name": "Close Approved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        -120
+      ],
+      "parameters": {
+        "url": "=https://api.github.com/repos/teddynted/ai-github-repository-blog-generator/issues/{{ $('Decide').item.json.number }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "method": "PATCH",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"state\": \"closed\", \"state_reason\": \"completed\" } }}"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
+    },
+    {
+      "name": "Comment Rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "url": "=https://api.github.com/repos/teddynted/ai-github-repository-blog-generator/issues/{{ $json.number }}/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"body\": \"\u274c Rejected by @\" + $json.actor } }}"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
+    },
+    {
+      "name": "Close Rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        120
+      ],
+      "parameters": {
+        "url": "=https://api.github.com/repos/teddynted/ai-github-repository-blog-generator/issues/{{ $('Decide').item.json.number }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "method": "PATCH",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"state\": \"closed\", \"state_reason\": \"not_planned\" } }}"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "ul4WpoayUkf2bZc0",
+          "name": "GitHub (blog-gen)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Search Approval Issues": {
+      "main": [
+        [
+          {
+            "node": "List Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Comments": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Call Publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Publish": {
+      "main": [
+        [
+          {
+            "node": "Comment Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment Approved": {
+      "main": [
+        [
+          {
+            "node": "Close Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment Rejected": {
+      "main": [
+        [
+          {
+            "node": "Close Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Search Approval Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "active": false
+}
