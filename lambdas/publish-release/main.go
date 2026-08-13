@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,8 +51,16 @@ type env struct {
 	blogPath     string // docs/blog
 	githubToken  string
 	sharedSecret string
-	s3           *s3.Client
-	http         *http.Client
+	// Optional external cross-post targets (empty = skip that platform).
+	devtoToken    string
+	hashnodeToken string
+	hashnodePub   string
+	mediumToken   string
+	publishDraft  bool
+	canonical     string
+	tags          []string
+	s3            *s3.Client
+	http          *http.Client
 }
 
 func main() {
@@ -83,6 +92,16 @@ func main() {
 	}
 	e.githubToken = mustParam(ctx, sm, os.Getenv("GITHUB_TOKEN_PARAM"))
 	e.sharedSecret = mustParam(ctx, sm, os.Getenv("SHARED_SECRET_PARAM"))
+	// Optional cross-post config (each token param may be absent/empty → skip it).
+	e.devtoToken = optParam(ctx, sm, os.Getenv("DEVTO_TOKEN_PARAM"))
+	e.hashnodeToken = optParam(ctx, sm, os.Getenv("HASHNODE_TOKEN_PARAM"))
+	e.hashnodePub = os.Getenv("HASHNODE_PUBLICATION_ID")
+	e.mediumToken = optParam(ctx, sm, os.Getenv("MEDIUM_TOKEN_PARAM"))
+	e.publishDraft = envBool("PUBLISH_DRAFT", false)
+	e.canonical = os.Getenv("CANONICAL_URL")
+	if t := os.Getenv("CROSSPOST_TAGS"); t != "" {
+		e.tags = strings.Split(t, ",")
+	}
 
 	lambda.Start(func(ctx context.Context, evt events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 		if subtle.ConstantTimeCompare([]byte(header(evt.Headers, "x-publish-secret")), []byte(e.sharedSecret)) != 1 {
@@ -92,28 +111,35 @@ func main() {
 		if err := json.Unmarshal([]byte(evt.Body), &req); err != nil || req.Owner == "" || req.Name == "" || req.ReleaseTag == "" {
 			return resp(400, map[string]string{"error": "owner, name and release_tag are required"}), nil
 		}
-		prURL, err := e.publish(ctx, req, a.Logger)
+		prURL, posts, err := e.publish(ctx, req, a.Logger)
 		if err != nil {
 			a.Logger.Error("publish failed", "repo", req.Owner+"/"+req.Name, "tag", req.ReleaseTag, "error", err.Error())
 			return resp(500, map[string]string{"error": err.Error()}), nil
 		}
-		a.Logger.Info("published", "tag", req.ReleaseTag, "pr", prURL)
-		return resp(200, map[string]string{"status": "ok", "pr": prURL}), nil
+		a.Logger.Info("published", "tag", req.ReleaseTag, "pr", prURL, "crossposts", len(posts))
+		body := map[string]any{"status": "ok", "pr": prURL}
+		if len(posts) > 0 {
+			body["crossposts"] = posts
+		}
+		return resp(200, body), nil
 	})
 }
 
-func (e *env) publish(ctx context.Context, r Request, logger interface{ Info(string, ...any) }) (string, error) {
+func (e *env) publish(ctx context.Context, r Request, logger interface {
+	Info(string, ...any)
+	Warn(string, ...any)
+}) (string, map[string]string, error) {
 	relBase := path.Join(e.prefix, r.Owner, r.Name, "releases", r.ReleaseTag)
 
 	// 1) read the generated blog from S3.
 	blog, err := e.getObject(ctx, path.Join(relBase, "blog.md"))
 	if err != nil {
-		return "", fmt.Errorf("read blog from s3: %w", err)
+		return "", nil, fmt.Errorf("read blog from s3: %w", err)
 	}
 
 	// 2) promote every release artifact to the approved-only published/ prefix.
 	if err := e.promote(ctx, relBase, path.Join(e.published, r.Owner, r.Name, r.ReleaseTag), logger); err != nil {
-		return "", fmt.Errorf("promote to published prefix: %w", err)
+		return "", nil, fmt.Errorf("promote to published prefix: %w", err)
 	}
 
 	// 3) open a PR adding the blog to the target repo.
@@ -122,9 +148,13 @@ func (e *env) publish(ctx context.Context, r Request, logger interface{ Info(str
 	title := fmt.Sprintf("Publish blog: %s/%s %s", r.Owner, r.Name, r.ReleaseTag)
 	prURL, err := e.openPR(ctx, branch, filePath, title, blog)
 	if err != nil {
-		return "", fmt.Errorf("open pull request: %w", err)
+		return "", nil, fmt.Errorf("open pull request: %w", err)
 	}
-	return prURL, nil
+
+	// 4) cross-post the blog to any configured external platforms (best-effort).
+	blogTitle, blogBody := splitTitle(string(blog))
+	posts := e.crosspost(ctx, blogTitle, blogBody, logger)
+	return prURL, posts, nil
 }
 
 // --- S3 helpers -------------------------------------------------------------
@@ -287,4 +317,26 @@ func envStr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func envBool(key string, def bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return def
+}
+
+// optParam reads an SSM parameter but never fails: an empty name, a missing
+// parameter, or a read error all yield "" so the caller simply skips it.
+func optParam(ctx context.Context, sm *ssm.Client, name string) string {
+	if name == "" {
+		return ""
+	}
+	out, err := sm.GetParameter(ctx, &ssm.GetParameterInput{Name: &name, WithDecryption: aws.Bool(true)})
+	if err != nil || out.Parameter == nil {
+		return ""
+	}
+	return aws.ToString(out.Parameter.Value)
 }
