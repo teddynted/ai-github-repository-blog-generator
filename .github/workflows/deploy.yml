@@ -197,6 +197,11 @@ jobs:
           P="$P StartCodeKey=$SHA/scheduled-start.zip StopCodeKey=$SHA/scheduled-stop.zip"
           P="$P IdleCodeKey=$SHA/idle-stop.zip"
           [ -n "$SCHEDULE_TIMEZONE" ] && P="$P ScheduleTimezone=$SCHEDULE_TIMEZONE"
+          # The fixed daily window is vestigial now: the box starts on a release
+          # (state machine) and idle-stop powers it off, so default the schedules
+          # to DISABLED. Set repo var SCHEDULE_STATE=ENABLED to bring it back.
+          SCHEDULE_STATE="${{ vars.SCHEDULE_STATE }}"; [ -z "$SCHEDULE_STATE" ] && SCHEDULE_STATE="DISABLED"
+          P="$P ScheduleState=$SCHEDULE_STATE"
           # Idle auto-stop is opt-in via repo vars; unset leaves EnableIdleStop=false
           # (the template default), so the idle Lambda/rule are not created.
           [ -n "$ENABLE_IDLE_STOP" ] && P="$P EnableIdleStop=$ENABLE_IDLE_STOP"
