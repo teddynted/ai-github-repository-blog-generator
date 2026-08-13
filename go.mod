@@ -19,6 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sfn v1.45.3
 	github.com/aws/aws-sdk-go-v2/service/sns v1.42.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.45.0
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.73.5
 	github.com/go-git/go-git/v5 v5.19.1
 )
 
