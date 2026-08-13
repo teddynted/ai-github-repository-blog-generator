@@ -77,7 +77,7 @@ jobs:
           # scheduled-start/scheduled-stop back the scheduler.yaml stack, which
           # owns instance power on the fixed daily window (deployed below,
           # wired to the compute stack's InstanceId).
-          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest notify-n8n; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest notify-n8n publish-release; do
             GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "dist/$fn/bootstrap" "./lambdas/$fn"
             (cd "dist/$fn" && zip -j "../$fn.zip" bootstrap)
           done
@@ -101,7 +101,7 @@ jobs:
 
       - name: upload artifacts (sha-versioned keys)
         run: |
-          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest notify-n8n; do
+          for fn in registration manual-trigger release-context scheduled-start scheduled-stop idle-stop load-video-scripts publish-video-manifest notify-n8n publish-release; do
             aws s3 cp "dist/$fn.zip" "s3://$ARTIFACTS_BUCKET/$SHA/$fn.zip"
           done
 
@@ -296,6 +296,15 @@ jobs:
               --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
             P="$P EnableN8nNotify=true ArtifactsBucket=$ARTIFACTS_BUCKET NotifyN8nCodeKey=$SHA/notify-n8n.zip N8nInstanceId=$N8N_INSTANCE_ID"
             [ -n "${{ vars.N8N_WEBHOOK_PATH }}" ] && P="$P N8nWebhookPath=${{ vars.N8N_WEBHOOK_PATH }}"
+          fi
+          # Publish-on-approve (opt-in via ENABLE_PUBLISH_ON_APPROVE=true): the n8n
+          # poller calls the publish-release Lambda on /approve. Set the two SSM
+          # SecureStrings out-of-band:
+          #   aws ssm put-parameter --name /blog-gen/github/publish-token --type SecureString --value '<token>'
+          #   aws ssm put-parameter --name /blog-gen/publish/shared-secret --type SecureString --value '<random>'
+          if [ "${{ vars.ENABLE_PUBLISH_ON_APPROVE }}" = "true" ]; then
+            P="$P EnablePublishOnApprove=true ArtifactsBucket=$ARTIFACTS_BUCKET PublishCodeKey=$SHA/publish-release.zip"
+            [ -n "${{ vars.TARGET_REPO }}" ] && P="$P TargetRepo=${{ vars.TARGET_REPO }}"
           fi
           aws cloudformation deploy \
             --template-file infrastructure/content.yaml \

@@ -78,10 +78,34 @@ Parameters:
       EC2 instance id of the n8n host, passed in by deploy.yml (resolved from the
       compute stack's InstanceId output). A parameter — not Fn::ImportValue — so
       the compute stack can replace the instance without a cross-stack export lock.
+  # --- Publish-on-approve: the n8n poller calls this Lambda on /approve to open a
+  # --- blog PR + promote the release's artifacts to an approved-only S3 prefix.
+  EnablePublishOnApprove:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: When "true", create the publish-release Lambda + Function URL.
+  PublishCodeKey:
+    Type: String
+    Default: publish-release.zip
+    Description: S3 key of the publish-release Lambda package in ArtifactsBucket.
+  TargetRepo:
+    Type: String
+    Default: teddynted/ai-github-repository-blog-generator
+    Description: "owner/repo the approved-blog PR is opened in."
+  PublishTokenParam:
+    Type: String
+    Default: /blog-gen/github/publish-token
+    Description: SSM SecureString name holding a GitHub token (Contents+PRs write on TargetRepo).
+  PublishSecretParam:
+    Type: String
+    Default: /blog-gen/publish/shared-secret
+    Description: SSM SecureString name holding the shared secret the poller sends in X-Publish-Secret.
 
 Conditions:
   HasContentBucket: !Not [!Equals [!Ref ContentBucket, ""]]
   EnableN8n: !Equals [!Ref EnableN8nNotify, "true"]
+  EnablePublish: !Equals [!Ref EnablePublishOnApprove, "true"]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -212,6 +236,101 @@ Resources:
       Tags:
         - Key: Project
           Value: !Ref ProjectName
+
+  # --- Publish-on-approve Lambda (gated on EnablePublishOnApprove) -------------
+  PublishReleaseRole:
+    Type: AWS::IAM::Role
+    Condition: EnablePublish
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: publish-release
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Read release artifacts + write the promoted published/ copies.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:ListBucket]
+                Resource:
+                  - !Sub
+                    - "arn:${AWS::Partition}:s3:::${B}"
+                    - B: !If [HasContentBucket, !Ref ContentBucket, !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"]
+                  - !Sub
+                    - "arn:${AWS::Partition}:s3:::${B}/*"
+                    - B: !If [HasContentBucket, !Ref ContentBucket, !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"]
+              # Content bucket is SSE-KMS: copying needs a data key + decrypt, scoped
+              # to the S3 service in this account/region (never direct KMS use).
+              - Effect: Allow
+                Action: [kms:GenerateDataKey, kms:Decrypt, kms:DescribeKey]
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
+                    kms:CallerAccount: !Ref AWS::AccountId
+              # Read the GitHub token + shared secret (SecureString).
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PublishTokenParam}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PublishSecretParam}"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
+
+  PublishReleaseFunction:
+    Type: AWS::Lambda::Function
+    Condition: EnablePublish
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [W1030]
+    Properties:
+      FunctionName: !Sub "${ProjectName}-publish-release"
+      Runtime: provided.al2023
+      Architectures: [arm64]
+      Handler: bootstrap
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt PublishReleaseRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref PublishCodeKey
+      Environment:
+        Variables:
+          CONTENT_BUCKET: !If [HasContentBucket, !Ref ContentBucket, !Sub "${ProjectName}-content-${AWS::AccountId}-${AWS::Region}"]
+          TARGET_REPO: !Ref TargetRepo
+          GITHUB_TOKEN_PARAM: !Ref PublishTokenParam
+          SHARED_SECRET_PARAM: !Ref PublishSecretParam
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Function URL (edge-unauthenticated; the handler enforces X-Publish-Secret).
+  PublishReleaseUrl:
+    Type: AWS::Lambda::Url
+    Condition: EnablePublish
+    Properties:
+      TargetFunctionArn: !GetAtt PublishReleaseFunction.Arn
+      AuthType: NONE
+
+  PublishReleaseUrlPermission:
+    Type: AWS::Lambda::Permission
+    Condition: EnablePublish
+    Properties:
+      FunctionName: !Ref PublishReleaseFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
 
   # Pulls the image + ships logs (the AWS-managed execution policy covers both).
   ContentTaskExecutionRole:
@@ -547,3 +666,7 @@ Outputs:
   EcrRepositoryUri:
     Description: ECR repo deploy.yml pushes the content-runner image to.
     Value: !GetAtt EcrRepository.RepositoryUri
+  PublishReleaseUrl:
+    Condition: EnablePublish
+    Description: Function URL the n8n Approval Poller POSTs to on /approve (with X-Publish-Secret).
+    Value: !GetAtt PublishReleaseUrl.FunctionUrl
